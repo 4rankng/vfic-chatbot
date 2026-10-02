@@ -9,6 +9,8 @@ import type * as RaCoreModule from "ra-core";
 import type { UserAccount } from "../types";
 import "@/index.css";
 import "./users.css";
+import "../conversations/inbox.css";
+import "../integrations/settings.css";
 
 const { accounts, secondAccount, listState } = vi.hoisted(() => {
   const first: UserAccount = {
@@ -78,6 +80,7 @@ vi.mock("ra-core", async (importOriginal) => ({
 }));
 
 import { UserList } from "./UserList";
+import { SettingsChrome } from "../integrations/SettingsChrome";
 
 const mountList = () => (
   <MemoryRouter>
@@ -93,6 +96,63 @@ afterEach(async () => {
 });
 
 describe("UserList", () => {
+  it.each([320, 360, 390])(
+    "keeps embedded mobile account metadata separate and inside the card at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      listState.data = [
+        {
+          ...accounts[0],
+          email: "nguyen.minh.anh.recruitment@vfic.example.org",
+        },
+      ];
+      const screen = await render(
+        <MemoryRouter>
+          <SettingsChrome activeItemId="settings-users" onItemSelect={() => {}}>
+            <div className="settings-embedded-resource settings-embedded-users">
+              <UserList embedded />
+            </div>
+          </SettingsChrome>
+        </MemoryRouter>,
+      );
+      await expect.element(screen.getByText("Nguyễn Minh Anh")).toBeVisible();
+      const row = screen.container.querySelector<HTMLElement>(
+        ".user-directory-row",
+      )!;
+      const rowBox = row.getBoundingClientRect();
+      const role = row
+        .querySelector<HTMLElement>(".user-directory-cell-role")!
+        .getBoundingClientRect();
+      const status = row
+        .querySelector<HTMLElement>(".user-directory-cell-status")!
+        .getBoundingClientRect();
+      const date = row
+        .querySelector<HTMLElement>(".user-directory-created")!
+        .getBoundingClientRect();
+      expect(status.left).toBeGreaterThanOrEqual(role.right);
+      expect(date.top).toBeGreaterThanOrEqual(status.bottom);
+      expect(date.left).toBeGreaterThanOrEqual(rowBox.left);
+      expect(date.right).toBeLessThanOrEqual(rowBox.right);
+      expect(date.bottom).toBeLessThanOrEqual(rowBox.bottom);
+      expect(rowBox.right).toBeLessThanOrEqual(width);
+      expect(row.scrollWidth).toBeLessThanOrEqual(Math.ceil(rowBox.width));
+      const identity = row.querySelector<HTMLElement>(
+        ".user-directory-identity",
+      )!;
+      const title = identity.querySelector<HTMLElement>("h3")!;
+      const email = identity.querySelector<HTMLElement>("p span")!;
+      for (const text of [title, email]) {
+        expect(getComputedStyle(text).whiteSpace).toBe("normal");
+        expect(getComputedStyle(text).overflow).toBe("visible");
+        expect(text.getBoundingClientRect().right).toBeLessThanOrEqual(
+          identity.getBoundingClientRect().right + 1,
+        );
+      }
+      expect(email.getBoundingClientRect().height).toBeGreaterThan(
+        parseFloat(getComputedStyle(email).lineHeight),
+      );
+    },
+  );
   it("reports the total directory count beyond the visible page", async () => {
     listState.total = 57;
     const screen = await render(mountList());

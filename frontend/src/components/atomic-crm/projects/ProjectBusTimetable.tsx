@@ -72,8 +72,12 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
   }, [projectId, page, retry]);
 
   return (
-    <section aria-labelledby={headingId} aria-busy={loading}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section
+      className="project-bus-timetable"
+      aria-labelledby={headingId}
+      aria-busy={loading}
+    >
+      <div className="project-bus-header">
         <h3
           id={headingId}
           className="inline-flex items-center gap-2 text-section-title font-semibold"
@@ -81,7 +85,7 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
           <BusFront className="size-4 text-muted-foreground" />
           Lịch xe đưa đón
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="project-bus-controls">
           {loading ? (
             <span className="inline-flex items-center gap-1.5 text-body text-muted-foreground">
               <Loading01
@@ -101,10 +105,11 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
             </span>
           )}
           {total > BUS_ROUTE_PAGE_SIZE && (
-            <div className="flex items-center gap-1">
+            <div className="project-bus-pagination">
               <ButtonUtility
                 tooltip="Trang trước"
-                className="uu-scope"
+                className="uu-scope project-icon-action"
+                color="tertiary"
                 size="sm"
                 isDisabled={loading || page <= 1}
                 onClick={() => setPage(Math.max(1, page - 1))}
@@ -112,7 +117,8 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
               />
               <ButtonUtility
                 tooltip="Trang sau"
-                className="uu-scope"
+                className="uu-scope project-icon-action"
+                color="tertiary"
                 size="sm"
                 isDisabled={loading || page >= pageCount}
                 onClick={() => setPage(Math.min(pageCount, page + 1))}
@@ -152,6 +158,7 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
       ) : !loadError && !loading ? (
         <EmptyState
           className="mt-3"
+          variant="inline"
           icon={<BusFront className="size-6" aria-hidden="true" />}
           title="Lịch xe đưa đón"
           description="Chưa có lịch xe đưa đón được trích xuất cho dự án này."
@@ -162,15 +169,20 @@ export const BusTimetableSection = ({ projectId }: { projectId: string }) => {
 };
 
 const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
-  <div className="rounded-md border bg-muted/15 p-3">
-    <div className="flex items-start justify-between gap-3">
+  <div className="project-bus-route-card rounded-md border bg-muted/15 p-3">
+    <div className="project-bus-route-header">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h4 className="text-body font-semibold leading-5">
+          <h4 className="project-bus-route-name text-body font-semibold leading-5">
             {route.route_name}
           </h4>
           {route.route_no && (
-            <Badge className="uu-scope" type="color" size="sm" color="gray">
+            <Badge
+              className="uu-scope project-bus-route-number"
+              type="color"
+              size="sm"
+              color="gray"
+            >
               Tuyến {route.route_no}
             </Badge>
           )}
@@ -190,26 +202,21 @@ const BusRouteCard = memo(({ route }: { route: BusRoute }) => (
     </div>
 
     {route.stops.length > 0 ? (
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <ol className="project-bus-stops">
         {route.stops.map((stop) => (
-          <Badge
-            key={stop.id}
-            className="uu-scope max-w-full gap-1"
-            type="color"
-            size="sm"
-            color="gray"
-          >
-            <span className="max-w-[180px] truncate font-medium">
-              {stop.stop_name}
-            </span>
+          <li key={stop.id} className="project-bus-stop">
+            <span className="project-bus-stop-name">{stop.stop_name}</span>
             {stop.scheduled_time && (
-              <span className="font-mono text-caption text-fg-quaternary">
+              <time
+                className="project-bus-stop-time"
+                dateTime={stop.scheduled_time}
+              >
                 {stop.scheduled_time}
-              </span>
+              </time>
             )}
-          </Badge>
+          </li>
         ))}
-      </div>
+      </ol>
     ) : (
       <p
         role="status"

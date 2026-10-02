@@ -1,18 +1,15 @@
 .settings-workspace-content {
-  /* One desktop tier for both the field and the action that pairs with it, on
-     the console's control scale: 40px is `--crm-control-height-md`, the step
-     `inbox/features.css` already declares for this console's group actions and
-     `users/users.css` for the directory's create button, so the three sheets
-     cannot drift apart again. The touch tier aliases the same scale. */
+  /* The console's compact field/action tiers; icon-only phone actions keep
+     their separate 44px hit target. */
   --settings-control-height: var(--crm-control-height-md);
   --settings-action-height: var(--crm-control-height-md);
   --settings-touch-target: var(--crm-control-height-touch);
-  /* One row height, capped at the console's 44px touch target. */
+  /* Text controls share the phone tier. */
   --settings-mobile-row-height: var(--crm-control-height-touch);
   --settings-space-2: 8px;
   --settings-space-3: 12px;
-  --settings-space-4: 16px;
-  --settings-space-5: 20px;
+  --settings-space-4: 12px;
+  --settings-space-5: 16px;
   --settings-card-radius: 12px;
   --settings-accent-border: color-mix(
     in srgb,
@@ -30,6 +27,11 @@
   border: 1px solid var(--settings-border);
 }
 
+.settings-workspace-content .settings-input input {
+  min-width: 0;
+  width: 100%;
+}
+
 /* The group's configuration counter is a Untitled UI badge now, so its colour
    and type come from the badge's own `color` variant; only the field-level
    marker keeps console state colours. */
@@ -44,6 +46,72 @@
 .settings-workspace-content .settings-group-icon svg {
   width: 16px;
   height: 16px;
+}
+
+.settings-workspace-content .settings-group-icon,
+.settings-mobile-drawer .settings-side-nav-icon {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-workspace-content .settings-group-description {
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-regular);
+  line-height: 1.5;
+}
+
+.settings-workspace-content .settings-load-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--settings-border);
+  border-radius: 8px;
+  background: var(--settings-elevated);
+  color: var(--ink);
+  font-size: var(--fs-body-sm);
+  line-height: 1.5;
+}
+
+.settings-workspace-content .settings-mobile-drawer-trigger > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-workspace-content .settings-mobile-drawer-label,
+.settings-workspace-content .settings-mobile-drawer-current {
+  display: inline;
+}
+
+@media (max-width: 767px) {
+  .settings-workspace-content {
+    --settings-control-height: var(--crm-control-height-touch);
+    --settings-action-height: var(--crm-control-height-touch);
+  }
+
+  .settings-workspace-content .settings-input,
+  .settings-workspace-content .settings-mobile-drawer-trigger {
+    height: var(--crm-control-height-touch);
+    max-height: none;
+  }
+
+  .settings-workspace-content .settings-llm-move {
+    width: 44px;
+    height: 44px;
+    max-height: none;
+  }
+
+  .settings-workspace-content .settings-mobile-group-summary:focus-visible {
+    outline: 2px solid var(--settings-accent);
+    outline-offset: -2px;
+  }
 }
 
 /* Card contract (Tailkit a-c-form-layouts-04 adapted to the warm console
@@ -419,9 +487,9 @@
   }
 
   .settings-mobile-group .settings-group-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 7px;
+    width: 20px;
+    height: 20px;
+    border-radius: 0;
   }
 
   .settings-mobile-group .settings-group-icon svg {
@@ -441,13 +509,13 @@
   }
 
   .settings-mobile-group .settings-group-content {
-    gap: var(--settings-space-2);
-    padding: var(--settings-space-2) 12px 14px;
+    gap: var(--settings-space-3);
+    padding: 12px 14px;
   }
 
   .settings-sensitive-input {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 36px 36px;
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
     align-items: center;
     gap: 4px;
   }
@@ -456,25 +524,16 @@
     min-width: 0;
   }
 
-  .workspace-frame-content .settings-workspace-content .settings-input-action,
-  .workspace-frame-content .settings-workspace-content .settings-copy-app-id {
+  .settings-workspace-content .settings-field .settings-input-action,
+  .settings-workspace-content .settings-field .settings-copy-app-id {
     position: relative;
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
-    border: 1px solid var(--settings-border);
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    max-height: none;
+    border: 0;
     border-radius: 8px;
-  }
-
-  .workspace-frame-content
-    .settings-workspace-content
-    .settings-input-action::after,
-  .workspace-frame-content
-    .settings-workspace-content
-    .settings-copy-app-id::after {
-    content: "";
-    position: absolute;
-    inset: -4px;
+    background: transparent;
   }
 
   .settings-input-action svg,
@@ -488,9 +547,10 @@
     width: auto;
     min-height: var(--settings-touch-target);
     height: var(--settings-touch-target);
+    max-height: none;
     margin-block: 0;
     border-radius: 8px;
-    padding-inline: 14px;
+    padding-inline: 10px;
     font-size: var(--fs-body-sm);
   }
 
@@ -498,10 +558,6 @@
   .settings-embedded-resource .persona-studio-command {
     min-height: var(--settings-touch-target);
     height: var(--settings-touch-target);
-  }
-
-  .settings-embedded-resource .persona-studio-command input {
-    font-size: 16px;
   }
 
   .settings-embedded-users .user-directory-create {
@@ -763,7 +819,8 @@
 .settings-field-hint {
   color: var(--ink-muted);
   font-size: var(--fs-body-sm);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-regular);
+  line-height: 1.5;
 }
 
 @media (max-width: 767px) {
@@ -895,21 +952,17 @@
   }
 
   .settings-group-header {
-    min-height: var(--settings-action-height);
-    padding: 11px var(--settings-space-4);
+    min-height: 64px;
+    padding: 16px var(--settings-space-5);
     border-bottom: 1px solid
       color-mix(in srgb, var(--settings-border) 72%, transparent);
-    background: color-mix(
-      in srgb,
-      var(--settings-accent-soft) 34%,
-      var(--settings-elevated)
-    );
+    background: var(--settings-surface);
   }
 
   .settings-group-content,
   .settings-messenger-group-content {
-    gap: 12px 14px;
-    padding: 14px var(--settings-space-4) var(--settings-space-4);
+    gap: 16px 20px;
+    padding: 20px var(--settings-space-5);
   }
 
   /* The height pair lives once, in the unconditional rule above; the desktop
@@ -947,83 +1000,6 @@
   .settings-oa-fields > .settings-oa-actions,
   .settings-oa-fields > .settings-advanced {
     grid-column: 1 / -1;
-  }
-}
-
-/* Tailkit a-c-form-layouts-04/05 at console density: a titled configuration
-   block is a row — `md:flex md:gap-5`, title and help in the `md:w-1/3` left
-   column, the field panel in the `md:w-2/3` right column — instead of a
-   full-width band above its fields. The card frame stays where it is: the row
-   wears the console's existing `--settings-elevated` / `--settings-border`
-   framing, not Tailkit's white card, and the left column keeps the tinted
-   identity surface as its rail.
-
-   The main column decides, not the viewport: `min-width: 768px` only keeps the
-   mobile disclosure out, and the 796px threshold mirrors the one that already
-   stacks the Zalo cards — below it a rail would leave each credential input
-   about a hundred pixels wide, so the block keeps its stacked band.
-
-   The provider board (`.settings-llm-card`) opts out at every width: those
-   cards compare as peers in equal tracks, and their header carries the rank
-   badge, the reorder arrows and the status chip, which a narrow rail cannot
-   hold. Group rows without a title column (a group with only content, the
-   Messenger empty state, the collapsed recovery disclosure) have no `:has()`
-   match and stay full width. */
-@media (min-width: 768px) {
-  @container settings-main (min-width: 796px) {
-    .settings-workspace-content
-      .settings-group:has(
-        > .settings-group-header,
-        > .settings-messenger-group-heading
-      ):not(.settings-llm-card) {
-      display: flex;
-      align-items: stretch;
-      gap: var(--settings-space-5);
-    }
-
-    /* The title and help column: a full-height rail inside the card. */
-    .settings-workspace-content
-      .settings-group:not(.settings-llm-card)
-      > .settings-group-header,
-    .settings-workspace-content
-      .settings-group:not(.settings-llm-card)
-      > .settings-messenger-group-heading {
-      min-width: 0;
-      flex: 0 0 33.3333%;
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: flex-start;
-      gap: var(--settings-space-2);
-      border-right: 1px solid
-        color-mix(in srgb, var(--settings-border) 72%, transparent);
-      border-bottom: 0;
-    }
-
-    .settings-workspace-content
-      .settings-group:not(.settings-llm-card)
-      > .settings-messenger-group-heading {
-      padding: 11px var(--settings-space-4);
-    }
-
-    /* Group and Messenger action rows sit with their title in the rail. */
-    .settings-workspace-content
-      .settings-group:not(.settings-llm-card)
-      > .settings-messenger-group-heading
-      > .settings-messenger-heading-actions {
-      justify-content: flex-start;
-    }
-
-    /* The field panel: the remaining two thirds, still tiled by the field
-       grids the CRM stylesheet already owns. */
-    .settings-workspace-content
-      .settings-group:not(.settings-llm-card)
-      > .settings-group-content,
-    .settings-workspace-content
-      .settings-group:not(.settings-llm-card)
-      > .settings-messenger-group-content {
-      min-width: 0;
-      flex: 1 1 66.6667%;
-    }
   }
 }
 
@@ -1300,8 +1276,16 @@
 /* Rank badge in the card header, filling the group's icon slot: position in
    the failover chain is more useful there than a decorative glyph. */
 .settings-workspace-content .settings-group-icon:has(.settings-llm-rank) {
+  width: 30px;
+  height: 30px;
   border-color: transparent;
   background: transparent;
+}
+
+.settings-workspace-content .settings-input-action:focus-visible,
+.settings-workspace-content .settings-copy-app-id:focus-visible {
+  outline: 2px solid var(--settings-accent);
+  outline-offset: 2px;
 }
 
 .settings-llm-rank {
@@ -1631,6 +1615,10 @@
    Without this the grid is only declared for narrow viewports and the icon
    buttons drop below the field. */
 @media (min-width: 768px) {
+  .settings-workspace-content .settings-zalo-bot > .settings-group-content {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .settings-workspace-content .settings-sensitive-input {
     display: grid;
     grid-template-columns: minmax(0, 1fr) var(--settings-control-height) var(
@@ -1649,9 +1637,9 @@
     width: var(--settings-control-height);
     min-width: var(--settings-control-height);
     height: var(--settings-control-height);
-    border: 1px solid var(--settings-border);
+    border: 0;
     border-radius: 8px;
-    background: var(--settings-elevated);
+    background: transparent;
     color: var(--ink-muted);
   }
 

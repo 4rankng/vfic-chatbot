@@ -188,6 +188,23 @@ afterEach(async () => {
 });
 
 describe("FacebookMessengerIntegrationPage", () => {
+  it("marks application credentials to avoid reusing saved login credentials", async () => {
+    const screen = await renderPage();
+    const appId = screen.getByRole("textbox", { name: /^App ID/ });
+    const secret = screen.getByRole("textbox", { name: /^App Secret/ });
+    await expect.element(appId).toBeVisible();
+    await expect.element(appId).toHaveAttribute("name", "facebook_app_id");
+    await expect.element(appId).toHaveAttribute("autocomplete", "off");
+    await expect.element(secret).toHaveAttribute("name", "facebook_app_secret");
+    await expect
+      .element(secret)
+      .toHaveAttribute("autocomplete", "new-password");
+    expect(appId.element().closest("form")?.getAttribute("autocomplete")).toBe(
+      "off",
+    );
+    await expect.element(secret).toHaveValue("");
+  });
+
   it("offers retry instead of reporting disconnected when Page status cannot load", async () => {
     mocks.loadStatus.mockRejectedValueOnce(new Error("Unavailable"));
     const screen = await renderPage();

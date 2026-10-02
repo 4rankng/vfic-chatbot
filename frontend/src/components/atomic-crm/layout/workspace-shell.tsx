@@ -23,6 +23,7 @@ import {
   type WorkspaceRole,
   type WorkspaceSection,
 } from "./workspace-nav-model";
+import "./workspace-mobile-chat.css";
 
 type WorkspaceShellProps = {
   children: ReactNode;

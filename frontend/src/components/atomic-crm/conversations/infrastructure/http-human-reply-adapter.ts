@@ -18,6 +18,7 @@ class HumanReplyAdapterError extends Error {
 }
 
 const statusFor = (httpStatus: number): HumanReplyStatus => {
+  if (httpStatus === 0) return "network";
   if (httpStatus === 401) return "unauthorized";
   if (httpStatus === 403) return "forbidden";
   if (httpStatus === 409) return "conflict";

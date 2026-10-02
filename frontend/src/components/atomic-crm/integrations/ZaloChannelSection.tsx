@@ -75,7 +75,9 @@ export const ZaloChannelSection = ({
         <legend className="sr-only">Thông tin kết nối Zalo</legend>
         <div className="settings-grid settings-grid-zalo">
           <SettingsGroup
+            className="settings-zalo-bot"
             title="Zalo Chatbot"
+            description="Thông tin kết nối Bot Platform."
             icon={<PlugZap className="size-4" />}
             meta={
               <SettingsGroupStatus
@@ -129,6 +131,7 @@ export const ZaloChannelSection = ({
 
           <SettingsGroup
             title="Zalo OA"
+            description="Ứng dụng và quyền truy cập Official Account."
             icon={<MessageCircle className="size-4" />}
             meta={
               <SettingsGroupStatus
@@ -151,7 +154,7 @@ export const ZaloChannelSection = ({
 
               <SecretField
                 id="zalo_oa_secret_key"
-                label="Bot Secret"
+                label="App Secret"
                 placeholder="Nhập giá trị"
                 statusState={statusState}
                 configured={settings?.zalo_oa_secret_key.configured ?? false}

@@ -11,8 +11,10 @@ import {
   SettingsFieldStatus,
   SettingsGroupStatus,
 } from "./SettingsFieldStatus";
-import { PlainField } from "./SecretField";
+import { PlainField, SecretField } from "./SecretField";
 import { SettingsChrome } from "./SettingsChrome";
+import { ZaloChannelSection } from "./ZaloChannelSection";
+import { TestMessages } from "../providers/commons/TestMessages";
 import "@/index.css";
 import "../conversations/inbox.css";
 import "./settings.css";
@@ -45,7 +47,7 @@ afterEach(async () => {
 
 const console = (children: React.ReactNode) => (
   <div
-    className="inbox-bg-container settings-workspace"
+    className="workspace-frame-content inbox-bg-container settings-workspace"
     style={
       {
         "--settings-border": "#d4dce6",
@@ -122,15 +124,13 @@ describe("settings workspace density scale", () => {
       ".settings-workspace-content",
     )!;
     const styles = getComputedStyle(scoped);
-    // The console's scale aliases the shared `--crm-control-height-*` steps, so
-    // the magic 38/36px pair cannot come back: the desktop field, the action
-    // that pairs with it and the touch tier are all one 40px tier (owner cap
-    // 2026-09-30 — no control renders taller than 40px).
+    // Text controls use the compact 36px desktop tier. Phone fields use 40px;
+    // icon-only phone actions keep their separate 44px target.
     expect(styles.getPropertyValue("--settings-control-height").trim()).toBe(
-      "40px",
+      "36px",
     );
     expect(styles.getPropertyValue("--settings-action-height").trim()).toBe(
-      "40px",
+      "36px",
     );
     expect(styles.getPropertyValue("--settings-touch-target").trim()).toBe(
       "40px",
@@ -160,6 +160,58 @@ describe("settings workspace density scale", () => {
 });
 
 describe("settings configuration group card", () => {
+  it.each([
+    ["desktop", 1440],
+    ["phone", 390],
+  ] as const)(
+    "uses the Bot credential card width on %s",
+    async (_label, width) => {
+      await page.viewport(width, 900);
+      const screen = await render(
+        console(
+          <TestMessages>
+            <ZaloChannelSection
+              settings={null}
+              statusState="ready"
+              form={{
+                zalo_bot_token: "",
+                zalo_bot_webhook_secret: "",
+                zalo_oa_app_id: "",
+                zalo_oa_secret_key: "",
+                zalo_oa_access_token: "",
+                zalo_oa_refresh_token: "",
+              }}
+              onValueChange={() => {}}
+              channelTesting={{ bot: false, oa: false }}
+              onTestChannel={() => {}}
+            />
+          </TestMessages>,
+        ),
+      );
+      const panel = screen.container.querySelector<HTMLElement>(
+        ".settings-zalo-bot > .settings-group-content",
+      )!;
+      const fields = Array.from(
+        panel.querySelectorAll<HTMLElement>(".settings-field"),
+      );
+      expect(fields).toHaveLength(2);
+      const first = fields[0].getBoundingClientRect();
+      const second = fields[1].getBoundingClientRect();
+      const box = panel.getBoundingClientRect();
+
+      expect(first.width).toBeCloseTo(second.width, 0);
+      if (width > 767) {
+        expect(first.width / box.width).toBeGreaterThan(0.44);
+        expect(second.left).toBeGreaterThan(first.right);
+        expect(box.right - second.right).toBeLessThanOrEqual(21);
+        expect(second.top).toBeCloseTo(first.top, 0);
+      } else {
+        expect(first.width / box.width).toBeGreaterThan(0.85);
+        expect(second.top).toBeGreaterThanOrEqual(first.bottom);
+      }
+    },
+  );
+
   it("renders each group as an elevated card with a rounded frame", async () => {
     await page.viewport(desktop, 720);
 
@@ -202,45 +254,23 @@ describe("settings configuration group card", () => {
     expect(getComputedStyle(card).borderTopWidth).toBe("1px");
   });
 
-  // TEST-17 replaced the source-text pin with this measured contract; the
-  // anatomy it measures is now Tailkit a-c-form-layouts-04/05 (`md:flex
-  // md:gap-5`, `md:w-1/3` title column, `md:w-2/3` field panel) rather than a
-  // full-width band above the body, so the divider the old test pinned as
-  // `border-bottom` is asserted here on the axis the anatomy actually uses.
-  it("divides the title rail from the field panel on a wide main column", async () => {
+  it("keeps credentials full width below a compact provider header", async () => {
     await page.viewport(desktop, 720);
-
     const screen = await render(console(group(<span />)));
     const card =
       screen.container.querySelector<HTMLElement>(".settings-group")!;
     const header = card.querySelector<HTMLElement>(".settings-group-header")!;
     const content = card.querySelector<HTMLElement>(".settings-group-content")!;
-
     const cardBox = card.getBoundingClientRect();
-    const rail = header.getBoundingClientRect();
-    const panel = content.getBoundingClientRect();
+    const headingBox = header.getBoundingClientRect();
+    const contentBox = content.getBoundingClientRect();
 
-    // md:flex md:gap-5 — one row, not a stacked band.
-    expect(getComputedStyle(card).display).toBe("flex");
-    expect(getComputedStyle(card).columnGap).toBe("20px");
-    // md:w-1/3 title+help column, md:w-2/3 field panel reaching the card edge.
-    expect(rail.width / cardBox.width).toBeGreaterThan(0.3);
-    expect(rail.width / cardBox.width).toBeLessThan(0.36);
-    expect(panel.width / cardBox.width).toBeGreaterThan(0.6);
-    expect(panel.left - rail.right).toBeCloseTo(20, 0);
-    // The panel runs to the card's inner right edge, inside the 1px frame.
-    expect(cardBox.right - panel.right).toBeLessThanOrEqual(1);
-
-    // The rail keeps the tinted identity surface, divided vertically now.
-    const headerStyles = getComputedStyle(header);
-    expect(headerStyles.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
-    expect(headerStyles.backgroundColor).not.toBe(
-      getComputedStyle(content).backgroundColor,
-    );
-    expect(headerStyles.borderRightWidth).toBe("1px");
-    expect(headerStyles.borderBottomWidth).toBe("0px");
-    // Title and status meta stack in the column instead of spanning the card.
-    expect(headerStyles.flexDirection).toBe("column");
+    expect(getComputedStyle(card).display).toBe("grid");
+    expect(headingBox.width).toBeCloseTo(cardBox.width - 2, 0);
+    expect(contentBox.width).toBeCloseTo(cardBox.width - 2, 0);
+    expect(contentBox.top).toBeGreaterThanOrEqual(headingBox.bottom - 1);
+    expect(getComputedStyle(header).borderRightWidth).toBe("0px");
+    expect(getComputedStyle(header).borderBottomWidth).toBe("1px");
   });
 
   it("keeps the header band when the main column cannot afford a rail", async () => {
@@ -358,7 +388,7 @@ describe("settings section panel", () => {
     )!;
     const styles = getComputedStyle(panel);
 
-    expect(styles.gap).toBe("16px");
+    expect(styles.gap).toBe("12px");
     expect(styles.borderTopWidth).toBe("0px");
     expect(styles.borderBottomWidth).toBe("0px");
   });
@@ -416,10 +446,10 @@ describe("settings action sizing", () => {
     );
     const button = screen.getByRole("button", { name: "Kiểm tra" }).element();
 
-    // The desktop action tier is the shared 40px `--crm-control-height-md`
+    // The desktop action tier is the shared 36px `--crm-control-height-md`
     // step — the same one `inbox/features.css` declares for this control.
-    expect(getComputedStyle(button).minHeight).toBe("40px");
-    expect(getComputedStyle(button).height).toBe("40px");
+    expect(getComputedStyle(button).minHeight).toBe("36px");
+    expect(getComputedStyle(button).height).toBe("36px");
   });
 
   it("restores full mobile touch targets", async () => {
@@ -436,8 +466,7 @@ describe("settings action sizing", () => {
     );
     const button = screen.getByRole("button", { name: "Kiểm tra" }).element();
 
-    expect(getComputedStyle(button).minHeight).toBe("40px");
-    expect(getComputedStyle(button).height).toBe("40px");
+    expect(button.getBoundingClientRect().height).toBe(40);
   });
 
   it("keeps the mobile navigation trigger and group rows touch-safe", async () => {
@@ -457,7 +486,7 @@ describe("settings action sizing", () => {
       ".settings-command-header h1",
     )!;
 
-    expect(getComputedStyle(trigger).minHeight).toBe("40px");
+    expect(trigger.getBoundingClientRect().height).toBe(40);
     expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     // The collapse row must not re-inherit the details padding that ships with
     // `<details>`, which pushed the chevron off the row.
@@ -467,6 +496,73 @@ describe("settings action sizing", () => {
     // The page title stays on the shared page-title scale (22px at phone width).
     expect(getComputedStyle(pageTitle).fontSize).toBe("22px");
   });
+
+  it.each([320, 390])(
+    "keeps credential icon actions bare and touch-safe without squeezing the input at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      const screen = await render(
+        console(
+          group(
+            <TestMessages>
+              <SecretField
+                id="test-secret"
+                label="Token"
+                value="synthetic-token"
+                configured={false}
+                placeholder="Nhập token"
+                onChange={() => {}}
+                notify={() => {}}
+              />
+              <div className="settings-oa-fields">
+                <PlainField
+                  id="test-app-id"
+                  label="App ID"
+                  value="synthetic-app"
+                  configured={false}
+                  onChange={() => {}}
+                  notify={() => {}}
+                />
+              </div>
+            </TestMessages>,
+          ),
+        ),
+      );
+      const fields = screen.container.querySelectorAll<HTMLElement>(
+        ".settings-sensitive-input, .settings-field-has-action",
+      );
+      expect(fields).toHaveLength(2);
+      for (const field of fields) {
+        const box = field.getBoundingClientRect();
+        const input = field.querySelector<HTMLInputElement>("input")!;
+        expect(
+          input.closest(".settings-input")!.getBoundingClientRect().height,
+        ).toBe(40);
+        expect(input.getBoundingClientRect().height).toBeLessThanOrEqual(40);
+        expect(getComputedStyle(input).fontSize).toBe("12px");
+        let previousRight = input.getBoundingClientRect().right;
+        for (const action of field.querySelectorAll<HTMLButtonElement>(
+          ".settings-input-action, .settings-copy-app-id",
+        )) {
+          const rect = action.getBoundingClientRect();
+          expect(rect.height).toBeGreaterThanOrEqual(44);
+          expect(rect.width).toBeGreaterThanOrEqual(44);
+          expect(rect.left).toBeGreaterThanOrEqual(previousRight);
+          expect(rect.right).toBeLessThanOrEqual(box.right + 1);
+          expect(getComputedStyle(action).borderTopWidth).toBe("0px");
+          expect(getComputedStyle(action).backgroundColor).toBe(
+            "rgba(0, 0, 0, 0)",
+          );
+          previousRight = rect.right;
+        }
+      }
+      const icon = screen.container.querySelector<HTMLElement>(
+        ".settings-group-icon",
+      )!;
+      expect(getComputedStyle(icon).borderTopWidth).toBe("0px");
+      expect(getComputedStyle(icon).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    },
+  );
 
   it("keeps mobile Messenger actions content-sized", async () => {
     await page.viewport(phone, 844);

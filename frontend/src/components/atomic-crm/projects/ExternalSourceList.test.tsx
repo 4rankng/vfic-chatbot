@@ -43,7 +43,9 @@ let queryClient: QueryClient;
 
 /** The list reads its query from the react-admin QueryClient in the app. */
 const QueryClientWrapper = ({ children }: { children: ReactNode }) => (
-  <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  <QueryClientProvider client={queryClient}>
+    <div className="inbox-bg-container project-workspace">{children}</div>
+  </QueryClientProvider>
 );
 
 const renderList = (ui: ReactElement) =>

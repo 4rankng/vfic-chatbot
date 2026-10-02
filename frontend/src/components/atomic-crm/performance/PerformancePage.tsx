@@ -64,10 +64,11 @@ export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
   const windowLabel =
     data.window === "1h" ? "1 giờ" : data.window === "7d" ? "7 ngày" : "24 giờ";
   const workerTone: Tone =
-    data.live.total_workers > 0 &&
-    data.live.busy_workers >= data.live.total_workers
-      ? "warning"
-      : "success";
+    data.live.total_workers === 0
+      ? "neutral"
+      : data.live.busy_workers >= data.live.total_workers
+        ? "warning"
+        : "success";
   const deliveryTone: Tone =
     (data.reliability?.failed_count ?? 0) > 0
       ? "danger"
@@ -85,9 +86,17 @@ export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
           icon={Server}
         />
         <Metric
-          label="Sức chứa worker"
-          value={`${data.live.busy_workers}/${data.live.total_workers}`}
-          hint="worker đang bận"
+          label="Mức tải worker"
+          value={
+            data.live.total_workers > 0
+              ? `${data.live.busy_workers}/${data.live.total_workers}`
+              : "Chưa có"
+          }
+          hint={
+            data.live.total_workers > 0
+              ? "worker đang bận"
+              : "chưa ghi nhận worker"
+          }
           tone={workerTone}
           icon={Cpu}
         />
@@ -106,7 +115,7 @@ export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
           icon={ShieldAlert}
         />
         <Metric
-          label="Giao gửi rủi ro"
+          label="Gửi tin cần kiểm tra"
           value={String(
             (data.reliability?.failed_count ?? 0) +
               (data.reliability?.send_unknown_count ?? 0),
@@ -162,7 +171,7 @@ export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
 /** Page shell: time-range switcher, manual refresh, and the three load states. */
 const PerformancePanel = () => {
   const [windowKey, setWindowKey] = useState<"1h" | "24h" | "7d">("24h");
-  const { data, isPending, isError, refetch, dataUpdatedAt } =
+  const { data, isPending, isFetching, isError, refetch, dataUpdatedAt } =
     usePerformanceStats(windowKey);
   const freshness = useMemo(
     () =>
@@ -175,9 +184,10 @@ const PerformancePanel = () => {
         : null,
     [dataUpdatedAt],
   );
-  const hasError = isError || !data;
+  const hasError = !data;
+  const refreshing = Boolean(isPending || isFetching);
   return (
-    <div className="performance-page" aria-busy={isPending || undefined}>
+    <div className="performance-page" aria-busy={refreshing || undefined}>
       <header className="performance-header">
         <div>
           <p className="performance-kicker">Vận hành</p>
@@ -185,13 +195,13 @@ const PerformancePanel = () => {
           <p>
             {isPending
               ? "Đang tải số liệu cho khoảng thời gian đã chọn."
-              : "Trải nghiệm ứng viên, năng lực xử lý và độ tin cậy giao gửi."}
+              : "Độ trễ xử lý, mức tải và trạng thái gửi tin theo từng kênh."}
           </p>
         </div>
         <div className="performance-header-actions">
           <ButtonGroup
             size="sm"
-            className="uu-scope"
+            className="performance-window-switcher uu-scope"
             aria-label="Khoảng thời gian"
             selectedKeys={[windowKey]}
             onSelectionChange={(keys) => {
@@ -200,7 +210,11 @@ const PerformancePanel = () => {
             }}
           >
             {WINDOWS.map((window) => (
-              <ButtonGroupItem key={window.key} id={window.key}>
+              <ButtonGroupItem
+                key={window.key}
+                id={window.key}
+                className="performance-window-option"
+              >
                 {window.label}
               </ButtonGroupItem>
             ))}
@@ -209,13 +223,13 @@ const PerformancePanel = () => {
             type="button"
             className="performance-refresh"
             onClick={() => void refetch()}
-            disabled={isPending}
+            disabled={refreshing}
             aria-label={
               freshness ? `Cập nhật lúc ${freshness}` : "Cập nhật dữ liệu"
             }
           >
             <RefreshCw
-              className={isPending ? "is-spinning" : undefined}
+              className={refreshing ? "is-spinning" : undefined}
               aria-hidden="true"
             />
             {freshness ? (
@@ -231,6 +245,12 @@ const PerformancePanel = () => {
           </button>
         </div>
       </header>
+      {data && isError ? (
+        <div className="performance-stale-notice" role="alert">
+          Chưa cập nhật được số liệu. Dữ liệu lần tải trước vẫn hiển thị; chọn
+          Cập nhật để thử lại.
+        </div>
+      ) : null}
       {isPending ? <PerformanceLoading /> : null}
       {!isPending && hasError ? (
         <PerformanceError onRetry={() => void refetch()} />

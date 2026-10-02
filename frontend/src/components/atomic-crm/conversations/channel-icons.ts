@@ -9,7 +9,7 @@ import {
 
 /**
  * The channel glyphs. One source, reused by the channel filter, the conversation
- * list and the thread header — a channel is identified by its icon everywhere,
+ * list and the composer — a channel is identified by its icon everywhere,
  * with the full label on the element's `alt`/`title`.
  */
 export const CHANNEL_ICONS: Record<ConversationChannelProvider, string> = {

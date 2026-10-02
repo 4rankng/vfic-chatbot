@@ -74,4 +74,26 @@ describe("apiJson error mapping", () => {
     expect(err.status).toBe(409);
     expect(err.name).toBe("ApiError");
   });
+
+  it("explains a network failure without retrying a potentially accepted write", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    await expect(
+      apiJson("/api/v1/users", { method: "POST", body: { name: "Test" } }),
+    ).rejects.toMatchObject({
+      name: "ApiError",
+      status: 0,
+      message: "Không thể kết nối. Kiểm tra mạng rồi thử lại.",
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves cancellation so it does not become a connection error", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const cancellation = new DOMException("Aborted", "AbortError");
+    globalThis.fetch = vi.fn().mockRejectedValue(cancellation);
+    await expect(
+      apiJson("/api/v1/users", { signal: controller.signal }),
+    ).rejects.toBe(cancellation);
+  });
 });

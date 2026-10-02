@@ -6,10 +6,10 @@ import {
   Pencil,
   Save,
   ShieldCheck,
-  UserRound,
 } from "lucide-react";
 import {
   Form,
+  email,
   required,
   useGetIdentity,
   useGetOne,
@@ -30,13 +30,11 @@ import { Label } from "@/components/base/input/label";
 import { HintText } from "@/components/base/input/hint-text";
 import { Select } from "@/components/base/select/select";
 import type { SelectItemType } from "@/components/base/select/select-shared";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { InboxIcons } from "../conversations/InboxIcons";
 import { apiJson, ApiError } from "@/lib/apiClient";
 import type { Profile } from "../types";
-import { EmptyState } from "../kit";
+import { EmptyState, PageHeading, PageShell } from "../kit";
 import { LoadingState } from "../misc/LoadingState";
-import "../conversations/inbox.css";
+import "./profile.css";
 
 type ProfileFieldSource = "full_name" | "email";
 
@@ -62,7 +60,6 @@ export const ProfilePage = () => {
   );
   const translate = useTranslate();
   const notify = useNotify();
-  const isMobile = useIsMobile();
 
   const { isPending, mutate } = useMutation({
     mutationKey: ["profile-update"],
@@ -99,21 +96,14 @@ export const ProfilePage = () => {
   const displayName = data?.full_name?.trim() || translate("crm.profile.title");
   const displayEmail = data?.email?.trim() || "";
 
-  const content = (
-    <div className="profile-workspace-content text-foreground">
-      <div className="ops-page-shell profile-page-shell">
-        <header className="ops-command-header profile-command-header">
-          <div className="ops-command-title">
-            <div className="ops-command-mark profile-command-mark">
-              <UserRound className="size-5" aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <p className="ops-kicker">Tài khoản</p>
-              <h1>Hồ sơ cá nhân</h1>
-              <p>{[displayName, displayEmail].filter(Boolean).join(" · ")}</p>
-            </div>
-          </div>
-        </header>
+  return (
+    <div className="account-profile-workspace-content text-foreground">
+      <PageShell size="narrow" className="account-profile-page-shell">
+        <PageHeading
+          eyebrow="Tài khoản"
+          title="Hồ sơ cá nhân"
+          subtitle={[displayName, displayEmail].filter(Boolean).join(" · ")}
+        />
 
         {profilePending ? (
           <LoadingState label="Đang tải hồ sơ cá nhân…" />
@@ -137,22 +127,7 @@ export const ProfilePage = () => {
             />
           </Form>
         )}
-      </div>
-    </div>
-  );
-
-  if (isMobile) {
-    return <div className="profile-mobile-shell">{content}</div>;
-  }
-
-  return (
-    <div className="inbox-bg-container profile-workspace">
-      <InboxIcons />
-      <div className="app profile-app" id="app">
-        <section className="panel center-panel profile-center-panel">
-          {content}
-        </section>
-      </div>
+      </PageShell>
     </div>
   );
 };
@@ -175,28 +150,28 @@ const ProfileForm = ({
   if (!identity) return null;
 
   return (
-    <div className="profile-grid">
+    <div className="account-profile-grid">
       <section
-        className="profile-section profile-account-section"
-        aria-labelledby="profile-account-title"
+        className="account-profile-section account-profile-account-section"
+        aria-labelledby="account-profile-account-title"
       >
-        <header className="profile-section-header">
-          <div className="profile-section-heading">
-            <span className="profile-card-icon">
+        <header className="account-profile-section-header">
+          <div className="account-profile-section-heading">
+            <span className="account-profile-card-icon">
               <ShieldCheck className="size-4" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <h2 id="profile-account-title">Thông tin tài khoản</h2>
+              <h2 id="account-profile-account-title">Thông tin tài khoản</h2>
               <p>Tên hiển thị và email đăng nhập.</p>
             </div>
           </div>
-          <div className="profile-actions">
+          <div className="account-profile-actions">
             {isEditMode ? (
               <>
                 <Button
                   type="button"
                   color="tertiary"
-                  className="uu-scope profile-action-button"
+                  className="uu-scope account-profile-action-button"
                   iconLeading={<CircleX />}
                   isDisabled={isSaving}
                   onClick={() => {
@@ -209,7 +184,7 @@ const ProfileForm = ({
                 <Button
                   type="submit"
                   color="primary"
-                  className="uu-scope profile-action-button profile-save-button"
+                  className="uu-scope account-profile-action-button account-profile-save-button"
                   isDisabled={!isDirty || isSaving}
                   isLoading={isSaving}
                   showTextWhileLoading
@@ -224,7 +199,7 @@ const ProfileForm = ({
               <Button
                 type="button"
                 color="secondary"
-                className="uu-scope profile-action-button"
+                className="uu-scope account-profile-action-button"
                 iconLeading={<Pencil />}
                 onClick={() => setEditMode(true)}
               >
@@ -234,7 +209,7 @@ const ProfileForm = ({
           </div>
         </header>
 
-        <div className="profile-field-grid">
+        <div className="account-profile-field-grid">
           <TextRender
             source="full_name"
             isEditMode={isEditMode}
@@ -249,8 +224,8 @@ const ProfileForm = ({
         </div>
       </section>
 
-      <section className="profile-session-section">
-        <div className="profile-session-content">
+      <section className="account-profile-session-section">
+        <div className="account-profile-session-content">
           <div className="min-w-0">
             <h2>Đăng xuất</h2>
             <p>Kết thúc phiên trên thiết bị này.</p>
@@ -258,7 +233,7 @@ const ProfileForm = ({
           <Button
             type="button"
             color="secondary"
-            className="uu-scope profile-action-button profile-logout-button"
+            className="uu-scope account-profile-action-button account-profile-logout-button"
             iconLeading={<LogOut className="size-4" />}
             onClick={() => logout()}
           >
@@ -285,14 +260,17 @@ const LanguageSelector = () => {
   }));
 
   return (
-    <div className="profile-field">
-      <div className="profile-field-label-row">
+    <div className="account-profile-field">
+      <div className="account-profile-field-label-row">
         <Globe2 className="size-3.5" aria-hidden="true" />
-        <span className="profile-field-label">{translate("crm.language")}</span>
+        <span className="account-profile-field-label">
+          {translate("crm.language")}
+        </span>
       </div>
       <Select
+        popoverClassName="uu-scope console-select-popover"
         aria-label={translate("crm.language")}
-        className="uu-scope profile-select-trigger"
+        className="uu-scope account-profile-select-trigger"
         items={items}
         selectedKey={locale}
         onSelectionChange={(key) => {
@@ -331,11 +309,11 @@ const TextRender = ({
     );
   }
   return (
-    <div className={`profile-field ${className ?? ""}`}>
-      <span className="profile-field-label">
+    <div className={`account-profile-field ${className ?? ""}`}>
+      <span className="account-profile-field-label">
         {translate(label, { _: source })}
       </span>
-      <span className="profile-field-value">
+      <span className="account-profile-field-value">
         {record?.[source]?.trim() || "Chưa cập nhật"}
       </span>
     </div>
@@ -351,7 +329,7 @@ const TextRender = ({
  * default `native` behaviour from writing `required` onto the input and letting
  * the browser block the submit before react-admin validates.
  *
- * `uu-scope` and the console's `profile-*` classes both ride the control: the
+ * `uu-scope` and the console's `account-profile-*` classes both ride the control: the
  * wrapper re-binds the four utility names this console and Untitled UI both
  * define (`bg-primary`, `bg-secondary`, `text-primary`, `border-primary`), while
  * the profile sheet keeps owning the field's density. See
@@ -370,14 +348,21 @@ const ProfileTextField = ({
   const label = `resources.users.fields.${source}`;
   const { id, field, fieldState, isRequired } = useInput({
     source,
-    validate: required(),
+    validate:
+      source === "email"
+        ? [
+            required("Vui lòng nhập email."),
+            email("Email chưa đúng định dạng."),
+          ]
+        : required("Vui lòng nhập họ tên."),
   });
   const type = source === "email" ? "email" : "text";
 
   return (
     <TextField
       id={id}
-      className={`profile-field profile-field-editing uu-scope ${className ?? ""}`}
+      size="sm"
+      className={`account-profile-field account-profile-field-editing uu-scope ${className ?? ""}`}
       name={field.name}
       type={type}
       value={typeof field.value === "string" ? field.value : ""}
@@ -388,7 +373,7 @@ const ProfileTextField = ({
       isInvalid={Boolean(fieldState.error)}
       isDisabled={disabled}
     >
-      <Label className="profile-field-label">
+      <Label className="account-profile-field-label">
         {translate(label, { _: source })}
       </Label>
       <InputBase
@@ -397,7 +382,7 @@ const ProfileTextField = ({
         autoComplete={source === "email" ? "email" : "name"}
         isInvalid={Boolean(fieldState.error)}
         isDisabled={disabled}
-        wrapperClassName="profile-input"
+        wrapperClassName="account-profile-input"
       />
       {fieldState.error?.message ? (
         <HintText isInvalid role="alert">

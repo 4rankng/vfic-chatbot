@@ -1,0 +1,163 @@
+.account-profile-workspace-content {
+  color: var(--workspace-ink);
+}
+
+.account-profile-workspace-content .account-profile-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.account-profile-workspace-content .account-profile-section,
+.account-profile-workspace-content .account-profile-session-section {
+  overflow: hidden;
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  background: var(--workspace-surface);
+  color: var(--workspace-ink);
+}
+
+.account-profile-workspace-content .account-profile-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--workspace-border);
+}
+
+.account-profile-workspace-content .account-profile-section-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-profile-workspace-content .account-profile-card-icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--workspace-action);
+}
+
+.account-profile-workspace-content .account-profile-card-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.account-profile-workspace-content .account-profile-section-header h2,
+.account-profile-workspace-content .account-profile-session-content h2 {
+  margin: 0;
+  color: var(--workspace-ink);
+  font-size: var(--fs-section-title);
+  font-weight: var(--fw-semibold);
+  line-height: 1.4;
+}
+
+.account-profile-workspace-content .account-profile-section-header p,
+.account-profile-workspace-content .account-profile-session-content p {
+  margin: 4px 0 0;
+  color: var(--workspace-ink-muted);
+  font-size: var(--fs-body-sm);
+  line-height: 1.5;
+}
+
+.account-profile-workspace-content .account-profile-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.account-profile-workspace-content .account-profile-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  align-content: start;
+  gap: 8px;
+}
+
+.account-profile-workspace-content .account-profile-field-label,
+.account-profile-workspace-content .account-profile-field-label-row {
+  color: var(--workspace-ink-muted);
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-medium);
+  line-height: 1.4;
+}
+
+.account-profile-workspace-content .account-profile-field-value {
+  display: block;
+  min-height: auto;
+  padding: 0;
+  overflow: visible;
+  color: var(--workspace-ink);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.account-profile-workspace-content .account-profile-input {
+  width: 100%;
+  min-height: var(--crm-control-height-md, 36px);
+  border: 1px solid var(--workspace-border);
+  border-radius: 8px;
+  background: var(--workspace-surface);
+}
+
+.account-profile-workspace-content .account-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.account-profile-workspace-content .account-profile-action-button {
+  min-height: var(--crm-control-height-md, 36px);
+}
+
+.account-profile-workspace-content .account-profile-session-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+}
+
+.account-profile-workspace-content .account-profile-logout-button {
+  flex: 0 0 auto;
+  color: var(--workspace-danger);
+}
+
+@media (max-width: 760px) {
+  .account-profile-workspace-content .account-profile-section-header,
+  .account-profile-workspace-content .account-profile-session-content {
+    padding: 16px;
+  }
+
+  .account-profile-workspace-content .account-profile-section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-profile-workspace-content .account-profile-actions {
+    justify-content: flex-end;
+  }
+
+  .account-profile-workspace-content .account-profile-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .account-profile-workspace-content .account-profile-input input {
+    max-height: none;
+  }
+
+  .account-profile-workspace-content .account-profile-action-button {
+    height: var(--crm-control-height-touch, 40px);
+    max-height: none;
+  }
+}

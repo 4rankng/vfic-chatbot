@@ -64,7 +64,7 @@ export const UserCreate = () => {
           subtitle="Tạo đăng nhập và quyền cho thành viên nội bộ."
         />
         <section
-          className="user-account-form mt-4"
+          className="user-account-form"
           aria-labelledby="user-create-form-title"
         >
           <header className="user-account-form-header">
@@ -133,20 +133,24 @@ export const UserCreate = () => {
                   className="user-account-field"
                 />
               </div>
+              <p className="user-account-role-help">
+                Chỉ cấp quyền Quản trị cho người cần quản lý tài khoản và cài
+                đặt.
+              </p>
               <footer className="user-account-form-actions">
                 <Button
                   href={listHref}
                   color="secondary"
-                  size="md"
-                  className="uu-scope user-account-secondary-action min-h-11 max-[760px]:w-full"
+                  size="sm"
+                  className="uu-scope user-account-secondary-action max-[760px]:w-full"
                   isDisabled={isSubmitting}
                 >
                   Hủy
                 </Button>
                 <Button
                   type="submit"
-                  size="md"
-                  className="uu-scope user-account-submit min-h-11 max-[760px]:w-full"
+                  size="sm"
+                  className="uu-scope user-account-submit max-[760px]:w-full"
                   isDisabled={isSubmitting}
                   isLoading={isSubmitting}
                   showTextWhileLoading

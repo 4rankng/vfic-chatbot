@@ -196,7 +196,7 @@ export const TingtingSection = () => {
             type="button"
             color="secondary"
             size="sm"
-            className="mt-2"
+            className="uu-scope mt-2"
             isDisabled={settingsQuery.isFetching}
             onClick={() => void settingsQuery.refetch()}
           >
@@ -320,7 +320,7 @@ export const TingtingSection = () => {
               <Button
                 type="button"
                 color="secondary"
-                className="settings-test-button tt-btn-touch"
+                className="uu-scope settings-test-button tt-btn-touch"
                 onClick={() => checkOa.mutate()}
                 isDisabled={checkOa.isPending}
                 aria-busy={checkOa.isPending}

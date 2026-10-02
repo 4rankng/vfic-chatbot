@@ -58,16 +58,6 @@
   .inbox-bg-container .app.project-app {
     grid-template-columns: 54px minmax(0, 1fr);
   }
-
-  .inbox-bg-container .header-person {
-    flex: 1 1 auto;
-    max-width: none;
-  }
-
-  .inbox-bg-container .header-actions {
-    width: auto;
-    justify-content: flex-end;
-  }
 }
 
 /* ---- Mobile (<= 767px): list-first master/detail ----
@@ -88,7 +78,8 @@
   }
 
   .inbox-bg-container {
-    /* Conversation routes own the full mobile viewport; no global top/bottom app bar. */
+    /* The base phone surface fills the viewport; the authenticated inbox list
+       reserves its global app bar below. */
     padding: 0;
     height: 100vh;
     height: 100dvh;
@@ -99,10 +90,9 @@
     height: 100dvh;
   }
 
-  /* The global topbar (h-14 + safe-area) sits above the scrolling frame
-     content on phones too, so a full-100dvh conversation surface overflows
-     the frame by exactly the topbar height and pushes the composer below
-     the fold. Reserve it — mirrors the 768-1023px band's calc(100dvh - 56px). */
+  /* The inbox list keeps the global app bar. The shell's
+     workspace-mobile-chat.css expands an open phone conversation to the full
+     viewport when that same rendered detail state hides the global bar. */
   .workspace-frame-content > .inbox-bg-container.conversation-workspace {
     height: calc(100vh - 3.5rem - env(safe-area-inset-top, 0px));
     height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px));
@@ -341,46 +331,6 @@
     position: fixed;
     z-index: 65;
   }
-  .inbox-bg-container .mobile-toggle.list-toggle {
-    display: inline-grid;
-  }
-  .inbox-bg-container .chat-header {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    min-height: 60px;
-  }
-  .inbox-bg-container .chat-header .icon-btn {
-    width: 44px;
-    height: 44px;
-  }
-  .inbox-bg-container .header-person {
-    width: 100%;
-  }
-  .inbox-bg-container .header-actions {
-    width: auto;
-    display: flex;
-    gap: 6px;
-    justify-content: flex-end;
-  }
-  .inbox-bg-container .mode-menu-trigger {
-    width: 44px;
-    height: 44px;
-    justify-content: center;
-    padding: 0;
-    border-radius: 999px;
-  }
-  .inbox-bg-container .mode-menu-trigger-label,
-  .inbox-bg-container .mode-menu-trigger-chevron {
-    display: none;
-  }
-  .inbox-bg-container .mode-menu-trigger--primary {
-    width: 44px;
-    padding: 0;
-    border-radius: 999px;
-  }
   .conversation-actions-menu {
     width: min(20rem, calc(100vw - 1rem));
     max-width: calc(100vw - 1rem);
@@ -395,14 +345,6 @@
   .conversation-actions-menu .conversation-actions-item svg {
     width: 20px;
     height: 20px;
-  }
-  .inbox-bg-container .chat-mode-chip {
-    width: 36px;
-    padding: 0;
-    justify-content: center;
-  }
-  .inbox-bg-container .chat-mode-chip span {
-    display: none;
   }
   .inbox-bg-container .profile-header {
     min-height: 64px;

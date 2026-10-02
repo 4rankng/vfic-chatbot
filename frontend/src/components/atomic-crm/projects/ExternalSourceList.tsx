@@ -313,6 +313,7 @@ export const ExternalSourceList = ({
     return (
       <EmptyState
         icon={<Link2 className="size-6" aria-hidden="true" />}
+        variant="inline"
         title="Nguồn đồng bộ"
         description="Chưa có nguồn đồng bộ Google Sheet cho trang kiến thức này."
       />

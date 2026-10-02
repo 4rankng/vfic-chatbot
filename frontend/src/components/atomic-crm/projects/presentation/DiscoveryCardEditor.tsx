@@ -1,6 +1,12 @@
 import { useId } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Project } from "../../types";
@@ -40,13 +46,19 @@ export const DiscoveryCardEditor = ({ project }: { project: Project }) => {
         <CardTitle className="text-section-title">
           Thông tin dùng khi gợi ý dự án
         </CardTitle>
+        <CardDescription>
+          Giúp chatbot giới thiệu và chọn dự án phù hợp với ứng viên.
+        </CardDescription>
       </CardHeader>
       <CardContent
         className="project-discovery-content grid gap-3 sm:grid-cols-2"
         aria-busy={saving}
       >
         {fields.map((field) => (
-          <div key={field.key} className="grid min-w-0 gap-1.5">
+          <div
+            key={field.key}
+            className={`grid min-w-0 gap-1.5 ${field.key === "summary" || field.key === "highlights" ? "project-discovery-wide-field" : ""}`}
+          >
             <Label htmlFor={`${formId}-${field.key}`}>{field.label}</Label>
             <Input
               id={`${formId}-${field.key}`}
@@ -57,7 +69,7 @@ export const DiscoveryCardEditor = ({ project }: { project: Project }) => {
             />
           </div>
         ))}
-        <div>
+        <div className="project-discovery-actions">
           <Button
             type="button"
             className="project-discovery-save"

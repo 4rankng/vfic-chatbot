@@ -81,12 +81,34 @@ export const ProjectKnowledgePanel = ({
       ) : null}
       {project.knowledge_mode === "DIRECT_CONTEXT" ? (
         <SinglePagePanel project={project} editable={canManageSources} />
-      ) : (
+      ) : project.knowledge_mode === "RAG" ? (
         <RagCategoriesPanel
           project={project}
           editable={editable}
           canManageSources={canManageSources}
         />
+      ) : (
+        <section className="project-legacy-knowledge" aria-label="Kiến thức cũ">
+          <Database
+            className="size-5 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <div>
+            <h2 className="text-section-title font-semibold">
+              Kiến thức chưa được chuyển đổi
+            </h2>
+            <p className="text-helper text-muted-foreground">
+              Dự án chưa có KB riêng để quản lý theo danh mục. Tài liệu hiện có
+              được giữ lại.
+            </p>
+            {canManageSources && (
+              <p className="text-helper text-muted-foreground">
+                Hoàn tất chuyển đổi kiến thức của dự án trước khi chỉnh sửa danh
+                mục.
+              </p>
+            )}
+          </div>
+        </section>
       )}
     </div>
   );
@@ -149,7 +171,7 @@ const BINARY_TYPE =
 const BriefIngestSection = ({
   projectId,
   disabled,
-  buttonLabel = "Nhập từ tệp văn bản (.md khuyến nghị)",
+  buttonLabel = "Nhập từ tệp văn bản",
   onIngested,
   onCutover,
 }: {
@@ -237,10 +259,16 @@ const BriefIngestSection = ({
   const ingesting = state.phase === "running";
   return (
     <section
-      className="project-brief-ingest grid gap-2"
+      className="project-brief-ingest"
       aria-label="Nhập kiến thức từ phiếu thông tin"
     >
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="project-brief-ingest-heading">
+        <div>
+          <p className="text-body font-semibold">Cập nhật kiến thức từ tệp</p>
+          <p className="text-helper text-muted-foreground">
+            Một tệp .txt hoặc .md, tối đa 2 MB.
+          </p>
+        </div>
         {/*
           The file affordance is a Untitled UI button plus a visually hidden
           input, not a `<label>` inside a button: the library's `Button` is a
@@ -378,17 +406,15 @@ const MigrationSection = ({ projectId }: { projectId: string }) => {
           Chuyển sang kiến thức 12 danh mục
         </h3>
         <p className="text-helper text-muted-foreground">
-          Tải lên tệp thông tin dự án để chuyển sang 12 danh mục. Danh mục đã có
-          dữ liệu được giữ lại nếu tệp không nêu; mục chưa có dữ liệu được đánh
-          dấu trống. Kiến thức hiện tại vẫn được dùng đến khi chuyển xong và
-          được lưu để khôi phục. Giữ trang mở để hoàn tất; nếu rời trang, hãy
-          chọn lại cùng tệp để tiếp tục.
+          Nạp tệp để phân loại kiến thức. Danh mục đã có dữ liệu được giữ lại
+          nếu tệp không nêu. Kiến thức hiện tại vẫn được dùng đến khi chuyển
+          xong. Giữ trang mở; nếu rời trang, chọn lại cùng tệp để tiếp tục.
         </p>
       </div>
       <BriefIngestSection
         projectId={projectId}
         disabled={migrating}
-        buttonLabel="Chuyển sang 12 danh mục — nhập từ tệp .md"
+        buttonLabel="Nhập tệp và chuyển đổi"
         onCutover={migrate}
       />
     </section>
@@ -474,7 +500,7 @@ const RagCategoriesPanel = ({
           Kiến thức theo danh mục
         </h2>
         <p className="project-knowledge-description">
-          Việc làm có trong file = đang tuyển.
+          Kiểm tra và cập nhật nội dung chatbot dùng để tư vấn.
         </p>
         {categories && (
           <div className="project-knowledge-progress" aria-live="polite">
@@ -552,6 +578,7 @@ const RagCategoriesPanel = ({
                     <button
                       key={category.key}
                       type="button"
+                      data-allow-tall
                       onClick={() => selectCategory(category.key)}
                       aria-pressed={isSelected}
                       aria-controls="project-category-detail"
@@ -644,7 +671,7 @@ const RagCategoriesPanel = ({
         )}
 
         {canManageSources && (
-          <section className="space-y-2">
+          <section className="project-source-section space-y-2">
             <h3 className="inline-flex items-center gap-2 text-body font-semibold">
               <Link2 className="size-4" aria-hidden="true" />
               Google Sheet

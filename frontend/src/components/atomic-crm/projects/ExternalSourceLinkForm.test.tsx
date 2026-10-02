@@ -27,6 +27,54 @@ describe("ExternalSourceLinkForm", () => {
     mocks.createSinglePageExternalSource.mockResolvedValue({ id: "src-sp-1" });
   });
 
+  it("keeps field associations unique when two source forms are open", async () => {
+    const screen = await render(
+      <>
+        <section data-testid="first-source">
+          <ExternalSourceLinkForm projectId="project-1" />
+        </section>
+        <section data-testid="second-source">
+          <ExternalSourceLinkForm projectId="project-2" />
+        </section>
+      </>,
+    );
+    const first = screen.getByTestId("first-source");
+    const second = screen.getByTestId("second-source");
+    await first.getByRole("button", { name: "Liên kết Google Sheet" }).click();
+    await second.getByRole("button", { name: "Liên kết Google Sheet" }).click();
+    const firstInput = first.getByLabelText("Link Google Sheet").element();
+    const secondInput = second.getByLabelText("Link Google Sheet").element();
+    expect(firstInput.id).not.toBe(secondInput.id);
+    await first
+      .getByLabelText("Link Google Sheet")
+      .fill("https://docs.google.com/spreadsheets/d/first/edit#gid=0");
+    await expect
+      .element(second.getByLabelText("Link Google Sheet"))
+      .toHaveValue("");
+  });
+
+  it("resets the target category when the selected knowledge category changes", async () => {
+    const screen = await render(
+      <ExternalSourceLinkForm projectId="project-1" defaultCategory="faq" />,
+    );
+    await screen.getByRole("button", { name: "Liên kết Google Sheet" }).click();
+    await screen.rerender(
+      <ExternalSourceLinkForm projectId="project-1" defaultCategory="jobs" />,
+    );
+    await screen.getByRole("button", { name: "Liên kết Google Sheet" }).click();
+    await expect
+      .element(screen.getByRole("combobox"))
+      .toHaveTextContent("Vị trí tuyển dụng");
+    await screen
+      .getByLabelText("Link Google Sheet")
+      .fill("https://docs.google.com/spreadsheets/d/new/edit#gid=0");
+    await screen.getByRole("button", { name: "Nhập một lần" }).click();
+    expect(mocks.createExternalSource).toHaveBeenCalledWith(
+      "project-1",
+      expect.objectContaining({ category_key: "jobs" }),
+    );
+  });
+
   it("rejects a non-Google URL before submit", async () => {
     const screen = await render(
       <ExternalSourceLinkForm projectId="project-1" />,

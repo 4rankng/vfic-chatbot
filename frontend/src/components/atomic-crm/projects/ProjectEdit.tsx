@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import {
   EditBase,
   Form,
@@ -16,7 +17,10 @@ import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { Project } from "../types";
-import { projectActivationConflictVi } from "./domain/project-knowledge-policy";
+import {
+  projectActivationConflictVi,
+  projectKnowledgeModeLabel,
+} from "./domain/project-knowledge-policy";
 import { DeleteButton } from "@/components/admin";
 
 const ProjectEditContent = () => {
@@ -62,9 +66,16 @@ const ProjectEditContent = () => {
       <div className="project-workspace-content">
         <div className="project-editor-header project-form-page-header flex flex-wrap items-start gap-3">
           <div className="mr-auto min-w-0">
-            <p className="text-caption font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+            <Button
+              type="button"
+              color="link-gray"
+              size="sm"
+              className="uu-scope project-back-link"
+              iconLeading={ArrowLeft}
+              onClick={() => redirect("/projects")}
+            >
               Dự án
-            </p>
+            </Button>
             <h1 className="mt-1 truncate text-content-title font-semibold">
               {project.name}
             </h1>
@@ -81,20 +92,18 @@ const ProjectEditContent = () => {
                 {project.is_active ? "Đang hoạt động" : "Đang tắt"}
               </Badge>
               <span aria-hidden="true">·</span>
-              <span>
-                {project.knowledge_mode === "DIRECT_CONTEXT"
-                  ? "Một nội dung"
-                  : "Theo danh mục"}
-              </span>
+              <span>{projectKnowledgeModeLabel(project.knowledge_mode)}</span>
             </div>
           </div>
-          {isAdmin && (
-            <DeleteButton
-              label="Xóa dự án"
-              successMessage="Đã xóa dự án."
-              redirect="list"
-            />
-          )}
+          <div className="project-page-actions">
+            {isAdmin && (
+              <DeleteButton
+                label="Xóa dự án"
+                successMessage="Đã xóa dự án."
+                redirect="list"
+              />
+            )}
+          </div>
         </div>
 
         <section

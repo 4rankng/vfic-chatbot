@@ -1,16 +1,21 @@
-import { render } from "vitest-browser-react";
+import { cleanup, render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 import { afterEach, vi } from "vitest";
 import type { Lead } from "../types";
 import { ConversationContextPanel } from "./ConversationContextPanel";
 import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
+import "@/index.css";
+import "./inbox.css";
 
 const mobileMock = vi.hoisted(() => ({ isMobile: false }));
 vi.mock("@/hooks/use-mobile", () => ({
   useIsMobile: () => mobileMock.isMobile,
 }));
 
-afterEach(() => {
+afterEach(async () => {
+  await cleanup();
   mobileMock.isMobile = false;
+  await page.viewport(1280, 720);
 });
 
 const lead: Lead = {
@@ -29,6 +34,110 @@ const lead: Lead = {
 };
 
 describe("ConversationContextPanel notes", () => {
+  it.each([320, 360, 390])(
+    "uses the full %ipx phone width without framing icons or clipping edit fields",
+    async (width) => {
+      mobileMock.isMobile = true;
+      await page.viewport(width, 740);
+      const screen = await render(
+        <TestMessages>
+          <ConversationContextPanel
+            lead={{
+              ...lead,
+              name: "Nguyễn Thị Thu Hương với tên ứng viên dài",
+              desired_job: "Công nhân đóng gói tại dự án ở Hải Phòng",
+            }}
+            open
+            canEdit
+            onSave={vi.fn()}
+            onClose={() => undefined}
+          />
+        </TestMessages>,
+      );
+      const dialog = screen.getByRole("dialog", { name: "Thông tin ứng viên" });
+      await expect.element(dialog).toBeVisible();
+      await expect
+        .poll(() => Math.round(dialog.element().getBoundingClientRect().left))
+        .toBe(0);
+      expect(dialog.element().getBoundingClientRect().right).toBe(width);
+      expect(dialog.element().scrollWidth).toBeLessThanOrEqual(width);
+      // These phone values also prove the safe-area rule wins over the later
+      // base header shorthand (18px); desktop context spacing stays separate.
+      const header = dialog.element().querySelector(".profile-header")!;
+      expect(getComputedStyle(header).paddingLeft).toBe("16px");
+      expect(getComputedStyle(header).paddingRight).toBe("16px");
+      for (const icon of dialog
+        .element()
+        .querySelectorAll(".candidate-info-icon, .context-close")) {
+        const style = getComputedStyle(icon);
+        expect(style.borderTopWidth).toBe("0px");
+        expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+        expect(style.boxShadow).toBe("none");
+      }
+      await screen
+        .getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" })
+        .click();
+      await expect
+        .element(screen.getByLabelText("Số điện thoại"))
+        .toHaveFocus();
+      for (const control of dialog
+        .element()
+        .querySelectorAll("input, textarea, button")) {
+        const bounds = control.getBoundingClientRect();
+        expect(bounds.left).toBeGreaterThanOrEqual(0);
+        expect(bounds.right).toBeLessThanOrEqual(width);
+      }
+      expect(dialog.element().scrollWidth).toBeLessThanOrEqual(width);
+    },
+  );
+
+  it("keeps phone fields compact while preserving larger bare icon targets", async () => {
+    mobileMock.isMobile = true;
+    await page.viewport(390, 844);
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const screen = await render(
+      <TestMessages>
+        <ConversationContextPanel
+          lead={lead}
+          open
+          canEdit
+          onSave={onSave}
+          onClose={() => undefined}
+        />
+      </TestMessages>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Thông tin ứng viên" });
+    await expect.element(dialog).toBeVisible();
+    await screen
+      .getByRole("button", { name: "Chỉnh sửa hồ sơ ứng viên" })
+      .click();
+    const inputs = dialog
+      .element()
+      .querySelectorAll<HTMLInputElement>('input[id^="candidate-profile-"]');
+    expect(inputs.length).toBeGreaterThanOrEqual(4);
+    for (const input of inputs) {
+      const fieldHeight = input.parentElement!.getBoundingClientRect().height;
+      expect(fieldHeight).toBe(40);
+      expect(input.getBoundingClientRect().height).toBeLessThanOrEqual(
+        fieldHeight,
+      );
+      expect(input.getBoundingClientRect().height).toBeGreaterThanOrEqual(36);
+      expect(getComputedStyle(input).fontSize).toBe(
+        window.matchMedia("(pointer: coarse)").matches ? "16px" : "12px",
+      );
+    }
+    for (const name of ["Hủy", "Lưu thay đổi"]) {
+      const action = screen.getByRole("button", { name }).element();
+      expect(action.getBoundingClientRect().height).toBe(40);
+    }
+    expect(
+      screen
+        .getByRole("button", { name: "Đóng thông tin ứng viên" })
+        .element()
+        .getBoundingClientRect().height,
+    ).toBeGreaterThanOrEqual(44);
+    expect(onSave).not.toHaveBeenCalled();
+  });
   it("keeps a mobile profile save open until its write finishes", async () => {
     mobileMock.isMobile = true;
     const onClose = vi.fn();
@@ -116,6 +225,15 @@ describe("ConversationContextPanel notes", () => {
     await expect
       .element(screen.getByText(/Họ tên được khuyến khích/))
       .toBeVisible();
+    const priorityFields = screen.container.querySelector(
+      ".candidate-priority-fields",
+    )!;
+    expect(
+      Array.from(priorityFields.querySelectorAll("[data-field]")).map((item) =>
+        item.getAttribute("data-field"),
+      ),
+    ).toEqual(["phone", "name", "expectation", "birth"]);
+    await screen.getByText("Thông tin bổ sung", { exact: true }).click();
     await expect.element(screen.getByRole("list")).toBeVisible();
     const noteItems = screen.getByRole("listitem").all();
     expect(noteItems).toHaveLength(2);

@@ -76,7 +76,7 @@ export const SettingsSectionPanel = ({
   id: string;
   children: ReactNode;
 }) => (
-  <section className="settings-section-panel" id={id}>
+  <section className="settings-section-panel uu-scope" id={id}>
     {children}
   </section>
 );

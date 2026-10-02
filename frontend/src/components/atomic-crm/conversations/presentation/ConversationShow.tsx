@@ -8,75 +8,22 @@ import {
   useRefresh,
   ShowBase,
 } from "ra-core";
-import type { Conversation } from "../../types";
-import {
-  conversationChannelLabel,
-  conversationChannelShortLabel,
-} from "../../types";
+import { conversationChannelLabel, type Conversation } from "../../types";
 import { deleteConversation } from "../application/conversation-operations";
 import { resolveConversationDisplayChannel } from "../domain/conversation-channel-display";
 import { channelIcon } from "../channel-icons";
 import { Confirm } from "@/components/admin/confirm";
-import { LeadAvatar } from "../LeadAvatar";
 import { ChatThread } from "./ChatThread";
-import {
-  type ConversationMode,
-  useConversationActions,
-} from "./use-conversation-actions";
-import { Badge } from "@/components/base/badges/badges";
-import { Button } from "@/components/base/buttons/button";
+import { useConversationActions } from "./use-conversation-actions";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
-import { MenuItem } from "react-aria-components";
 import { Dropdown } from "@/components/base/dropdown/dropdown";
-import {
-  Bot,
-  Check,
-  ChevronDown,
-  Handshake,
-  History,
-  MoreHorizontal,
-  PanelRight,
-  Phone,
-  Trash2,
-  UserRound,
-  type LucideIcon,
-} from "lucide-react";
+import { History, MoreHorizontal, Trash2 } from "lucide-react";
+import { ConversationHeader } from "./ConversationHeader";
+import { ConversationReplyMode } from "./ConversationReplyMode";
 import { useIsMobile, useIsWideDesktop } from "@/hooks/use-mobile";
 import { ConversationContextAdapter } from "../conversation-capability";
 import { useConversationCapabilitySlots } from "../useConversationCapabilitySlots";
 import { DecisionTracePanel } from "../../automation/DecisionTracePanel";
-
-type ReplyMode = Extract<ConversationMode, "human" | "semi_auto" | "bot">;
-
-const MODE_OPTIONS: Array<{
-  mode: ReplyMode;
-  label: string;
-  title: string;
-  description: string;
-  Icon: LucideIcon;
-}> = [
-  {
-    mode: "human",
-    label: "Tư vấn viên",
-    title: "Tư vấn viên - chỉ nhân sự trả lời người trò chuyện",
-    description: "Nhân viên trả lời trực tiếp",
-    Icon: UserRound,
-  },
-  {
-    mode: "semi_auto",
-    label: "Bán tự động",
-    title: "Bán tự động - ChatBot tiếp quản khi tư vấn viên không phản hồi",
-    description: "Chatbot hỗ trợ khi cần",
-    Icon: Handshake,
-  },
-  {
-    mode: "bot",
-    label: "Chatbot",
-    title: "Chatbot - ChatBot xử lý cuộc trò chuyện",
-    description: "Chatbot tự động xử lý",
-    Icon: Bot,
-  },
-];
 
 /**
  * Inbox center pane: the conversation header (mobile list-toggle + candidate
@@ -124,13 +71,10 @@ export const ConversationShowContent = ({
     canHumanReply,
     setConversationMode,
     handleTakeover,
+    isChangingMode,
   } = useConversationActions(record);
   const activeMode = effectiveMode ?? record?.mode ?? "bot";
-  const activeModeOption = MODE_OPTIONS.find(
-    (option) => option.mode === activeMode,
-  );
-  const ActiveModeIcon = activeModeOption?.Icon ?? Bot;
-  // OA accounts share one provider id, so the header names the account the
+  // OA accounts share one provider id, so the channel glyph identifies the account the
   // channel_identity points at (TingTing OA vs the Viet Phap OA).
   const displayChannel = resolveConversationDisplayChannel(
     record?.channel_identity,
@@ -199,255 +143,54 @@ export const ConversationShowContent = ({
             className="panel center-panel"
             aria-label="Nội dung trò chuyện"
           >
-            <header className="chat-header">
-              <ButtonUtility
-                size="sm"
-                color="tertiary"
-                tooltip="Mở danh sách hội thoại"
-                className="icon-btn mobile-toggle list-toggle uu-scope"
-                icon={
-                  <svg className="icon" aria-hidden="true">
-                    <use href="#i-panel" />
-                  </svg>
-                }
-                onPress={() => onOpenList?.()}
-              />
-              <div className="header-person">
-                {showWorkspacePanel && context.renderPanel ? (
-                  <button
-                    type="button"
-                    className="header-avatar-button"
-                    onClick={(event) => openContextPanel(event.currentTarget)}
-                    aria-label={`Xem thông tin ứng viên của ${context.displayName}`}
-                    aria-expanded={isWideDesktop || isContextOpen}
-                    aria-controls="conversation-context-panel"
-                  >
-                    <LeadAvatar
-                      src={context.avatarUrl}
-                      bg={context.avatarBackground}
-                      ink={context.avatarForeground}
-                      iconSize={18}
-                      className="header-avatar"
-                      alt={context.avatarAlt}
-                    />
-                  </button>
-                ) : (
-                  <LeadAvatar
-                    src={context.avatarUrl}
-                    bg={context.avatarBackground}
-                    ink={context.avatarForeground}
-                    iconSize={18}
-                    className="header-avatar"
-                    alt={context.avatarAlt}
-                  />
-                )}
-                <div className="person-copy">
-                  <div className="person-name-row">
-                    {showWorkspacePanel && context.renderPanel ? (
-                      <button
-                        type="button"
-                        className="person-name person-name-button"
-                        ref={contextNameTriggerRef}
-                        onClick={(event) =>
-                          openContextPanel(event.currentTarget)
-                        }
-                        aria-expanded={isWideDesktop || isContextOpen}
-                        aria-controls="conversation-context-panel"
-                      >
-                        {context.displayName}
-                      </button>
-                    ) : (
-                      <span className="person-name">{context.displayName}</span>
-                    )}
-                  </div>
-                  <div className="person-subtitle">
-                    {channelGlyph ? (
-                      <>
-                        <img
-                          className="conv-channel-icon"
-                          data-channel={displayChannel ?? "unknown"}
-                          src={channelGlyph}
-                          alt={channelLabel}
-                          title={channelLabel}
-                        />
-                        <span
-                          className="conv-channel-name"
-                          title={channelLabel}
-                        >
-                          {conversationChannelShortLabel(displayChannel)}
-                        </span>
-                      </>
-                    ) : (
-                      <span
-                        className="conv-channel"
-                        data-channel={displayChannel ?? "unknown"}
-                        title={channelLabel}
-                      >
-                        {conversationChannelShortLabel(displayChannel)}
-                      </span>
-                    )}
-                    {context.contactSubtitle?.secondaryName && (
-                      <span className="person-subtitle-name">
-                        {context.contactSubtitle.secondaryName}
-                      </span>
-                    )}
-                    {context.contactSubtitle?.secondaryName &&
-                    context.contactSubtitle.phone ? (
-                      <span className="person-subtitle-sep" aria-hidden="true">
-                        ·
-                      </span>
-                    ) : null}
-                    {context.contactSubtitle?.phone && (
-                      <span className="person-subtitle-phone">
-                        <Phone
-                          className="person-subtitle-icon"
-                          aria-hidden="true"
-                        />
-                        <span>{context.contactSubtitle.phone}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="header-actions">
-                <Dropdown.Root>
-                  <Button
-                    size="sm"
-                    color="secondary"
-                    noTextPadding
-                    className={`uu-scope mode-menu-trigger mode-menu-trigger--primary tt-btn tt-btn-sm ${activeMode}`}
-                    aria-label="Đổi chế độ trả lời"
-                    isDisabled={activeMode === "closed" || needsClaim}
-                  >
-                    <span className="mode-menu-trigger-icon">
-                      <ActiveModeIcon className="icon" aria-hidden="true" />
-                    </span>
-                    <span className="mode-menu-trigger-label">
-                      {activeModeOption?.label ?? "Chế độ trả lời"}
-                    </span>
-                    <ChevronDown
-                      className="mode-menu-trigger-chevron"
-                      aria-hidden="true"
-                    />
-                  </Button>
-                  <Dropdown.Popover
-                    placement="bottom end"
-                    offset={10}
-                    className="uu-scope mode-menu-content"
-                  >
-                    <Dropdown.Menu>
-                      {MODE_OPTIONS.map((option) => {
-                        const isActive = activeMode === option.mode;
-                        return (
-                          <MenuItem
-                            key={option.mode}
-                            id={option.mode}
-                            textValue={option.label}
-                            className={`mode-menu-item ${option.mode} ${isActive ? "active" : ""}`}
-                            onAction={() => {
-                              if (!isActive) setConversationMode(option.mode);
-                            }}
-                          >
-                            <span className="mode-menu-icon">
-                              <option.Icon
-                                className="icon"
-                                aria-hidden="true"
-                              />
-                            </span>
-                            <span className="mode-menu-copy">
-                              <span className="mode-menu-title">
-                                {option.label}
-                              </span>
-                              <span className="mode-menu-description">
-                                {option.description}
-                              </span>
-                            </span>
-                            <span
-                              className="mode-menu-check"
-                              aria-hidden="true"
-                            >
-                              {isActive ? <Check className="icon" /> : null}
-                            </span>
-                          </MenuItem>
-                        );
-                      })}
-                    </Dropdown.Menu>
-                  </Dropdown.Popover>
-                </Dropdown.Root>
-                {(permissions === "admin" && record) ||
-                (!isWideDesktop && context.renderPanel) ? (
+            <ConversationHeader
+              identity={context}
+              onBack={onOpenList}
+              onOpenCandidate={
+                showWorkspacePanel && context.renderPanel
+                  ? openContextPanel
+                  : undefined
+              }
+              candidateOpen={isWideDesktop || isContextOpen}
+              candidateTriggerRef={contextNameTriggerRef}
+              actions={
+                permissions === "admin" && record ? (
                   <Dropdown.Root>
                     <ButtonUtility
                       ref={conversationActionsTriggerRef}
                       size="sm"
                       color="tertiary"
-                      className="uu-scope icon-btn ghost"
+                      className="uu-scope conversation-header-actions-button"
                       aria-label="Thao tác hội thoại"
-                      icon={
-                        <MoreHorizontal className="icon" aria-hidden="true" />
-                      }
+                      icon={<MoreHorizontal aria-hidden="true" />}
                     />
                     <Dropdown.Popover
                       placement="bottom end"
-                      offset={10}
+                      offset={8}
                       className="uu-scope conversation-actions-menu"
                     >
                       <Dropdown.Menu>
-                        {permissions === "admin" && record ? (
-                          <Dropdown.Item
-                            id="decision-trace"
-                            className="conversation-actions-item"
-                            icon={History}
-                            label="Suy luận chatbot"
-                            onPress={() => setIsDecisionTraceOpen(true)}
-                          />
-                        ) : null}
-                        {!isWideDesktop && context.renderPanel ? (
-                          <Dropdown.Item
-                            id="candidate-panel"
-                            className="conversation-actions-item"
-                            icon={PanelRight}
-                            label={context.panelLabel}
-                            onPress={() => openContextPanel()}
-                          />
-                        ) : null}
-                        {permissions === "admin" && record ? (
-                          <>
-                            <Dropdown.Separator />
-                            <Dropdown.Item
-                              id="delete-conversation"
-                              className="conversation-actions-item conversation-actions-item-danger"
-                              icon={Trash2}
-                              label="Xoá hội thoại"
-                              onPress={() => setDeleteOpen(true)}
-                            />
-                          </>
-                        ) : null}
+                        <Dropdown.Item
+                          id="decision-trace"
+                          className="conversation-actions-item"
+                          icon={History}
+                          label="Suy luận chatbot"
+                          onPress={() => setIsDecisionTraceOpen(true)}
+                        />
+                        <Dropdown.Separator />
+                        <Dropdown.Item
+                          id="delete-conversation"
+                          className="conversation-actions-item conversation-actions-item-danger"
+                          icon={Trash2}
+                          label="Xoá hội thoại"
+                          onPress={() => setDeleteOpen(true)}
+                        />
                       </Dropdown.Menu>
                     </Dropdown.Popover>
                   </Dropdown.Root>
-                ) : null}
-                {CapabilityActions ? (
-                  <CapabilityActions conversation={record} />
-                ) : null}
-                {activeMode === "closed" && (
-                  <span
-                    className="chat-mode-chip-tooltip"
-                    title="Hội thoại đã đóng; không có thao tác tiếp nhận"
-                  >
-                    <Badge
-                      type="pill-color"
-                      color="brand"
-                      size="sm"
-                      className="uu-scope chat-mode-chip"
-                    >
-                      <Bot className="icon" aria-hidden="true" />
-                      <span>Hội thoại đã đóng</span>
-                    </Badge>
-                  </span>
-                )}
-              </div>
-            </header>
+                ) : null
+              }
+            />
 
             <ChatThread
               key={record?.id ?? "empty"}
@@ -458,6 +201,32 @@ export const ConversationShowContent = ({
               needsClaimOverride={needsClaim}
               canHumanReplyOverride={canHumanReply}
               onTakeoverOverride={handleTakeover}
+              isChangingModeOverride={isChangingMode}
+              composerToolbar={
+                <>
+                  {activeMode !== "closed" ? (
+                    <div className="composer-channel-mode">
+                      {channelGlyph ? (
+                        <img
+                          src={channelGlyph}
+                          alt={channelLabel}
+                          title={channelLabel}
+                          className="composer-channel-icon"
+                        />
+                      ) : null}
+                      <ConversationReplyMode
+                        mode={activeMode}
+                        needsClaim={needsClaim}
+                        isChangingMode={isChangingMode}
+                        onChange={setConversationMode}
+                      />
+                    </div>
+                  ) : null}
+                  {CapabilityActions ? (
+                    <CapabilityActions conversation={record} />
+                  ) : null}
+                </>
+              }
             />
 
             {showWorkspacePanel &&

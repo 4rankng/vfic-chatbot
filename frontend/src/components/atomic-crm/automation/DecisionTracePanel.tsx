@@ -336,7 +336,7 @@ export const DecisionTracePanel = ({
       <SheetContent
         id="decision-trace-sheet"
         side="right"
-        className="w-full gap-0 overflow-hidden p-0 sm:max-w-lg"
+        className="w-full gap-0 overflow-hidden p-0 sm:max-w-lg max-md:[&>[data-slot=sheet-close]]:size-11"
         onCloseAutoFocus={(event) => {
           if (!returnFocusRef?.current) return;
           event.preventDefault();

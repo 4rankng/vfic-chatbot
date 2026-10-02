@@ -1,15 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  Link,
   createHashRouter,
   RouterProvider,
+  useLocation,
   type DataRouter,
 } from "react-router";
+import type { ReactNode } from "react";
 import { memoryStore, StoreContextProvider } from "ra-core";
 import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import "@/index.css";
+import "../conversations/inbox.css";
 
 import { RuntimeCapabilityProvider } from "../capabilities/RuntimeCapabilityProvider";
 import { buildStaticRecruitmentRuntime } from "../capabilities/static-recruitment-runtime";
@@ -65,7 +69,10 @@ let router: DataRouter | null = null;
  * Mounts the real shell under the shipped hash router, so `useHref` resolves
  * the same `#/...` hrefs the browser does, with the real recruitment runtime.
  */
-const renderWorkspaceShell = async (initialPath = "/conversations") => {
+const renderWorkspaceShell = async (
+  initialPath = "/conversations",
+  content: ReactNode = <p>nội dung tuyển dụng</p>,
+) => {
   window.location.hash = `#${initialPath}`;
 
   router = createHashRouter([
@@ -75,9 +82,7 @@ const renderWorkspaceShell = async (initialPath = "/conversations") => {
         <RuntimeCapabilityProvider runtime={buildStaticRecruitmentRuntime(7)}>
           <TestMessages>
             <StoreContextProvider value={memoryStore()}>
-              <WorkspaceShell>
-                <p>nội dung tuyển dụng</p>
-              </WorkspaceShell>
+              <WorkspaceShell>{content}</WorkspaceShell>
             </StoreContextProvider>
           </TestMessages>
         </RuntimeCapabilityProvider>
@@ -89,6 +94,37 @@ const renderWorkspaceShell = async (initialPath = "/conversations") => {
     <QueryClientProvider client={new QueryClient()}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
+  );
+};
+
+const InboxRouteFixture = () => {
+  const location = useLocation();
+  if (location.pathname !== "/conversations") {
+    return <p>Trang dự án</p>;
+  }
+  const detailOpen = Boolean(new URLSearchParams(location.search).get("id"));
+  return (
+    <div
+      className={`inbox-bg-container conversation-workspace ${detailOpen ? "conversation-open" : ""}`}
+    >
+      <div
+        className={`app ${detailOpen ? "detail-open has-selected-conversation" : ""}`}
+      >
+        {detailOpen ? (
+          <section className="center-panel">
+            <Link to="/conversations" replace>
+              Danh sách hội thoại
+            </Link>
+            <Link to="/conversations?id=candidate-1&panel=detail">
+              Thông tin ứng viên
+            </Link>
+            <p>Hội thoại ứng viên</p>
+          </section>
+        ) : (
+          <Link to="/conversations?id=candidate-1">Chọn ứng viên</Link>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -141,6 +177,101 @@ describe("WorkspaceShell desktop rail", () => {
     ).toEqual(["Tin nhắn"]);
     expect(current[0].getAttribute("href")).toBe("#/conversations");
   });
+});
+
+describe("WorkspaceShell phone conversation chrome", () => {
+  it("uses the full phone viewport in detail and restores navigation on Back and route history", async () => {
+    await page.viewport(390, 844);
+    const screen = await renderWorkspaceShell(
+      "/conversations",
+      <InboxRouteFixture />,
+    );
+    const topbar =
+      screen.container.querySelector<HTMLElement>(".workspace-topbar")!;
+    const main = screen.container.querySelector<HTMLElement>(
+      ".workspace-frame-content",
+    )!;
+    // This lane does not compile Tailwind's hidden/lg:flex utilities. Match
+    // the real phone rail visibility when measuring the vertical geometry.
+    screen.container.querySelector<HTMLElement>(
+      ".workspace-sidebar",
+    )!.style.display = "none";
+    screen.container.querySelector<HTMLElement>(
+      ".workspace-frame > a",
+    )!.style.cssText =
+      "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)";
+    await expect.element(topbar).toBeVisible();
+    expect(topbar.getBoundingClientRect().height).toBe(56);
+
+    await screen.getByRole("link", { name: "Chọn ứng viên" }).click();
+    await expect.element(topbar).not.toBeVisible();
+    const inbox = screen.container.querySelector<HTMLElement>(
+      ".conversation-workspace",
+    )!;
+    expect(topbar.getBoundingClientRect().height).toBe(0);
+    expect(main.getBoundingClientRect().top).toBe(0);
+    expect(inbox.getBoundingClientRect().height).toBe(844);
+    expect(inbox.getBoundingClientRect().bottom).toBe(844);
+
+    await screen.getByRole("link", { name: "Thông tin ứng viên" }).click();
+    await expect.element(topbar).not.toBeVisible();
+    await screen.getByRole("link", { name: "Danh sách hội thoại" }).click();
+    await expect.element(topbar).toBeVisible();
+    expect(main.getBoundingClientRect().top).toBe(56);
+    expect(inbox.getBoundingClientRect().height).toBe(788);
+
+    await router!.navigate("/conversations?id=candidate-1");
+    await expect.element(topbar).not.toBeVisible();
+    await router!.navigate("/projects?id=project-1");
+    await expect.element(topbar).toBeVisible();
+    await router!.navigate(-1);
+    await expect.element(topbar).not.toBeVisible();
+    await router!.navigate(-1);
+    await expect.element(topbar).toBeVisible();
+  });
+
+  it("hides the bar when opening a phone conversation deep link directly", async () => {
+    await page.viewport(390, 844);
+    const screen = await renderWorkspaceShell(
+      "/conversations?id=candidate-1&panel=detail",
+      <InboxRouteFixture />,
+    );
+    await expect
+      .element(
+        screen.container.querySelector<HTMLElement>(".workspace-topbar")!,
+      )
+      .not.toBeVisible();
+    await screen.getByRole("link", { name: "Danh sách hội thoại" }).click();
+    await expect
+      .element(
+        screen.container.querySelector<HTMLElement>(".workspace-topbar")!,
+      )
+      .toBeVisible();
+  });
+
+  it.each([768, 1024, 1440])(
+    "preserves the topbar and content radius at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const screen = await renderWorkspaceShell(
+        "/conversations",
+        <InboxRouteFixture />,
+      );
+      const topbar =
+        screen.container.querySelector<HTMLElement>(".workspace-topbar")!;
+      const main = screen.container.querySelector<HTMLElement>(
+        ".workspace-frame-content",
+      )!;
+      const before = {
+        height: topbar.getBoundingClientRect().height,
+        radius: getComputedStyle(main).borderTopLeftRadius,
+      };
+      await screen.getByRole("link", { name: "Chọn ứng viên" }).click();
+      await expect.element(topbar).toBeVisible();
+      expect(topbar.getBoundingClientRect().height).toBe(before.height);
+      expect(getComputedStyle(main).borderTopLeftRadius).toBe(before.radius);
+    },
+  );
 });
 
 describe("WorkspaceShell phone drawer", () => {

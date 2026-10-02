@@ -12,6 +12,26 @@ test.describe("bot-run trace journey", () => {
       page.getByRole("heading", { name: "Lần chạy bot" }),
     ).toBeVisible({ timeout: 15_000 });
 
+    // Audit rows contain both a reply preview and outcome metadata. The global
+    // compact-control ceiling must not clip one into the next row on phones.
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      const row = page.locator(".bot-run-row").first();
+      await expect(row).toBeVisible();
+      const bounds = await row.evaluate((element) => {
+        const frame = element.getBoundingClientRect();
+        const content = element.firstElementChild!.getBoundingClientRect();
+        return {
+          height: frame.height,
+          topInset: content.top - frame.top,
+          bottomInset: frame.bottom - content.bottom,
+        };
+      });
+      expect(bounds.height).toBeGreaterThanOrEqual(64);
+      expect(bounds.topInset).toBeGreaterThanOrEqual(0);
+      expect(bounds.bottomInset).toBeGreaterThanOrEqual(0);
+    }
+
     await page.getByText("E2E bot reply").first().click();
 
     await expect(

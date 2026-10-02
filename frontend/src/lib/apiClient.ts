@@ -38,7 +38,7 @@ export const clearTokens = (): void => {
 export const apiUrl = (path: string): string =>
   `${vficConfig.apiBaseUrl}${path}`;
 
-/** Error carrying the HTTP status so callers (e.g. humanReplyService) can map it. */
+/** Error carrying the HTTP status; zero means no server response was received. */
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -129,12 +129,22 @@ const send = async (
     body = form ? (options.body as FormData) : JSON.stringify(options.body);
   }
 
-  return fetch(apiUrl(path), {
-    method: options.method ?? (hasBody ? "POST" : "GET"),
-    headers,
-    body,
-    signal: options.signal,
-  });
+  try {
+    return await fetch(apiUrl(path), {
+      method: options.method ?? (hasBody ? "POST" : "GET"),
+      headers,
+      body,
+      signal: options.signal,
+    });
+  } catch (error) {
+    if (error instanceof TypeError && !options.signal?.aborted) {
+      throw new ApiError(
+        0,
+        "Không thể kết nối. Kiểm tra mạng rồi thử lại.",
+      );
+    }
+    throw error;
+  }
 };
 
 const accessTokenRotationListeners = new Set<(accessToken: string) => void>();

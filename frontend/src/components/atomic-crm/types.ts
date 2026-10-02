@@ -123,6 +123,9 @@ export type Conversation = {
   // Backend ConversationMode is BOT/HUMAN/SEMI_AUTO/CLOSED; the REST dataProvider
   // lower-cases it so render checks keep working.
   mode: "bot" | "human" | "semi_auto" | "closed";
+  // The API and realtime projection carry the monotonic state guard version.
+  // Optional for partial records; mode actions return it on the full row.
+  version?: number;
   needs_human?: boolean;
   last_inbound_at: string | null;
   last_outbound_at?: string | null;
@@ -501,11 +504,7 @@ export const CONVERSATION_CHANNEL_LABELS: Record<
   tingting_oa: "TingTing OA",
 };
 
-/**
- * Row-sized form of the same vocabulary: a conversation row has one line for
- * the candidate and the channel chip sits beside the name, where the full
- * support-OA label cannot fit. Kept beside the full map so the two cannot drift.
- */
+/** Compact channel labels for lists and narrow panes. */
 export const CONVERSATION_CHANNEL_SHORT_LABELS: Record<
   ConversationChannelProvider,
   string

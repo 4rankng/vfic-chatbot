@@ -1,6 +1,7 @@
 import { TestMemoryRouter } from "ra-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 import type * as InstallationModule from "../installation/installation-context";
 import type * as RaCoreModule from "ra-core";
 
@@ -42,6 +43,7 @@ vi.mock("@/components/admin/notification", () => ({
 }));
 
 import { LoginPage } from "./LoginPage";
+import "@/index.css";
 
 const renderLogin = async () =>
   render(
@@ -60,9 +62,89 @@ beforeEach(() => {
 
 afterEach(async () => {
   await cleanup();
+  await page.viewport(1280, 900);
 });
 
 describe("LoginPage", () => {
+  it.each([320, 390, 1280])(
+    "uses compact auth fields and 13px labels on a mouse-operated viewport at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      expect(window.matchMedia("(pointer: fine)").matches).toBe(true);
+      const screen = await renderLogin();
+      for (const name of ["Email", "Mật khẩu"]) {
+        const input = screen.getByRole("textbox", { name }).element();
+        const wrapper = input.closest<HTMLElement>('[class~="group/input"]')!;
+        expect(wrapper.getBoundingClientRect().height).toBe(
+          width < 768 ? 40 : 36,
+        );
+        expect(getComputedStyle(input).fontSize).toBe("12px");
+      }
+      const labels = screen.container.querySelectorAll("label");
+      for (const label of labels) {
+        expect(getComputedStyle(label).fontSize).toBe("13px");
+      }
+      expect(
+        screen
+          .getByRole("button", { name: "Đăng nhập" })
+          .element()
+          .getBoundingClientRect().height,
+      ).toBe(width < 768 ? 40 : 36);
+    },
+  );
+  it.each([320, 390])(
+    "keeps the password action unboxed with a44px phone target at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      const screen = await renderLogin();
+      const action = screen.getByRole("button", { name: "Hiện mật khẩu" });
+      await expect.element(action).toBeVisible();
+      const element = action.element();
+      expect(element.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+      expect(element.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      expect(getComputedStyle(element).borderTopWidth).toBe("0px");
+      expect(getComputedStyle(element).backgroundColor).toBe(
+        "rgba(0, 0, 0, 0)",
+      );
+      await action.click();
+      await expect
+        .element(screen.getByRole("textbox", { name: "Mật khẩu" }))
+        .toHaveAttribute("type", "text");
+    },
+  );
+  it("keeps credentials and offers an inline error when sign-in fails", async () => {
+    mocks.login.mockRejectedValue(new Error("Email hoặc mật khẩu không đúng."));
+    const screen = await renderLogin();
+    await screen.getByRole("textbox", { name: "Email" }).fill("a@vfic.com.vn");
+    await screen
+      .getByRole("textbox", { name: "Mật khẩu" })
+      .fill("mat-khau-2026");
+    await screen.getByRole("button", { name: "Đăng nhập" }).click();
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("Email hoặc mật khẩu không đúng.");
+    await expect
+      .element(screen.getByRole("textbox", { name: "Email" }))
+      .toHaveValue("a@vfic.com.vn");
+    await expect
+      .element(screen.getByRole("button", { name: "Đăng nhập" }))
+      .toBeEnabled();
+  });
+
+  it("explains malformed email before submitting credentials", async () => {
+    const screen = await renderLogin();
+    await screen
+      .getByRole("textbox", { name: "Email" })
+      .fill("khong-phai-email");
+    await screen
+      .getByRole("textbox", { name: "Mật khẩu" })
+      .fill("mat-khau-2026");
+    await screen.getByRole("button", { name: "Đăng nhập" }).click();
+    await expect
+      .element(screen.getByText("Nhập địa chỉ email hợp lệ."))
+      .toBeVisible();
+    expect(mocks.login).not.toHaveBeenCalled();
+  });
   it("explains blank credentials inline and focuses the first invalid field", async () => {
     const screen = await renderLogin();
 

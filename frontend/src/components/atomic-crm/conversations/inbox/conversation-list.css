@@ -1,5 +1,5 @@
 /* Conversation List */
-.inbox-bg-container .conversations {
+.inbox-bg-container:where(.conversation-workspace) .conversations {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -11,12 +11,12 @@
 }
 
 @media (min-width: 768px) {
-  .inbox-bg-container .conversations {
+  .inbox-bg-container:where(.conversation-workspace) .conversations {
     padding: 10px 10px 18px;
     background: var(--surface-solid);
   }
 
-  .inbox-bg-container .conversation {
+  .inbox-bg-container:where(.conversation-workspace) .conversation {
     gap: 12px;
     padding: 13px 12px;
     border-radius: 14px;
@@ -26,12 +26,12 @@
     box-shadow: none;
   }
 
-  .inbox-bg-container .conversation:hover {
+  .inbox-bg-container:where(.conversation-workspace) .conversation:hover {
     background: #f5f7fa;
     transform: translateY(-1px);
   }
 
-  .inbox-bg-container .conversation.active {
+  .inbox-bg-container:where(.conversation-workspace) .conversation.active {
     background: var(--brand-light);
     border-color: color-mix(
       in srgb,
@@ -41,29 +41,31 @@
     box-shadow: 0 6px 18px color-mix(in srgb, var(--brand) 10%, transparent);
   }
 
-  .inbox-bg-container .conversation.needs-attention:not(.active) {
+  .inbox-bg-container:where(.conversation-workspace)
+    .conversation.needs-attention:not(.active) {
     background: var(--surface-solid);
   }
 
-  .inbox-bg-container .conv-name {
+  .inbox-bg-container:where(.conversation-workspace) .conv-name {
     color: var(--workspace-ink);
     font-weight: var(--chat-fw-medium);
   }
 
-  .inbox-bg-container .conv-preview,
-  .inbox-bg-container .conv-time {
+  .inbox-bg-container:where(.conversation-workspace) .conv-preview,
+  .inbox-bg-container:where(.conversation-workspace) .conv-time {
     color: var(--workspace-muted);
   }
 
-  .inbox-bg-container .avatar {
+  .inbox-bg-container:where(.conversation-workspace) .avatar {
     box-shadow: inset 0 0 0 1px var(--workspace-blue-line);
   }
 }
-.inbox-bg-container .conversations::-webkit-scrollbar {
+.inbox-bg-container:where(.conversation-workspace)
+  .conversations::-webkit-scrollbar {
   display: none;
 }
 
-.inbox-bg-container .infinite-scroll-sentinel {
+.inbox-bg-container:where(.conversation-workspace) .infinite-scroll-sentinel {
   display: grid;
   min-height: 36px;
   place-items: center;
@@ -75,11 +77,11 @@
    section-title heading, optional action row). The list only supplies the
    inset: the directory is a narrow column, so the frame keeps clear of the rail
    above it and of the panel edges. */
-.inbox-bg-container .list-empty-state {
+.inbox-bg-container:where(.conversation-workspace) .list-empty-state {
   margin: 20px 16px;
 }
 
-.inbox-bg-container .conversation {
+.inbox-bg-container:where(.conversation-workspace) .conversation {
   position: relative;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -93,23 +95,26 @@
   text-align: left;
   transition: var(--transition);
 }
-.inbox-bg-container .conversation + .conversation {
+.inbox-bg-container:where(.conversation-workspace)
+  .conversation
+  + .conversation {
   margin-top: 4px;
 }
-.inbox-bg-container .conversation:hover {
+.inbox-bg-container:where(.conversation-workspace) .conversation:hover {
   background: var(--surface-hover);
   transform: none;
 }
-.inbox-bg-container .conversation.needs-attention {
+.inbox-bg-container:where(.conversation-workspace)
+  .conversation.needs-attention {
   background: var(--surface-solid);
 }
-.inbox-bg-container .conversation.active {
+.inbox-bg-container:where(.conversation-workspace) .conversation.active {
   background: var(--brand-light);
   border-color: transparent;
   box-shadow: none;
 }
 
-.inbox-bg-container .avatar {
+.inbox-bg-container:where(.conversation-workspace) .avatar {
   position: relative;
   width: 42px;
   height: 42px;
@@ -122,11 +127,11 @@
   background: var(--avatar-bg, var(--brand-light));
   box-shadow: inset 0 0 0 1px var(--border-glass);
 }
-.inbox-bg-container .avatar.round {
+.inbox-bg-container:where(.conversation-workspace) .avatar.round {
   border-radius: 50%;
 }
 
-.inbox-bg-container .presence {
+.inbox-bg-container:where(.conversation-workspace) .presence {
   position: absolute;
   right: -2px;
   bottom: -2px;
@@ -137,7 +142,7 @@
   background: var(--success);
 }
 
-.inbox-bg-container .conv-body {
+.inbox-bg-container:where(.conversation-workspace) .conv-body {
   min-width: 0;
   width: 100%;
   display: grid;
@@ -146,15 +151,15 @@
   align-content: center;
   justify-items: stretch;
 }
-.inbox-bg-container .conv-top {
+.inbox-bg-container:where(.conversation-workspace) .conv-top {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 8px;
   margin-bottom: 0;
   min-width: 0;
 }
-.inbox-bg-container .conv-name {
+.inbox-bg-container:where(.conversation-workspace) .conv-name {
   min-width: 0;
   color: var(--ink);
   font-size: var(--chat-fs-list-title);
@@ -164,7 +169,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.inbox-bg-container .conv-time {
+.inbox-bg-container:where(.conversation-workspace) .conv-time {
   color: var(--ink-faint);
   font-size: var(--chat-fs-meta);
   font-weight: var(--chat-fw-medium);
@@ -172,7 +177,7 @@
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
 }
-.inbox-bg-container .conv-preview {
+.inbox-bg-container:where(.conversation-workspace) .conv-preview {
   width: 100%;
   min-width: 0;
   color: var(--ink-muted);
@@ -187,26 +192,27 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.inbox-bg-container .conv-preview > span {
+.inbox-bg-container:where(.conversation-workspace) .conv-preview > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.inbox-bg-container .conv-preview-icon {
+.inbox-bg-container:where(.conversation-workspace) .conv-preview-icon {
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
   color: #98a2b3;
 }
-.inbox-bg-container .conv-bottom {
+.inbox-bg-container:where(.conversation-workspace) .conv-bottom {
+  padding-right: 24px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
   row-gap: 5px;
   min-width: 0;
 }
-.inbox-bg-container .conv-meta-row {
+.inbox-bg-container:where(.conversation-workspace) .conv-meta-row {
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -214,7 +220,7 @@
   gap: 5px;
   flex-wrap: wrap;
 }
-.inbox-bg-container .conv-state-label {
+.inbox-bg-container:where(.conversation-workspace) .conv-state-label {
   color: var(--ink-muted);
   font-size: var(--chat-fs-chip);
   font-weight: var(--chat-fw-semibold);
@@ -225,7 +231,8 @@
   border: 0;
   background: none;
 }
-.inbox-bg-container .conv-state-label.is-human-escalation {
+.inbox-bg-container:where(.conversation-workspace)
+  .conv-state-label.is-human-escalation {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -237,7 +244,7 @@
   color: #8a5a00;
   animation: human-escalation-pulse 2.8s ease-in-out infinite;
 }
-.inbox-bg-container .conv-state-icon {
+.inbox-bg-container:where(.conversation-workspace) .conv-state-icon {
   width: 12px;
   height: 12px;
 }
@@ -247,7 +254,7 @@
     box-shadow: 0 0 0 3px rgb(246 211 101 / 28%);
   }
 }
-.inbox-bg-container .list-retry {
+.inbox-bg-container:where(.conversation-workspace) .list-retry {
   margin-top: 8px;
   border: 0;
   background: transparent;
@@ -255,7 +262,7 @@
   font-weight: var(--chat-fw-bold);
 }
 
-.inbox-bg-container .mini-chip {
+.inbox-bg-container:where(.conversation-workspace) .mini-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -269,30 +276,30 @@
 }
 /* Lead-priority chip — TEXT is the accessible signal (readable without colour);
    the tint reinforces via the global lead-priority CSS vars. */
-.inbox-bg-container .mini-chip.priority-hot {
+.inbox-bg-container:where(.conversation-workspace) .mini-chip.priority-hot {
   color: #ffffff;
   background: var(--brand);
 }
-.inbox-bg-container .mini-chip.priority-warm {
+.inbox-bg-container:where(.conversation-workspace) .mini-chip.priority-warm {
   color: #ffffff;
   background: var(--brand);
 }
-.inbox-bg-container .mini-chip.priority-cold {
+.inbox-bg-container:where(.conversation-workspace) .mini-chip.priority-cold {
   border: 1px solid var(--workspace-border);
   color: var(--workspace-ink-muted);
   background: var(--workspace-surface-muted);
 }
-.inbox-bg-container .mini-chip .icon {
+.inbox-bg-container:where(.conversation-workspace) .mini-chip .icon {
   width: 12px;
   height: 12px;
 }
 
 @media (min-width: 768px) {
-  .inbox-bg-container .conversations {
+  .inbox-bg-container:where(.conversation-workspace) .conversations {
     padding: 0;
   }
 
-  .inbox-bg-container .conversation {
+  .inbox-bg-container:where(.conversation-workspace) .conversation {
     grid-template-columns: 42px minmax(0, 1fr);
     align-items: center;
     gap: 12px;
@@ -310,39 +317,45 @@
   /* Priority and escalation chips add a third text row. Let those queue items
      grow instead of inheriting daisyUI's fixed button height and painting the
      chip across the item divider. */
-  .inbox-bg-container .conversation:has(.conv-meta-row:not(:empty)) {
+  .inbox-bg-container:where(.conversation-workspace)
+    .conversation:has(.conv-meta-row:not(:empty)) {
     min-height: 90px;
   }
 
-  .inbox-bg-container .conversation + .conversation {
+  .inbox-bg-container:where(.conversation-workspace)
+    .conversation
+    + .conversation {
     margin-top: 0;
   }
 
-  .inbox-bg-container .conversation:hover {
+  .inbox-bg-container:where(.conversation-workspace) .conversation:hover {
     border-color: var(--workspace-blue-line);
     background: #f5f7fa;
     transform: none;
   }
 
-  .inbox-bg-container .conversation.active {
+  .inbox-bg-container:where(.conversation-workspace) .conversation.active {
     border-color: var(--workspace-blue-line);
     background: var(--brand-light);
     box-shadow: none;
   }
 
-  .inbox-bg-container .conversation.needs-attention:not(.active) {
+  .inbox-bg-container:where(.conversation-workspace)
+    .conversation.needs-attention:not(.active) {
     background: var(--surface-solid);
   }
 
-  .inbox-bg-container .conversation.needs-attention:hover {
+  .inbox-bg-container:where(.conversation-workspace)
+    .conversation.needs-attention:hover {
     background: #f5f7fa;
   }
 
-  .inbox-bg-container .conversation.active.needs-attention {
+  .inbox-bg-container:where(.conversation-workspace)
+    .conversation.active.needs-attention {
     background: var(--brand-light);
   }
 
-  .inbox-bg-container .conversation::after {
+  .inbox-bg-container:where(.conversation-workspace) .conversation::after {
     content: "";
     position: absolute;
     right: 14px;
@@ -352,34 +365,34 @@
     background: var(--workspace-blue-line);
   }
 
-  .inbox-bg-container .avatar {
+  .inbox-bg-container:where(.conversation-workspace) .avatar {
     margin-top: 0;
     border-radius: 50%;
     box-shadow: inset 0 0 0 1px var(--workspace-border);
   }
 
-  .inbox-bg-container .conv-body {
+  .inbox-bg-container:where(.conversation-workspace) .conv-body {
     row-gap: 4px;
   }
 
-  .inbox-bg-container .conv-top {
+  .inbox-bg-container:where(.conversation-workspace) .conv-top {
     align-items: start;
   }
 
-  .inbox-bg-container .conv-name {
+  .inbox-bg-container:where(.conversation-workspace) .conv-name {
     color: var(--workspace-ink);
     font-size: var(--fs-nav);
     font-weight: var(--chat-fw-medium);
     line-height: 1.45;
   }
 
-  .inbox-bg-container .conv-time {
+  .inbox-bg-container:where(.conversation-workspace) .conv-time {
     color: var(--workspace-faint);
     font-size: var(--chat-fs-caption);
     line-height: 1.2;
   }
 
-  .inbox-bg-container .conv-bottom {
+  .inbox-bg-container:where(.conversation-workspace) .conv-bottom {
     width: 100%;
     display: flex;
     min-width: 0;
@@ -388,7 +401,7 @@
     gap: 4px;
   }
 
-  .inbox-bg-container .conv-preview {
+  .inbox-bg-container:where(.conversation-workspace) .conv-preview {
     display: flex;
     color: var(--workspace-muted);
     font-size: var(--fs-body-sm);
@@ -400,12 +413,12 @@
     word-break: normal;
   }
 
-  .inbox-bg-container .conv-meta-row {
+  .inbox-bg-container:where(.conversation-workspace) .conv-meta-row {
     justify-content: flex-start;
     flex-wrap: wrap;
   }
 
-  .inbox-bg-container .mini-chip {
+  .inbox-bg-container:where(.conversation-workspace) .mini-chip {
     min-height: 20px;
     padding: 0 8px;
     border-radius: 999px;
@@ -415,35 +428,27 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .inbox-bg-container .conversation.needs-attention::after {
+  .inbox-bg-container:where(.conversation-workspace)
+    .conversation.needs-attention::after {
     animation: none;
   }
 
-  .inbox-bg-container .conv-state-label.is-human-escalation {
+  .inbox-bg-container:where(.conversation-workspace)
+    .conv-state-label.is-human-escalation {
     animation: none;
   }
 }
 
-/* Channel indicator on a directory row and in the thread header.
- *
- * Which channel a thread belongs to was only visible inside the conversation,
- * never in the list, and the opened thread had no indicator at all. One quiet
- * pill serves both surfaces — the row (before the name) and the thread header
- * (after the name) — whose hue matches the adapter tile it came from, and
- * carries the full channel name on the element's `title`, because the
- * employee-support OA's full label cannot fit either surface. Scoped by its own
- * class prefix rather than as a descendant of the shared `.inbox-bg-container`,
- * so it adds nothing to the FE-19 ratchet. */
+/* Unboxed channel glyph in the row's bottom-right corner. */
 .conv-channel {
+  position: absolute;
+  right: 10px;
+  bottom: 11px;
   flex: 0 0 auto;
   align-self: center;
   height: 18px;
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
-  border: 1px solid var(--uu-inbox-line);
-  border-radius: 6px;
-  background: var(--uu-inbox-surface-subtle);
   color: var(--uu-inbox-muted);
   font-size: 11px;
   font-weight: var(--chat-fw-bold);
@@ -452,29 +457,6 @@
   white-space: nowrap;
 }
 
-.conv-channel[data-channel="zalo_bot"] {
-  border-color: color-mix(in srgb, #1f7ae0 32%, transparent);
-  background: color-mix(in srgb, #1f7ae0 10%, var(--uu-inbox-surface));
-  color: #17538f;
-}
-
-.conv-channel[data-channel="zalo_oa"] {
-  border-color: color-mix(in srgb, #0f6fbe 32%, transparent);
-  background: color-mix(in srgb, #0f6fbe 10%, var(--uu-inbox-surface));
-  color: #0f5182;
-}
-
-.conv-channel[data-channel="facebook_messenger"] {
-  border-color: color-mix(in srgb, #7b3fe4 30%, transparent);
-  background: color-mix(in srgb, #7b3fe4 10%, var(--uu-inbox-surface));
-  color: #5b2fae;
-}
-
-/* Glyph-only channel chip: the brand glyph replaces the text label —
-   recognisable at a glance, and the full name rides the title attribute. */
-.conv-channel.conv-channel-glyph {
-  padding: 1px;
-}
 .conv-channel .conv-channel-glyph {
   width: 16px;
   height: 16px;
@@ -483,16 +465,8 @@
   border-radius: 4px;
 }
 
-.conv-channel[data-channel="tingting_oa"] {
-  border-color: color-mix(in srgb, #b7358a 30%, transparent);
-  background: color-mix(in srgb, #b7358a 10%, var(--uu-inbox-surface));
-  color: #8a2568;
-}
-
-/* The thread header identifies the channel by the same glyph the channel filter
-   uses, at the supporting role's scale. The pill above stays for the list row,
-   which has no icon column of its own. */
-.inbox-bg-container .conv-channel-icon {
+/* Thread headers use the same channel glyph as conversation rows. */
+.inbox-bg-container:where(.conversation-workspace) .conv-channel-icon {
   flex: 0 0 16px;
   width: 16px;
   height: 16px;
@@ -500,7 +474,7 @@
   border-radius: 4px;
 }
 
-.inbox-bg-container .conv-channel-name {
+.inbox-bg-container:where(.conversation-workspace) .conv-channel-name {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;

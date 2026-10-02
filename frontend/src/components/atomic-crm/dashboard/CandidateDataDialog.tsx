@@ -26,7 +26,6 @@ import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { InputBase, TextField } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
-import { ProgressBarBase } from "@/components/base/progress-indicators/progress-indicators";
 import { TextArea } from "@/components/base/textarea/textarea";
 
 import { formatCandidateNotes } from "../conversations/domain/candidate-notes";
@@ -38,6 +37,7 @@ import {
   type CandidateProfileUpdate,
 } from "../leads/domain/candidateProfile";
 import type { Lead } from "../types";
+import "./dashboard.css";
 
 type CandidateDataDialogProps = {
   lead: Lead;
@@ -98,8 +98,14 @@ const candidateFields = (
   };
 
   return [
-    field("name", translate("leads.fields.name"), lead.name, UserRound),
     field("phone", translate("leads.fields.phone"), lead.phone, Phone),
+    field("name", translate("leads.fields.name"), lead.name, UserRound),
+    field(
+      "desired-job",
+      translate("leads.fields.desired_job"),
+      lead.desired_job,
+      Handshake,
+    ),
     field(
       "birth",
       translate("leads.fields.birth_year_and_age"),
@@ -107,12 +113,6 @@ const candidateFields = (
       CalendarDays,
     ),
     field("gender", translate("leads.fields.gender"), lead.gender, UserRound),
-    field(
-      "desired-job",
-      translate("leads.fields.desired_job"),
-      lead.desired_job,
-      Handshake,
-    ),
     field(
       "experience",
       translate("leads.fields.experience"),
@@ -172,8 +172,6 @@ export const CandidateDataDialog = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const translate = useTranslate();
   const fields = candidateFields(lead, translate);
-  const completedFields = fields.filter((field) => field.complete).length;
-  const completionPercent = Math.round((completedFields / fields.length) * 100);
   const candidateName =
     textValue(displayName) ||
     textValue(lead.name) ||
@@ -245,7 +243,7 @@ export const CandidateDataDialog = ({
       <Modal className="w-full outline-hidden sm:max-w-2xl">
         <Dialog
           aria-label={translate("leads.profile_title")}
-          className="flex flex-col gap-0 p-0 outline-hidden"
+          className="candidate-data-dialog console-form-control flex flex-col gap-0 p-0 outline-hidden"
         >
           <header className="sticky top-0 z-10 border-b border-secondary bg-primary px-5 py-4 pr-14 text-left sm:px-6 sm:py-5">
             <div className="flex min-w-0 items-center gap-3">
@@ -278,13 +276,13 @@ export const CandidateDataDialog = ({
               className="rounded-lg border border-secondary bg-secondary p-4"
               aria-labelledby="candidate-completion-title"
             >
-              <div className="mb-3 flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-4">
                 <div>
                   <h3
                     id="candidate-completion-title"
                     className="text-sm font-semibold text-primary"
                   >
-                    Mức độ hoàn thiện
+                    Liên hệ ứng viên
                   </h3>
                   <p className="mt-1 text-xs text-tertiary">
                     {lead.phone?.trim()
@@ -294,14 +292,7 @@ export const CandidateDataDialog = ({
                     sung sau.
                   </p>
                 </div>
-                <span className="shrink-0 text-sm font-semibold text-primary">
-                  {completedFields}/{fields.length} mục
-                </span>
               </div>
-              <ProgressBarBase value={completionPercent} />
-              <span className="sr-only">
-                Đã hoàn thiện {completionPercent}% hồ sơ ứng viên
-              </span>
             </section>
 
             <section
@@ -330,65 +321,81 @@ export const CandidateDataDialog = ({
 
               {editSession ? (
                 <form
-                  className="mt-4 grid gap-5"
+                  className="candidate-data-form mt-3 grid gap-3"
                   onSubmit={(event) => {
                     event.preventDefault();
                     void saveProfile();
                   }}
                 >
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {candidateProfileFields.map((field) => {
-                      const inputId = `dashboard-candidate-${lead.id}-${field.key}`;
-                      return (
-                        <TextField
-                          key={field.key}
-                          id={inputId}
-                          name={field.key}
-                          className="min-w-0"
-                          value={editSession.draft[field.key]}
-                          isDisabled={isSaving}
-                          onChange={(next) =>
-                            setEditSession((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    draft: {
-                                      ...current.draft,
-                                      [field.key]: next,
-                                    },
-                                  }
-                                : current,
-                            )
-                          }
-                        >
-                          <Label>{translate(field.labelKey)}</Label>
-                          <InputBase
-                            inputMode={field.inputMode}
-                            type={
-                              field.inputMode === "numeric"
-                                ? "number"
-                                : field.inputMode === "tel"
-                                  ? "tel"
-                                  : "text"
+                  <div className="candidate-data-fields grid gap-3 sm:grid-cols-2">
+                    {[...candidateProfileFields]
+                      .sort((left, right) => {
+                        const priority = [
+                          "phone",
+                          "name",
+                          "desired_job",
+                          "birth_year",
+                        ];
+                        const rank = (key: string) => {
+                          const index = priority.indexOf(key);
+                          return index < 0 ? priority.length : index;
+                        };
+                        return rank(left.key) - rank(right.key);
+                      })
+                      .map((field) => {
+                        const inputId = `dashboard-candidate-${lead.id}-${field.key}`;
+                        return (
+                          <TextField
+                            key={field.key}
+                            id={inputId}
+                            name={field.key}
+                            className="min-w-0"
+                            size="sm"
+                            value={editSession.draft[field.key]}
+                            isDisabled={isSaving}
+                            onChange={(next) =>
+                              setEditSession((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      draft: {
+                                        ...current.draft,
+                                        [field.key]: next,
+                                      },
+                                    }
+                                  : current,
+                              )
                             }
-                            autoComplete={
-                              field.key === "name"
-                                ? "name"
-                                : field.key === "phone"
-                                  ? "tel"
-                                  : "off"
-                            }
-                            min={field.min}
-                            max={field.max}
-                          />
-                        </TextField>
-                      );
-                    })}
+                          >
+                            <Label>{translate(field.labelKey)}</Label>
+                            <InputBase
+                              inputMode={field.inputMode}
+                              type={
+                                field.inputMode === "numeric"
+                                  ? "number"
+                                  : field.inputMode === "tel"
+                                    ? "tel"
+                                    : "text"
+                              }
+                              autoComplete={
+                                field.key === "name"
+                                  ? "name"
+                                  : field.key === "phone"
+                                    ? "tel"
+                                    : "off"
+                              }
+                              min={field.min}
+                              max={field.max}
+                            />
+                          </TextField>
+                        );
+                      })}
                   </div>
 
                   <TextArea
                     id={`dashboard-candidate-${lead.id}-notes`}
                     label={translate("leads.fields.notes")}
+                    size="sm"
                     value={editSession.draft.notes}
                     rows={5}
                     isDisabled={isSaving}
@@ -417,6 +424,7 @@ export const CandidateDataDialog = ({
                     <Button
                       type="button"
                       color="secondary"
+                      size="sm"
                       iconLeading={X}
                       isDisabled={isSaving}
                       onPress={cancelEditing}
@@ -426,6 +434,7 @@ export const CandidateDataDialog = ({
                     <Button
                       type="submit"
                       color="primary"
+                      size="sm"
                       iconLeading={Save}
                       isLoading={isSaving}
                       showTextWhileLoading

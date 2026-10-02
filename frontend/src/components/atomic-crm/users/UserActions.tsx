@@ -159,9 +159,10 @@ export const UserActions = () => {
       <Dropdown.Root>
         <span title={actionLabel}>
           <Button
+            data-allow-tall
             color="tertiary"
             size="sm"
-            className="size-10"
+            className="user-directory-menu size-10"
             iconLeading={MoreHorizontal}
             aria-label={actionLabel}
             isDisabled={resetPending || deletePending || togglePending}
@@ -205,7 +206,7 @@ export const UserActions = () => {
         <Modal className="w-full outline-hidden sm:max-w-md">
           <Dialog
             aria-label="Đổi mật khẩu"
-            className="flex flex-col gap-4 p-5 outline-hidden"
+            className="user-account-dialog console-form-control flex flex-col gap-3 p-4 outline-hidden"
           >
             <div className="flex flex-col gap-1">
               <h2 className="flex items-center gap-2 text-section-title font-semibold text-primary">
@@ -217,13 +218,14 @@ export const UserActions = () => {
               </p>
             </div>
             <form
-              className="flex flex-col gap-4"
+              className="flex flex-col gap-3"
               onSubmit={(event) => {
                 event.preventDefault();
                 void resetPassword();
               }}
             >
               <Input
+                size="sm"
                 ref={passwordRef}
                 className="uu-scope"
                 wrapperClassName="[&>button]:hidden"
@@ -242,6 +244,7 @@ export const UserActions = () => {
                 hint={passwordError ?? "Ít nhất 8 ký tự."}
               />
               <Input
+                size="sm"
                 ref={confirmationRef}
                 className="uu-scope"
                 wrapperClassName="[&>button]:hidden"
@@ -266,7 +269,7 @@ export const UserActions = () => {
                 <Button
                   type="button"
                   color="secondary"
-                  size="md"
+                  size="sm"
                   isDisabled={resetPending}
                   onClick={closeResetDialog}
                 >
@@ -274,7 +277,7 @@ export const UserActions = () => {
                 </Button>
                 <Button
                   type="submit"
-                  size="md"
+                  size="sm"
                   isDisabled={resetPending}
                   isLoading={resetPending}
                   showTextWhileLoading
@@ -299,7 +302,7 @@ export const UserActions = () => {
         <Modal className="w-full outline-hidden sm:max-w-md">
           <Dialog
             aria-label="Xóa vĩnh viễn tài khoản?"
-            className="flex flex-col gap-4 p-5 outline-hidden"
+            className="user-account-dialog console-form-control flex flex-col gap-3 p-4 outline-hidden"
           >
             <div className="flex flex-col gap-1">
               <h2 className="text-section-title font-semibold text-primary">
@@ -313,7 +316,7 @@ export const UserActions = () => {
               <Button
                 type="button"
                 color="secondary"
-                size="md"
+                size="sm"
                 onClick={() => setDeleteOpen(false)}
                 isDisabled={deletePending}
               >
@@ -322,7 +325,7 @@ export const UserActions = () => {
               <Button
                 type="button"
                 color="primary-destructive"
-                size="md"
+                size="sm"
                 onClick={() => void hardDelete()}
                 isDisabled={deletePending}
                 isLoading={deletePending}

@@ -3,10 +3,12 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import { VList, type VListHandle } from "virtua";
 import { useGetIdentity, useNotify, useTranslate } from "ra-core";
@@ -30,6 +32,7 @@ import { ChatMessageRow } from "./ChatMessageRow";
 import { LoadingState } from "../../misc/LoadingState";
 import { Button } from "@/components/base/buttons/button";
 import { Bot } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // ChatThread is the reusable message thread + composer. It owns the realtime
 // subscription, the virtualised scroller (with all the snap / load-more arming
@@ -66,7 +69,10 @@ export interface ChatThreadProps {
   isBotModeOverride?: boolean;
   needsClaimOverride?: boolean;
   canHumanReplyOverride?: boolean;
-  onTakeoverOverride?: () => void;
+  onTakeoverOverride?: () => void | Promise<void>;
+  isChangingModeOverride?: boolean;
+  /** Host-owned reply mode and capability controls, measured with the footer. */
+  composerToolbar?: ReactNode;
   showComposerTakeoverNotice?: boolean;
 }
 
@@ -78,6 +84,8 @@ export const ChatThread = ({
   needsClaimOverride,
   canHumanReplyOverride,
   onTakeoverOverride,
+  isChangingModeOverride,
+  composerToolbar,
   showComposerTakeoverNotice = true,
 }: ChatThreadProps) => {
   // Message state lives in the normalized store (persists across conversation
@@ -96,8 +104,14 @@ export const ChatThread = ({
   const { identity } = useGetIdentity();
   const notify = useNotify();
   const translate = useTranslate();
+  const isMobile = useIsMobile();
+  const composerHintId = useId();
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [takeoverFocusRequest, setTakeoverFocusRequest] = useState<{
+    conversationId: string;
+    settled: boolean;
+  } | null>(null);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(
     null,
   );
@@ -131,17 +145,51 @@ export const ChatThread = ({
     needsClaim: internalNeedsClaim,
     canHumanReply: internalCanHumanReply,
     handleTakeover: internalHandleTakeover,
+    isChangingMode: internalIsChangingMode,
   } = useConversationActions(conversation);
   const isBotMode = isBotModeOverride ?? internalIsBotMode;
   const needsClaim = needsClaimOverride ?? internalNeedsClaim;
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
+  const isChangingMode = Boolean(
+    isChangingModeOverride ?? internalIsChangingMode,
+  );
   // Footer is always present for a selected conversation so the bottom row is a
   // stable boundary in every mode. Content is derived from existing state only.
   const showTakeoverNotice =
     showComposerTakeoverNotice && (isBotMode || needsClaim);
   const isClosedMode = !isBotMode && !needsClaim && !canHumanReply;
   const showComposerForm = canHumanReply;
+
+  // Only an explicit takeover should move focus into the newly available
+  // composer. Realtime mode changes must not interrupt the reader's focus.
+  useEffect(() => {
+    if (!takeoverFocusRequest) return;
+    if (takeoverFocusRequest.conversationId !== conversationId) {
+      setTakeoverFocusRequest(null);
+      return;
+    }
+    if (!takeoverFocusRequest.settled || isChangingMode) return;
+    setTakeoverFocusRequest(null);
+    if (canHumanReply) textareaRef.current?.focus({ preventScroll: true });
+  }, [takeoverFocusRequest, conversationId, canHumanReply, isChangingMode]);
+
+  const handleExplicitTakeover = async () => {
+    if (isChangingMode || takeoverFocusRequest) return;
+    const request = { conversationId, settled: false };
+    setTakeoverFocusRequest(request);
+    try {
+      await handleTakeover();
+      setTakeoverFocusRequest((current) =>
+        current === request ? { ...request, settled: true } : current,
+      );
+    } catch {
+      // The action owns error feedback. Failed claims leave focus in place.
+      setTakeoverFocusRequest((current) =>
+        current === request ? null : current,
+      );
+    }
+  };
 
   const scrollToNewest = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = scrollerElRef.current;
@@ -389,7 +437,8 @@ export const ChatThread = ({
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = reply.trim();
-    if (!trimmed || !canHumanReply || isSendingRef.current) return;
+    if (!trimmed || !canHumanReply || isChangingMode || isSendingRef.current)
+      return;
     isSendingRef.current = true;
     const recruiterId = identity?.id != null ? String(identity.id) : "";
     const tempId = recruiterId ? insertOptimistic(trimmed, recruiterId) : "";
@@ -577,20 +626,49 @@ export const ChatThread = ({
       {/* The bottom row is always rendered for a selected conversation so it is
           a stable boundary in every mode. No position:fixed/overlay. */}
       <footer ref={composerWrapRef} className="composer-wrap">
-        {showTakeoverNotice && (
+        {composerToolbar ? (
+          <div className="composer-controls">
+            {composerToolbar}
+            {showTakeoverNotice ? (
+              <div className="composer-takeover-controls">
+                {needsClaim ? (
+                  <span className="composer-claim-hint">
+                    Cần tiếp quản để trả lời.
+                  </span>
+                ) : null}
+                <Button
+                  type="button"
+                  color="primary"
+                  size="sm"
+                  className="uu-scope inline-takeover-btn"
+                  isDisabled={isChangingMode}
+                  isLoading={isChangingMode}
+                  showTextWhileLoading
+                  onPress={handleExplicitTakeover}
+                >
+                  Tiếp quản
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {!composerToolbar && showTakeoverNotice && (
           <div className="handoff-note tt-alert tt-alert-info tt-alert-soft">
             <Bot className="icon" />
             <span>
               {needsClaim
                 ? "Hội thoại cần nhân viên xác minh trước khi trả lời."
-                : "Đang dùng ChatBot cho cuộc trò chuyện này."}
+                : "Chatbot tự động trả lời."}
             </span>
             <Button
               type="button"
               size="sm"
               color="primary"
               className="uu-scope inline-takeover-btn tt-btn tt-btn-sm tt-btn-outline"
-              onPress={handleTakeover}
+              isDisabled={isChangingMode}
+              isLoading={isChangingMode}
+              showTextWhileLoading
+              onPress={handleExplicitTakeover}
             >
               Tiếp quản
             </Button>
@@ -598,19 +676,28 @@ export const ChatThread = ({
         )}
         {showComposerForm && (
           <form
-            className={`composer ${!canHumanReply ? "disabled" : ""}`}
+            className={`composer ${!canHumanReply || isChangingMode ? "disabled" : ""}`}
+            aria-busy={isSending || isChangingMode}
             onSubmit={handleSend}
           >
             <textarea
               ref={textareaRef}
               className="tt-textarea"
               rows={1}
+              aria-label="Tin nhắn trả lời"
+              aria-describedby={isMobile ? undefined : composerHintId}
               placeholder={canHumanReply ? "Nhập tin nhắn..." : "Chưa sẵn sàng"}
-              disabled={!canHumanReply || isSending}
+              disabled={!canHumanReply || isChangingMode || isSending}
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !isMobile &&
+                  !e.nativeEvent.isComposing &&
+                  e.keyCode !== 229
+                ) {
                   e.preventDefault();
                   handleSend(e);
                 }
@@ -619,10 +706,14 @@ export const ChatThread = ({
             <Button
               type="submit"
               size="sm"
-              color="primary"
-              className="uu-scope composer-action send tt-btn tt-btn-primary tt-btn-circle text-primary-foreground"
+              color="tertiary"
+              className="uu-scope composer-action send"
+              data-allow-tall
               aria-label="Gửi tin nhắn"
-              isDisabled={!canHumanReply || isSending || !reply.trim()}
+              isDisabled={
+                !canHumanReply || isChangingMode || isSending || !reply.trim()
+              }
+              isLoading={isSending}
               iconLeading={
                 <svg className="icon" aria-hidden="true">
                   <use href="#i-send" />
@@ -631,6 +722,11 @@ export const ChatThread = ({
             />
           </form>
         )}
+        {showComposerForm && !isMobile ? (
+          <p id={composerHintId} className="composer-keyboard-hint">
+            Enter để gửi · Shift + Enter để xuống dòng
+          </p>
+        ) : null}
         {isClosedMode && (
           <div
             ref={closedStatusRef}

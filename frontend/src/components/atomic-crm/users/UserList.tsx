@@ -93,14 +93,14 @@ const UserListContent = ({
       <UserAccountTable />
     </div>
   ) : (
-    <PageShell size="wide">
+    <PageShell size="wide" className="user-directory-workspace">
       <PageHeading
         eyebrow="Quản trị truy cập"
         title={title}
         subtitle="Tài khoản và quyền truy cập nội bộ."
         actions={<CreateUserButton />}
       />
-      <UserAccountTable className="mt-4" />
+      <UserAccountTable className="user-directory-card" />
     </PageShell>
   );
 

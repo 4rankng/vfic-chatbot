@@ -39,6 +39,7 @@ const UserEditContent = () => {
   const redirect = useRedirect();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const translate = useTranslate();
+  const listHref = useHref("/users");
   const [submitting, setSubmitting] = useState(false);
   if (!user) return null;
 
@@ -67,7 +68,7 @@ const UserEditContent = () => {
 
   return (
     <section
-      className="user-account-form user-account-edit-form mt-4"
+      className="user-account-form user-account-edit-form"
       aria-labelledby="user-edit-form-title"
     >
       <header className="user-account-form-header user-account-edit-header">
@@ -133,9 +134,18 @@ const UserEditContent = () => {
           </div>
           <footer className="user-account-form-actions">
             <Button
+              href={listHref}
+              color="secondary"
+              size="sm"
+              className="uu-scope user-account-secondary-action max-[760px]:w-full"
+              isDisabled={submitting}
+            >
+              Hủy
+            </Button>
+            <Button
               type="submit"
-              size="md"
-              className="user-account-submit min-h-11 max-[760px]:w-full"
+              size="sm"
+              className="uu-scope user-account-submit max-[760px]:w-full"
               isDisabled={submitting}
               isLoading={submitting}
               showTextWhileLoading
@@ -163,6 +173,7 @@ export const UserEdit = () => {
           actions={
             <Button
               href={href}
+              className="uu-scope user-account-back-action"
               color="secondary"
               size="sm"
               iconLeading={ArrowLeft}

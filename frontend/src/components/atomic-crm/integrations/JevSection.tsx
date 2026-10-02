@@ -110,7 +110,7 @@ export const JevSection = ({
               <Button
                 type="button"
                 color="secondary"
-                className="tt-btn-touch"
+                className="uu-scope tt-btn-touch"
                 onClick={() => {
                   void panels.testProviderPanel("jev");
                 }}

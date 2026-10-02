@@ -344,7 +344,8 @@ const AttentionPanel = ({
       </div>
       {isEmpty ? (
         <EmptyState
-          className="mx-auto my-4"
+          variant="inline"
+          className="mx-auto"
           icon={<CheckCircle2 className="size-6" aria-hidden="true" />}
           title="Không có hội thoại cần xử lý"
           description="Mọi cuộc trò chuyện hiện đã được xử lý. Bạn có thể chuyển sang xem ứng viên mới."
@@ -414,7 +415,8 @@ const CandidatePanel = ({
       </div>
       {isEmpty ? (
         <EmptyState
-          className="mx-auto my-4"
+          variant="inline"
+          className="mx-auto"
           icon={<UserRoundPlus className="size-6" aria-hidden="true" />}
           title="Chưa có ứng viên có số điện thoại"
           description="Ứng viên sẽ xuất hiện tại đây sau khi cung cấp số liên hệ."
@@ -539,7 +541,15 @@ const CandidateAvatar = ({
 }: {
   name: string;
   src?: string | null;
-}) => <Avatar size="sm" src={src} alt={`Ảnh đại diện của ${name}`} />;
+}) => (
+  <Avatar
+    size="sm"
+    src={src}
+    alt={`Ảnh đại diện của ${name}`}
+    className="dashboard-candidate-avatar"
+    contentClassName="dashboard-candidate-avatar-content"
+  />
+);
 
 const AttentionRow = ({
   row,
@@ -587,6 +597,7 @@ const AttentionRow = ({
     return (
       <button
         type="button"
+        data-allow-tall
         className="dashboard-candidate-row"
         onClick={onClick}
         aria-label={`Mở hội thoại với ${name}${elapsed ? `, ${elapsed}` : ""}`}
@@ -668,6 +679,7 @@ const CandidateRow = ({
           <AriaButton
             ref={actionTriggerRef}
             type="button"
+            data-allow-tall
             className="dashboard-candidate-row"
             aria-label={`Chọn thao tác cho ${name}, số điện thoại ${phone}`}
           >

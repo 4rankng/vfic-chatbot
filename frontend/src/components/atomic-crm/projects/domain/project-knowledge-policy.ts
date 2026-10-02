@@ -86,6 +86,15 @@ export const buildProjectCreation = ({
   is_active: false,
 });
 
+/** A nullable mode identifies a legacy project without its own knowledge base. */
+export const projectKnowledgeModeLabel = (
+  mode: Project["knowledge_mode"],
+): string => {
+  if (mode === "DIRECT_CONTEXT") return "Một trang";
+  if (mode === "RAG") return "Theo danh mục";
+  return "Kiến thức cũ";
+};
+
 export const projectReadinessLabel = (
   project: Pick<
     Project,

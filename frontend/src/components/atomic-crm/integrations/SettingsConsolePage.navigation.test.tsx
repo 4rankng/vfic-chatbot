@@ -188,6 +188,35 @@ afterEach(async () => {
 });
 
 describe("SettingsConsolePage navigation", () => {
+  it("offers an in-page retry when integration settings fail to load", async () => {
+    mocks.isMobile = false;
+    mocks.loadZaloSettings.mockRejectedValueOnce(new Error("load failed"));
+    const screen = await render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <SettingsConsolePage />
+      </QueryClientProvider>,
+    );
+
+    await expect
+      .element(screen.getByText("Chưa tải được cấu hình tích hợp."))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Bot Token" }))
+      .toBeDisabled();
+    await screen.getByRole("button", { name: "Thử lại", exact: true }).click();
+    await expect.poll(() => mocks.loadZaloSettings.mock.calls.length).toBe(2);
+    await expect
+      .element(screen.getByText("Chưa tải được cấu hình tích hợp."))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Bot Token" }))
+      .toBeEnabled();
+  });
+
   it("announces permission loading without exposing editable settings", async () => {
     mocks.permissionsPending = true;
     const queryClient = new QueryClient({

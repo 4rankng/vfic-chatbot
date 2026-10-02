@@ -32,6 +32,17 @@ type Signal = {
  * into a single ordered queue, falling back to a calm "nothing to do" state.
  */
 export const AttentionQueue = ({ data }: { data: PerfMetrics }) => {
+  const showRelatedTurns = () => {
+    const target = document.getElementById("slow-turns");
+    if (!target) return;
+    target.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
+      block: "start",
+    });
+    target.focus({ preventScroll: true });
+  };
   const endToEnd = data.percentiles.end_to_end?.p95;
   const delivery = data.reliability;
   const signals: Signal[] = [];
@@ -119,12 +130,13 @@ export const AttentionQueue = ({ data }: { data: PerfMetrics }) => {
                 <>
                   <b>{signal.value}</b>
                   {data.slow_turns.length > 0 ? (
-                    <a
-                      href="#slow-turns"
+                    <button
+                      type="button"
                       aria-label={`Xem lượt liên quan đến ${signal.title}`}
+                      onClick={showRelatedTurns}
                     >
                       <ArrowRight aria-hidden="true" />
-                    </a>
+                    </button>
                   ) : null}
                 </>
               )}

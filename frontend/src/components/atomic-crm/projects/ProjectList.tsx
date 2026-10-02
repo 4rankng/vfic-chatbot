@@ -38,6 +38,7 @@ import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 import {
   aggregateProjectFeatureReadiness,
   projectActivationConflictVi,
+  projectKnowledgeModeLabel,
   projectReadinessLabel,
 } from "./domain/project-knowledge-policy";
 
@@ -135,7 +136,7 @@ const ProjectListContent = () => {
             <div className="ops-command-title">
               <div className="min-w-0">
                 <h1>Dự án tuyển dụng</h1>
-                <p>Theo dõi trạng thái, tài liệu và độ sẵn sàng kiến thức.</p>
+                <p>Quản lý tuyển dụng và kiến thức tư vấn cho từng dự án.</p>
               </div>
             </div>
             <div className="project-command-actions">
@@ -199,7 +200,7 @@ const ProjectListContent = () => {
               <span>{documentCount} tài liệu trên trang</span>
               <span>
                 {readiness.total > 0
-                  ? `${readiness.ready}/${readiness.total} danh mục sẵn sàng trên trang`
+                  ? `${readiness.ready}/${readiness.total} tiêu chí tư vấn trên trang`
                   : "Chưa đo độ sẵn sàng"}
               </span>
             </section>
@@ -284,7 +285,7 @@ export const ProjectDirectoryFilters = ({
     />
     <Select
       label="Trạng thái tuyển dụng"
-      popoverClassName="uu-scope"
+      popoverClassName="uu-scope console-select-popover"
       items={PROJECT_STATUS_OPTIONS}
       selectedKey={status}
       onSelectionChange={(key) => onStatusChange(String(key))}
@@ -331,7 +332,7 @@ const projectStateBadge = (
             };
       }
       return {
-        label: "Sẵn sàng",
+        label: "Đã nạp",
         className:
           "tt-badge-success tt-badge-soft border-transparent text-success",
       };
@@ -399,9 +400,7 @@ export const ProjectAccordionList = ({
                       {stateBadge.label}
                     </Badge>
                     <Badge variant="outline">
-                      {project.knowledge_mode === "DIRECT_CONTEXT"
-                        ? "Một trang"
-                        : "Theo danh mục"}
+                      {projectKnowledgeModeLabel(project.knowledge_mode)}
                     </Badge>
                   </div>
                 </div>
@@ -417,7 +416,7 @@ export const ProjectAccordionList = ({
                   <div>
                     <dt>
                       <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                      Sẵn sàng
+                      Thông tin tư vấn
                     </dt>
                     <dd>{readinessText}</dd>
                   </div>

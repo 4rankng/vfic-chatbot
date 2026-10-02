@@ -70,7 +70,19 @@ const CONVERSATION_LIST_SORT = {
 const getRelativeTimeString = (dateStr?: string) => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
-  return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+  if (!Number.isFinite(d.getTime())) return "";
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) {
+    return d.toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  return d.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    ...(d.getFullYear() === today.getFullYear() ? {} : { year: "2-digit" }),
+  });
 };
 
 // Hoisted static style objects so list rows don't allocate brand-new objects on
@@ -160,9 +172,8 @@ const ConversationListItem = memo(
     isActive,
     onSelect,
   }: ConversationListItemProps) => {
-    const time = getRelativeTimeString(
-      conversation.last_inbound_at ?? conversation.updated_at,
-    );
+    const timestamp = conversation.last_inbound_at ?? conversation.updated_at;
+    const time = getRelativeTimeString(timestamp);
 
     const name = presentation.displayName;
     // Preview = latest message snippet (batched via vfic_last_messages), falling
@@ -221,24 +232,16 @@ const ConversationListItem = memo(
         </LeadAvatar>
         <span className="conv-body">
           <span className="conv-top">
-            <span
-              className="conv-channel"
-              data-channel={displayChannel ?? "unknown"}
-              title={conversationChannelLabel(displayChannel)}
-            >
-              {channelIcon(displayChannel) ? (
-                <img
-                  className="conv-channel-glyph"
-                  src={channelIcon(displayChannel)}
-                  alt=""
-                  aria-hidden="true"
-                />
-              ) : (
-                conversationChannelShortLabel(displayChannel)
-              )}
-            </span>
             <span className="conv-name">{name}</span>
-            <span className="conv-time">{time}</span>
+            {time ? (
+              <time
+                className="conv-time"
+                dateTime={timestamp}
+                title={new Date(timestamp).toLocaleString("vi-VN")}
+              >
+                {time}
+              </time>
+            ) : null}
           </span>
           <span className="conv-bottom">
             {subtitle && (
@@ -278,6 +281,22 @@ const ConversationListItem = memo(
               ) : null}
             </span>
           </span>
+        </span>
+        <span
+          className="conv-channel"
+          data-channel={displayChannel ?? "unknown"}
+          title={conversationChannelLabel(displayChannel)}
+        >
+          {channelIcon(displayChannel) ? (
+            <img
+              className="conv-channel-glyph"
+              src={channelIcon(displayChannel)}
+              alt=""
+              aria-hidden="true"
+            />
+          ) : (
+            conversationChannelShortLabel(displayChannel)
+          )}
         </span>
       </button>
     );
@@ -416,10 +435,12 @@ const ConversationListPanel = ({
   selectedId,
   onSelect,
   readIds,
+  deletedIds,
 }: {
   selectedId: string | null;
   onSelect: (c: Conversation) => void;
   readIds: Set<string>;
+  deletedIds: ReadonlySet<string>;
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const translate = useTranslate();
@@ -520,6 +541,7 @@ const ConversationListPanel = ({
     if (!conversations) return [];
     return conversations
       .filter((conversation) => {
+        if (deletedIds.has(conversation.id)) return false;
         if (!deferredQuery) return true;
         const viewModel = getRowViewModel(conversation);
         const haystack = [
@@ -532,7 +554,7 @@ const ConversationListPanel = ({
         return vietnameseSearchIncludes(haystack, deferredQuery);
       })
       .sort((first, second) => compareConversationRows(first, second, readIds));
-  }, [conversations, deferredQuery, getRowViewModel, readIds]);
+  }, [conversations, deferredQuery, deletedIds, getRowViewModel, readIds]);
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -597,10 +619,7 @@ const ConversationListPanel = ({
         }
       />
 
-      <div
-        className="conversations animate-in fade-in-0 duration-300"
-        ref={scrollRootRef}
-      >
+      <div className="conversations" ref={scrollRootRef}>
         {isPending ? (
           Array.from({ length: 6 }).map((_, i) => (
             <ConversationListItemSkeleton key={i} />
@@ -655,7 +674,6 @@ const WorkspaceRail = ({
   <div className="workspace-rail" aria-label="Tin nhắn">
     <div className="workspace-title">
       <div className="workspace-title-copy">
-        <span className="workspace-rail-kicker">Tương tác đa kênh</span>
         <div className="workspace-title-row">
           <h1 className="workspace-heading">Hộp thư</h1>
         </div>
@@ -666,11 +684,24 @@ const WorkspaceRail = ({
   </div>
 );
 
-const ConversationListContent = () => {
+const ConversationListContent = ({
+  deletedIds,
+  excludeDeletedId,
+}: {
+  deletedIds: ReadonlySet<string>;
+  excludeDeletedId: (id: string) => void;
+}) => {
   const { data: conversations } = useListContext<Conversation>();
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectableConversations = useMemo(
+    () =>
+      deletedIds.size === 0
+        ? conversations
+        : conversations?.filter(({ id }) => !deletedIds.has(id)),
+    [conversations, deletedIds],
+  );
   const conversationIdsKey = useMemo(
     () => conversations?.map((c) => c.id).join("|") ?? "",
     [conversations],
@@ -686,9 +717,14 @@ const ConversationListContent = () => {
 
   const urlId = searchParams.get("id");
   const conversationFromCurrentPage =
-    conversations?.find((conversation) => conversation.id === urlId) ?? null;
+    selectableConversations?.find(
+      (conversation) => conversation.id === urlId,
+    ) ?? null;
   const shouldLoadDeepLink = Boolean(
-    urlId && conversations && !conversationFromCurrentPage,
+    urlId &&
+      !deletedIds.has(urlId) &&
+      selectableConversations &&
+      !conversationFromCurrentPage,
   );
   const {
     data: deepLinkedConversation,
@@ -699,6 +735,10 @@ const ConversationListContent = () => {
     { id: urlId ?? "" },
     { enabled: shouldLoadDeepLink },
   );
+  const selectableDeepLink =
+    deepLinkedConversation && !deletedIds.has(deepLinkedConversation.id)
+      ? deepLinkedConversation
+      : undefined;
   // BLOCKER #1: the `?reason=` URL param is now consumed at the
   // `<ConversationList>` mount (passed to `InfiniteListBase filter`) so the
   // backend `list_by_attention_reason` filter runs and the server returns the
@@ -711,20 +751,116 @@ const ConversationListContent = () => {
   // the browser back button naturally returns to the list. Desktop always shows
   // the detail alongside the list.
   const detailOpen = !isMobile || !!urlId;
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const previousPaneRef = useRef({ detailOpen, isMobile });
+  const pendingDetailFocusRef = useRef(false);
+  const selected = findSelectedConversation(
+    selectableConversations,
+    selectedId,
+    selectableDeepLink,
+  );
+
+  useEffect(() => {
+    let focusFrame: number | undefined;
+    const pane =
+      workspaceRef.current?.querySelector<HTMLElement>(".center-panel");
+    const focusDetail = () => {
+      if (
+        !pendingDetailFocusRef.current ||
+        !pane ||
+        getComputedStyle(pane).visibility !== "visible"
+      ) {
+        return;
+      }
+      // Restore only focus lost to BODY or a hidden inbox control. A deliberate
+      // composer/menu interaction, including a portal, takes precedence.
+      const active = document.activeElement;
+      const isHiddenInboxControl =
+        active instanceof HTMLElement &&
+        workspaceRef.current?.contains(active) &&
+        (active.getClientRects().length === 0 ||
+          getComputedStyle(active).visibility === "hidden");
+      if (active && active !== document.body && !isHiddenInboxControl) {
+        pendingDetailFocusRef.current = false;
+        pane.removeEventListener("transitionend", focusDetail);
+        return;
+      }
+      const identity = workspaceRef.current?.querySelector<HTMLButtonElement>(
+        "button.conversation-header-identity",
+      );
+      const back = workspaceRef.current?.querySelector<HTMLButtonElement>(
+        "button.conversation-header-back",
+      );
+      const target = identity ?? back;
+      if (!target) return;
+      target.focus();
+      // A transitioning, still-hidden pane can reject focus. Keep the request
+      // until the browser accepts it, rather than silently leaving it on BODY.
+      if (document.activeElement === target) {
+        pendingDetailFocusRef.current = false;
+        pane.removeEventListener("transitionend", focusDetail);
+      }
+    };
+    const previous = previousPaneRef.current;
+    previousPaneRef.current = { detailOpen, isMobile };
+    // Explicit phone navigation swaps panes. Wait for the selected record's
+    // header if it is still loading; mounting, resizing and realtime updates
+    // must not take focus from another control.
+    if (!isMobile || !previous.isMobile) {
+      pendingDetailFocusRef.current = false;
+      return;
+    }
+    if (!previous.detailOpen && detailOpen) {
+      pendingDetailFocusRef.current = true;
+    }
+    if (detailOpen && selected?.id === urlId && pendingDetailFocusRef.current) {
+      // Try once on the next frame and, if visibility still rejects focus,
+      // again when the existing pane transition finishes. Reduced motion needs
+      // no transition event because the first visible frame accepts focus.
+      pane?.addEventListener("transitionend", focusDetail);
+      focusFrame = requestAnimationFrame(focusDetail);
+    }
+    if (!detailOpen) {
+      pendingDetailFocusRef.current = false;
+      // Both the inbox Back control and browser history clear the URL. Focus
+      // the selected row, or search when it was deleted or is no longer listed.
+      if (!previous.detailOpen) return;
+      const selectedRow =
+        workspaceRef.current?.querySelector<HTMLButtonElement>(
+          '.left-panel .conversation[aria-current="page"]',
+        );
+      const search = workspaceRef.current?.querySelector<HTMLInputElement>(
+        '.left-panel input[type="search"]',
+      );
+      (selectedRow ?? search)?.focus();
+    }
+    return () => {
+      if (focusFrame !== undefined) cancelAnimationFrame(focusFrame);
+      pane?.removeEventListener("transitionend", focusDetail);
+    };
+  }, [detailOpen, isMobile, selected?.id, urlId]);
 
   // Seed the selection: a deep link (?id=) opens that conversation; otherwise
   // desktop auto-selects the first for an immediate detail view, while mobile
   // stays list-first until the user taps a row.
   useEffect(() => {
-    if (!conversations) return;
+    if (!selectableConversations) return;
+    // A confirmed deletion stays excluded for the mounted inbox, including
+    // during pending/failed refresh and old history navigation.
+    if (urlId && deletedIds.has(urlId)) {
+      setSearchParams((prev) => conversationSelectionParams(prev, null), {
+        replace: true,
+      });
+      return;
+    }
     const hasUrlConversation = Boolean(
       urlId &&
-        (conversationFromCurrentPage || deepLinkedConversation?.id === urlId),
+        (conversationFromCurrentPage || selectableDeepLink?.id === urlId),
     );
     const hasSelectedConversation = !!findSelectedConversation(
-      conversations,
+      selectableConversations,
       selectedId,
-      deepLinkedConversation,
+      selectableDeepLink,
     );
 
     if (urlId && shouldLoadDeepLink && isDeepLinkPending) return;
@@ -755,8 +891,8 @@ const ConversationListContent = () => {
 
     if (hasSelectedConversation) return;
 
-    if (!isMobile && conversations.length > 0) {
-      const firstId = (conversations[0] as Conversation).id;
+    if (!isMobile && selectableConversations.length > 0) {
+      const firstId = (selectableConversations[0] as Conversation).id;
       setSelectedId(firstId);
       if (
         urlId &&
@@ -775,23 +911,18 @@ const ConversationListContent = () => {
       setSelectedId(null);
     }
   }, [
-    conversations,
     conversationFromCurrentPage,
-    deepLinkedConversation,
+    deletedIds,
     isDeepLinkError,
     isDeepLinkPending,
     isMobile,
+    selectableConversations,
+    selectableDeepLink,
     selectedId,
     setSearchParams,
     shouldLoadDeepLink,
     urlId,
   ]);
-
-  const selected = findSelectedConversation(
-    conversations,
-    selectedId,
-    deepLinkedConversation,
-  );
 
   // `setSearchParams` is memoized on `location.search` (react-router 7), so its
   // identity changes on every navigation. Depending on it directly would
@@ -830,8 +961,19 @@ const ConversationListContent = () => {
     });
   };
 
+  const onConversationDeleted = () => {
+    // The list refresh follows this callback. Clear selection immediately so a
+    // cached deleted row cannot retain selection or receive return focus.
+    if (selected) {
+      excludeDeletedId(selected.id);
+    }
+    setSelectedId(null);
+    backToList();
+  };
+
   return (
     <div
+      ref={workspaceRef}
       className={`inbox-bg-container conversation-workspace ${
         isMobile && detailOpen ? "conversation-open" : ""
       }`}
@@ -847,13 +989,14 @@ const ConversationListContent = () => {
           selectedId={selected?.id ?? null}
           onSelect={openConversation}
           readIds={pendingReadIds}
+          deletedIds={deletedIds}
         />
 
         {selected ? (
           <RecordContextProvider value={selected}>
             <ConversationShowContent
               onOpenList={backToList}
-              onDeleted={backToList}
+              onDeleted={onConversationDeleted}
               showWorkspacePanel
             />
           </RecordContextProvider>
@@ -870,6 +1013,12 @@ const ConversationListContent = () => {
 };
 
 export const ConversationList = () => {
+  // Hard-deleted IDs cannot become valid again. Keep them above the keyed list
+  // for this mounted inbox, including across empty/loading snapshots and filters.
+  const [deletedIds, setDeletedIds] = useState<ReadonlySet<string>>(new Set());
+  const excludeDeletedId = useCallback((id: string) => {
+    setDeletedIds((previous) => new Set(previous).add(id));
+  }, []);
   // BLOCKER #1 fix: read `?reason=` HERE (at the InfiniteListBase mount) and
   // forward it as the list's permanent `filter` so react-admin emits
   // `?reason=<enum>` in the data-provider call, which the backend
@@ -905,7 +1054,10 @@ export const ConversationList = () => {
       sort={CONVERSATION_LIST_SORT}
       filter={serverFilter}
     >
-      <ConversationListContent />
+      <ConversationListContent
+        deletedIds={deletedIds}
+        excludeDeletedId={excludeDeletedId}
+      />
     </InfiniteListBase>
   );
 };

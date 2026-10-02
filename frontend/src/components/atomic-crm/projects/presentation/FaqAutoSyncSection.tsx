@@ -9,7 +9,7 @@ export const FaqAutoSyncSection = ({ autoSyncOn }: Props) => {
 
   return (
     <p
-      className="rounded-md border border-amber-300 bg-amber-50 p-3 text-body-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+      className="rounded-md border border-warning/30 bg-warning/10 p-3 text-body-sm text-foreground"
       role="status"
     >
       FAQ đang được đồng bộ tự động từ Google Sheet. Các thay đổi thủ công sẽ bị

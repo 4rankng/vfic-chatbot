@@ -61,6 +61,7 @@ export const ProviderField = ({
         {/* An empty placeholder keeps a model-less provider blank, exactly as
             the select it replaces rendered an unset value. */}
         <Select
+          popoverClassName="uu-scope console-select-popover"
           id={field.formKey}
           size="sm"
           className="uu-scope"

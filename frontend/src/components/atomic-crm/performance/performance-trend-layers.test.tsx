@@ -73,7 +73,7 @@ const WindowSwitcher = () => {
   return (
     <ButtonGroup
       size="sm"
-      className="uu-scope"
+      className="performance-window-switcher uu-scope"
       aria-label="Khoảng thời gian"
       selectedKeys={[windowKey]}
       onSelectionChange={(keys) => {
@@ -81,9 +81,15 @@ const WindowSwitcher = () => {
         if (next) setWindowKey(next as "1h" | "24h" | "7d");
       }}
     >
-      <ButtonGroupItem id="1h">1 giờ</ButtonGroupItem>
-      <ButtonGroupItem id="24h">24 giờ</ButtonGroupItem>
-      <ButtonGroupItem id="7d">7 ngày</ButtonGroupItem>
+      <ButtonGroupItem id="1h" className="performance-window-option">
+        1 giờ
+      </ButtonGroupItem>
+      <ButtonGroupItem id="24h" className="performance-window-option">
+        24 giờ
+      </ButtonGroupItem>
+      <ButtonGroupItem id="7d" className="performance-window-option">
+        7 ngày
+      </ButtonGroupItem>
     </ButtonGroup>
   );
 };
@@ -235,6 +241,45 @@ describe("performance trend chart layers", () => {
 });
 
 describe("performance header hierarchy", () => {
+  it.each([320, 390])(
+    "wraps intrinsic period controls before they overlap refresh in a narrow panel at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      const screen = await render(
+        dashboard(<div style={{ maxWidth: 224 }}>{header()}</div>),
+      );
+      const group = screen
+        .getByRole("radiogroup", { name: "Khoảng thời gian" })
+        .element();
+      const refresh = screen
+        .getByRole("button", { name: "Cập nhật dữ liệu" })
+        .element();
+      const actions = screen.container.querySelector<HTMLElement>(
+        ".performance-header-actions",
+      )!;
+      const groupBox = group.getBoundingClientRect();
+      const refreshBox = refresh.getBoundingClientRect();
+      const rowBox = actions.getBoundingClientRect();
+      // Both controls retain their natural width. When their combined intrinsic
+      // width exceeds the panel, refresh must move to a second row rather than
+      // shrinking a grid track underneath the period group's painted buttons.
+      expect(groupBox.width + refreshBox.width + 6).toBeGreaterThan(
+        rowBox.width,
+      );
+      expect(refreshBox.top).toBeGreaterThanOrEqual(groupBox.bottom);
+      expect(refreshBox.right).toBeLessThanOrEqual(rowBox.right + 1);
+      for (const option of group.querySelectorAll("button")) {
+        const box = option.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(rowBox.left);
+        expect(box.right).toBeLessThanOrEqual(rowBox.right);
+        expect(getComputedStyle(option).fontSize).toBe("12px");
+      }
+      await screen.getByRole("radio", { name: "7 ngày" }).click();
+      await expect
+        .element(screen.getByRole("radio", { name: "7 ngày" }))
+        .toHaveAttribute("aria-checked", "true");
+    },
+  );
   it("marks exactly the chosen window as selected", async () => {
     // The switcher is one React Aria segmented control; a pixel pin on the
     // deleted `.performance-window` rules cannot prove that. Selecting a
@@ -283,19 +328,33 @@ describe("performance header hierarchy", () => {
     expect(subtitleStyles.lineHeight).toBe("18px");
   });
 
-  it("drops the refresh timestamp prefix on very narrow screens", async () => {
-    // Below 420px the "Cập nhật lúc HH:MM:SS" prefix would push the refresh
-    // glyph and label off the row, so the prefix is hidden and only the time
-    // remains.
-    await page.viewport(narrow, 900);
-    const screen = await render(dashboard(header()));
+  it.each([320, narrow])(
+    "keeps the refresh action44px and the header inside the narrow viewport at %ipx",
+    async (width) => {
+      // Below 420px the "Cập nhật lúc HH:MM:SS" prefix would push the refresh
+      // glyph and label off the row, so the prefix is hidden and only the time
+      // remains.
+      await page.viewport(width, 900);
+      const screen = await render(dashboard(header()));
 
-    const prefix = screen.container.querySelector<HTMLElement>(
-      ".performance-refresh-prefix",
-    )!;
-    expect(getComputedStyle(prefix).display).toBe("none");
-    expect(prefix.getBoundingClientRect().width).toBe(0);
-  });
+      const prefix = screen.container.querySelector<HTMLElement>(
+        ".performance-refresh-prefix",
+      )!;
+      expect(getComputedStyle(prefix).display).toBe("none");
+      expect(prefix.getBoundingClientRect().width).toBe(0);
+      const refresh = screen
+        .getByRole("button", { name: "Cập nhật dữ liệu" })
+        .element();
+      expect(refresh.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      const actions = screen.container.querySelector<HTMLElement>(
+        ".performance-header-actions",
+      )!;
+      expect(refresh.getBoundingClientRect().right).toBeLessThanOrEqual(
+        actions.getBoundingClientRect().right + 1,
+      );
+      expect(actions.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    },
+  );
 });
 
 describe("performance metric strip", () => {

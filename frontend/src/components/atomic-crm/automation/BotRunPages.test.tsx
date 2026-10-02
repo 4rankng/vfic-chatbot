@@ -1,6 +1,8 @@
 import { type ReactNode } from "react";
-import { render } from "vitest-browser-react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render } from "vitest-browser-react";
+import { page } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@/index.css";
 
 import type { BotRun, BotRunTraceDetail } from "../types";
 
@@ -60,6 +62,10 @@ const run: BotRun = {
 };
 
 describe("Bot run pages", () => {
+  afterEach(async () => {
+    await cleanup();
+    await page.viewport(1280, 720);
+  });
   beforeEach(() => {
     mocks.redirect.mockReset();
     mocks.notify.mockReset();
@@ -70,6 +76,34 @@ describe("Bot run pages", () => {
     mocks.list.refetch.mockReset();
     mocks.list.refetch.mockResolvedValue({ error: null });
     mocks.list.total = 1;
+  });
+
+  it("lets phone audit rows contain their preview and status without overlapping", async () => {
+    await page.viewport(390, 844);
+    mocks.list.data = [run, { ...run, id: 43 }];
+    mocks.list.total = 2;
+    const screen = await render(
+      <div className="workspace-frame-content">
+        <BotRunListContent />
+      </div>,
+    );
+    const rows = screen.container.querySelectorAll<HTMLElement>(".bot-run-row");
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.hasAttribute("data-allow-tall")).toBe(true);
+      expect(row.getBoundingClientRect().height).toBeGreaterThanOrEqual(88);
+      const preview = row.querySelector(".bot-run-preview")!;
+      const status = row.querySelector('[data-slot="bot-run-outcome"]')!;
+      expect(preview.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        row.getBoundingClientRect().bottom,
+      );
+      expect(status.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        row.getBoundingClientRect().bottom,
+      );
+    }
+    expect(rows[1].getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      rows[0].getBoundingClientRect().bottom,
+    );
   });
 
   it("distinguishes a failed initial request from an empty audit trail", async () => {

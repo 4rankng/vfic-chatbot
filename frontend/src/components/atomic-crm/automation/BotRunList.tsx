@@ -6,24 +6,25 @@ import { cn, getRelativeTimeString } from "@/lib/utils";
 import { EmptyState, ListPagination, PageHeading, PageShell } from "../kit";
 import type { BotRun } from "../types";
 import { durationLabel, outcomeMeta } from "./botRunMeta";
+import "./bot-runs.css";
 
 export const BotRunRow = ({ run }: { run: BotRun }) => {
   const redirect = useRedirect();
   const meta = outcomeMeta(run.outcome);
-  const preview =
-    run.proposed_reply?.slice(0, 140) ?? "— không có câu trả lời —";
+  const preview = run.proposed_reply?.trim() || "Không có câu trả lời";
   const dur = durationLabel(run);
   const relativeTime = getRelativeTimeString(run.started_at);
 
   return (
     <button
       type="button"
+      data-allow-tall
       onClick={() => redirect("show", "bot_runs", run.id)}
       aria-label={`Xem lần chạy #${run.id}: ${meta.label}, ${relativeTime}${dur ? `, ${dur}` : ""}`}
-      className="group flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5"
+      className="bot-run-row group flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5"
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-body font-medium text-foreground">
+        <p className="bot-run-preview text-body font-medium text-foreground">
           {preview}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-helper text-muted-foreground">
@@ -125,7 +126,7 @@ const SkeletonRows = () => (
 );
 
 export const BotRunListContent = () => {
-  const { data, isPending, isFetching, error, refetch } =
+  const { data, total, isPending, isFetching, error, refetch } =
     useListContext<BotRun>();
   const notify = useNotify();
   const [retrying, setRetrying] = useState(false);
@@ -161,13 +162,41 @@ export const BotRunListContent = () => {
   );
 
   return (
-    <PageShell>
-      <PageHeading className="uu-scope" title="Lần chạy bot" />
+    <PageShell size="wide" className="bot-runs-workspace">
+      <PageHeading
+        className="uu-scope"
+        eyebrow="Vận hành"
+        title="Lần chạy bot"
+        subtitle="Theo dõi câu trả lời, kết quả gửi và các bước xử lý."
+        actions={
+          <Button
+            type="button"
+            className="uu-scope"
+            color="secondary"
+            size="sm"
+            iconLeading={RefreshCw}
+            isDisabled={busy}
+            isLoading={Boolean(isFetching || retrying)}
+            showTextWhileLoading
+            onClick={() => void retry()}
+          >
+            Cập nhật
+          </Button>
+        }
+      />
       <section
-        className="mt-4 border-y border-[var(--workspace-border)] bg-[var(--workspace-surface)]"
+        className="bot-run-list-panel"
         aria-label="Nhật ký xử lý"
         aria-busy={busy}
       >
+        <header className="bot-run-list-heading">
+          <h2>Nhật ký xử lý</h2>
+          <span className="tabular-nums">
+            {isPending && total == null
+              ? "Đang tải…"
+              : `${new Intl.NumberFormat("vi-VN").format(total ?? records.length)} lượt`}
+          </span>
+        </header>
         {isPending && records.length === 0 ? (
           <SkeletonRows />
         ) : records.length === 0 && error ? (

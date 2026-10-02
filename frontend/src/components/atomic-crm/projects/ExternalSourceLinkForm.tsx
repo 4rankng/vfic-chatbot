@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useNotify } from "ra-core";
 import { AlertCircle, FileText, Link2, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -54,6 +54,8 @@ export const ExternalSourceLinkForm = ({
   variant = "category",
 }: Props) => {
   const notify = useNotify();
+  const formId = useId();
+  const sourceId = (field: string) => `${formId}-${field}`;
   const [open, setOpen] = useState(false);
   const [sheetUrl, setSheetUrl] = useState("");
   const [categoryKey, setCategoryKey] =
@@ -67,13 +69,14 @@ export const ExternalSourceLinkForm = ({
   useEffect(() => {
     setOpen(false);
     setSheetUrl("");
+    setCategoryKey(defaultCategory);
     setAutoSync(false);
     setSubmitting(false);
     submittingRef.current = false;
     return () => {
       contextRef.current += 1;
     };
-  }, [projectId, variant]);
+  }, [defaultCategory, projectId, variant]);
 
   const urlValid = sheetUrl.trim() === "" || isValidGoogleSheetUrl(sheetUrl);
   const gidResolution = sheetUrl.trim()
@@ -168,15 +171,15 @@ export const ExternalSourceLinkForm = ({
         disabled={disabled}
       >
         <Link2 className="size-4" />
-        {isSinglePage ? "Liên kết Google Sheet" : "Liên kết Google Sheet"}
+        Liên kết Google Sheet
       </Button>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+    <div className="project-source-link-form">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
+      <div className="project-source-link-header">
         <FileText className="size-4 text-primary" aria-hidden="true" />
         <h4 className="text-body font-semibold">
           {isSinglePage ? "Google Sheet 1 trang" : "Liên kết Google Sheet"}
@@ -184,33 +187,33 @@ export const ExternalSourceLinkForm = ({
       </div>
 
       {/* Body */}
-      <div className="space-y-4 p-4">
+      <div className="project-source-link-body">
         <div className="space-y-2">
-          <Label htmlFor="ext-src-url">Link Google Sheet</Label>
+          <Label htmlFor={sourceId("ext-src-url")}>Link Google Sheet</Label>
           <Input
-            id="ext-src-url"
+            id={sourceId("ext-src-url")}
             value={sheetUrl}
             onChange={(event) => setSheetUrl(event.target.value)}
-            placeholder={
-              isSinglePage
-                ? "https://docs.google.com/spreadsheets/d/.../edit#gid=123456789"
-                : "https://docs.google.com/spreadsheets/d/.../edit#gid=123456789"
-            }
+            placeholder="https://docs.google.com/spreadsheets/d/.../edit#gid=123456789"
             inputMode="url"
+            autoComplete="off"
             aria-invalid={!urlValid || !gidValid}
             aria-describedby={
               !urlValid
-                ? "ext-src-url-error"
+                ? sourceId("ext-src-url-error")
                 : !gidValid
-                  ? "ext-src-gid-error"
-                  : isSinglePage && gidResolution?.ok
-                    ? "ext-src-gid-preview"
+                  ? sourceId("ext-src-gid-error")
+                  : gidResolution?.ok
+                    ? sourceId("ext-src-gid-preview")
                     : undefined
             }
             disabled={submitting || disabled}
           />
           {!urlValid && (
-            <p id="ext-src-url-error" className="text-body-sm text-destructive">
+            <p
+              id={sourceId("ext-src-url-error")}
+              className="text-body-sm text-destructive"
+            >
               Chỉ nhận link https://docs.google.com/... (Sheet đặt "Anyone with
               link can view").
             </p>
@@ -218,7 +221,9 @@ export const ExternalSourceLinkForm = ({
           {urlValid && gidHint && (
             <p
               id={
-                gidResolution?.ok ? "ext-src-gid-preview" : "ext-src-gid-error"
+                gidResolution?.ok
+                  ? sourceId("ext-src-gid-preview")
+                  : sourceId("ext-src-gid-error")
               }
               className={
                 gidResolution?.ok
@@ -233,7 +238,7 @@ export const ExternalSourceLinkForm = ({
 
         {!isSinglePage && (
           <div className="space-y-1.5">
-            <Label htmlFor="ext-src-category">Danh mục</Label>
+            <Label htmlFor={sourceId("ext-src-category")}>Danh mục</Label>
             <Select
               value={categoryKey}
               onValueChange={(value) =>
@@ -241,7 +246,7 @@ export const ExternalSourceLinkForm = ({
               }
               disabled={submitting || disabled}
             >
-              <SelectTrigger id="ext-src-category" className="h-9">
+              <SelectTrigger id={sourceId("ext-src-category")} className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -256,7 +261,7 @@ export const ExternalSourceLinkForm = ({
         )}
 
         <label
-          htmlFor="ext-src-autosync"
+          htmlFor={sourceId("ext-src-autosync")}
           className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/20 p-3 transition-colors hover:bg-muted/40"
         >
           <span className="space-y-0.5">
@@ -270,7 +275,7 @@ export const ExternalSourceLinkForm = ({
             </span>
           </span>
           <Switch
-            id="ext-src-autosync"
+            id={sourceId("ext-src-autosync")}
             checked={autoSync}
             onCheckedChange={setAutoSync}
             disabled={submitting || disabled}
@@ -290,7 +295,7 @@ export const ExternalSourceLinkForm = ({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-4 py-3">
+      <div className="project-source-link-footer">
         <Button
           type="button"
           variant="outline"

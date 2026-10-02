@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useId } from "react";
+import { useId, useRef } from "react";
 import type { SinglePageDraft } from "./use-single-page-draft";
 import { ExternalSourceLinkForm } from "../ExternalSourceLinkForm";
 import { ExternalSourceList } from "../ExternalSourceList";
@@ -47,6 +47,7 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
     text,
   } = draft;
   const filenameId = useId();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
     <Card className="project-single-page-card">
@@ -92,6 +93,8 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
                 </p>
                 <Button
                   variant="outline"
+                  data-allow-tall
+                  className="project-single-page-reload"
                   disabled={saving}
                   onClick={discardChanges}
                 >
@@ -114,26 +117,30 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
                 />
               </div>
               {editable && (
-                <Button
-                  variant="outline"
-                  className="project-single-page-file-button"
-                  disabled={saving || loadFailed}
-                  asChild
-                >
-                  <label>
-                    <Upload className="size-4" />
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="project-single-page-file-button"
+                    disabled={saving || loadFailed}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="size-4" aria-hidden="true" />
                     Chọn file
-                    <input
-                      type="file"
-                      accept=".txt,.md,text/plain,text/markdown"
-                      className="sr-only"
-                      disabled={saving || loadFailed}
-                      onChange={(event) =>
-                        void readFile(event.target.files?.[0])
-                      }
-                    />
-                  </label>
-                </Button>
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    hidden
+                    accept=".txt,.md,text/plain,text/markdown"
+                    aria-label="Chọn tệp trang kiến thức"
+                    disabled={saving || loadFailed}
+                    onChange={(event) => {
+                      void readFile(event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
+                  />
+                </>
               )}
             </div>
             <Textarea
@@ -169,7 +176,7 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
                 aria-labelledby="single-page-sync-heading"
               >
                 <header className="project-single-page-sync-header flex flex-wrap items-center gap-x-2 gap-y-1 text-label font-semibold">
-                  <div className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
+                  <div className="project-single-page-sync-label inline-flex min-w-0 items-center gap-2">
                     <Link2
                       className="size-4 shrink-0 text-muted-foreground"
                       aria-hidden="true"

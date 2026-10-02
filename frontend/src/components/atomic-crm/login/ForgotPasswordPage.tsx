@@ -1,10 +1,19 @@
 import { useState, type ComponentType } from "react";
-import { Form, required, useInput, useNotify, ValidationError } from "ra-core";
+import {
+  email as validateEmail,
+  Form,
+  required,
+  useInput,
+  useNotify,
+  ValidationError,
+} from "ra-core";
 import type { SubmitHandler, FieldValues } from "react-hook-form";
 import { Link, useNavigate } from "react-router";
 import {
   ArrowLeft,
   ArrowRight,
+  Eye,
+  EyeOff,
   KeyRound,
   Lock,
   Mail,
@@ -12,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { InputBase, TextField } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
 import { HintText } from "@/components/base/input/hint-text";
@@ -124,23 +134,28 @@ export const ForgotPasswordPage = () => {
             </div>
           </div>
 
-          <div className="uu-scope tt-card rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6">
+          <div className="uu-scope w-full">
             {step === "email" ? (
-              <Form className="space-y-4" onSubmit={submitEmail} noValidate>
+              <Form
+                className="space-y-3"
+                onSubmit={submitEmail}
+                noValidate
+                disableInvalidFormNotification
+              >
                 <RecoveryField
                   label="Email"
                   source="email"
                   type="email"
                   autoComplete="email"
-                  placeholder="you@example.com"
+                  placeholder="ten@congty.vn"
                   icon={Mail}
                   disabled={loading}
                   validateRequired
                 />
                 <Button
                   type="submit"
-                  size="lg"
-                  className="mt-2 h-12 w-full"
+                  size="sm"
+                  className="mt-1 w-full"
                   isDisabled={loading}
                   isLoading={loading}
                   showTextWhileLoading
@@ -150,7 +165,12 @@ export const ForgotPasswordPage = () => {
                 </Button>
               </Form>
             ) : (
-              <Form className="space-y-4" onSubmit={submitOtp} noValidate>
+              <Form
+                className="space-y-3"
+                onSubmit={submitOtp}
+                noValidate
+                disableInvalidFormNotification
+              >
                 <RecoveryField
                   label="Email"
                   source="email"
@@ -189,8 +209,8 @@ export const ForgotPasswordPage = () => {
                 />
                 <Button
                   type="submit"
-                  size="lg"
-                  className="mt-2 h-12 w-full"
+                  size="sm"
+                  className="mt-1 w-full"
                   isDisabled={loading}
                   isLoading={loading}
                   showTextWhileLoading
@@ -201,8 +221,8 @@ export const ForgotPasswordPage = () => {
                 <Button
                   type="button"
                   color="secondary"
-                  size="lg"
-                  className="h-12 w-full"
+                  size="sm"
+                  className="w-full"
                   isDisabled={loading || !canResend}
                   isLoading={isResending}
                   showTextWhileLoading
@@ -226,10 +246,6 @@ export const ForgotPasswordPage = () => {
               Quay lại đăng nhập
             </Link>
           </div>
-
-          <p className="mt-6 text-center text-helper text-muted-foreground">
-            Khôi phục quyền truy cập an toàn
-          </p>
         </section>
       </AuthShell>
       <Notification />
@@ -262,11 +278,21 @@ const RecoveryField = ({
   validateRequired = false,
   icon: Icon,
 }: RecoveryFieldProps) => {
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const renderedType = type === "password" && passwordVisible ? "text" : type;
   const { id, field, fieldState, isRequired } = useInput({
     source,
     type,
     validate: validateRequired
-      ? required(`Vui lòng nhập ${label.toLocaleLowerCase("vi-VN")}.`)
+      ? [
+          required(`Vui lòng nhập ${label.toLocaleLowerCase("vi-VN")}.`),
+          ...(type === "email"
+            ? [
+                (value: string) =>
+                  validateEmail("Nhập địa chỉ email hợp lệ.")(value.trim()),
+              ]
+            : []),
+        ]
       : undefined,
     defaultValue,
   });
@@ -276,7 +302,7 @@ const RecoveryField = ({
       id={id}
       className="uu-scope gap-1.5"
       name={field.name}
-      type={type}
+      type={renderedType}
       value={typeof field.value === "string" ? field.value : ""}
       onChange={(value: string) => field.onChange(value)}
       onBlur={field.onBlur}
@@ -286,23 +312,34 @@ const RecoveryField = ({
       isInvalid={Boolean(fieldState.error)}
     >
       <Label>{label}</Label>
-      {/*
-        `[&>button]:hidden` suppresses the primitive's password eye. This flow has
-        never offered a reveal action, and the primitive's eye is labelled in
-        English — the console is Vietnamese-only.
-      */}
-      <InputBase
-        ref={field.ref}
-        type={type}
-        icon={Icon}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
-        isDisabled={disabled}
-        isInvalid={Boolean(fieldState.error)}
-        inputClassName="min-h-12"
-        wrapperClassName={type === "password" ? "[&>button]:hidden" : undefined}
-      />
+      <div className="relative w-full">
+        <InputBase
+          ref={field.ref}
+          type={renderedType}
+          icon={Icon}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          inputMode={inputMode}
+          isDisabled={disabled}
+          isInvalid={Boolean(fieldState.error)}
+          size="sm"
+          inputClassName={type === "password" ? "pr-12" : undefined}
+          wrapperClassName={
+            type === "password" ? "[&>button]:hidden" : undefined
+          }
+        />
+        {type === "password" ? (
+          <ButtonUtility
+            data-allow-tall
+            tooltip={`${passwordVisible ? "Ẩn" : "Hiện"} ${label.toLocaleLowerCase("vi-VN")}`}
+            color="tertiary"
+            className="auth-password-action absolute right-0.5 top-1/2 -translate-y-1/2"
+            isDisabled={disabled}
+            icon={passwordVisible ? <EyeOff /> : <Eye />}
+            onPress={() => setPasswordVisible((current) => !current)}
+          />
+        ) : null}
+      </div>
       {fieldState.error?.message ? (
         <HintText isInvalid role="alert">
           <ValidationError error={fieldState.error.message} />

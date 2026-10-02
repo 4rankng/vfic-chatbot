@@ -12,14 +12,14 @@ import { AuthShell } from "./AuthShell";
 export const LoginSkeleton = () => (
   <AuthShell productName="TingHire">
     <div
-      className="flex flex-col gap-5"
+      className="flex flex-col gap-3"
       role="status"
       aria-label="Đang tải biểu mẫu"
     >
       <Skeleton className="h-8 w-40" />
-      <Skeleton className="h-12 w-full" />
-      <Skeleton className="h-12 w-full" />
-      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-[var(--form-control-height)] w-full" />
+      <Skeleton className="h-[var(--form-control-height)] w-full" />
+      <Skeleton className="h-[var(--form-control-height)] w-full" />
     </div>
   </AuthShell>
 );

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import {
   Form,
+  email,
   required,
   useInput,
   useLogin,
-  useNotify,
   ValidationError,
 } from "ra-core";
 import type { FieldValues, SubmitHandler } from "react-hook-form";
@@ -40,26 +40,29 @@ import { AuthShell } from "./AuthShell";
 export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
   const { manifest } = useInstallationContext();
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const login = useLogin();
-  const notify = useNotify();
   const activeName =
     manifest.lifecycle === "ACTIVE"
       ? manifest.branding?.app_name?.trim() ||
         manifest.customer_identity?.display_name.trim()
       : null;
 
-  const handleSubmit: SubmitHandler<FieldValues> = (values) => {
+  const handleSubmit: SubmitHandler<FieldValues> = async (values) => {
+    if (loading) return;
     setLoading(true);
-    login(values, redirectTo)
-      .catch((error: unknown) => {
-        notify(
-          error instanceof Error && error.message
-            ? error.message
-            : "Đăng nhập không thành công. Vui lòng thử lại.",
-          { type: "error" },
-        );
-      })
-      .finally(() => setLoading(false));
+    setLoginError(null);
+    try {
+      await login(values, redirectTo);
+    } catch (error: unknown) {
+      setLoginError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Đăng nhập không thành công. Vui lòng thử lại.",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const productName = activeName ?? "TingHire";
@@ -67,10 +70,7 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
   return (
     <>
       <AuthShell productName={productName}>
-        <section
-          aria-labelledby="login-title"
-          className="uu-scope tt-card tt-card-border rounded-xl border border-base-300 bg-base-100 p-6 shadow-sm sm:p-7"
-        >
+        <section aria-labelledby="login-title" className="uu-scope w-full">
           <h1
             id="login-title"
             className="mb-5 text-page-title font-semibold tracking-tight"
@@ -78,13 +78,26 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
             Đăng nhập
           </h1>
 
-          <Form className="grid gap-5" onSubmit={handleSubmit} noValidate>
+          <Form
+            className="grid gap-3"
+            onSubmit={handleSubmit}
+            noValidate
+            disableInvalidFormNotification
+          >
             <EmailField disabled={loading} />
             <PasswordField disabled={loading} />
+            {loginError ? (
+              <p
+                role="alert"
+                className="rounded-lg border border-error_subtle bg-error-primary px-4 py-3 text-body text-error-primary"
+              >
+                {loginError}
+              </p>
+            ) : null}
             <Button
               type="submit"
-              size="lg"
-              className="mt-2 min-h-12 w-full"
+              size="sm"
+              className="mt-1 w-full"
               isDisabled={loading}
               isLoading={loading}
               showTextWhileLoading
@@ -112,12 +125,15 @@ const EmailField = ({ disabled }: { disabled?: boolean }) => {
   const { id, field, fieldState, isRequired } = useInput({
     source: "email",
     type: "email",
-    validate: required("Vui lòng nhập email."),
+    validate: [
+      required("Vui lòng nhập email."),
+      (value: string) => email("Nhập địa chỉ email hợp lệ.")(value.trim()),
+    ],
   });
   return (
     <TextField
       id={id}
-      className="uu-scope gap-2"
+      className="uu-scope gap-1.5"
       name={field.name}
       type="email"
       value={typeof field.value === "string" ? field.value : ""}
@@ -136,7 +152,7 @@ const EmailField = ({ disabled }: { disabled?: boolean }) => {
         autoComplete="email"
         isDisabled={disabled}
         isInvalid={Boolean(fieldState.error)}
-        inputClassName="min-h-12"
+        size="sm"
       />
       {fieldState.error?.message ? (
         <HintText isInvalid role="alert">
@@ -157,7 +173,7 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
   return (
     <TextField
       id={id}
-      className="uu-scope gap-2"
+      className="uu-scope gap-1.5"
       name={field.name}
       type={visible ? "text" : "password"}
       value={typeof field.value === "string" ? field.value : ""}
@@ -177,18 +193,20 @@ const PasswordField = ({ disabled }: { disabled?: boolean }) => {
         */}
         <InputBase
           ref={field.ref}
+          size="sm"
           type={visible ? "text" : "password"}
           icon={Lock}
           autoComplete="current-password"
           isDisabled={disabled}
           isInvalid={Boolean(fieldState.error)}
-          inputClassName="min-h-12"
+          inputClassName="pr-12"
           wrapperClassName="[&>button]:hidden"
         />
         <ButtonUtility
+          data-allow-tall
           tooltip={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
           color="tertiary"
-          className="absolute right-2 top-1/2 min-h-10 min-w-10 -translate-y-1/2"
+          className="auth-password-action absolute right-0.5 top-1/2 -translate-y-1/2"
           onClick={() => setVisible((current) => !current)}
           isDisabled={disabled}
           icon={visible ? <EyeOff /> : <Eye />}

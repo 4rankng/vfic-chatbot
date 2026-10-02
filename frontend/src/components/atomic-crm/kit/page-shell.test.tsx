@@ -2,6 +2,7 @@ import { render } from "vitest-browser-react";
 import { describe, expect, it } from "vitest";
 
 import { EmptyState, PageShell } from "./page-shell";
+import "@/index.css";
 
 describe("PageShell", () => {
   it("renders children inside the requested column width", async () => {
@@ -43,6 +44,11 @@ describe("EmptyState", () => {
     expect(screen.getByText("Tạo mục đầu tiên để bắt đầu.")).toBeTruthy();
     expect(screen.getByTestId("empty-icon")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Tạo mới" })).toBeTruthy();
+    const icon = screen.getByTestId("empty-icon").element().parentElement!;
+    const style = getComputedStyle(icon);
+    expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(style.borderTopWidth).toBe("0px");
+    expect(style.boxShadow).toBe("none");
   });
 
   it("renders no action region when the caller passes none", async () => {
@@ -55,5 +61,11 @@ describe("EmptyState", () => {
     );
 
     expect(screen.container.querySelectorAll("button")).toHaveLength(0);
+    expect(screen.container.querySelectorAll("main, h1")).toHaveLength(0);
+    await expect
+      .element(
+        screen.getByRole("heading", { level: 2, name: "Chưa có dữ liệu" }),
+      )
+      .toBeVisible();
   });
 });

@@ -344,6 +344,7 @@ export const FacebookMessengerIntegrationPage = () => {
           OAuth flow can build a valid authorization URL. */}
       <form
         className="settings-group settings-messenger-group settings-messenger-credentials"
+        autoComplete="off"
         onSubmit={submitCredentials}
       >
         <div className="settings-messenger-group-heading">
@@ -367,7 +368,7 @@ export const FacebookMessengerIntegrationPage = () => {
                 type="button"
                 color="secondary"
                 size="sm"
-                className="mt-2"
+                className="uu-scope mt-2"
                 isDisabled={credentialsQuery.isFetching}
                 onClick={() => void credentialsQuery.refetch()}
               >
@@ -477,6 +478,7 @@ export const FacebookMessengerIntegrationPage = () => {
               type="button"
               color="secondary"
               size="sm"
+              className="uu-scope"
               isDisabled={statusQuery.isFetching}
               onClick={() => void statusQuery.refetch()}
             >
@@ -509,7 +511,7 @@ export const FacebookMessengerIntegrationPage = () => {
               <Button
                 type="button"
                 color="secondary"
-                className="settings-test-button tt-btn-touch"
+                className="uu-scope settings-test-button tt-btn-touch"
                 onClick={() => testConnection.mutate()}
                 isDisabled={testConnection.isPending}
                 aria-busy={testConnection.isPending}
@@ -696,6 +698,7 @@ export const FacebookMessengerIntegrationPage = () => {
           <div className="settings-messenger-recovery-content">
             <form
               className="settings-field settings-messenger-recovery-form"
+              autoComplete="off"
               onSubmit={loadManualFlow}
             >
               <label

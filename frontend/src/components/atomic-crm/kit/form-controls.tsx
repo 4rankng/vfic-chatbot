@@ -240,8 +240,9 @@ export const FormTextInput = ({
   if (type === "password") {
     return (
       <TextField
+        size="sm"
         id={inputId}
-        className={cx("uu-scope", className)}
+        className={cx("uu-scope console-form-control", className)}
         name={field.name}
         autoComplete={autoComplete}
         autoFocus={autoFocus}
@@ -269,11 +270,12 @@ export const FormTextInput = ({
             inputClassName="pr-12"
           />
           <AriaButton
+            data-allow-tall
             aria-label={passwordVisible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
             aria-pressed={passwordVisible}
             isDisabled={isDisabled}
             onPress={() => setPasswordVisible((visible) => !visible)}
-            className="absolute inset-y-0 right-1 my-auto flex size-8 items-center justify-center rounded-md text-fg-quaternary outline-focus-ring hover:bg-secondary hover:text-fg-quaternary_hover focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 max-md:size-10"
+            className="absolute inset-y-0 right-1 my-auto flex size-8 items-center justify-center rounded-md text-fg-quaternary outline-focus-ring hover:bg-secondary hover:text-fg-quaternary_hover focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 max-md:size-11"
           >
             {passwordVisible ? (
               <EyeOff className="size-4" aria-hidden="true" />
@@ -291,8 +293,9 @@ export const FormTextInput = ({
 
   return (
     <UntitledInput
+      size="sm"
       id={inputId}
-      className={cx("uu-scope", className)}
+      className={cx("uu-scope console-form-control", className)}
       wrapperClassName={inputClassName}
       name={field.name}
       ref={field.ref}
@@ -338,7 +341,7 @@ export const FormTextArea = ({
   return (
     <UntitledTextArea
       id={inputId}
-      className={cx("uu-scope", className)}
+      className={cx("uu-scope console-form-control", className)}
       name={field.name}
       textAreaRef={field.ref}
       label={label}
@@ -393,8 +396,10 @@ export const FormSelect = ({
 
   return (
     <UntitledSelect
+      size="sm"
+      popoverClassName="uu-scope console-select-popover"
       id={inputId}
-      className={cx("uu-scope", className)}
+      className={cx("uu-scope console-form-control", className)}
       label={label}
       placeholder={placeholder}
       items={items}

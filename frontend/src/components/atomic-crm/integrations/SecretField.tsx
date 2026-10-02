@@ -170,9 +170,10 @@ export const SecretField = ({
         */}
         <InputBase
           id={id}
+          name={id}
           size="sm"
           type={isShowing ? "text" : "password"}
-          autoComplete="off"
+          autoComplete="new-password"
           spellCheck={false}
           readOnly={revealed !== null}
           value={revealed ?? value}
@@ -241,6 +242,7 @@ export const PlainField = ({
   >
     <InputBase
       id={id}
+      name={id}
       size="sm"
       type="text"
       autoComplete="off"

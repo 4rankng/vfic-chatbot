@@ -75,21 +75,45 @@
   mask-image: radial-gradient(circle at 0 0, #000 0, transparent 34rem);
 }
 
-.inbox-bg-container .app {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .app {
   gap: 10px;
   border-radius: var(--radius-uu-2xl, 18px);
 }
 
-.inbox-bg-container .left-panel,
-.inbox-bg-container .center-panel,
-.inbox-bg-container .right-panel.context-persistent {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .left-panel,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .center-panel,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .right-panel.context-persistent {
   border-color: var(--uu-inbox-line);
   border-radius: var(--radius-uu-2xl, 18px);
   box-shadow: var(--shadow-uu-md, 0 4px 8px -2px rgb(16 24 40 / 0.1));
 }
 
-.inbox-bg-container .left-panel,
-.inbox-bg-container .right-panel.context-persistent {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .left-panel,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .right-panel.context-persistent {
   background: color-mix(
     in srgb,
     var(--uu-inbox-surface) 96%,
@@ -97,13 +121,21 @@
   );
 }
 
-.inbox-bg-container .center-panel {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .center-panel {
   padding: 0;
   background: var(--uu-inbox-surface);
 }
 
 /* Directory header: Untitled UI command-menu rhythm with visible hierarchy. */
-.inbox-bg-container .workspace-rail {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-rail {
   grid-template-areas:
     "title adapters"
     "search search";
@@ -115,7 +147,12 @@
   background: var(--uu-inbox-surface);
 }
 
-.inbox-bg-container .workspace-rail > .workspace-title {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-rail
+  > .workspace-title {
   grid-area: title;
   position: static;
   width: auto;
@@ -125,49 +162,83 @@
   white-space: normal;
 }
 
-.inbox-bg-container .workspace-rail > .channel-adapter-selector {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-rail
+  > .channel-adapter-selector {
   grid-area: adapters;
   justify-content: flex-end;
 }
 
-.inbox-bg-container .workspace-title-row {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-title-row {
   align-items: center;
 }
 
-.inbox-bg-container .workspace-title-copy {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-title-copy {
   gap: 2px;
 }
 
-.inbox-bg-container .workspace-rail-kicker {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-rail-kicker {
   color: var(--uu-inbox-brand);
   font-size: var(--fs-caption);
   font-weight: 700;
   letter-spacing: 0.1em;
 }
 
-.inbox-bg-container .workspace-heading {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-heading {
   color: var(--uu-inbox-ink);
   font-size: var(--fs-section-title);
   font-weight: 700;
   letter-spacing: -0.015em;
 }
 
-.inbox-bg-container .channel-adapter-options {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .channel-adapter-options {
   gap: 4px;
-  padding: 2px;
-  border: 1px solid var(--uu-inbox-line);
-  border-radius: 10px;
-  background: var(--uu-inbox-surface-subtle);
+  padding: 0;
 }
 
-.inbox-bg-container .channel-adapter-option {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .channel-adapter-option {
   width: 34px;
   height: 34px;
   flex-basis: 34px;
   border-radius: 7px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
-.inbox-bg-container .channel-adapter-option img {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .channel-adapter-option
+  img {
   width: 30px;
   height: 30px;
 }
@@ -175,9 +246,12 @@
 /* Touch devices keep :hover stuck after a tap; gate so the hover surface never
    lingers over a cleared filter selection. */
 @media (hover: hover) {
-  .inbox-bg-container .channel-adapter-option:hover {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .channel-adapter-option:hover {
     background: var(--uu-inbox-surface);
-    box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
     transform: none;
   }
 }
@@ -191,12 +265,22 @@
    with !important, so a shadow here would silently never render. The border
    width is already 1px/transparent on every option, so colouring it shifts
    nothing. */
-.inbox-bg-container .channel-adapter-option[aria-checked="true"] {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .channel-adapter-option[aria-checked="true"] {
   border-color: var(--uu-inbox-brand);
   background: var(--uu-inbox-brand-soft);
 }
 
-.inbox-bg-container .workspace-rail .search input {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-rail
+  .search
+  input {
   min-height: 40px;
   height: 40px;
   padding-right: 18px;
@@ -209,27 +293,53 @@
   box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
 }
 
-.inbox-bg-container .workspace-rail .search input::placeholder {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-rail
+  .search
+  input::placeholder {
   color: var(--uu-inbox-faint);
 }
 
-.inbox-bg-container .workspace-rail .search .icon {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-rail
+  .search
+  .icon {
   left: 13px;
   color: var(--uu-inbox-muted);
 }
 
-.inbox-bg-container .workspace-rail .search input:focus {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-rail
+  .search
+  input:focus {
   border-color: var(--uu-inbox-brand);
   box-shadow: var(--uu-inbox-focus);
 }
 
 /* Conversation list: crisp scan lines, stable hover, unmistakable selection. */
-.inbox-bg-container .conversations {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conversations {
   padding: 8px;
   background: var(--uu-inbox-surface);
 }
 
-.inbox-bg-container .conversation {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conversation {
   min-height: 76px;
   gap: 11px;
   padding: 11px 10px;
@@ -238,16 +348,29 @@
   color: var(--uu-inbox-muted);
 }
 
-.inbox-bg-container .conversation + .conversation {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conversation
+  + .conversation {
   margin-top: 2px;
 }
 
-.inbox-bg-container .conversation:hover {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conversation:hover {
   border-color: var(--uu-inbox-line);
   background: var(--uu-inbox-surface-subtle);
 }
 
-.inbox-bg-container .conversation.active {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conversation.active {
   border-color: color-mix(
     in srgb,
     var(--uu-inbox-brand) 36%,
@@ -258,7 +381,11 @@
     color-mix(in srgb, var(--uu-inbox-brand) 8%, transparent);
 }
 
-.inbox-bg-container .conversation.active::before {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conversation.active::before {
   left: -1px;
   width: 4px;
   height: 40px;
@@ -266,11 +393,20 @@
   background: var(--uu-inbox-brand);
 }
 
-.inbox-bg-container .conversation.needs-attention:not(.active) {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conversation.needs-attention:not(.active) {
   background: color-mix(in srgb, #fff7ed 54%, #ffffff);
 }
 
-.inbox-bg-container .conversation .avatar {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conversation
+  .avatar {
   width: 42px;
   height: 42px;
   border: 1px solid var(--uu-inbox-line);
@@ -281,7 +417,12 @@
     0 0 0 4px var(--uu-inbox-line);
 }
 
-.inbox-bg-container .conversation.active .avatar {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conversation.active
+  .avatar {
   border-color: var(--uu-inbox-brand-line);
   background: var(--uu-inbox-brand-soft);
   color: var(--uu-inbox-brand-hover);
@@ -290,101 +431,103 @@
     0 0 0 4px var(--uu-inbox-brand-line);
 }
 
-.inbox-bg-container .conv-name {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conv-name {
   color: var(--uu-inbox-ink);
   font-weight: var(--fw-semibold);
   letter-spacing: -0.006em;
 }
 
-.inbox-bg-container .conv-time {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conv-time {
   color: var(--uu-inbox-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.inbox-bg-container .conv-preview {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conv-preview {
   color: var(--uu-inbox-muted);
 }
 
-.inbox-bg-container .conv-preview-icon {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conv-preview-icon {
   color: var(--uu-inbox-faint);
 }
 
-.inbox-bg-container .mini-chip {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .mini-chip {
   min-height: 22px;
   border-radius: 999px;
   font-weight: var(--fw-semibold);
 }
 
-.inbox-bg-container .mini-chip.priority-hot,
-.inbox-bg-container .mini-chip.priority-warm {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .mini-chip.priority-hot,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .mini-chip.priority-warm {
   border-color: color-mix(in srgb, #f79009 32%, transparent);
   background: #fff7ed;
   color: #9a3412;
 }
 
-.inbox-bg-container .conv-state-label.is-human-escalation {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .conv-state-label.is-human-escalation {
   color: #b54708;
 }
 
-/* Conversation identity and actions. */
-.inbox-bg-container .chat-header {
-  min-height: 72px;
-  padding: 9px 12px 14px;
-  border-bottom: 0;
-}
-
-.inbox-bg-container .header-avatar {
-  border-color: var(--uu-inbox-brand-line);
-  background: linear-gradient(145deg, #ffffff, var(--uu-inbox-brand-soft));
-  color: var(--uu-inbox-brand-hover);
-  box-shadow:
-    0 0 0 3px #ffffff,
-    0 0 0 4px var(--uu-inbox-brand-line);
-}
-
-.inbox-bg-container .person-name {
-  color: var(--uu-inbox-ink);
-}
-
-.inbox-bg-container .person-subtitle {
-  color: var(--uu-inbox-muted);
-}
-
-.inbox-bg-container .icon-btn,
-.inbox-bg-container .mode-menu-trigger {
+/* Conversation controls that also serve the transcript and context pane. */
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .icon-btn {
   min-width: 40px;
   min-height: 40px;
   border-color: transparent;
   color: var(--uu-inbox-muted);
 }
 
-.inbox-bg-container .icon-btn:hover,
-.inbox-bg-container .mode-menu-trigger:hover:not(:disabled) {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .icon-btn:hover {
   border-color: var(--uu-inbox-line);
   background: var(--uu-inbox-surface);
   color: var(--uu-inbox-ink);
   box-shadow: var(--shadow-uu-sm, 0 1px 3px rgb(16 24 40 / 0.1));
 }
 
-.inbox-bg-container .mode-menu-trigger--primary {
-  padding-inline: 10px;
-  border-color: var(--uu-inbox-brand-line);
-  background: var(--uu-inbox-brand-soft);
-  color: var(--uu-inbox-brand-hover);
-}
-
-.inbox-bg-container .mode-menu-trigger--primary:hover:not(:disabled) {
-  border-color: var(--uu-inbox-brand-line);
-  background: color-mix(in srgb, var(--uu-inbox-brand-soft) 70%, #ffffff);
-  color: var(--uu-inbox-brand-strong);
-}
-
-.inbox-bg-container .mode-menu-trigger-icon {
-  color: currentColor;
-}
-
 /* Thread: one continuous column surface with dividers, not a nested card. */
-.inbox-bg-container .chat-scroll-shell {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-scroll-shell {
   border: 0;
   border-top: 1px solid var(--uu-inbox-line);
   border-radius: 0;
@@ -392,36 +535,33 @@
   box-shadow: none;
 }
 
-.inbox-bg-container .chat-scroller {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-scroller {
   padding-block: 24px 28px;
-  background:
-    radial-gradient(
-      circle at 15% 4%,
-      color-mix(in srgb, var(--uu-inbox-brand) 5%, transparent),
-      transparent 22rem
-    ),
-    radial-gradient(
-      circle,
-      color-mix(in srgb, var(--uu-inbox-brand) 8%, transparent) 0.75px,
-      transparent 0.75px
-    ),
-    var(--uu-inbox-surface);
-  background-size:
-    auto,
-    22px 22px,
-    auto;
+  background: var(--uu-inbox-surface);
 }
 
-.inbox-bg-container .message-row {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .message-row {
   gap: 11px;
   margin-bottom: 16px;
 }
 
-.inbox-bg-container .message-avatar {
-  border-color: var(--uu-inbox-line);
-  background: var(--uu-inbox-surface);
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .message-avatar {
+  border: 0;
+  background: transparent;
   color: var(--uu-inbox-muted);
-  box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
+  box-shadow: none;
 }
 
 /* a-c-chat-01 at console density: fill-only bubbles (no border, no shadow),
@@ -429,7 +569,11 @@
    `text-sm` body scale. Inbound sits on the muted surface, outbound on the solid
    brand fill with white text. Colours resolve through the console's
    `--workspace-*` roles, which this sheet re-points at the inbox brand above. */
-.inbox-bg-container .bubble {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .bubble {
   max-width: min(80%, 680px);
   padding: 12px;
   border: 0;
@@ -437,53 +581,97 @@
   box-shadow: none;
 }
 
-.inbox-bg-container .message-row.user .bubble {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .message-row.user
+  .bubble {
   border-bottom-left-radius: 0;
   background: var(--workspace-surface-muted);
   color: var(--workspace-ink);
 }
 
-.inbox-bg-container .message-row.bot .bubble,
-.inbox-bg-container .message-row.agent .bubble {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .message-row.bot
+  .bubble,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .message-row.agent
+  .bubble {
   border-bottom-right-radius: 0;
   background: var(--workspace-action);
   color: #ffffff;
 }
 
-.inbox-bg-container .message-text {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .message-text {
   font-size: var(--fs-body);
   line-height: 1.52;
 }
 
-.inbox-bg-container .bubble-meta-inline {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .bubble-meta-inline {
   gap: 5px;
   margin-left: 8px;
   font-size: var(--fs-caption);
   font-variant-numeric: tabular-nums;
 }
 
-.inbox-bg-container .message-row.user .bubble-time-inline {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .message-row.user
+  .bubble-time-inline {
   color: var(--workspace-ink-muted);
 }
 
 /* The outbound bubble is a solid brand fill, so its meta row is set in white
    instead of the page's ink scale. */
-.inbox-bg-container
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
   .message-row:is(.bot, .agent)
   .bubble
   :is(.bubble-time-inline, .delivery-status, .delivery-retry-count) {
   color: rgba(255, 255, 255, 0.78);
 }
 
-.inbox-bg-container
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
   .message-row:is(.bot, .agent)
   .bubble
   :is(.delivery-retry-button, .delivery-error-detail) {
   color: #ffffff;
 }
 
-.inbox-bg-container .system-message span,
-.inbox-bg-container .system-event span {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .system-message
+  span,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .system-event
+  span {
   border: 1px solid var(--uu-inbox-line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
@@ -491,38 +679,58 @@
   box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
 }
 
-.inbox-bg-container .composer-wrap {
-  padding: 12px 10px 5px;
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .composer-wrap {
+  padding: 12px 16px;
   border-top: 1px solid var(--uu-inbox-line);
   background: var(--uu-inbox-surface);
 }
 
-.inbox-bg-container .composer {
-  min-height: 50px;
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .composer {
+  min-height: 44px;
   border-color: var(--uu-inbox-line-strong);
   border-radius: 12px;
   box-shadow: var(--shadow-uu-sm, 0 1px 3px rgb(16 24 40 / 0.1));
 }
 
-.inbox-bg-container .composer:focus-within {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .composer:focus-within {
   border-color: var(--uu-inbox-brand);
   box-shadow: var(--uu-inbox-focus);
 }
 
-.inbox-bg-container .composer-action.send {
-  border-color: var(--uu-inbox-brand);
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .composer-action.send {
+  border: 0;
   border-radius: 9px;
-  background: linear-gradient(
-    135deg,
-    var(--uu-inbox-brand),
-    var(--uu-inbox-brand-hover)
-  );
-  box-shadow: 0 4px 8px -4px
-    color-mix(in srgb, var(--uu-inbox-brand) 62%, transparent);
+  background: transparent;
+  color: var(--uu-inbox-brand);
+  box-shadow: none;
 }
 
-.inbox-bg-container .handoff-note,
-.inbox-bg-container .closed-note {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .handoff-note,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .closed-note {
   min-height: 48px;
   border-color: var(--uu-inbox-line);
   border-radius: 11px;
@@ -531,8 +739,16 @@
   box-shadow: var(--shadow-uu-xs, 0 1px 2px rgb(16 24 40 / 0.05));
 }
 
-.inbox-bg-container .inline-takeover-btn,
-.inbox-bg-container .takeover-btn {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .inline-takeover-btn,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .takeover-btn {
   min-height: 38px;
   border-color: var(--uu-inbox-brand);
   border-radius: 9px;
@@ -546,30 +762,81 @@
     color-mix(in srgb, var(--uu-inbox-brand) 62%, transparent);
 }
 
+.inbox-bg-container:where(.conversation-workspace) .composer-keyboard-hint {
+  margin: 6px 2px 0;
+  color: var(--uu-inbox-muted);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+  text-align: right;
+}
+
+.inbox-bg-container:where(.conversation-workspace) .handoff-note {
+  margin-bottom: 0;
+  padding: 10px 12px;
+}
+
+.inbox-bg-container:where(.conversation-workspace) .handoff-note > span {
+  min-width: 0;
+  flex: 1;
+  line-height: 1.5;
+}
+
 /* Candidate context: open sections separated by rhythm and rules. */
-.inbox-bg-container .profile-header {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-header {
   min-height: 72px;
   height: auto;
   border-color: var(--uu-inbox-line);
   background: rgba(255, 255, 255, 0.96);
 }
 
-.inbox-bg-container .profile-title {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-title {
   color: var(--uu-inbox-ink);
   letter-spacing: -0.012em;
 }
 
-.inbox-bg-container .profile-title-copy small {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-title-copy
+  > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-title-copy
+  small {
   color: var(--uu-inbox-muted);
 }
 
-.inbox-bg-container .profile-scroll {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-scroll {
   padding: 0 16px 16px;
   background: var(--uu-inbox-surface);
   scrollbar-color: var(--uu-inbox-line-strong) transparent;
 }
 
-.inbox-bg-container .context-card {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-card {
   margin: 0;
   padding: 20px 0 0;
   border: 0;
@@ -578,7 +845,11 @@
   box-shadow: none;
 }
 
-.inbox-bg-container .context-overview {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-overview {
   position: relative;
   overflow: visible;
   margin: 0 -16px;
@@ -594,28 +865,48 @@
   box-shadow: none;
 }
 
-.inbox-bg-container .context-overview::before {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-overview::before {
   display: none;
 }
 
-.inbox-bg-container .context-overview-kicker {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-overview-kicker {
   color: var(--uu-inbox-brand-hover);
   letter-spacing: 0.07em;
 }
 
-.inbox-bg-container .candidate-progress-score {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-progress-score {
   border-color: var(--uu-inbox-brand-line);
   background: var(--uu-inbox-brand-soft);
   color: var(--uu-inbox-brand-hover);
 }
 
-.inbox-bg-container .candidate-progress-meter {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-progress-meter {
   height: 7px;
   background: #eaecf0;
   box-shadow: none;
 }
 
-.inbox-bg-container .candidate-progress-fill {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-progress-fill {
   background: linear-gradient(
     90deg,
     var(--uu-inbox-brand),
@@ -623,24 +914,41 @@
   );
 }
 
-.inbox-bg-container .section-head {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .section-head {
   margin-bottom: 10px;
 }
 
-.inbox-bg-container .section-head h3 {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .section-head
+  h3 {
   color: var(--uu-inbox-ink);
   font-size: var(--fs-body);
   letter-spacing: -0.008em;
 }
 
-.inbox-bg-container .candidate-info-grid {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-grid {
   overflow: visible;
   border: 0;
   border-radius: 0;
   background: transparent;
 }
 
-.inbox-bg-container .candidate-info-row {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row {
   min-height: 56px;
   grid-template-columns: 32px minmax(0, 1fr) 18px;
   gap: 10px;
@@ -649,48 +957,210 @@
   background: transparent;
 }
 
-.inbox-bg-container .candidate-info-row:hover {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row:hover {
   background: transparent;
 }
 
-.inbox-bg-container .candidate-info-row.filled {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row.filled {
   background: transparent;
 }
 
-.inbox-bg-container .candidate-info-icon {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-icon {
   width: 32px;
   height: 32px;
-  border-color: transparent;
-  border-radius: 8px;
-  background: var(--uu-inbox-surface-subtle);
+  border: 0;
+  background: transparent;
   color: var(--uu-inbox-muted);
 }
 
-.inbox-bg-container .candidate-info-row.filled .candidate-info-icon {
-  border-color: var(--uu-inbox-brand-line);
-  background: var(--uu-inbox-brand-soft);
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row.filled
+  .candidate-info-icon {
   color: var(--uu-inbox-brand-hover);
 }
 
-.inbox-bg-container .candidate-info-label {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-label {
   color: var(--uu-inbox-muted);
   font-size: var(--fs-caption);
   font-weight: 600;
 }
 
-.inbox-bg-container .candidate-info-value {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-value {
   color: var(--uu-inbox-muted);
   font-size: var(--fs-helper);
   font-weight: 500;
 }
 
-.inbox-bg-container .candidate-info-row.filled .candidate-info-value {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row.filled
+  .candidate-info-value {
   color: var(--uu-inbox-ink);
   font-weight: 600;
 }
 
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-contact-card {
+  gap: 8px;
+  padding-block: 16px;
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-contact-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-contact-heading
+  h2 {
+  margin: 0;
+  color: var(--uu-inbox-ink);
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-contact-status {
+  margin-left: auto;
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-contact-card
+  p {
+  margin: 0;
+  color: var(--uu-inbox-ink);
+  font-size: var(--fs-body-sm);
+  line-height: 1.55;
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-contact-card
+  .candidate-contact-hint {
+  color: var(--uu-inbox-muted);
+  font-size: var(--fs-helper);
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-extra-fields {
+  margin-top: 20px;
+  border-top: 1px solid var(--uu-inbox-line);
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-extra-fields
+  > summary {
+  min-height: 44px;
+  padding-block: 12px;
+  color: var(--uu-inbox-muted);
+  font-size: var(--fs-helper);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-field-priority,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-field-optional {
+  border-radius: 4px;
+  padding: 2px 5px;
+  background: var(--uu-inbox-surface-subtle);
+  color: var(--uu-inbox-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-field-priority {
+  background: var(--uu-inbox-brand-soft);
+  color: var(--uu-inbox-brand-hover);
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-profile-fields {
+  display: grid;
+  gap: 14px;
+}
+
 /* Web accessibility and state parity. */
-.inbox-bg-container
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
   :is(
     button,
     input,
@@ -703,12 +1173,14 @@
   outline-offset: 2px;
 }
 
-.inbox-bg-container
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
   :is(
     .conversation,
     .channel-adapter-option,
     .icon-btn,
-    .mode-menu-trigger,
     .composer-action,
     .inline-takeover-btn,
     .takeover-btn
@@ -717,30 +1189,54 @@
 }
 
 @media (min-width: 768px) {
-  .workspace-frame-content .inbox-bg-container .app {
+  .workspace-frame-content
+    .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .app {
     grid-template-columns: minmax(292px, 324px) minmax(0, 1fr);
   }
 
-  .workspace-frame-content .inbox-bg-container .app.has-selected-conversation {
+  .workspace-frame-content
+    .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .app.has-selected-conversation {
     grid-template-columns: minmax(292px, 324px) minmax(0, 1fr);
   }
 }
 
 @media (min-width: 1280px) {
-  .workspace-frame-content .inbox-bg-container .app.has-selected-conversation {
+  .workspace-frame-content
+    .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .app.has-selected-conversation {
     grid-template-columns: minmax(292px, 324px) minmax(0, 1fr) 360px;
   }
 }
 
 @media (max-width: 900px) and (min-width: 768px) {
-  .inbox-bg-container .workspace-rail {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-rail {
     grid-template-areas:
       "adapters"
       "search";
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .inbox-bg-container .workspace-rail > .workspace-title {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-rail
+    > .workspace-title {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -749,32 +1245,59 @@
     white-space: nowrap;
   }
 
-  .inbox-bg-container .workspace-rail > .channel-adapter-selector {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-rail
+    > .channel-adapter-selector {
     justify-content: flex-start;
   }
 }
 
 @media (max-width: 767px) {
-  .inbox-bg-container {
+  .inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  ) {
     background: var(--uu-inbox-surface);
   }
 
-  .inbox-bg-container::before {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )::before {
     display: none;
   }
 
-  .inbox-bg-container .app {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .app {
     gap: 0;
     border-radius: 0;
   }
 
-  .inbox-bg-container .left-panel,
-  .inbox-bg-container .center-panel {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .left-panel,
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .center-panel {
     border-radius: 0;
     box-shadow: none;
   }
 
-  .inbox-bg-container .workspace-rail {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-rail {
     grid-template-areas:
       "title adapters"
       "search search";
@@ -782,76 +1305,160 @@
     padding: calc(10px + env(safe-area-inset-top)) 14px 12px;
   }
 
-  .inbox-bg-container .channel-adapter-options {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .channel-adapter-options {
     border: 0;
     padding: 0;
     background: transparent;
   }
 
-  .inbox-bg-container .channel-adapter-option {
-    width: 40px;
-    height: 40px;
-    flex-basis: 40px;
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .channel-adapter-option {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
   }
 
-  /* The tile is capped at 40px, so the icon must fit inside it — the desktop
-     pair is 30px in a 34px tile. */
-  .inbox-bg-container .channel-adapter-option img {
+  /* The 36px icon leaves room inside the phone's 44px touch target. */
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .channel-adapter-option
+    img {
     width: 36px;
     height: 36px;
   }
 
-  /* index.css puts a `min-height: 40px !important` touch floor on every
-     `.workspace-frame-content` input at phone widths. The owner capped every
-     directory-header control at 40px, so this rule has to out-rank that floor;
-     the `!important` is load-bearing, not redundant. */
-  .inbox-bg-container .workspace-rail .search input {
-    min-height: 40px !important;
-    height: 40px;
+  /* Text fields use the same compact height as other phone forms. */
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-rail
+    .search
+    input {
+    min-height: var(--form-control-height) !important;
+    height: var(--form-control-height);
   }
 
-  .inbox-bg-container .conversations {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .conversations {
     padding: 6px 10px;
   }
 
-  .inbox-bg-container .conversation {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .conversation {
     min-height: 72px;
     border-radius: 0;
     border-right: 0;
     border-left: 0;
   }
 
-  .inbox-bg-container .conversation.active::before {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .conversation.active::before {
     display: block;
     left: 0;
     height: 40px;
   }
 
-  .inbox-bg-container .center-panel {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .center-panel {
     padding: 0;
   }
 
-  .inbox-bg-container .chat-header {
-    min-height: 62px;
+  /* The workspace's important 40px text-control floor otherwise replaces
+     this glyph's minimum and lets the console-button ceiling shrink it. */
+  .inbox-bg-container:where(.conversation-workspace)
+    .composer
+    .composer-action.send {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px !important;
+    max-height: none;
+    flex-shrink: 0;
   }
 
-  .inbox-bg-container .bubble {
+  .inbox-bg-container:where(.conversation-workspace) .inline-takeover-btn,
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .context-close,
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .section-head
+    button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .inbox-bg-container:where(.conversation-workspace) .composer-wrap {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .bubble {
     max-width: min(86%, calc(100% - 38px));
   }
 
-  .inbox-bg-container .profile-scroll {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .profile-scroll {
     padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .inbox-bg-container *,
-  .inbox-bg-container *::before,
-  .inbox-bg-container *::after {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    *,
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    *::before,
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    *::after {
     scroll-behavior: auto !important;
   }
 
-  .inbox-bg-container .candidate-progress-fill {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .candidate-progress-fill {
     transition: none;
   }
 }

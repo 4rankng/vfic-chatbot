@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as RaCoreModule from "ra-core";
 import { page } from "vitest/browser";
 import { cleanup, render } from "vitest-browser-react";
-import { MemoryRouter } from "react-router";
+import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 import type { ReactNode } from "react";
 
 import type { Conversation } from "../../types";
@@ -26,8 +26,13 @@ import type { Conversation } from "../../types";
 // --- Mocks -------------------------------------------------------------
 
 const avatarRenders = vi.hoisted(() => new Map<string, number>());
-const listState = vi.hoisted(() => ({ conversations: [] as Conversation[] }));
+const listState = vi.hoisted(() => ({
+  conversations: [] as Conversation[],
+  isPending: false,
+  error: null as Error | null,
+}));
 const emptySlots = vi.hoisted(() => ({}));
+const viewportState = vi.hoisted(() => ({ isMobile: false }));
 
 vi.mock("../LeadAvatar", () => ({
   LeadAvatar: ({ alt, children }: { alt?: string; children?: ReactNode }) => {
@@ -47,8 +52,8 @@ vi.mock("ra-core", async (importOriginal) => ({
   InfiniteListBase: ({ children }: { children?: ReactNode }) => <>{children}</>,
   useListContext: () => ({
     data: listState.conversations,
-    isPending: false,
-    error: null,
+    isPending: listState.isPending,
+    error: listState.error,
     refetch: () => Promise.resolve(),
   }),
   useInfinitePaginationContext: () => ({
@@ -80,11 +85,41 @@ vi.mock("../useConversationCapabilitySlots", async (importOriginal) => {
   };
 });
 
-// Desktop: the panel stays visible once a conversation is open (the mobile
-// shell hides the list behind the detail pane).
-vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => viewportState.isMobile,
+}));
 
-vi.mock("./ConversationShow", () => ({ ConversationShowContent: () => null }));
+// Keep the detail's public navigation callbacks and focusable Back control,
+// without pulling its data, socket and dialog behavior into the list suite.
+vi.mock("./ConversationShow", () => ({
+  ConversationShowContent: ({
+    onOpenList,
+    onDeleted,
+  }: {
+    onOpenList?: () => void;
+    onDeleted?: () => void;
+  }) => (
+    <section className="panel center-panel">
+      <header className="chat-header conversation-header">
+        <button
+          className="conversation-header-back"
+          onClick={onOpenList}
+          aria-label="Mở danh sách hội thoại"
+        >
+          Quay lại
+        </button>
+        <button
+          data-allow-tall
+          className="conversation-header-identity conversation-header-identity-button"
+        >
+          Thông tin ứng viên
+        </button>
+      </header>
+      <input aria-label="Trả lời" />
+      <button onClick={onDeleted}>Xoá hội thoại</button>
+    </section>
+  ),
+}));
 
 import { ConversationList } from "./ConversationList";
 import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
@@ -162,8 +197,168 @@ beforeEach(async () => {
   // Desktop shell: the mobile layout (<= 767px) hides the list behind the open
   // detail pane, which would remove the rows from the accessibility tree.
   await page.viewport(1280, 720);
+  viewportState.isMobile = false;
   avatarRenders.clear();
   listState.conversations = [];
+  listState.isPending = false;
+  listState.error = null;
+});
+
+describe("ConversationList — navigation focus", () => {
+  const mountMobileList = async (initialEntries = ["/conversations"]) => {
+    viewportState.isMobile = true;
+    await page.viewport(390, 844);
+    listState.conversations = conversations;
+    const router = createMemoryRouter(
+      [{ path: "/conversations", element: <ConversationList /> }],
+      { initialEntries },
+    );
+    const screen = await render(<RouterProvider router={router} />);
+    return { screen, router };
+  };
+
+  it("returns focus to the selected row after mobile Back", async () => {
+    const { screen } = await mountMobileList();
+    await screen.getByRole("button", { name: /Ứng viên Hai/ }).click();
+    const identity = screen.getByRole("button", { name: "Thông tin ứng viên" });
+    await expect.element(identity).toBeVisible();
+    const detailPane = identity.element().closest(".center-panel")!;
+    await expect.element(identity).toHaveFocus();
+    await screen
+      .getByRole("button", { name: "Mở danh sách hội thoại" })
+      .click();
+
+    await expect
+      .element(screen.getByRole("button", { name: /Ứng viên Hai/ }))
+      .toHaveFocus();
+    // Reopening the same record reuses its existing pane. Let the visibility
+    // transition finish to reproduce the settled mobile list seen in live QA.
+    await vi.waitFor(() => {
+      expect(getComputedStyle(detailPane).visibility).toBe("hidden");
+    });
+    await screen.getByRole("button", { name: /Ứng viên Hai/ }).click();
+    await expect.element(identity).toHaveFocus();
+  });
+
+  it("returns focus to the selected row after browser Back", async () => {
+    const { screen, router } = await mountMobileList();
+    await screen.getByRole("button", { name: /Ứng viên Hai/ }).click();
+    const back = screen.getByRole("button", {
+      name: "Mở danh sách hội thoại",
+    });
+    await expect.element(back).toBeVisible();
+    back.element().focus();
+    await router.navigate(-1);
+
+    await expect
+      .element(screen.getByRole("button", { name: /Ứng viên Hai/ }))
+      .toHaveFocus();
+  });
+
+  it("preserves deliberate reply focus while the mobile pane finishes opening", async () => {
+    const { screen } = await mountMobileList();
+    await screen.getByRole("button", { name: /Ứng viên Hai/ }).click();
+    const reply = screen.getByRole("textbox", { name: "Trả lời" });
+    await reply.click();
+    const pane = reply.element().closest(".center-panel")!;
+    await vi.waitFor(() => {
+      expect(getComputedStyle(pane).transform).toBe("matrix(1, 0, 0, 1, 0, 0)");
+    });
+
+    await expect.element(reply).toHaveFocus();
+  });
+
+  it("focuses search when returning from a deep link outside the loaded list", async () => {
+    const { screen } = await mountMobileList(["/conversations?id=conv-2"]);
+    // Opening a fresh deep link is not an in-page pane transition and should
+    // not steal the browser's initial focus.
+    await expect
+      .element(screen.getByRole("button", { name: "Thông tin ứng viên" }))
+      .not.toHaveFocus();
+    // Refresh removes the selected row before navigation. The list can still
+    // render its other cached rows and search without waiting on detail data.
+    listState.conversations = conversations.filter(({ id }) => id !== "conv-2");
+    await screen
+      .getByRole("button", { name: "Mở danh sách hội thoại" })
+      .click();
+
+    await expect.element(screen.getByLabelText("Tìm liên hệ")).toHaveFocus();
+  });
+
+  it("clears selection and focuses search after successful mobile deletion", async () => {
+    const { screen } = await mountMobileList();
+    await screen.getByRole("button", { name: /Ứng viên Hai/ }).click();
+    // onDeleted runs before the server list refresh. Keep the deleted row in
+    // this cached list to prove it cannot receive focus or retain selection.
+    await screen.getByRole("button", { name: "Xoá hội thoại" }).click();
+
+    await expect.element(screen.getByLabelText("Tìm liên hệ")).toHaveFocus();
+    expect(
+      screen.container.querySelector('.conversation[aria-current="page"]'),
+    ).toBeNull();
+  });
+
+  it("keeps desktop focus while the selected conversation changes", async () => {
+    listState.conversations = conversations;
+    const router = createMemoryRouter([
+      { path: "*", element: <ConversationList /> },
+    ]);
+    const screen = await render(<RouterProvider router={router} />);
+    const search = screen.getByLabelText("Tìm liên hệ");
+    await search.click();
+    await router.navigate("/conversations?id=conv-2");
+
+    await expect.element(search).toHaveFocus();
+  });
+
+  it("keeps a confirmed deleted row excluded through pending and failed desktop refresh", async () => {
+    listState.conversations = [conversations[0]];
+    const router = createMemoryRouter([
+      { path: "*", element: <ConversationList /> },
+    ]);
+    const screen = await render(<RouterProvider router={router} />);
+    await expect
+      .element(screen.getByRole("button", { name: /Ứng viên Một/ }))
+      .toHaveAttribute("aria-current", "page");
+    await screen.getByRole("button", { name: "Xoá hội thoại" }).click();
+    await expect
+      .element(screen.getByRole("button", { name: /Ứng viên Một/ }))
+      .not.toBeInTheDocument();
+
+    // Loading/filter snapshots may temporarily contain no rows before the
+    // failed refresh restores its stale data. Empty is not deletion proof.
+    listState.conversations = [];
+    listState.isPending = true;
+    // This changes the InfiniteListBase key and remounts its content. Confirmed
+    // deletion markers belong to the mounted inbox, above that filter boundary.
+    await router.navigate("/conversations?needs_attention=true");
+
+    // Context rerenders may keep the old record while refetch is pending, then
+    // report an error. Neither may mount that deleted conversation's detail.
+    for (const pending of [true, false]) {
+      listState.conversations = [{ ...conversations[0] }];
+      listState.isPending = pending;
+      listState.error = pending ? null : new Error("Không thể tải hộp thư");
+      await router.navigate("/conversations?needs_attention=true", {
+        replace: true,
+      });
+      expect(
+        screen.container.querySelector('.conversation[aria-current="page"]'),
+      ).toBeNull();
+      await expect
+        .element(screen.getByRole("button", { name: "Thông tin ứng viên" }))
+        .not.toBeInTheDocument();
+    }
+
+    listState.conversations = [conversations[1]];
+    listState.error = null;
+    await router.navigate("/conversations?needs_attention=true", {
+      replace: true,
+    });
+    await expect
+      .element(screen.getByRole("button", { name: /Ứng viên Hai/ }))
+      .toHaveAttribute("aria-current", "page");
+  });
 });
 
 afterEach(async () => {

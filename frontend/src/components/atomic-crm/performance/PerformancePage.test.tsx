@@ -113,6 +113,30 @@ const manySlowTurns = Array.from({ length: 10 }, (_, index) => ({
 }));
 
 describe("PerformanceMetrics", () => {
+  it("opens related slow turns without replacing the hash-router location", async () => {
+    const screen = await render(
+      <TestMessages>
+        <PerformanceMetrics
+          data={{
+            ...populatedMetrics,
+            percentiles: {
+              ...populatedMetrics.percentiles,
+              end_to_end: { p50: 10_000, p95: 15_000, p99: 20_000 },
+            },
+          }}
+        />
+      </TestMessages>,
+    );
+    const before = window.location.hash;
+    await screen
+      .getByRole("button", {
+        name: "Xem lượt liên quan đến Độ trễ p95 vượt mục tiêu",
+      })
+      .click();
+    expect(window.location.hash).toBe(before);
+    expect(document.activeElement?.id).toBe("slow-turns");
+  });
+
   it("replaces repeated empty panels with one concise low-data state", async () => {
     const screen = await render(
       <TestMessages>

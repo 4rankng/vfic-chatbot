@@ -1,0 +1,27 @@
+/* A selected phone conversation supplies its own header. Reuse the inbox's
+   rendered detail state so Back, invalid deep links and route changes restore
+   the global navigation without synchronising another copy of selection. */
+@media (max-width: 767px) {
+  .workspace-frame:has(
+      .workspace-frame-content > .conversation-workspace.conversation-open
+    )
+    > .workspace-topbar {
+    display: none;
+  }
+
+  .workspace-frame:has(
+      .workspace-frame-content > .conversation-workspace.conversation-open
+    )
+    .workspace-frame-content {
+    border-top-left-radius: 0;
+  }
+
+  .workspace-frame:has(
+      .workspace-frame-content > .conversation-workspace.conversation-open
+    )
+    .workspace-frame-content
+    > .conversation-workspace.conversation-open {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+}

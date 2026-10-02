@@ -73,11 +73,11 @@
   --crm-fs-control: var(--fs-control);
   --crm-fs-input: var(--fs-input);
   --crm-control-height-sm: 32px;
-  --crm-control-height-md: 40px;
+  --crm-control-height-md: var(--form-control-height);
   --crm-control-height-touch: 40px;
   --crm-control-radius: 8px;
   --crm-control-icon: 16px;
-  --crm-control-pad-x: 12px;
+  --crm-control-pad-x: 10px;
   --crm-fs-value-xl: var(--fs-display);
   --crm-fs-value-lg: var(--fs-metric);
   --crm-fs-value-md: var(--fs-metric);

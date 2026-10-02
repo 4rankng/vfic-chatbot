@@ -147,15 +147,17 @@ export const CategoryEditor = ({
               </Button>
             </>
           )}
-          {canManageSources && !isEditing && (
-            <ExternalSourceLinkForm
-              projectId={projectId}
-              defaultCategory={selectedKey}
-              onCreated={onSourceCreated}
-            />
-          )}
         </div>
       </div>
+      {canManageSources && !isEditing && (
+        <div className="project-category-source-link">
+          <ExternalSourceLinkForm
+            projectId={projectId}
+            defaultCategory={selectedKey}
+            onCreated={onSourceCreated}
+          />
+        </div>
+      )}
       {loading ? (
         <Skeleton className="project-category-editor-skeleton" />
       ) : loadFailed ? (
@@ -183,7 +185,7 @@ export const CategoryEditor = ({
           placeholder="Nhập nội dung của danh mục để kiểm tra và lưu."
         />
       ) : hasCurrentSource ? (
-        <div className="border-y border-border py-2">
+        <div className="project-category-source-content">
           <Textarea
             value={content}
             readOnly
@@ -193,7 +195,16 @@ export const CategoryEditor = ({
             placeholder="Danh mục này chưa có dữ liệu đang dùng."
           />
         </div>
-      ) : null}
+      ) : (
+        <div className="project-category-empty-state">
+          <p className="text-body font-medium">Chưa có nội dung</p>
+          <p className="text-helper text-muted-foreground">
+            {editable
+              ? "Nhập tệp thông tin dự án hoặc chọn Sửa nội dung để thêm danh mục này."
+              : "Danh mục này chưa được bổ sung kiến thức."}
+          </p>
+        </div>
+      )}
     </section>
   );
 };

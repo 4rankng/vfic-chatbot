@@ -7,10 +7,7 @@
 }
 
 .user-directory-create {
-  /* 40px is `--crm-control-height-md`, spelled out because this route renders
-     the directory without `inbox/tokens.css`. The mobile touch floor raises it
-     to 44px on its own, so no `!important` is needed to hold either value. */
-  min-height: 40px;
+  min-height: var(--crm-control-height-md, 36px);
   border-radius: 8px;
   box-shadow: none;
 }
@@ -70,17 +67,18 @@
 
 .user-account-form {
   overflow: hidden;
-  border-block: 1px solid var(--workspace-border);
-  background: transparent;
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  background: var(--workspace-surface);
 }
 
 .user-account-form-header {
-  min-height: 72px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 4px;
+  gap: 12px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--workspace-border);
 }
 
@@ -92,20 +90,35 @@
 }
 
 .user-account-form-icon {
-  width: 34px;
-  height: 34px;
+  width: 20px;
+  height: 20px;
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid
-    color-mix(
-      in srgb,
-      var(--workspace-action-strong) 20%,
-      var(--workspace-border)
-    );
-  border-radius: 9px;
-  background: var(--workspace-teal-soft);
   color: var(--workspace-action-strong);
+}
+
+.user-account-form-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.user-directory-menu {
+  border: 0;
+  background: transparent;
+}
+
+.user-directory-menu:focus-visible {
+  outline: 2px solid var(--workspace-action);
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  .user-directory-menu[data-icon-only] {
+    width: 44px;
+    height: 44px;
+    max-height: none;
+  }
 }
 
 /* The console's one card-header role — the same `--fs-section-title` /
@@ -127,17 +140,39 @@
 }
 
 .user-account-form-body {
-  padding: 22px 4px 4px;
+  padding: 16px 16px 8px;
 }
 
 .user-account-field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px 16px;
+  gap: 12px;
 }
 
 .user-account-field {
   min-width: 0;
+}
+
+.user-account-dialog [class~="group/input"],
+.user-account-dialog button.console-button {
+  height: var(--crm-control-height-md, 36px);
+  min-height: var(--crm-control-height-md, 36px);
+  max-height: none;
+}
+
+/* These controls use shadow rings in the library. The console's flat surface
+   layer removes those shadows, so the account form supplies a real edge. */
+.user-account-field > button[aria-haspopup="listbox"] {
+  border: 1px solid var(--workspace-border);
+}
+
+.user-account-field > button[aria-haspopup="listbox"]:focus-visible {
+  outline: 2px solid var(--workspace-focus);
+  outline-offset: 2px;
+}
+
+.user-account-field[data-invalid] > button[aria-haspopup="listbox"] {
+  border-color: var(--workspace-danger);
 }
 
 .user-account-field-wide {
@@ -145,13 +180,21 @@
 }
 
 .user-account-form-actions {
-  min-height: 72px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 22px;
+  margin-top: 16px;
   border-top: 1px solid var(--workspace-border);
+}
+
+.user-account-form-actions > * {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--crm-control-height-md, 36px);
+  min-height: var(--crm-control-height-md, 36px);
 }
 
 .user-account-submit {
@@ -162,7 +205,44 @@
   min-height: 52px;
   display: flex;
   align-items: center;
-  border-block: 1px solid var(--workspace-border);
+  border-top: 1px solid var(--workspace-border);
+}
+
+.user-account-toggle-row .uu-scope {
+  display: inline-flex;
+  position: relative;
+}
+
+.user-account-toggle-row .uu-scope > div.rounded-full {
+  padding: 1px;
+  border: 1px solid var(--workspace-ink-muted);
+  background: var(--workspace-surface-muted);
+}
+
+.user-account-toggle-row .uu-scope > div.rounded-full > div {
+  border: 1px solid var(--workspace-ink-muted);
+  background: var(--workspace-surface);
+}
+
+.user-account-toggle-row .uu-scope[data-selected] > div.rounded-full {
+  border-color: var(--workspace-action-strong);
+  background: var(--workspace-action-strong);
+}
+
+.user-account-toggle-row .uu-scope[data-selected] > div.rounded-full > div {
+  border-color: var(--workspace-action-strong);
+  background: var(--primary-foreground);
+}
+
+.user-account-form .user-account-role-help {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 8px;
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-ink-muted);
+  font-size: var(--fs-body-sm);
+  line-height: 1.6;
 }
 
 .user-account-statuses {
@@ -178,15 +258,39 @@
 }
 
 @media (max-width: 760px) {
+  .user-account-dialog [class~="group/input"],
+  .user-account-dialog button.console-button {
+    height: var(--crm-control-height-touch, 40px);
+    min-height: var(--crm-control-height-touch, 40px);
+  }
+
   .user-directory-toolbar {
     align-items: flex-start;
     margin-bottom: 12px;
   }
 
-  .user-directory-create {
+  .user-directory-toolbar .user-directory-create {
     width: auto;
     min-width: max-content;
-    padding-inline: 14px;
+    padding-inline: 10px;
+    height: var(--crm-control-height-touch, 40px);
+    max-height: none;
+  }
+
+  .user-directory-identity h3,
+  .user-directory-identity p span {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .user-directory-identity p {
+    align-items: flex-start;
+  }
+
+  .user-directory-identity p svg {
+    flex: 0 0 auto;
   }
 
   /* A phone row is a two-band card, not a table row: drop the table box roles
@@ -266,13 +370,13 @@
   }
 
   .user-account-form {
-    margin-top: 8px;
+    margin-top: 0;
   }
 
   .user-account-form-header {
     align-items: flex-start;
-    min-height: 68px;
-    padding-inline: 0;
+    min-height: 60px;
+    padding-inline: 16px;
   }
 
   .user-account-edit-header {
@@ -286,12 +390,12 @@
   }
 
   .user-account-form-body {
-    padding: 18px 0 2px;
+    padding: 16px;
   }
 
   .user-account-field-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    gap: 12px;
   }
 
   .user-account-field-wide {
@@ -302,6 +406,53 @@
     align-items: stretch;
     flex-direction: column-reverse;
     min-height: auto;
-    padding-block: 16px 2px;
+    padding-block: 12px 0;
+  }
+
+  .user-account-form .user-account-field > button[aria-haspopup="listbox"],
+  .user-account-form .user-account-form-actions > *,
+  .workspace-frame-content .user-account-back-action {
+    height: var(--crm-control-height-touch, 40px);
+    max-height: none;
+  }
+
+  .user-account-form .user-account-field button[aria-pressed] {
+    width: 44px;
+    height: 44px;
+    max-height: none;
+  }
+
+  .user-account-toggle-row .uu-scope {
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+}
+
+@media (max-width: 479px) {
+  /* The embedded settings card leaves less width than the standalone page.
+     Give the date its own line instead of forcing three metadata cells into
+     the space beside the avatar. */
+  .user-directory-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+
+  .user-directory-cell-identity {
+    grid-area: 1 / 2;
+  }
+
+  .user-directory-cell-actions {
+    grid-area: 1 / 3;
+  }
+
+  .user-directory-cell-status {
+    grid-area: 2 / 3;
+    justify-self: end;
+  }
+
+  .user-directory-cell-created {
+    grid-area: 3 / 2 / 4 / 4;
+    justify-self: start;
   }
 }

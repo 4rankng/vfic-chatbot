@@ -308,11 +308,11 @@
   --text-body-sm: 0.8125rem;
   --text-body-sm--line-height: 1.4545; /* 18px */
 
-  --text-control: 0.875rem;
-  --text-control--line-height: 1.4286; /* 20px at 14px desktop */
+  --text-control: 0.75rem;
+  --text-control--line-height: 1.5; /* 18px at 12px */
 
-  --text-label: 0.875rem;
-  --text-label--line-height: 1.4286; /* 20px at 14px desktop */
+  --text-label: 0.8125rem;
+  --text-label--line-height: 1.3846; /* 18px at 13px */
 
   --text-button: 0.875rem;
   --text-button--line-height: 1.4286; /* 20px at 14px desktop */
@@ -362,6 +362,7 @@
     --text-control
   ); /* input/textarea use text-control; CSS consumers use this var */
   --fs-label: var(--text-label);
+  --form-control-height: 36px;
   --fs-button: var(--text-button);
   --fs-helper: var(--text-helper);
   --fs-meta: var(--text-meta);
@@ -596,9 +597,8 @@ input:-webkit-autofill:focus {
    compact mobile spec. This is a single, centralized override — components do
    not set their own mobile font sizes.
 
-   Form controls (input/textarea/select) are kept at 16px on touch so iOS
-   Safari does not zoom the viewport on focus; the control/label tokens are
-   overridden to 1rem (16px) below only for that purpose. */
+   Editable text fields on touch devices keep their focus-zoom protection in
+   the control envelope below. Labels and selected values stay compact. */
 @media screen and (max-width: 767px) {
   :root {
     --text-display: 1.5rem; /* 24px */
@@ -613,8 +613,9 @@ input:-webkit-autofill:focus {
     --text-body: 0.875rem; /* 14px */
     --text-body-lg: 1rem; /* 16px */
     --text-body-sm: 0.8125rem; /* 13px */
-    --text-control: 1rem; /* 16px — iOS focus-zoom safe */
-    --text-label: 1rem; /* 16px — iOS focus-zoom safe */
+    --text-control: 0.75rem; /* 12px */
+    --text-label: 0.8125rem; /* 13px */
+    --form-control-height: 40px;
     --text-button: 0.875rem; /* 14px */
     --text-helper: 0.75rem; /* 12px */
     --text-caption: 0.75rem; /* 12px; --text-meta/--text-badge alias it */
@@ -1266,17 +1267,107 @@ input[type="time"] {
   [type="range"]
 ),
 :is([role="option"], [role="menuitem"]) {
-  font-size: var(--text-helper) !important;
+  font-size: var(--text-helper, 0.75rem) !important;
 }
 
-/* A 16px text input prevents Safari from zooming the workspace on focus. */
-@media (max-width: 767px) {
-  :is(input, select, textarea):not(
+/* Native fields and React Aria selects share one value/label scale. The
+   select's nested text has its own library utility, so inheritance alone did
+   not make it match native inputs. These scopes exclude desktop chrome. */
+:where(
+    .workspace-frame-content,
+    .candidate-context-sheet,
+    .auth-shell,
+    .console-form-control
+  )
+  :is(input, select, textarea) {
+  line-height: 1.5;
+}
+
+:where(
+    .workspace-frame-content,
+    .candidate-context-sheet,
+    .auth-shell,
+    .console-form-control
+  )
+  label {
+  font-size: var(--text-label, 0.8125rem);
+  line-height: var(--text-label--line-height, 1.3846);
+}
+
+:is(
+    .workspace-frame-content,
+    .candidate-context-sheet,
+    .auth-shell,
+    .console-form-control
+  )
+  button[aria-haspopup="listbox"] {
+  font-size: var(--text-control, 0.75rem);
+  line-height: var(--text-control--line-height, 1.5);
+}
+
+:where(
+    .workspace-frame-content,
+    .candidate-context-sheet,
+    .auth-shell,
+    .console-form-control
+  )
+  button[aria-haspopup="listbox"]
+  p,
+.console-select-popover
+  [role="option"]
+  :is([slot="label"], [slot="description"]) {
+  font-size: var(--text-control, 0.75rem);
+  line-height: var(--text-control--line-height, 1.5);
+}
+
+/* The wrapper is the visible field. Its input fills the inner box instead of
+   adding a second minimum height below the wrapper's border. */
+:is(
+    .workspace-frame-content,
+    .candidate-context-sheet,
+    .auth-shell,
+    .console-form-control
+  )
+  [class~="group/input"],
+:where(
+    .workspace-frame-content,
+    .candidate-context-sheet,
+    .auth-shell,
+    .console-form-control
+  )
+  :is(button[aria-haspopup="listbox"], [data-slot="select-trigger"]) {
+  height: var(--form-control-height);
+  min-height: var(--form-control-height);
+}
+
+:is(
+    .workspace-frame-content,
+    .candidate-context-sheet,
+    .auth-shell,
+    .console-form-control
+  )
+  [class~="group/input"]
+  input:not([type="checkbox"]):not([type="radio"]) {
+  height: 100%;
+  min-height: 0 !important;
+  max-height: none;
+  padding-block: 0;
+}
+
+/* Editable text needs 16px on touch to prevent Safari focus zoom. Narrow
+   mouse/keyboard panels, labels, selects and read-only values do not. */
+@media (pointer: coarse) {
+  :is(input, textarea):not(
     [type="checkbox"],
     [type="radio"],
-    [type="range"]
+    [type="range"],
+    [readonly],
+    [aria-readonly="true"],
+    [disabled],
+    [aria-disabled="true"]
   ) {
     font-size: 16px !important;
+    line-height: 1.25;
   }
 }
 

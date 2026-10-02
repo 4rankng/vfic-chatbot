@@ -700,27 +700,6 @@
   color: var(--ink);
 }
 
-.inbox-bg-container .chat-header {
-  border-bottom-color: var(--paper-line-soft);
-  background: var(--chat-header-bg);
-}
-
-.inbox-bg-container .mode-menu-trigger {
-  background: #ffffff;
-}
-
-.inbox-bg-container .mode-menu-trigger.human {
-  color: var(--workspace-ink, var(--foreground));
-}
-
-.inbox-bg-container .mode-menu-trigger.semi_auto {
-  color: var(--workspace-ink, var(--foreground));
-}
-
-.inbox-bg-container .mode-menu-trigger.bot {
-  color: var(--workspace-ink, var(--foreground));
-}
-
 @media (max-width: 767px) {
   .inbox-bg-container .workspace-rail {
     padding-top: 18px;

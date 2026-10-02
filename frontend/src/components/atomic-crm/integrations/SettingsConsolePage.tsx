@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { usePermissions, useTranslate } from "ra-core";
+import { usePermissions } from "ra-core";
+import { ShieldOff } from "lucide-react";
+import { Button } from "@/components/base/buttons/button";
+import { EmptyState, PageShell } from "../kit/page-shell";
+import { PageHeading } from "../kit/page-heading";
 import { LoadingState } from "../misc/LoadingState";
 
 import { useProviderPanels } from "./useProviderPanels";
@@ -25,7 +29,6 @@ import {
  * one is on screen and where the OAuth callback should land.
  */
 export const SettingsConsolePage = () => {
-  const translate = useTranslate();
   const { permissions, isPending: permissionsPending } = usePermissions();
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(
     resolveInitialSettingsItemId,
@@ -48,11 +51,14 @@ export const SettingsConsolePage = () => {
     return (
       <SettingsWorkspace>
         <div className="settings-workspace-content text-foreground">
-          <div className="ops-page-shell settings-page-shell">
-            <div className="ops-panel settings-access-denied">
-              {translate("ra.auth.access_denied", { _: "Access denied" })}
-            </div>
-          </div>
+          <PageShell>
+            <PageHeading title="Cài đặt" />
+            <EmptyState
+              icon={<ShieldOff className="size-6" aria-hidden="true" />}
+              title="Bạn chưa có quyền truy cập"
+              description="Liên hệ quản trị viên để thay đổi cấu hình hệ thống."
+            />
+          </PageShell>
         </div>
       </SettingsWorkspace>
     );
@@ -98,6 +104,28 @@ export const SettingsConsolePage = () => {
 
   return (
     <SettingsChrome activeItemId={activeItemId} onItemSelect={setActiveItemId}>
+      {settings.statusState === "error" &&
+      [
+        "settings-zalo-channel",
+        "settings-llm-providers",
+        "settings-jev",
+      ].includes(activeItemId) ? (
+        <div className="settings-load-error" role="alert">
+          <span>Chưa tải được cấu hình tích hợp.</span>
+          <Button
+            type="button"
+            color="secondary"
+            size="sm"
+            className="uu-scope"
+            isDisabled={settings.isFetching}
+            isLoading={settings.isFetching}
+            showTextWhileLoading
+            onClick={settings.retry}
+          >
+            Thử lại
+          </Button>
+        </div>
+      ) : null}
       {renderSection()}
     </SettingsChrome>
   );

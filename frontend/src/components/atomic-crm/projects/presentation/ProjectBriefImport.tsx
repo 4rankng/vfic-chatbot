@@ -94,12 +94,12 @@ export const ProjectBriefImport = ({
       className="project-brief-import grid gap-2"
       aria-labelledby="project-brief-import-title"
     >
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="project-brief-import-heading">
         <h2
           id="project-brief-import-title"
           className="text-helper font-medium text-foreground"
         >
-          Đã có sẵn phiếu thông tin?
+          Thông tin dự án
         </h2>
         {/*
           The file affordance is a Untitled UI button plus a visually hidden
@@ -133,10 +133,8 @@ export const ProjectBriefImport = ({
         />
       </div>
       <p className="text-helper text-muted-foreground">
-        Tải lên một tệp văn bản tối đa 2 MB (.txt hoặc .md). Hệ thống lưu tệp,
-        tạo dự án nháp và nạp các danh mục từ nội dung thực tế. Bạn có thể rời
-        trang trong khi hệ thống xử lý, rồi kiểm tra dự án trước khi bật tuyển
-        dụng.
+        Một tệp .txt hoặc .md, tối đa 2 MB. Hệ thống tạo bản nháp và nạp kiến
+        thức từ nội dung trong tệp. Kiểm tra kết quả trước khi bật tuyển dụng.
       </p>
       {error ? (
         <p role="alert" className="text-helper text-destructive">

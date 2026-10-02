@@ -30,10 +30,12 @@ export const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
     <section
       className="performance-panel performance-slow-turns tt-card tt-card-border"
       id="slow-turns"
+      tabIndex={-1}
+      aria-labelledby="slow-turns-title"
     >
       <div className="performance-section-heading">
         <div>
-          <h2>
+          <h2 id="slow-turns-title">
             Lượt cần xem <span>{slowTurns.length}</span>
           </h2>
           <p>Các lượt ảnh hưởng tới phản hồi hoặc giao gửi.</p>

@@ -1,382 +1,12 @@
-/* Center Panel Header */
-.inbox-bg-container .chat-header {
-  position: relative;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 22px;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  min-height: 74px;
-  overflow: visible;
-  border-bottom: 1px solid var(--workspace-blue-line);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-
-.inbox-bg-container .chat-header .icon-btn {
-  width: 40px;
-  height: 40px;
-}
-
-.inbox-bg-container .header-person {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  overflow: visible;
-}
-.inbox-bg-container .header-avatar-button {
-  appearance: none;
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
-  margin-inline: -2px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  padding: 2px;
-  cursor: pointer;
-}
-.inbox-bg-container .header-avatar-button:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-.inbox-bg-container .header-avatar {
-  position: relative;
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand), var(--brand-hover));
-  color: var(--primary-foreground);
-  font-size: var(--chat-fs-body);
-  font-weight: var(--chat-fw-bold);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 16%, transparent);
-}
-
-.inbox-bg-container .person-copy {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.inbox-bg-container .person-name-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-/* Identity envelope (global rule): the name is the single main line and never
-   wraps — it truncates — and the supporting line (channel + phone) is the only
-   second line. Both sizes come from the two small roles: 12px / 11px. */
-.inbox-bg-container .person-name {
-  color: var(--ink);
-  font-size: var(--fs-helper);
-  font-weight: var(--chat-fw-bold);
-  line-height: var(--chat-lh-tight);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.inbox-bg-container .person-subtitle {
-  margin-top: 2px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--workspace-ink-muted);
-  font-size: var(--fs-caption);
-  line-height: var(--chat-lh-tight);
-  white-space: nowrap;
-  overflow: hidden;
-}
-.inbox-bg-container .person-subtitle-name {
-  font-weight: var(--chat-fw-medium);
-}
-.inbox-bg-container .person-subtitle-sep {
-  opacity: 0.6;
-}
-.inbox-bg-container .person-subtitle-phone {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.inbox-bg-container .person-subtitle-icon {
-  width: 12px;
-  height: 12px;
-  flex: 0 0 12px;
-  opacity: 0.8;
-}
-.inbox-bg-container .person-name-button {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-}
-.inbox-bg-container .person-name-button::after {
-  content: "›";
-  display: inline-block;
-  margin-left: 4px;
-  color: var(--brand);
-  font-size: var(--fs-subsection);
-  font-weight: var(--chat-fw-bold);
-  line-height: 1;
-}
-.inbox-bg-container .person-name-button:hover {
-  color: var(--brand);
-}
-.inbox-bg-container .person-name-button:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 3px;
-  border-radius: 3px;
-}
-
-.inbox-bg-container .header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-.inbox-bg-container .chat-mode-chip {
-  height: 32px;
-  padding: 0 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid color-mix(in srgb, var(--brand) 24%, transparent);
-  border-radius: var(--rad-sm);
-  background: color-mix(in srgb, var(--brand-light) 70%, var(--surface-solid));
-  color: var(--brand);
-  font-size: var(--chat-fs-meta);
-  font-weight: var(--chat-fw-semibold);
-  white-space: nowrap;
-}
-.inbox-bg-container .chat-mode-chip .icon {
-  width: 12px;
-  height: 12px;
-}
-.inbox-bg-container .mode-menu-trigger {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px 3px 4px;
-  border: 1px solid var(--workspace-border, var(--border));
-  border-radius: 10px;
-  background: var(--surface-solid);
-  color: var(--workspace-ink, var(--foreground));
-  font-size: var(--chat-fs-meta);
-  font-weight: var(--chat-fw-medium);
-  white-space: nowrap;
-  transition: var(--transition);
-}
-.inbox-bg-container .mode-menu-trigger--primary {
-  border-color: var(--workspace-border, var(--border));
-  background: #ffffff;
-  color: var(--workspace-ink, var(--foreground));
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
-}
-.inbox-bg-container .mode-menu-trigger:hover:not(:disabled) {
-  border-color: #b8c0cc;
-  background: #ffffff;
-  transform: none;
-}
-.inbox-bg-container .mode-menu-trigger--primary:hover:not(:disabled) {
-  border-color: #b8c0cc;
-  background: #ffffff;
-  color: #1d2939;
-  box-shadow: 0 2px 5px rgba(16, 24, 40, 0.1);
-  transform: none;
-}
-.inbox-bg-container .mode-menu-trigger.human {
-  color: var(--workspace-ink, var(--foreground));
-}
-.inbox-bg-container .mode-menu-trigger.semi_auto {
-  color: var(--workspace-ink, var(--foreground));
-}
-.inbox-bg-container .mode-menu-trigger.bot {
-  color: var(--workspace-ink, var(--foreground));
-}
-.inbox-bg-container .mode-menu-trigger.closed {
-  color: var(--ink-muted);
-}
-.inbox-bg-container .mode-menu-trigger:disabled {
-  cursor: default;
-  opacity: 0.7;
-}
-.inbox-bg-container .mode-menu-trigger-icon {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  flex: 0 0 26px;
-  place-items: center;
-  border: 1px solid var(--workspace-border, var(--border));
-  border-radius: 8px;
-  background: #f2f4f7;
-  color: #475467;
-}
-.inbox-bg-container .mode-menu-trigger-icon .icon {
-  width: 16px;
-  height: 16px;
-}
-.inbox-bg-container .mode-menu-trigger-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: var(--chat-fw-semibold);
-}
-.inbox-bg-container .mode-menu-trigger-chevron {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-  color: var(--workspace-ink-muted, var(--muted-foreground));
-  transition: transform 160ms ease;
-}
-.inbox-bg-container .mode-menu-trigger[aria-expanded="true"] {
-  border-color: #98a2b3;
-  box-shadow: 0 0 0 3px rgba(52, 64, 84, 0.08);
-}
-.inbox-bg-container
-  .mode-menu-trigger[aria-expanded="true"]
-  .mode-menu-trigger-chevron {
-  transform: rotate(180deg);
-}
-/* Untitled UI's Button wraps its children in a `data-text` span so the label can
-   carry the loading/underline treatment. The mode trigger's own flex row is the
-   three spans below, so the wrapper must not introduce a box between them. */
-.inbox-bg-container .mode-menu-trigger > [data-text] {
-  display: contents;
-}
 /* Untitled UI menu items are portalled out of the workspace, so they cannot be
-   scoped by `.inbox-bg-container`; the destructive row keeps the console's
+   scoped by `.inbox-bg-container:where(.conversation-workspace)`; the destructive row keeps the console's
    danger colour instead of the library's default label colour. */
 .conversation-actions-item-danger span,
 .conversation-actions-item-danger svg {
   color: var(--destructive);
 }
-.mode-menu-content {
-  width: min(272px, calc(100vw - 32px));
-  padding: 8px;
-  border: 1px solid var(--workspace-border, var(--border));
-  border-radius: 14px;
-  background: #ffffff;
-  color: #1d2939;
-  box-shadow:
-    0 16px 40px rgba(16, 24, 40, 0.14),
-    0 2px 8px rgba(16, 24, 40, 0.08) !important;
-}
-.mode-menu-item {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 20px;
-  align-items: center;
-  gap: 9px;
-  min-height: 56px;
-  padding: 7px 9px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  color: #1d2939;
-  cursor: pointer;
-  transition:
-    background-color 0.16s var(--ease),
-    border-color 0.16s var(--ease),
-    color 0.16s var(--ease);
-}
-.mode-menu-item:hover,
-.mode-menu-item:focus-visible {
-  background: #f7f8fa;
-  border-color: #e4e7ec;
-}
-.mode-menu-item.active {
-  border-color: #cfd7e5;
-  background: #f0f3f8;
-}
-.mode-menu-icon {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border: 1px solid var(--workspace-border, var(--border));
-  border-radius: 8px;
-  background: #ffffff;
-  color: #475569;
-}
-.mode-menu-icon .icon,
-.mode-menu-check .icon {
-  width: 16px;
-  height: 16px;
-}
-.mode-menu-item.human .mode-menu-icon {
-  color: #475467;
-}
-.mode-menu-item.semi_auto .mode-menu-icon {
-  color: #475467;
-}
-.mode-menu-item.bot .mode-menu-icon {
-  color: #475467;
-}
-.mode-menu-copy {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.mode-menu-title {
-  overflow: hidden;
-  color: #1d2939;
-  font-size: var(--fs-body);
-  font-weight: 600;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mode-menu-description {
-  overflow: hidden;
-  color: var(--workspace-ink-muted, var(--muted-foreground));
-  font-size: var(--fs-meta);
-  font-weight: var(--fw-regular);
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mode-menu-check {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  place-items: center;
-  color: var(--workspace-ink, var(--foreground));
-}
 
-@container (max-width: 760px) {
-  .inbox-bg-container .chat-header {
-    min-height: 64px;
-    gap: 8px;
-    padding: 8px 12px;
-  }
-
-  .inbox-bg-container .header-person {
-    flex: 1 1 auto;
-    max-width: none;
-  }
-
-  .inbox-bg-container .header-actions {
-    flex: 0 0 auto;
-    gap: 6px;
-  }
-}
-
-@container (max-width: 640px) {
-  .inbox-bg-container .chat-header {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
-.inbox-bg-container .icon-btn {
+.inbox-bg-container:where(.conversation-workspace) .icon-btn {
   width: 40px;
   height: 40px;
   display: grid;
@@ -387,18 +17,18 @@
   color: var(--ink-muted);
   transition: var(--transition);
 }
-.inbox-bg-container .icon-btn:hover {
+.inbox-bg-container:where(.conversation-workspace) .icon-btn:hover {
   color: var(--brand);
   border-color: var(--brand);
   box-shadow: none;
   transform: none;
 }
-.inbox-bg-container .icon-btn.ghost {
+.inbox-bg-container:where(.conversation-workspace) .icon-btn.ghost {
   border-color: transparent;
   background: transparent;
 }
 
-.inbox-bg-container .takeover-btn {
+.inbox-bg-container:where(.conversation-workspace) .takeover-btn {
   height: 32px;
   padding: 0 12px;
   display: flex;
@@ -413,12 +43,12 @@
   box-shadow: none;
   transition: var(--transition);
 }
-.inbox-bg-container .takeover-btn:hover {
+.inbox-bg-container:where(.conversation-workspace) .takeover-btn:hover {
   transform: none;
   box-shadow: none;
   filter: brightness(1.1);
 }
-.inbox-bg-container .takeover-btn.taken {
+.inbox-bg-container:where(.conversation-workspace) .takeover-btn.taken {
   background: var(--success);
   box-shadow: none;
   cursor: default;
@@ -426,7 +56,7 @@
 }
 
 /* Chat Content */
-.inbox-bg-container .chat-scroll-shell {
+.inbox-bg-container:where(.conversation-workspace) .chat-scroll-shell {
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -451,7 +81,7 @@
     var(--chat-bg);
 }
 
-.inbox-bg-container .chat-scroller {
+.inbox-bg-container:where(.conversation-workspace) .chat-scroller {
   min-height: 0;
   padding: clamp(18px, 2vw, 28px) 0 clamp(20px, 2.2vw, 32px);
   overflow-y: auto;
@@ -471,33 +101,38 @@
     transparent;
 }
 @media (pointer: coarse) {
-  .inbox-bg-container .chat-scroller {
+  .inbox-bg-container:where(.conversation-workspace) .chat-scroller {
     scrollbar-width: none;
   }
 }
-.inbox-bg-container .chat-scroller::-webkit-scrollbar {
+.inbox-bg-container:where(.conversation-workspace)
+  .chat-scroller::-webkit-scrollbar {
   width: 8px;
 }
-.inbox-bg-container .chat-scroller::-webkit-scrollbar-track {
+.inbox-bg-container:where(.conversation-workspace)
+  .chat-scroller::-webkit-scrollbar-track {
   background: transparent;
 }
-.inbox-bg-container .chat-scroller::-webkit-scrollbar-thumb {
+.inbox-bg-container:where(.conversation-workspace)
+  .chat-scroller::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--ink-faint) 34%, transparent);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.inbox-bg-container .chat-scroller::-webkit-scrollbar-thumb:hover {
+.inbox-bg-container:where(.conversation-workspace)
+  .chat-scroller::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--ink-faint) 56%, transparent);
   background-clip: padding-box;
 }
 @media (pointer: coarse) {
-  .inbox-bg-container .chat-scroller::-webkit-scrollbar {
+  .inbox-bg-container:where(.conversation-workspace)
+    .chat-scroller::-webkit-scrollbar {
     display: none;
   }
 }
 
-.inbox-bg-container .chat-history-top-spacer {
+.inbox-bg-container:where(.conversation-workspace) .chat-history-top-spacer {
   min-height: 40px;
   display: flex;
   align-items: center;
@@ -505,11 +140,11 @@
   padding: 8px 16px 0;
 }
 
-.inbox-bg-container .chat-history-loading {
+.inbox-bg-container:where(.conversation-workspace) .chat-history-loading {
   width: fit-content;
 }
 
-.inbox-bg-container .chat-history-error {
+.inbox-bg-container:where(.conversation-workspace) .chat-history-error {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -524,15 +159,15 @@
   color: var(--ink-muted);
   font-size: var(--chat-fs-meta);
 }
-.inbox-bg-container .chat-history-error button,
-.inbox-bg-container .chat-load-error button {
+.inbox-bg-container:where(.conversation-workspace) .chat-history-error button,
+.inbox-bg-container:where(.conversation-workspace) .chat-load-error button {
   border: 0;
   background: transparent;
   color: var(--brand);
   font-weight: var(--chat-fw-bold);
 }
 
-.inbox-bg-container .new-message-jump {
+.inbox-bg-container:where(.conversation-workspace) .new-message-jump {
   position: absolute;
   left: 50%;
   bottom: 16px;
@@ -557,14 +192,15 @@
     color 0.16s var(--ease);
 }
 
-.inbox-bg-container .new-message-jump:hover {
+.inbox-bg-container:where(.conversation-workspace) .new-message-jump:hover {
   border-color: var(--brand);
   color: var(--brand);
 }
 
 /* Strong variant: an unseen candidate/bot/other-recruiter arrival while away.
    Not color-alone — the visible label + bolder weight carry the emphasis. */
-.inbox-bg-container .new-message-jump.has-unseen {
+.inbox-bg-container:where(.conversation-workspace)
+  .new-message-jump.has-unseen {
   width: auto;
   min-height: 36px;
   max-width: calc(100% - 32px);
@@ -581,24 +217,27 @@
   box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 30%, transparent);
 }
 
-.inbox-bg-container .new-message-jump.has-unseen:hover {
+.inbox-bg-container:where(.conversation-workspace)
+  .new-message-jump.has-unseen:hover {
   filter: brightness(1.06);
 }
 
-.inbox-bg-container .new-message-jump-icon {
+.inbox-bg-container:where(.conversation-workspace) .new-message-jump-icon {
   width: 16px;
   height: 16px;
   transform: rotate(90deg);
   color: var(--brand);
 }
 
-.inbox-bg-container .new-message-jump.has-unseen .new-message-jump-icon {
+.inbox-bg-container:where(.conversation-workspace)
+  .new-message-jump.has-unseen
+  .new-message-jump-icon {
   color: var(--primary-foreground);
 }
 
 /* System updates are timeline annotations, not date headings. Keeping them
    compact prevents an event-heavy thread from obscuring the actual exchange. */
-.inbox-bg-container .system-message {
+.inbox-bg-container:where(.conversation-workspace) .system-message {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -609,19 +248,19 @@
   line-height: var(--chat-lh-body);
   text-align: center;
 }
-.inbox-bg-container .system-message::before,
-.inbox-bg-container .system-message::after {
+.inbox-bg-container:where(.conversation-workspace) .system-message::before,
+.inbox-bg-container:where(.conversation-workspace) .system-message::after {
   content: "";
   flex: 1 1 24px;
   height: 1px;
   background: var(--border);
 }
-.inbox-bg-container .system-message span {
+.inbox-bg-container:where(.conversation-workspace) .system-message span {
   max-width: min(78%, 560px);
   overflow-wrap: anywhere;
 }
 
-.inbox-bg-container .system-event {
+.inbox-bg-container:where(.conversation-workspace) .system-event {
   width: fit-content;
   max-width: min(100%, 760px);
   margin: 0 auto 24px;
@@ -640,14 +279,14 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
-.inbox-bg-container .system-event span {
+.inbox-bg-container:where(.conversation-workspace) .system-event span {
   min-width: 0;
 }
-.inbox-bg-container .system-event .icon {
+.inbox-bg-container:where(.conversation-workspace) .system-event .icon {
   color: var(--brand);
 }
 
-.inbox-bg-container .message-row {
+.inbox-bg-container:where(.conversation-workspace) .message-row {
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -662,31 +301,31 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-.inbox-bg-container .message-row.grouped {
+.inbox-bg-container:where(.conversation-workspace) .message-row.grouped {
   margin-top: 0;
   margin-bottom: 6px;
 }
 
-.inbox-bg-container .message-row.user {
+.inbox-bg-container:where(.conversation-workspace) .message-row.user {
   justify-content: flex-start;
 }
-.inbox-bg-container .message-row.bot,
-.inbox-bg-container .message-row.agent {
+.inbox-bg-container:where(.conversation-workspace) .message-row.bot,
+.inbox-bg-container:where(.conversation-workspace) .message-row.agent {
   justify-content: flex-end;
 }
 
-.inbox-bg-container .message-avatar {
+.inbox-bg-container:where(.conversation-workspace) .message-avatar {
   width: 28px;
   height: 28px;
   flex: 0 0 28px;
   display: grid;
   place-items: center;
   border-radius: 9px;
-  background: var(--surface-solid);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 0;
   color: var(--ink-muted);
 }
-.inbox-bg-container .bubble {
+.inbox-bg-container:where(.conversation-workspace) .bubble {
   max-width: min(68%, 640px);
   min-width: 0;
   padding: 12px 16px;
@@ -701,28 +340,28 @@
 }
 
 @container (max-width: 480px) {
-  .inbox-bg-container .bubble {
+  .inbox-bg-container:where(.conversation-workspace) .bubble {
     max-width: min(78%, calc(100% - 38px));
   }
 }
 
-.inbox-bg-container .message-text {
+.inbox-bg-container:where(.conversation-workspace) .message-text {
   display: grid;
   width: 100%;
   min-width: 0;
   gap: 4px;
   contain: layout style paint;
 }
-.inbox-bg-container .message-text-block {
+.inbox-bg-container:where(.conversation-workspace) .message-text-block {
   margin: 0;
   min-width: 0;
 }
-.inbox-bg-container .message-text-break {
+.inbox-bg-container:where(.conversation-workspace) .message-text-break {
   display: block;
   height: 8px;
 }
 
-.inbox-bg-container .message-row.user .bubble {
+.inbox-bg-container:where(.conversation-workspace) .message-row.user .bubble {
   background: var(--chat-bubble-user);
   color: var(--chat-bubble-user-text);
   border-color: color-mix(
@@ -732,41 +371,47 @@
   );
   border-bottom-left-radius: 6px;
 }
-.inbox-bg-container .message-row.user.grouped .bubble {
+.inbox-bg-container:where(.conversation-workspace)
+  .message-row.user.grouped
+  .bubble {
   border-top-left-radius: 12px;
 }
 
-.inbox-bg-container .message-row.bot .bubble {
+.inbox-bg-container:where(.conversation-workspace) .message-row.bot .bubble {
   background: var(--chat-bubble-bot);
   color: var(--ink);
   border-color: color-mix(in srgb, var(--brand) 20%, var(--border));
   border-bottom-right-radius: 6px;
 }
-.inbox-bg-container .message-row.agent .bubble {
+.inbox-bg-container:where(.conversation-workspace) .message-row.agent .bubble {
   background: var(--chat-bubble-agent);
   color: var(--chat-bubble-agent-text);
   border-color: color-mix(in oklab, var(--inbox-accent) 18%, transparent);
   border-bottom-right-radius: 6px;
 }
-.inbox-bg-container .message-row.bot.grouped .bubble,
-.inbox-bg-container .message-row.agent.grouped .bubble {
+.inbox-bg-container:where(.conversation-workspace)
+  .message-row.bot.grouped
+  .bubble,
+.inbox-bg-container:where(.conversation-workspace)
+  .message-row.agent.grouped
+  .bubble {
   border-top-right-radius: 12px;
 }
 
-.inbox-bg-container .bubble-content {
+.inbox-bg-container:where(.conversation-workspace) .bubble-content {
   display: grid;
   gap: 6px;
   justify-items: stretch;
   min-width: 0;
 }
-.inbox-bg-container .bubble-time-inline {
+.inbox-bg-container:where(.conversation-workspace) .bubble-time-inline {
   font-size: var(--chat-fs-caption);
   font-weight: var(--chat-fw-medium);
   color: var(--ink-faint);
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.inbox-bg-container .bubble-meta-inline {
+.inbox-bg-container:where(.conversation-workspace) .bubble-meta-inline {
   justify-self: end;
   display: inline-flex;
   align-items: center;
@@ -775,15 +420,15 @@
   font-size: var(--chat-fs-caption);
   line-height: 1;
 }
-.inbox-bg-container .delivery-status {
+.inbox-bg-container:where(.conversation-workspace) .delivery-status {
   font-weight: var(--chat-fw-semibold);
   color: var(--ink-faint);
 }
 
-.inbox-bg-container .delivery-retry-count {
+.inbox-bg-container:where(.conversation-workspace) .delivery-retry-count {
   color: var(--muted-foreground);
 }
-.inbox-bg-container .delivery-retry-button {
+.inbox-bg-container:where(.conversation-workspace) .delivery-retry-button {
   color: var(--inbox-accent);
   font: inherit;
   font-weight: var(--chat-fw-semibold);
@@ -792,40 +437,43 @@
      link, so hover changes the underline only. */
   background: none;
 }
-.inbox-bg-container .delivery-retry-button:disabled {
+.inbox-bg-container:where(.conversation-workspace)
+  .delivery-retry-button:disabled {
   cursor: wait;
   opacity: 0.7;
 }
-.inbox-bg-container .delivery-status.pending {
+.inbox-bg-container:where(.conversation-workspace) .delivery-status.pending {
   color: var(--inbox-accent);
 }
-.inbox-bg-container .delivery-status.failed {
+.inbox-bg-container:where(.conversation-workspace) .delivery-status.failed {
   color: var(--destructive);
 }
-.inbox-bg-container .delivery-status.suppressed {
+.inbox-bg-container:where(.conversation-workspace) .delivery-status.suppressed {
   color: var(--ink-muted);
 }
 /* Failure reason shown in place of missing reply text on a blank "Gửi lỗi"
  * bubble, so the row is diagnosable. Destructive but slightly muted so it reads
  * as a sub-detail, not the primary message content. */
-.inbox-bg-container .delivery-error-detail {
+.inbox-bg-container:where(.conversation-workspace) .delivery-error-detail {
   color: var(--destructive);
   opacity: 0.85;
   margin: 0;
 }
-.inbox-bg-container .message-row.user .bubble-time-inline {
+.inbox-bg-container:where(.conversation-workspace)
+  .message-row.user
+  .bubble-time-inline {
   color: var(--ink-faint);
 }
 
 /* Composer */
-.inbox-bg-container .composer-wrap {
+.inbox-bg-container:where(.conversation-workspace) .composer-wrap {
   padding: 14px clamp(18px, 3vw, 44px) 18px;
   background: linear-gradient(180deg, rgba(244, 247, 251, 0.82), #ffffff 52%);
   border-top: 1px solid var(--workspace-blue-line);
   min-width: 0;
 }
 
-.inbox-bg-container .handoff-note {
+.inbox-bg-container:where(.conversation-workspace) .handoff-note {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -838,13 +486,13 @@
   font-weight: var(--chat-fw-medium);
   color: var(--ink-muted);
 }
-.inbox-bg-container .handoff-note:empty {
+.inbox-bg-container:where(.conversation-workspace) .handoff-note:empty {
   display: none;
 }
-.inbox-bg-container .handoff-note .icon {
+.inbox-bg-container:where(.conversation-workspace) .handoff-note .icon {
   color: var(--brand);
 }
-.inbox-bg-container .handoff-note .strong {
+.inbox-bg-container:where(.conversation-workspace) .handoff-note .strong {
   color: var(--ink);
   font-weight: var(--chat-fw-bold);
 }
@@ -852,7 +500,7 @@
 /* Closed-mode read-only explanation. Explanatory only — no send/takeover
    action; backend ownership remains authoritative. Mirrors the handoff-note
    surface so the footer boundary stays consistent across modes. */
-.inbox-bg-container .closed-note {
+.inbox-bg-container:where(.conversation-workspace) .closed-note {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -866,38 +514,38 @@
   color: var(--ink-muted);
   outline: none;
 }
-.inbox-bg-container .closed-note .icon {
+.inbox-bg-container:where(.conversation-workspace) .closed-note .icon {
   flex: 0 0 auto;
   color: var(--ink-faint);
 }
-.inbox-bg-container .closed-note:focus-visible {
+.inbox-bg-container:where(.conversation-workspace) .closed-note:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
-.inbox-bg-container .inline-takeover-btn {
+.inbox-bg-container:where(.conversation-workspace) .inline-takeover-btn {
   margin-left: auto;
   padding: 6px 14px;
-  background: var(--brand);
-  color: var(--primary-foreground);
+  background: transparent;
+  color: var(--brand);
   border: 0;
   border-radius: var(--rad-sm);
   font-size: var(--chat-fs-meta);
   font-weight: var(--chat-fw-semibold);
   transition: var(--transition);
 }
-.inbox-bg-container .inline-takeover-btn:hover {
+.inbox-bg-container:where(.conversation-workspace) .inline-takeover-btn:hover {
   filter: brightness(1.1);
   transform: translateY(-1px);
 }
 
-.inbox-bg-container .composer {
+.inbox-bg-container:where(.conversation-workspace) .composer {
   position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 58px;
-  padding: 7px 8px 7px 16px;
+  min-height: 44px;
+  padding: 2px 6px 2px 12px;
   min-width: 0;
   background: var(--surface-solid);
   border: 1px solid var(--workspace-blue-line);
@@ -905,17 +553,17 @@
   box-shadow: 0 9px 26px rgba(35, 54, 80, 0.09);
   transition: var(--transition);
 }
-.inbox-bg-container .composer:focus-within {
+.inbox-bg-container:where(.conversation-workspace) .composer:focus-within {
   border-color: var(--brand);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 18%, transparent);
 }
-.inbox-bg-container .composer.disabled {
+.inbox-bg-container:where(.conversation-workspace) .composer.disabled {
   background: color-mix(in srgb, var(--surface-solid) 82%, var(--brand-light));
   border-color: var(--border);
   box-shadow: none;
 }
 
-.inbox-bg-container .composer textarea {
+.inbox-bg-container:where(.conversation-workspace) .composer textarea {
   flex: 1;
   min-width: 0;
   height: 40px;
@@ -932,21 +580,25 @@
   font-weight: var(--chat-fw-regular);
   line-height: var(--chat-lh-body);
 }
-.inbox-bg-container .composer textarea::placeholder {
+.inbox-bg-container:where(.conversation-workspace)
+  .composer
+  textarea::placeholder {
   color: var(--ink-faint);
 }
-.inbox-bg-container .composer.disabled textarea {
+.inbox-bg-container:where(.conversation-workspace) .composer.disabled textarea {
   cursor: default;
   color: var(--ink-muted);
   font-weight: var(--fw-semibold);
   -webkit-text-fill-color: var(--ink-muted);
 }
-.inbox-bg-container .composer.disabled textarea::placeholder {
+.inbox-bg-container:where(.conversation-workspace)
+  .composer.disabled
+  textarea::placeholder {
   color: var(--ink-muted);
   opacity: 1;
 }
 
-.inbox-bg-container .composer-action {
+.inbox-bg-container:where(.conversation-workspace) .composer-action {
   width: 34px;
   height: 34px;
   min-width: 40px;
@@ -959,26 +611,31 @@
   color: var(--ink-faint);
   transition: var(--transition);
 }
-.inbox-bg-container .composer-action:hover:not(:disabled) {
+.inbox-bg-container:where(.conversation-workspace)
+  .composer-action:hover:not(:disabled) {
   color: var(--brand);
   background: var(--surface-hover);
 }
-.inbox-bg-container .composer-action.send {
-  width: 42px;
-  height: 42px;
+.inbox-bg-container:where(.conversation-workspace) .composer-action.send {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   border-radius: 13px;
   background: var(--brand);
   color: var(--primary-foreground);
   box-shadow: none;
 }
-.inbox-bg-container .composer-action.send:hover:not(:disabled) {
+.inbox-bg-container:where(.conversation-workspace)
+  .composer-action.send:hover:not(:disabled) {
   transform: none;
   box-shadow: none;
 }
-.inbox-bg-container .composer-action.send:disabled {
-  background: color-mix(in srgb, var(--surface-solid) 92%, var(--brand-light));
+.inbox-bg-container:where(.conversation-workspace)
+  .composer-action.send:disabled {
+  background: transparent;
   color: var(--ink-faint);
-  border: 1px solid var(--border);
+  border: 0;
   box-shadow: none;
   opacity: 1;
 }

@@ -4,7 +4,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
-import { ProgressBar } from "@/components/base/progress-indicators/progress-indicators";
 import { InputBase, TextField } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
 import { TextArea } from "@/components/base/textarea/textarea";
@@ -57,6 +56,18 @@ type CandidateInfoItem = {
 };
 
 const hasMeaningfulValue = (value: unknown) => display(value, "") !== "";
+
+const PRIORITY_INFO_KEYS = ["phone", "name", "expectation", "birth"];
+const PRIORITY_EDIT_KEYS = ["phone", "name", "desired_job", "birth_year"];
+const orderedProfileFields = [...candidateProfileFields].sort(
+  (first, second) => {
+    const rank = (key: string) => {
+      const index = PRIORITY_EDIT_KEYS.indexOf(key);
+      return index === -1 ? PRIORITY_EDIT_KEYS.length : index;
+    };
+    return rank(first.key) - rank(second.key);
+  },
+);
 
 const notesInclude = (notes: string | null | undefined, terms: string[]) => {
   const normalized = notes?.toLocaleLowerCase("vi-VN") ?? "";
@@ -137,7 +148,11 @@ export const ConversationContextPanel = ({
       },
       {
         key: "birth",
-        label: translate("leads.fields.date_of_birth"),
+        label: translate(
+          lead?.birth_year || !lead?.age
+            ? "leads.fields.birth_year"
+            : "leads.fields.age",
+        ),
         value: display(dateOfBirth, noData),
         complete: Boolean(dateOfBirth),
         Icon: CalendarDays,
@@ -160,7 +175,7 @@ export const ConversationContextPanel = ({
       },
       {
         key: "expectation",
-        label: translate("leads.fields.expectation"),
+        label: "Nguyện vọng",
         value: display(lead?.desired_job, noData),
         complete: hasMeaningfulValue(lead?.desired_job),
         Icon: Handshake,
@@ -215,20 +230,11 @@ export const ConversationContextPanel = ({
       },
     ];
   }, [lead, translate]);
-  const completedInfoCount = candidateInfoItems.filter(
-    (item) => item.complete,
-  ).length;
-  const completionPercent =
-    candidateInfoItems.length > 0
-      ? Math.round((completedInfoCount / candidateInfoItems.length) * 100)
-      : 0;
   const content = (
     <CandidateContextBody
       key={String(lead?.id ?? "empty")}
       lead={lead}
       candidateInfoItems={candidateInfoItems}
-      completedInfoCount={completedInfoCount}
-      completionPercent={completionPercent}
       canEdit={canEdit}
       isSaving={isSaving}
       onSavingChange={(saving) =>
@@ -261,7 +267,7 @@ export const ConversationContextPanel = ({
         }}
         isDismissable={!isSaving}
         isKeyboardDismissDisabled={isSaving}
-        className="uu-scope z-50"
+        className="uu-scope z-50 pl-0"
       >
         <Modal>
           <Dialog
@@ -293,8 +299,6 @@ export const ConversationContextPanel = ({
 const CandidateContextBody = ({
   lead,
   candidateInfoItems,
-  completedInfoCount,
-  completionPercent,
   canEdit,
   isSaving,
   onSavingChange,
@@ -304,8 +308,6 @@ const CandidateContextBody = ({
 }: {
   lead?: Lead;
   candidateInfoItems: CandidateInfoItem[];
-  completedInfoCount: number;
-  completionPercent: number;
   canEdit: boolean;
   isSaving: boolean;
   onSavingChange: (saving: boolean) => void;
@@ -388,37 +390,25 @@ const CandidateContextBody = ({
       </header>
 
       <div className="profile-scroll">
-        <section className="context-overview candidate-progress-card tt-card tt-card-sm">
-          <div className="candidate-progress-top">
-            <span className="context-overview-kicker">
-              Thông tin đã thu thập
-            </span>
+        <section className="context-overview candidate-contact-card">
+          <div className="candidate-contact-heading">
+            <Phone className="icon" aria-hidden="true" />
+            <h2>Liên hệ ứng viên</h2>
             <Badge
               type="pill-color"
-              color="brand"
+              color={lead?.phone?.trim() ? "success" : "warning"}
               size="sm"
-              className="uu-scope candidate-progress-score tt-badge tt-badge-soft"
+              className="uu-scope candidate-contact-status"
             >
-              {completedInfoCount}/{candidateInfoItems.length}
+              {lead?.phone?.trim() ? "Đã có số" : "Cần số điện thoại"}
             </Badge>
           </div>
-          {/* Decorative: the paragraph below states the same completion in
-              words, so the meter stays out of the accessible tree instead of
-              announcing an unnamed progressbar twice. */}
-          <div aria-hidden="true">
-            <ProgressBar
-              value={completionPercent}
-              className="candidate-progress-meter"
-              progressClassName="candidate-progress-fill"
-            />
-          </div>
           <p>
-            Đã ghi nhận {completionPercent}% thông tin hồ sơ.{" "}
             {lead?.phone?.trim()
               ? "Đã có số điện thoại để liên hệ."
               : "Cần bổ sung số điện thoại để liên hệ."}
           </p>
-          <p>
+          <p className="candidate-contact-hint">
             Họ tên được khuyến khích; nguyện vọng và năm sinh có thể bổ sung
             sau.
           </p>
@@ -435,7 +425,7 @@ const CandidateContextBody = ({
                 type="button"
                 size="xs"
                 color="tertiary"
-                className="uu-scope"
+                className="uu-scope candidate-profile-edit-trigger"
                 aria-label="Chỉnh sửa hồ sơ ứng viên"
                 iconLeading={<Pencil className="size-3.5" aria-hidden="true" />}
                 onPress={() => {
@@ -455,15 +445,16 @@ const CandidateContextBody = ({
           </div>
           {editSession ? (
             <form
-              className="uu-scope grid gap-4"
+              className="uu-scope candidate-profile-edit-form grid gap-4"
+              aria-label="Chỉnh sửa hồ sơ ứng viên"
               aria-busy={isSaving}
               onSubmit={(event) => {
                 event.preventDefault();
                 void saveProfile();
               }}
             >
-              <div className="grid gap-3 sm:grid-cols-2">
-                {candidateProfileFields.map((field) => {
+              <div className="candidate-profile-fields">
+                {orderedProfileFields.map((field) => {
                   const inputId = `candidate-profile-${field.key}`;
                   return (
                     <TextField
@@ -484,8 +475,14 @@ const CandidateContextBody = ({
                         )
                       }
                     >
-                      <Label>{translate(field.labelKey)}</Label>
+                      <Label>
+                        {field.key === "desired_job"
+                          ? "Nguyện vọng"
+                          : translate(field.labelKey)}
+                      </Label>
                       <InputBase
+                        wrapperClassName="candidate-profile-field-input"
+                        autoFocus={field.key === "phone"}
                         inputMode={field.inputMode}
                         type={
                           field.inputMode === "numeric"
@@ -527,7 +524,7 @@ const CandidateContextBody = ({
                   {saveError}
                 </p>
               ) : null}
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="candidate-profile-edit-actions flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"
                   size="sm"
@@ -563,11 +560,28 @@ const CandidateContextBody = ({
               </div>
             </form>
           ) : (
-            <div className="candidate-info-grid">
-              {candidateInfoItems.map((item) => (
-                <CandidateInfoRow key={item.key} item={item} />
-              ))}
-            </div>
+            <>
+              <div className="candidate-info-grid candidate-priority-fields">
+                {PRIORITY_INFO_KEYS.map((key) => {
+                  const item = candidateInfoItems.find(
+                    (field) => field.key === key,
+                  );
+                  return item ? (
+                    <CandidateInfoRow key={item.key} item={item} />
+                  ) : null;
+                })}
+              </div>
+              <details className="candidate-extra-fields">
+                <summary>Thông tin bổ sung</summary>
+                <div className="candidate-info-grid">
+                  {candidateInfoItems
+                    .filter((item) => !PRIORITY_INFO_KEYS.includes(item.key))
+                    .map((item) => (
+                      <CandidateInfoRow key={item.key} item={item} />
+                    ))}
+                </div>
+              </details>
+            </>
           )}
         </section>
       </div>
@@ -587,7 +601,15 @@ const CandidateInfoRow = ({ item }: { item: CandidateInfoItem }) => {
         <Icon className="icon" aria-hidden="true" />
       </span>
       <div className="candidate-info-copy">
-        <span className="candidate-info-label">{item.label}</span>
+        <span className="candidate-info-label">
+          {item.label}
+          {item.key === "phone" ? (
+            <span className="candidate-field-priority">Bắt buộc</span>
+          ) : null}
+          {item.key === "birth" ? (
+            <span className="candidate-field-optional">Tùy chọn</span>
+          ) : null}
+        </span>
         {item.noteItems ? (
           <ul className="candidate-info-value candidate-note-list">
             {item.noteItems.map((note, index) => (

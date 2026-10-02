@@ -11,6 +11,7 @@ import { durationLabel, formatDateTime, outcomeMeta } from "./botRunMeta";
 import { DecisionTraceRenderer } from "./DecisionTracePanel";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import { DECISION_TRACE_QUERY_KEY } from "./decisionTraceQueries";
+import "./bot-runs.css";
 
 const Fact = ({ label, value }: { label: string; value?: ReactNode }) => (
   <div className="min-w-0 border-b border-[var(--workspace-border)] px-4 py-3 sm:odd:border-r">
@@ -26,7 +27,7 @@ export const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
   const dur = durationLabel(run);
 
   return (
-    <section className="mt-4 border-y border-[var(--workspace-border)] bg-[var(--workspace-surface)]">
+    <section className="bot-run-detail-panel">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--workspace-border)] px-4 py-3">
         <h2 className="flex min-w-0 items-center gap-2 text-section-title font-semibold">
           <Bot className="size-4 text-muted-foreground" />
@@ -36,7 +37,7 @@ export const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
             console and Untitled UI both define; see
             src/styles/untitledui-theme.css. */}
         <Badge
-          className="uu-scope shrink-0 font-semibold tracking-wide uppercase"
+          className="uu-scope shrink-0 font-semibold"
           type="pill-color"
           size="sm"
           color={meta.badgeColor}

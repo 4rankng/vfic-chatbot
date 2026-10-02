@@ -1,5 +1,6 @@
 import { MemoryRouter } from "react-router";
 import { cleanup, render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -25,6 +26,8 @@ vi.mock("ra-core", () => ({
 }));
 
 import { UserActions } from "./UserActions";
+import "@/index.css";
+import "./users.css";
 
 const mount = () =>
   render(
@@ -37,9 +40,32 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await cleanup();
+  await page.viewport(1280, 900);
 });
 
 describe("account actions", () => {
+  it.each([320, 390])(
+    "keeps the mobile action target44px and unboxed at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      const screen = await mount();
+      const action = screen.getByRole("button", {
+        name: "Mở thao tác cho Nguyễn Minh Anh",
+      });
+      await expect.element(action).toBeVisible();
+      const element = action.element();
+      expect(element.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+      expect(element.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      expect(getComputedStyle(element).borderTopWidth).toBe("0px");
+      expect(getComputedStyle(element).backgroundColor).toBe(
+        "rgba(0, 0, 0, 0)",
+      );
+      await action.click();
+      await expect
+        .element(screen.getByRole("menuitem", { name: "Đổi mật khẩu" }))
+        .toBeVisible();
+    },
+  );
   it("locks a confirmed delete and explains its pending state", async () => {
     let finish!: (value: object) => void;
     mocks.remove.mockReturnValueOnce(

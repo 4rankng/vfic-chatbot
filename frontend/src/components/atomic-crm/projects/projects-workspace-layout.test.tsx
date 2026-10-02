@@ -102,7 +102,7 @@ describe("project ledger workspace surface", () => {
     expect(panelStyles.boxShadow).toBe("none");
   });
 
-  it("draws the rollup strip as one ruled band", async () => {
+  it("keeps rollup metrics readable without competing card chrome", async () => {
     await page.viewport(desktop, 900);
     const screen = await render(
       workspace(
@@ -112,62 +112,42 @@ describe("project ledger workspace surface", () => {
         </div>,
       ),
     );
-
     const strip = screen.container.querySelector<HTMLElement>(
       ".project-rollup-strip",
     )!;
-    const styles = getComputedStyle(strip);
-    // One continuous band: ruled top and bottom, no fill, no rounding, and a
-    // floor tall enough to hit (one 40px tier with the console's control cap).
-    expect(styles.borderBlockStartWidth).toBe("1px");
-    expect(styles.borderBlockStartStyle).toBe("solid");
-    expect(styles.borderBlockEndWidth).toBe("1px");
-    expect(styles.borderRadius).toBe("0px");
-    expect(styles.backgroundColor).toBe("rgba(0, 0, 0, 0)");
-    expect(styles.minHeight).toBe("40px");
-
-    // The chips inside inherit the flat treatment — no pill rounding.
+    expect(getComputedStyle(strip).display).toBe("flex");
+    expect(getComputedStyle(strip).flexWrap).toBe("wrap");
     for (const chip of Array.from(
       strip.querySelectorAll<HTMLElement>("span"),
     )) {
-      expect(getComputedStyle(chip).borderRadius, chip.outerHTML).toBe("0px");
-      expect(getComputedStyle(chip).backgroundColor, chip.outerHTML).toBe(
-        "rgba(0, 0, 0, 0)",
+      expect(chip.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(chip.getBoundingClientRect().right).toBeLessThanOrEqual(
+        strip.getBoundingClientRect().right + 1,
       );
     }
   });
 });
 
 describe("project mobile command header", () => {
-  it("shrinks the create action to an icon below 480px", async () => {
-    // `.project-create-button { width: 44px; font-size: 0 }` — the label is
-    // hidden and the glyph carries the action, in a square that matches the
-    // shell's 44px touch floor instead of a 32x44 pill.
+  it("keeps a labelled create action reachable on narrow phones", async () => {
     await page.viewport(phone, 900);
     const screen = await render(workspace(commandHeader()));
-
     const create = screen.container.querySelector<HTMLElement>(
       ".project-create-button",
     )!;
-    // Icon-only: the label is hidden and the glyph carries the action. The
-    // square's height comes from the shell's touch floor, not from this sheet,
-    // so only the hidden label is asserted in this lane.
-    expect(getComputedStyle(create).fontSize).toBe("0px");
-
-    const title = screen.container.querySelector<HTMLElement>(
-      ".project-command-header h1",
-    )!;
-    const titleRect = title.getBoundingClientRect();
-    const createRect = create.getBoundingClientRect();
-    // Title and action share the row; the action does not wrap below it.
-    expect(createRect.top).toBeGreaterThanOrEqual(titleRect.top - 20);
-    expect(createRect.right).toBeGreaterThan(titleRect.left);
+    expect(
+      Number.parseFloat(getComputedStyle(create).fontSize),
+    ).toBeGreaterThan(0);
+    expect(create.getBoundingClientRect().height).toBe(40);
+    expect(create.getBoundingClientRect().right).toBeLessThanOrEqual(phone);
+    await expect
+      .element(screen.getByRole("button", { name: "Dự án mới" }))
+      .toBeVisible();
   });
 
   it("keeps the labelled create action between 480px and 768px", async () => {
     // Above the 480px breakpoint the button keeps its label, so its box grows
-    // past the icon-only square; the height is the shell's 44px touch floor
-    // (src/index.css), not a value this sheet declares.
+    // past the icon-only square; the height is the compact phone control step.
     await page.viewport(600, 900);
     const screen = await render(workspace(commandHeader()));
 
@@ -211,23 +191,20 @@ describe("project accordion summary", () => {
     </div>
   );
 
-  it("uses compact trigger and fact padding below 768px", async () => {
+  it("keeps project facts and the expand target within the phone surface", async () => {
     await page.viewport(phone, 900);
     const screen = await render(workspace(accordion()));
-
     const trigger = screen.container.querySelector<HTMLElement>(
       ".project-accordion-trigger",
     )!;
-    const triggerStyles = getComputedStyle(trigger);
-    expect(triggerStyles.paddingTop).toBe("11px");
-    expect(triggerStyles.paddingLeft).toBe("12px");
-
-    const fact = screen.container.querySelector<HTMLElement>(
-      ".project-accordion-facts > div",
+    expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    const facts = screen.container.querySelector<HTMLElement>(
+      ".project-accordion-facts",
     )!;
-    const factStyles = getComputedStyle(fact);
-    expect(factStyles.paddingTop).toBe("6px");
-    expect(factStyles.paddingLeft).toBe("8px");
+    expect(facts.scrollWidth).toBeLessThanOrEqual(facts.clientWidth + 1);
+    for (const fact of Array.from(facts.children) as HTMLElement[]) {
+      expect(fact.getBoundingClientRect().right).toBeLessThanOrEqual(phone);
+    }
   });
 
   it("clamps the accordion description to two lines", async () => {
@@ -360,8 +337,8 @@ describe("project knowledge category editor", () => {
       ".project-category-mobile-select",
     )!;
     expect(getComputedStyle(select).display).toBe("block");
-    // 40px so the select is reachable on a phone under the console's cap.
-    expect(getComputedStyle(select).minHeight).toBe("40px");
+    // The category selector follows the compact phone text-control step.
+    expect(Number.parseFloat(getComputedStyle(select).minHeight)).toBe(40);
   });
 
   it("spans the destructive editor action across the row", async () => {

@@ -2,7 +2,7 @@
 //
 // Two cascade layers both declared `.bubble` and disagreed about the bubble's
 // near-corner radius and fill, so the anatomy is pinned on the computed style of
-// the real component inside the real `.inbox-bg-container` scope rather than on
+// the real component inside the real `.inbox-bg-container.conversation-workspace` scope rather than on
 // a stylesheet's source text — the TEST-17 shape this repo uses for feature CSS.
 //
 // The fills are compared against probes painted from the same `--workspace-*`
@@ -38,7 +38,7 @@ const message = (type: Message["type"]): Message => ({
 
 /** The row inside the inbox scope the console renders it in. */
 const frame = (kind: ConversationMessageKind) => (
-  <div className="inbox-bg-container">
+  <div className="inbox-bg-container conversation-workspace">
     <div className="chat-scroller">
       <ChatMessageRow
         message={message(kind === "user" ? "inbound" : "outbound")}
@@ -67,6 +67,21 @@ describe("ChatMessageRow — a-c-chat-01 bubble anatomy", () => {
   afterEach(async () => {
     await cleanup();
   });
+
+  it.each([320, 390])(
+    "keeps the candidate glyph unboxed at %ipx",
+    async (width) => {
+      await page.viewport(width, 740);
+      const screen = await render(frame("user"));
+      const avatar =
+        screen.container.querySelector<HTMLElement>(".message-avatar")!;
+      const style = getComputedStyle(avatar);
+      expect(style.borderTopWidth).toBe("0px");
+      expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(style.boxShadow).toBe("none");
+      expect(avatar.getBoundingClientRect().width).toBeGreaterThanOrEqual(26);
+    },
+  );
 
   it("squares the near bottom corner of an inbound bubble on the muted surface", async () => {
     const screen = await render(frame("user"));

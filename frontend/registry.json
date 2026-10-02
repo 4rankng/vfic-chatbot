@@ -699,7 +699,15 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/conversations/presentation/ConversationReplyMode.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/presentation/ConversationList.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/presentation/ConversationHeader.tsx",
           "type": "registry:component"
         },
         {
@@ -871,11 +879,23 @@
           "type": "registry:style"
         },
         {
+          "path": "src/components/atomic-crm/settings/profile.css",
+          "type": "registry:style"
+        },
+        {
           "path": "src/components/atomic-crm/projects/projects.css",
           "type": "registry:style"
         },
         {
           "path": "src/components/atomic-crm/performance/performance.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/login/auth.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/layout/workspace-mobile-chat.css",
           "type": "registry:style"
         },
         {
@@ -947,6 +967,10 @@
           "type": "registry:style"
         },
         {
+          "path": "src/components/atomic-crm/conversations/inbox/conversation-header.css",
+          "type": "registry:style"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/inbox/context-drawer.css",
           "type": "registry:style"
         },
@@ -960,6 +984,10 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/inbox/base.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/automation/bot-runs.css",
           "type": "registry:style"
         },
         {

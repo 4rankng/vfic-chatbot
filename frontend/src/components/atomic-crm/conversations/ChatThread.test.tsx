@@ -9,7 +9,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
-import type { ReactNode } from "react";
+import { page } from "vitest/browser";
+import { useState, type ReactNode } from "react";
+
+import "@/index.css";
+import "./inbox.css";
 
 import type { Conversation, Message } from "../types";
 
@@ -39,6 +43,11 @@ const realtimeControls = {
   retryHistory: vi.fn(),
   loadMore: vi.fn(),
 };
+
+const mobileState = vi.hoisted(() => ({ isMobile: false }));
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => mobileState.isMobile,
+}));
 
 vi.mock("virtua", () => ({
   // Minimal stand-in: a scrollable div that renders its children and forwards
@@ -159,6 +168,9 @@ const mountThread = async (overrides?: {
   isBotModeOverride?: boolean;
   needsClaimOverride?: boolean;
   canHumanReplyOverride?: boolean;
+  isChangingModeOverride?: boolean;
+  composerToolbar?: ReactNode;
+  onTakeoverOverride?: () => void | Promise<void>;
 }) =>
   render(
     <Shell>
@@ -168,12 +180,15 @@ const mountThread = async (overrides?: {
         isBotModeOverride={overrides?.isBotModeOverride}
         needsClaimOverride={overrides?.needsClaimOverride}
         canHumanReplyOverride={overrides?.canHumanReplyOverride}
-        onTakeoverOverride={vi.fn()}
+        onTakeoverOverride={overrides?.onTakeoverOverride ?? vi.fn()}
+        isChangingModeOverride={overrides?.isChangingModeOverride}
+        composerToolbar={overrides?.composerToolbar}
       />
     </Shell>,
   );
 
 beforeEach(() => {
+  mobileState.isMobile = false;
   Object.assign(messageStoreState, {
     messages: [],
     isLoading: false,
@@ -192,6 +207,54 @@ afterEach(async () => {
 // --- Tests -------------------------------------------------------------
 
 describe("ChatThread — mode-gated footer", () => {
+  it.each([320, 390])(
+    "keeps the send glyph's 44px target within a %ipx composer",
+    async (width) => {
+      await page.viewport(width, 900);
+      mobileState.isMobile = true;
+      try {
+        const screen = await render(
+          <div className="workspace-frame-content">
+            <div className="inbox-bg-container conversation-workspace conversation-open">
+              <div className="app detail-open has-selected-conversation">
+                <Shell>
+                  <ChatThread
+                    conversationId="conv-1"
+                    conversation={baseConversation()}
+                    canHumanReplyOverride
+                    needsClaimOverride={false}
+                  />
+                </Shell>
+              </div>
+            </div>
+          </div>,
+        );
+        const send = screen.container.querySelector<HTMLButtonElement>(
+          ".composer-action.send",
+        )!;
+        const assertTarget = () => {
+          const target = send.getBoundingClientRect();
+          const composer = send.closest(".composer")!.getBoundingClientRect();
+          expect(target.width).toBe(44);
+          expect(target.height).toBe(44);
+          expect(target.left).toBeGreaterThanOrEqual(composer.left);
+          expect(target.right).toBeLessThanOrEqual(composer.right);
+          expect(target.top).toBeGreaterThanOrEqual(composer.top);
+          expect(target.bottom).toBeLessThanOrEqual(composer.bottom);
+        };
+        expect(send.disabled).toBe(true);
+        assertTarget();
+        await screen
+          .getByRole("textbox", { name: "Tin nhắn trả lời" })
+          .fill("Xin chào");
+        expect(send.disabled).toBe(false);
+        assertTarget();
+      } finally {
+        await page.viewport(1280, 720);
+      }
+    },
+  );
+
   it("renders the composer for human mode", async () => {
     const screen = await mountThread({ canHumanReplyOverride: true });
     await expect
@@ -200,6 +263,49 @@ describe("ChatThread — mode-gated footer", () => {
     expect(
       screen.container.querySelector(".composer-wrap .composer"),
     ).not.toBeNull();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Tin nhắn trả lời" }))
+      .toBeVisible();
+  });
+
+  it("keeps IME confirmation and mobile Enter from sending a reply", async () => {
+    const screen = await mountThread({ canHumanReplyOverride: true });
+    await screen
+      .getByRole("textbox", { name: "Tin nhắn trả lời" })
+      .fill("Ứng viên");
+    const textarea = screen.container.querySelector("textarea")!;
+    textarea.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        isComposing: true,
+        bubbles: true,
+      }),
+    );
+    expect(dataProviderMock.sendHumanReply).not.toHaveBeenCalled();
+    textarea.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        keyCode: 229,
+        bubbles: true,
+      }),
+    );
+    expect(dataProviderMock.sendHumanReply).not.toHaveBeenCalled();
+    await cleanup();
+    mobileState.isMobile = true;
+    const phoneScreen = await mountThread({ canHumanReplyOverride: true });
+    await phoneScreen
+      .getByRole("textbox", { name: "Tin nhắn trả lời" })
+      .fill("Ứng viên");
+    phoneScreen.container
+      .querySelector("textarea")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    expect(dataProviderMock.sendHumanReply).not.toHaveBeenCalled();
+    await phoneScreen.getByRole("button", { name: "Gửi tin nhắn" }).click();
+    await expect
+      .poll(() => dataProviderMock.sendHumanReply.mock.calls.length)
+      .toBe(1);
   });
 
   it("renders the composer for semi-auto mode", async () => {
@@ -215,7 +321,7 @@ describe("ChatThread — mode-gated footer", () => {
       canHumanReplyOverride: false,
     });
     await expect
-      .element(screen.getByText("Đang dùng ChatBot cho cuộc trò chuyện này."))
+      .element(screen.getByText("Chatbot tự động trả lời."))
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Tiếp quản" }))
@@ -255,6 +361,146 @@ describe("ChatThread — mode-gated footer", () => {
     expect(screen.container.querySelector("textarea")).toBeNull();
     expect(screen.container.querySelector(".inline-takeover-btn")).toBeNull();
     expect(screen.container.querySelector(".composer-action.send")).toBeNull();
+  });
+
+  it("places host controls with one explicit takeover action and no repeated bot status", async () => {
+    const takeover = vi.fn();
+    const screen = await mountThread({
+      isBotModeOverride: true,
+      canHumanReplyOverride: false,
+      composerToolbar: <button type="button">Chế độ: Chatbot</button>,
+      onTakeoverOverride: takeover,
+    });
+    const controls = screen.container.querySelector(".composer-controls")!;
+    expect(controls.textContent).toContain("Chế độ: Chatbot");
+    expect(screen.container.querySelector(".handoff-note")).toBeNull();
+    expect(screen.container.querySelector("textarea")).toBeNull();
+    await screen.getByRole("button", { name: "Tiếp quản" }).click();
+    expect(takeover).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables takeover during a pending mode change and keeps unclaimed conversations read-only", async () => {
+    const takeover = vi.fn();
+    const screen = await mountThread({
+      isBotModeOverride: false,
+      needsClaimOverride: true,
+      canHumanReplyOverride: false,
+      isChangingModeOverride: true,
+      composerToolbar: (
+        <button type="button" disabled>
+          Chế độ: Tư vấn viên
+        </button>
+      ),
+      onTakeoverOverride: takeover,
+    });
+    await expect
+      .element(screen.getByText("Cần tiếp quản để trả lời."))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Tiếp quản" }))
+      .toBeDisabled();
+    expect(screen.container.querySelector("textarea")).toBeNull();
+    expect(takeover).not.toHaveBeenCalled();
+  });
+
+  it("preserves the draft and blocks Enter or submit until a mode change settles", async () => {
+    const renderThread = (pending: boolean) => (
+      <Shell>
+        <ChatThread
+          conversationId="conv-1"
+          conversation={baseConversation()}
+          canHumanReplyOverride
+          isChangingModeOverride={pending}
+        />
+      </Shell>
+    );
+    const screen = await render(renderThread(false));
+    const draft = "Bản nháp cần giữ lại";
+    await screen.getByRole("textbox", { name: "Tin nhắn trả lời" }).fill(draft);
+    await screen.rerender(renderThread(true));
+    const textbox = screen.getByRole("textbox", { name: "Tin nhắn trả lời" });
+    await expect.element(textbox).toBeDisabled();
+    await expect.element(textbox).toHaveValue(draft);
+    await expect
+      .element(screen.getByRole("button", { name: "Gửi tin nhắn" }))
+      .toBeDisabled();
+    screen.container
+      .querySelector("textarea")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    screen.container
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    expect(dataProviderMock.sendHumanReply).not.toHaveBeenCalled();
+    expect(realtimeControls.insertOptimistic).not.toHaveBeenCalled();
+    await screen.rerender(renderThread(false));
+    await expect.element(textbox).toBeEnabled();
+    await expect.element(textbox).toHaveValue(draft);
+    await screen.getByRole("button", { name: "Gửi tin nhắn" }).click();
+    await expect
+      .poll(() => dataProviderMock.sendHumanReply.mock.calls.length)
+      .toBe(1);
+  });
+
+  it("focuses the available composer after an explicit takeover succeeds", async () => {
+    let acceptTakeover!: () => void;
+    const accepted = new Promise<void>((resolve) => {
+      acceptTakeover = resolve;
+    });
+    const Harness = () => {
+      const [state, setState] = useState<"bot" | "pending" | "human">("bot");
+      return (
+        <Shell>
+          <ChatThread
+            conversationId="conv-1"
+            conversation={baseConversation()}
+            isBotModeOverride={state !== "human"}
+            canHumanReplyOverride={state === "human"}
+            isChangingModeOverride={state === "pending"}
+            onTakeoverOverride={async () => {
+              setState("pending");
+              await accepted;
+              setState("human");
+            }}
+          />
+        </Shell>
+      );
+    };
+    const screen = await render(<Harness />);
+    await screen.getByRole("button", { name: "Tiếp quản" }).click();
+    await expect
+      .element(screen.getByRole("button", { name: "Tiếp quản" }))
+      .toBeDisabled();
+    expect(screen.container.querySelector("textarea")).toBeNull();
+    acceptTakeover();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Tin nhắn trả lời" }))
+      .toHaveFocus();
+  });
+
+  it("does not autofocus after a realtime mode change or a failed explicit takeover", async () => {
+    const failedTakeover = vi.fn(async () => {});
+    const renderThread = (human: boolean) => (
+      <Shell>
+        <ChatThread
+          conversationId="conv-1"
+          conversation={baseConversation()}
+          isBotModeOverride={!human}
+          canHumanReplyOverride={human}
+          onTakeoverOverride={failedTakeover}
+        />
+      </Shell>
+    );
+    const screen = await render(renderThread(false));
+    await screen.getByRole("button", { name: "Tiếp quản" }).click();
+    // The action has settled without accepting human mode. A later realtime
+    // update must not be mistaken for the completion of that failed claim.
+    await expect.poll(() => failedTakeover.mock.calls.length).toBe(1);
+    await screen.rerender(renderThread(true));
+    await expect
+      .element(screen.getByRole("textbox", { name: "Tin nhắn trả lời" }))
+      .not.toHaveFocus();
   });
 
   it("always renders the footer element in every mode (stable bottom boundary)", async () => {

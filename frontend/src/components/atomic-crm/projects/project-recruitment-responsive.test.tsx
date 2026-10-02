@@ -80,7 +80,7 @@ afterEach(async () => {
 });
 
 describe("recruitment project workspace across device sizes", () => {
-  it.each([360, 390, 768, 1440])(
+  it.each([320, 360, 390, 768, 1440])(
     "keeps long project content, filters and training progress usable at %ipx",
     async (width) => {
       await page.viewport(width, 900);
@@ -110,10 +110,7 @@ describe("recruitment project workspace across device sizes", () => {
         const upload = screen
           .getByRole("button", { name: "Nhập từ tệp" })
           .element();
-        expect(upload.getBoundingClientRect().height).toBeGreaterThanOrEqual(
-          44,
-        );
-        expect(getComputedStyle(search.element()).fontSize).toBe("16px");
+        expect(upload.getBoundingClientRect().height).toBe(40);
       }
       const filters = screen.container.querySelector<HTMLElement>(
         ".project-directory-filters",
@@ -121,6 +118,21 @@ describe("recruitment project workspace across device sizes", () => {
       expect(
         getComputedStyle(filters).gridTemplateColumns.split(" ").length,
       ).toBe(width < 768 ? 1 : 3);
+      expect(getComputedStyle(filters).gap).toBe("12px");
+      expect(getComputedStyle(filters).padding).toBe("16px");
+      const expectedHeight = width < 768 ? 40 : 36;
+      const inputBox = search.element().parentElement!;
+      expect(inputBox.getBoundingClientRect().height).toBe(expectedHeight);
+      const statusControl = screen
+        .getByRole("button", { name: /Trạng thái tuyển dụng/ })
+        .element();
+      expect(statusControl.getBoundingClientRect().height).toBe(expectedHeight);
+      const touch = window.matchMedia("(pointer: coarse)").matches;
+      expect(getComputedStyle(search.element()).fontSize).toBe(
+        touch ? "16px" : "12px",
+      );
+      const statusLabel = statusControl.querySelector("p")!;
+      expect(getComputedStyle(statusLabel).fontSize).toBe("12px");
     },
   );
 

@@ -58,6 +58,7 @@ const SettingsSideNav = ({
               key={item.label}
               type="button"
               className={`settings-side-nav-link${active ? " is-active" : ""}`}
+              aria-current={active ? "page" : undefined}
               onClick={() => onItemSelect(item.itemId)}
             >
               <SettingsNavLinkContent
@@ -91,7 +92,7 @@ const MobileSettingsNav = ({
         <Button
           color="secondary"
           size="md"
-          className="settings-mobile-drawer-trigger"
+          className="settings-mobile-drawer-trigger uu-scope"
           aria-label="Mở danh mục cài đặt"
           iconLeading={Menu}
           iconTrailing={ChevronDown}
@@ -125,6 +126,7 @@ const MobileSettingsNav = ({
                       key={item.itemId}
                       type="button"
                       className={`settings-mobile-drawer-item${active ? " is-active" : ""}`}
+                      aria-current={active ? "page" : undefined}
                       onClick={() => {
                         onItemSelect(item.itemId);
                         setOpen(false);

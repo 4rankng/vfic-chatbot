@@ -57,7 +57,7 @@ const projects: Project[] = [
 ];
 
 // The state badge is the first badge in each row's badge group; the second is
-// the knowledge-mode badge. Scoped here because "Sẵn sàng" also appears as the
+// the knowledge-mode badge. Scoped here because "Đã nạp" also appears as the
 // readiness fact label in every row.
 const stateBadgeLabels = (container: HTMLElement): string[] =>
   Array.from(container.querySelectorAll(".project-accordion-badges")).map(
@@ -78,10 +78,7 @@ describe("ProjectAccordionList", () => {
 
     // rag-project ships `ingest_state: "ready"`; single-project is a legacy
     // payload without the field and falls back to its draft state.
-    expect(stateBadgeLabels(screen.container)).toEqual([
-      "Sẵn sàng",
-      "Bản nháp",
-    ]);
+    expect(stateBadgeLabels(screen.container)).toEqual(["Đã nạp", "Bản nháp"]);
     await expect.element(screen.getByText("Bản nháp")).toBeVisible();
     // The old binary labels must not resurface anywhere in the list.
     expect(screen.container.textContent).not.toContain("Đang hoạt động");
@@ -135,7 +132,7 @@ describe("ProjectAccordionList", () => {
     expect(stateBadgeLabels(screen.container)).toEqual([
       "Đang nạp",
       "Lỗi nạp",
-      "Sẵn sàng",
+      "Đã nạp",
       "Bản nháp",
     ]);
     await expect.element(screen.getByText("Đang nạp")).toBeVisible();

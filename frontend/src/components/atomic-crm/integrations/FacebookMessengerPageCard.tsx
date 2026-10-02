@@ -246,7 +246,7 @@ const FacebookPageCard = ({ account, projects }: FacebookPageCardProps) => {
           <Button
             type="button"
             color="secondary"
-            className="settings-test-button settings-danger-action tt-btn-touch"
+            className="uu-scope settings-test-button settings-danger-action tt-btn-touch"
             onClick={() => disconnect.mutate()}
             isDisabled={disconnect.isPending}
             aria-busy={disconnect.isPending}

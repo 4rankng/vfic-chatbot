@@ -12,7 +12,35 @@
   min-height: 0;
 }
 
-.inbox-bg-container .profile-header {
+/* The phone sheet is portalled outside the workspace control floor. Its
+   editable fields and actions therefore own their touch target explicitly. */
+@media (max-width: 767px) {
+  .candidate-context-sheet .conversation-context-sheet-body .profile-header {
+    padding-top: calc(10px + env(safe-area-inset-top));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  .candidate-context-sheet .candidate-profile-field-input,
+  .candidate-context-sheet .candidate-profile-edit-actions > button {
+    height: var(--form-control-height);
+    min-height: var(--form-control-height);
+    max-height: none;
+  }
+
+  .candidate-context-sheet .candidate-profile-edit-trigger,
+  .candidate-context-sheet .context-close {
+    height: 44px;
+    min-height: 44px;
+    max-height: none;
+  }
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -21,7 +49,11 @@
   border-bottom: 1px solid var(--workspace-blue-line);
   background: var(--surface-solid);
 }
-.inbox-bg-container .profile-title {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-title {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -31,41 +63,62 @@
   min-width: 0;
 }
 
-.inbox-bg-container .profile-title-copy {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-title-copy {
   display: grid;
   min-width: 0;
   gap: 1px;
 }
 
-.inbox-bg-container .profile-title-copy small {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-title-copy
+  small {
   color: var(--ink-muted);
   font-size: var(--chat-fs-caption);
   font-weight: var(--chat-fw-medium);
   line-height: var(--chat-lh-tight);
 }
-.inbox-bg-container .context-header-actions {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.inbox-bg-container .context-close {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-close {
   display: grid;
   width: 32px;
   height: 32px;
   min-width: 40px;
   min-height: 40px;
   place-items: center;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 6px;
-  background: var(--workspace-bg-deep);
+  background: transparent;
   color: var(--ink-muted);
   font-size: var(--fs-body);
   font-weight: 700;
   line-height: 1;
 }
 
-.inbox-bg-container .profile-scroll {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -75,20 +128,36 @@
   scrollbar-width: thin;
   scrollbar-color: var(--workspace-blue-line) transparent;
 }
-.inbox-bg-container .profile-scroll::-webkit-scrollbar {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-scroll::-webkit-scrollbar {
   width: 8px;
 }
-.inbox-bg-container .profile-scroll::-webkit-scrollbar-thumb {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-scroll::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
   background: var(--workspace-blue-line);
   background-clip: padding-box;
 }
-.inbox-bg-container .profile-scroll::-webkit-scrollbar-thumb:hover {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .profile-scroll::-webkit-scrollbar-thumb:hover {
   background-color: var(--ink-faint);
 }
 
-.inbox-bg-container .context-card {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-card {
   padding: 16px;
   border: 1px solid var(--workspace-blue-line);
   border-radius: 16px;
@@ -96,11 +165,20 @@
   box-shadow: 0 8px 24px rgba(35, 54, 80, 0.06);
 }
 
-.inbox-bg-container .context-card + .context-card {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-card
+  + .context-card {
   margin-top: 12px;
 }
 
-.inbox-bg-container .context-overview {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-overview {
   display: grid;
   gap: 8px;
   padding: 16px;
@@ -112,11 +190,19 @@
   box-shadow: 0 8px 24px rgba(35, 54, 80, 0.06);
 }
 
-.inbox-bg-container .context-overview-copy {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-overview-copy {
   min-width: 0;
 }
 
-.inbox-bg-container .context-overview-kicker {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-overview-kicker {
   color: var(--brand);
   font-size: var(--chat-fs-caption);
   font-weight: var(--chat-fw-bold);
@@ -124,7 +210,12 @@
   text-transform: uppercase;
 }
 
-.inbox-bg-container .context-overview-copy h2 {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-overview-copy
+  h2 {
   margin: 0;
   color: var(--ink);
   font-size: var(--chat-fs-section-title);
@@ -133,7 +224,12 @@
   overflow-wrap: anywhere;
 }
 
-.inbox-bg-container .context-overview-copy p {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .context-overview-copy
+  p {
   margin: 6px 0 0;
   color: var(--ink-muted);
   font-size: var(--chat-fs-meta);
@@ -141,18 +237,30 @@
   overflow-wrap: anywhere;
 }
 
-.inbox-bg-container .candidate-progress-card {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-progress-card {
   gap: 10px;
 }
 
-.inbox-bg-container .candidate-progress-top {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-progress-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.inbox-bg-container .candidate-progress-score {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-progress-score {
   color: var(--brand);
   font-size: var(--chat-fs-meta);
   font-weight: var(--chat-fw-bold);
@@ -161,7 +269,11 @@
   background: var(--brand-light);
 }
 
-.inbox-bg-container .candidate-progress-meter {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-progress-meter {
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
@@ -169,7 +281,11 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 55%, transparent);
 }
 
-.inbox-bg-container .candidate-progress-fill {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-progress-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
@@ -179,20 +295,34 @@
   transition: transform 0.26s var(--ease);
 }
 
-.inbox-bg-container .section-head {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
 }
-.inbox-bg-container .section-head h3 {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .section-head
+  h3 {
   margin: 0;
   font-size: var(--chat-fs-body);
   font-weight: var(--chat-fw-bold);
   color: var(--ink);
 }
-.inbox-bg-container .section-head button {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .section-head
+  button {
   font-size: var(--chat-fs-meta);
   font-weight: var(--chat-fw-semibold);
   color: var(--brand);
@@ -200,7 +330,11 @@
   background: none;
 }
 
-.inbox-bg-container .candidate-info-grid {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-grid {
   display: grid;
   gap: 0;
   overflow: hidden;
@@ -209,7 +343,11 @@
   background: var(--surface-solid);
 }
 
-.inbox-bg-container .candidate-info-row {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row {
   min-height: 54px;
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) 18px;
@@ -226,38 +364,60 @@
   );
 }
 
-.inbox-bg-container .candidate-info-row.filled {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row.filled {
   background: var(--surface-solid);
 }
 
-.inbox-bg-container .candidate-info-row:last-child {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row:last-child {
   border-bottom: 0;
 }
 
-.inbox-bg-container .candidate-info-icon {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-icon {
   width: 30px;
   height: 30px;
   display: grid;
   place-items: center;
-  border-radius: var(--rad-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 0;
+  background: transparent;
   color: var(--ink-faint);
 }
 
-.inbox-bg-container .candidate-info-row.filled .candidate-info-icon {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row.filled
+  .candidate-info-icon {
   color: var(--brand);
-  border-color: color-mix(in srgb, var(--brand) 22%, var(--border));
-  background: var(--brand-light);
 }
 
-.inbox-bg-container .candidate-info-copy {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-copy {
   display: grid;
   min-width: 0;
   gap: 3px;
 }
 
-.inbox-bg-container .candidate-info-label {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-label {
   color: var(--ink-faint);
   font-size: var(--chat-fs-caption);
   font-weight: var(--chat-fw-semibold);
@@ -267,7 +427,11 @@
   overflow-wrap: anywhere;
 }
 
-.inbox-bg-container .candidate-info-value {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-value {
   color: var(--ink-faint);
   font-size: var(--chat-fs-meta);
   font-weight: var(--chat-fw-medium);
@@ -275,17 +439,28 @@
   overflow-wrap: anywhere;
 }
 
-.inbox-bg-container .candidate-info-row[data-field="notes"] {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row[data-field="notes"] {
   align-items: start;
 }
 
-.inbox-bg-container
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
   .candidate-info-row[data-field="notes"]
   .candidate-info-copy {
   padding-block: 2px;
 }
 
-.inbox-bg-container .candidate-note-list {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-note-list {
   display: grid;
   gap: 6px;
   margin: 1px 0 0;
@@ -293,19 +468,38 @@
   list-style: disc;
 }
 
-.inbox-bg-container .candidate-note-list li {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-note-list
+  li {
   padding-left: 2px;
 }
 
-.inbox-bg-container .candidate-note-list li::marker {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-note-list
+  li::marker {
   color: var(--brand);
 }
 
-.inbox-bg-container .candidate-info-row.filled .candidate-info-value {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-row.filled
+  .candidate-info-value {
   color: var(--ink);
 }
 
-.inbox-bg-container .candidate-info-state {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .candidate-info-state {
   width: 18px;
   height: 18px;
   display: grid;
@@ -314,7 +508,11 @@
   color: var(--success);
 }
 
-.inbox-bg-container .workspace-empty-state {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-state {
   width: min(760px, calc(100% - 64px));
   min-height: 0;
   height: auto;
@@ -334,7 +532,11 @@
   text-align: left;
 }
 
-.inbox-bg-container .workspace-empty-visual {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-visual {
   position: relative;
   min-height: 300px;
   display: grid;
@@ -343,7 +545,11 @@
   background: #f7f9fc;
 }
 
-.inbox-bg-container .workspace-empty-eyebrow {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-eyebrow {
   position: absolute;
   top: 18px;
   left: 18px;
@@ -354,14 +560,22 @@
   backdrop-filter: blur(8px);
 }
 
-.inbox-bg-container .workspace-empty-illustration {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-illustration {
   width: 100%;
   height: auto;
   display: block;
   object-fit: contain;
 }
 
-.inbox-bg-container .workspace-empty-copy {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-copy {
   display: grid;
   align-content: center;
   max-width: none;
@@ -369,7 +583,12 @@
   padding: 34px 32px;
 }
 
-.inbox-bg-container .workspace-empty-copy h2 {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-copy
+  h2 {
   margin: 0;
   color: var(--workspace-ink);
   font-size: var(--fs-section-title);
@@ -377,7 +596,12 @@
   line-height: 1.2;
 }
 
-.inbox-bg-container .workspace-empty-copy > p {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-copy
+  > p {
   margin: 0;
   color: var(--workspace-muted);
   font-size: var(--fs-body-sm);
@@ -385,14 +609,23 @@
   line-height: 1.55;
 }
 
-.inbox-bg-container .workspace-empty-features {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-features {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
 }
 
-.inbox-bg-container .workspace-empty-features span {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-features
+  span {
   min-height: 30px;
   display: inline-flex;
   align-items: center;
@@ -406,37 +639,66 @@
   font-weight: var(--chat-fw-semibold);
 }
 
-.inbox-bg-container .workspace-empty-features .icon {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .workspace-empty-features
+  .icon {
   width: 14px;
   height: 14px;
   color: var(--workspace-active);
 }
 
 @container (max-width: 720px) {
-  .inbox-bg-container .workspace-empty-state {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-empty-state {
     width: min(430px, calc(100% - 40px));
     grid-template-columns: 1fr;
   }
 
-  .inbox-bg-container .workspace-empty-visual {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-empty-visual {
     min-height: 210px;
   }
 
-  .inbox-bg-container .workspace-empty-illustration {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-empty-illustration {
     width: min(100%, 390px);
   }
 
-  .inbox-bg-container .workspace-empty-copy {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-empty-copy {
     padding: 24px 26px 28px;
     text-align: center;
   }
 
-  .inbox-bg-container .workspace-empty-features {
+  .inbox-bg-container:where(
+      .conversation-workspace,
+      .conversation-context-sheet-body
+    )
+    .workspace-empty-features {
     justify-content: center;
   }
 }
 
-.inbox-bg-container .chat-header-placeholder {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-header-placeholder {
   min-height: 64px;
   display: flex;
   align-items: center;
@@ -446,9 +708,22 @@
   pointer-events: none;
 }
 
-.inbox-bg-container .chat-header-placeholder-avatar,
-.inbox-bg-container .chat-header-placeholder-action,
-.inbox-bg-container .chat-header-placeholder-copy i {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-header-placeholder-avatar,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-header-placeholder-action,
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-header-placeholder-copy
+  i {
   display: block;
   border-radius: 50%;
   background: color-mix(
@@ -458,27 +733,49 @@
   );
 }
 
-.inbox-bg-container .chat-header-placeholder-avatar {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-header-placeholder-avatar {
   width: 34px;
   height: 34px;
 }
 
-.inbox-bg-container .chat-header-placeholder-copy {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-header-placeholder-copy {
   display: grid;
   gap: 6px;
   width: 116px;
 }
 
-.inbox-bg-container .chat-header-placeholder-copy i {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-header-placeholder-copy
+  i {
   height: 7px;
   border-radius: 999px;
 }
 
-.inbox-bg-container .chat-header-placeholder-copy i:last-child {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-header-placeholder-copy
+  i:last-child {
   width: 64%;
 }
 
-.inbox-bg-container .chat-header-placeholder-action {
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .chat-header-placeholder-action {
   width: 28px;
   height: 28px;
   margin-left: auto;

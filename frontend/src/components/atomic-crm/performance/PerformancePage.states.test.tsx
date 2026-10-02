@@ -158,4 +158,53 @@ describe("PerformancePage wrapper states", () => {
     await screen.getByRole("button", { name: /Cập nhật lúc/ }).click();
     expect(refetch).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps known metrics visible when a background refresh fails", async () => {
+    usePerformanceStatsMock.mockReturnValue({
+      data: metrics,
+      isPending: false,
+      isFetching: false,
+      isError: true,
+      refetch: vi.fn(),
+      dataUpdatedAt: Date.parse("2026-07-26T20:00:00+08:00"),
+    });
+    const screen = await render(
+      <TestMessages>
+        <PerformancePage />
+      </TestMessages>,
+    );
+
+    await expect.element(screen.getByRole("alert")).toBeVisible();
+    await expect
+      .element(screen.getByRole("region", { name: "Tình trạng hệ thống" }))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("heading", {
+          name: "Không tải được số liệu hiệu suất",
+        }),
+      )
+      .not.toBeInTheDocument();
+  });
+
+  it("prevents overlapping refresh requests while metrics are fetching", async () => {
+    const refetch = vi.fn();
+    usePerformanceStatsMock.mockReturnValue({
+      data: metrics,
+      isPending: false,
+      isFetching: true,
+      isError: false,
+      refetch,
+      dataUpdatedAt: Date.parse("2026-07-26T20:00:00+08:00"),
+    });
+    const screen = await render(
+      <TestMessages>
+        <PerformancePage />
+      </TestMessages>,
+    );
+    await expect
+      .element(screen.getByRole("button", { name: /Cập nhật lúc/ }))
+      .toBeDisabled();
+    expect(refetch).not.toHaveBeenCalled();
+  });
 });

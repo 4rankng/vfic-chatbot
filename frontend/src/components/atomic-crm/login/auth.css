@@ -1,0 +1,53 @@
+.auth-shell .auth-tagline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--primary);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+}
+
+.auth-shell .auth-tagline svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.auth-shell .auth-password-action {
+  width: 44px;
+  height: 44px;
+  max-height: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.auth-shell .auth-password-action:hover:not(:disabled) {
+  background: var(--muted);
+}
+
+.auth-shell .auth-password-action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.auth-shell [class~="group/input"],
+.auth-shell button.console-button {
+  height: var(--crm-control-height-md, 36px);
+  min-height: var(--crm-control-height-md, 36px);
+  max-height: none;
+}
+
+.auth-shell label {
+  font-size: var(--fs-label, 13px);
+  line-height: 18px;
+}
+
+@media (max-width: 767px) {
+  .auth-shell [class~="group/input"],
+  .auth-shell button.console-button {
+    height: var(--crm-control-height-touch, 40px);
+    min-height: var(--crm-control-height-touch, 40px);
+  }
+}

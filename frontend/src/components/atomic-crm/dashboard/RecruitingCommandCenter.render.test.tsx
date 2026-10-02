@@ -1,16 +1,23 @@
 import type * as RaCore from "ra-core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router";
-import { render } from "vitest-browser-react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render } from "vitest-browser-react";
+import { page } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockApiJson, mockDataProviderUpdate, mockNotify, mockPermissions } =
-  vi.hoisted(() => ({
-    mockApiJson: vi.fn(),
-    mockDataProviderUpdate: vi.fn(),
-    mockNotify: vi.fn(),
-    mockPermissions: { value: "recruiter" },
-  }));
+const {
+  mockApiJson,
+  mockDataProviderUpdate,
+  mockNotify,
+  mockPermissions,
+  mockMobile,
+} = vi.hoisted(() => ({
+  mockApiJson: vi.fn(),
+  mockDataProviderUpdate: vi.fn(),
+  mockNotify: vi.fn(),
+  mockPermissions: { value: "recruiter" },
+  mockMobile: { value: false },
+}));
 
 vi.mock("@/lib/apiClient", () => ({
   apiJson: mockApiJson,
@@ -27,7 +34,7 @@ vi.mock("ra-core", async (importOriginal) => {
 });
 
 vi.mock("@/hooks/use-mobile", () => ({
-  useIsMobile: () => false,
+  useIsMobile: () => mockMobile.value,
 }));
 
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
@@ -63,71 +70,109 @@ describe("RecruitingCommandCenter candidate rows", () => {
     mockDataProviderUpdate.mockResolvedValue({ data: {} });
     mockNotify.mockReset();
     mockPermissions.value = "recruiter";
+    mockMobile.value = false;
   });
 
-  it("opens a conversation without rendering a redundant chevron", async () => {
-    const attention = {
-      updated_at: "2026-07-12T10:00:00Z",
-      counters: {
-        needs_reply: 1,
-        overdue: 0,
-        due_today: 0,
-        priority: 0,
-        unread: 0,
-      },
-      immediate: [
-        {
-          key: "candidate",
-          reason: "REPLY_OVERDUE",
-          urgency_at: "2026-07-12T09:00:00Z",
-          conversation_id: "conversation-1",
-          lead_id: null,
-          name: "Ứng viên mẫu",
-          phone: null,
-          desired_job: null,
-          lead_stage: null,
-          lead_score: null,
-          last_inbound_at: null,
-          due_at: null,
-          delivery_status: null,
-          action: "OPEN_CONVERSATION",
+  afterEach(async () => {
+    await cleanup();
+    await page.viewport(1280, 900);
+  });
+
+  it.each([1280, 320, 390])(
+    "keeps the attention row readable and its placeholder unboxed at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      mockMobile.value = width < 768;
+      const attention = {
+        updated_at: "2026-07-12T10:00:00Z",
+        counters: {
+          needs_reply: 1,
+          overdue: 0,
+          due_today: 0,
+          priority: 0,
+          unread: 0,
         },
-      ],
-      today: [],
-    };
-    mockApiJson.mockImplementation((url: string) =>
-      Promise.resolve(
-        url.startsWith("/api/v1/leads") ? { data: [], total: 0 } : attention,
-      ),
-    );
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const screen = await render(
-      <TestMessages>
-        <MemoryRouter>
-          <QueryClientProvider client={queryClient}>
-            <RecruitingCommandCenter />
-            <LocationProbe />
-          </QueryClientProvider>
-        </MemoryRouter>
-      </TestMessages>,
-    );
+        immediate: [
+          {
+            key: "candidate",
+            reason: "REPLY_OVERDUE",
+            urgency_at: "2026-07-12T09:00:00Z",
+            conversation_id: "conversation-1",
+            lead_id: null,
+            name: "Ứng viên mẫu",
+            phone: null,
+            desired_job: null,
+            lead_stage: null,
+            lead_score: null,
+            last_inbound_at: null,
+            due_at: null,
+            delivery_status: null,
+            action: "OPEN_CONVERSATION",
+          },
+        ],
+        today: [],
+      };
+      mockApiJson.mockImplementation((url: string) =>
+        Promise.resolve(
+          url.startsWith("/api/v1/leads") ? { data: [], total: 0 } : attention,
+        ),
+      );
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const screen = await render(
+        <TestMessages>
+          <MemoryRouter>
+            <QueryClientProvider client={queryClient}>
+              <div className="dashboard-workspace">
+                <section className="dashboard-workspace-content uu-scope">
+                  <RecruitingCommandCenter />
+                </section>
+              </div>
+              <LocationProbe />
+            </QueryClientProvider>
+          </MemoryRouter>
+        </TestMessages>,
+      );
 
-    await expect
-      .element(
-        screen.getByRole("button", { name: /Mở hội thoại với Ứng viên mẫu/ }),
-      )
-      .toBeVisible();
-    await expect
-      .element(screen.getByLabelText("1 hội thoại cần xử lý"))
-      .toBeVisible();
-    await expect.element(screen.getByText("Quá hạn phản hồi")).toBeVisible();
-    await expect.element(screen.getByText("Mở", { exact: true })).toBeVisible();
-    expect(
-      screen.container.querySelector(".dashboard-candidate-chevron"),
-    ).toBeNull();
-  });
+      await expect
+        .element(
+          screen.getByRole("button", { name: /Mở hội thoại với Ứng viên mẫu/ }),
+        )
+        .toBeVisible();
+      await expect
+        .element(screen.getByLabelText("1 hội thoại cần xử lý"))
+        .toBeVisible();
+      await expect.element(screen.getByText("Quá hạn phản hồi")).toBeVisible();
+      await expect
+        .element(screen.getByText("Mở", { exact: true }))
+        .toBeVisible();
+      expect(
+        screen.container.querySelector(".dashboard-candidate-chevron"),
+      ).toBeNull();
+      const row = screen.container.querySelector<HTMLElement>(
+        ".dashboard-candidate-row",
+      )!;
+      const rowBox = row.getBoundingClientRect();
+      const icon = row.querySelector<HTMLElement>(
+        ".dashboard-candidate-avatar-content",
+      )!;
+      expect(icon.querySelector("svg")).not.toBeNull();
+      expect(getComputedStyle(icon).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(icon).outlineWidth).toBe("0px");
+      expect(getComputedStyle(icon).borderTopWidth).toBe("0px");
+      if (width < 768) {
+        expect(rowBox.height).toBeGreaterThanOrEqual(60);
+        expect(rowBox.right).toBeLessThanOrEqual(width);
+        for (const content of row.children) {
+          const box = content.getBoundingClientRect();
+          expect(box.top).toBeGreaterThanOrEqual(rowBox.top);
+          expect(box.bottom).toBeLessThanOrEqual(rowBox.bottom);
+          expect(box.right).toBeLessThanOrEqual(rowBox.right);
+        }
+      }
+    },
+  );
 
   it("shows candidate identity and phone only, then opens the linked conversation", async () => {
     const attention = {
@@ -242,7 +287,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
     await expect
       .element(screen.getByRole("dialog", { name: "Thông tin ứng viên" }))
       .toBeVisible();
-    await expect.element(screen.getByText("Mức độ hoàn thiện")).toBeVisible();
+    await expect.element(screen.getByText("Liên hệ ứng viên")).toBeVisible();
     await expect.element(screen.getByText("Dữ liệu đã thu thập")).toBeVisible();
     await expect.element(screen.getByText("Công nhân sản xuất")).toBeVisible();
     await expect.element(screen.getByText("2 năm")).toBeVisible();

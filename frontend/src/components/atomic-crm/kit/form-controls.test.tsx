@@ -99,6 +99,38 @@ afterEach(async () => {
 });
 
 describe("kit form controls", () => {
+  it.each([320, 390, 1440])(
+    "matches text fields and custom selects to the compact scale at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const screen = await mount(vi.fn());
+      const input = screen.getByRole("textbox", { name: "Email" }).element();
+      const field = input.closest('[class~="group/input"]')!;
+      const height = width < 768 ? 40 : 36;
+      expect(field.getBoundingClientRect().height).toBe(height);
+      expect(input.getBoundingClientRect().height).toBeLessThanOrEqual(height);
+      expect(getComputedStyle(input).fontSize).toBe(
+        window.matchMedia("(pointer: coarse)").matches ? "16px" : "12px",
+      );
+      const label = input
+        .closest(".console-form-control")!
+        .querySelector("label")!;
+      expect(getComputedStyle(label).fontSize).toBe("13px");
+      const select = screen.getByRole("button", { name: /Vai trò/ });
+      expect(select.element().getBoundingClientRect().height).toBe(height);
+      expect(
+        getComputedStyle(select.element().querySelector("p")!).fontSize,
+      ).toBe("12px");
+      await select.click();
+      const option = screen.getByRole("option", { name: "Quản trị" });
+      await expect.element(option).toBeVisible();
+      expect(
+        getComputedStyle(option.element().querySelector('[slot="label"]')!)
+          .fontSize,
+      ).toBe("12px");
+    },
+  );
+
   it("reveals and masks a password through a Vietnamese action without submitting the form", async () => {
     const onSubmit = vi.fn();
     const screen = await mountField(

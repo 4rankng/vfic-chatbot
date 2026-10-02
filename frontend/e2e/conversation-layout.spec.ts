@@ -56,9 +56,7 @@ test("follows transcript layout changes without native observer errors", async (
     (response) =>
       response.url().endsWith("/release") && response.status() === 200,
   );
-  await page
-    .getByRole("menuitem", { name: "Chatbot Chatbot tự động xử lý" })
-    .click();
+  await page.getByRole("menuitem", { name: /^Chatbot\s/ }).click();
   await release;
   for (const width of [360, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });

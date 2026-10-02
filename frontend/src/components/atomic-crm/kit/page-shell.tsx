@@ -45,16 +45,17 @@ type EmptyStateProps = {
   action?: ReactNode;
   className?: string;
   role?: "status" | "alert";
+  variant?: "panel" | "inline";
 };
 
 /**
  * The console's single empty state, rendered on Untitled UI's empty-state
  * anatomy. Every surface that can be empty routes through here — knowledge
  * base, automation, knowledge, personas, projects and conversations — so the
- * icon frame, type scale and action placement move together.
+ * icon treatment, type scale and action placement move together.
  *
  * The icon stays a caller-supplied element (callers pass a sized lucide icon)
- * inside a console-token circle, so this does not force a shipped component
+ * without a decorative frame, so this does not force a shipped component
  * signature change on six screens.
  */
 export function EmptyState({
@@ -64,36 +65,34 @@ export function EmptyState({
   action,
   className,
   role = "status",
+  variant = "panel",
 }: EmptyStateProps) {
   return (
     <UntitledEmptyState
       size="md"
       role={role}
       className={cx(
-        "uu-scope min-h-56 min-w-0 gap-4 rounded-panel border border-secondary bg-primary px-4 py-8 sm:px-6 sm:py-10",
+        "uu-scope min-w-0 gap-4 px-4 text-center sm:px-6",
+        variant === "panel"
+          ? "min-h-56 rounded-panel border border-secondary bg-primary py-8 sm:py-10"
+          : "min-h-44 py-6",
         className,
       )}
     >
       <span
         aria-hidden="true"
-        className="flex size-12 items-center justify-center rounded-full bg-secondary text-fg-quaternary [&>svg]:size-5"
+        className="flex size-12 items-center justify-center text-fg-quaternary [&>svg]:size-5"
       >
         {icon}
       </span>
-      <UntitledEmptyState.Content className="gap-1">
-        {/* The size lives on an inner span: the primitive's own `text-lg`
-            utility beats a size class passed to Title (and tailwind-merge
-            cannot tell the console's `text-section-title` from a text colour,
-            so it would drop it). The span sidesteps both, so no `!important`
-            escalation is needed. `text-foreground` keeps the title console ink
-            even though this subtree is `.uu-scope` — see page-heading.tsx. */}
-        <UntitledEmptyState.Title className="text-foreground [overflow-wrap:anywhere]">
-          <span className="text-section-title font-semibold">{title}</span>
-        </UntitledEmptyState.Title>
+      <div className="grid min-w-0 max-w-sm gap-2">
+        <h2 className="text-section-title font-semibold text-foreground [overflow-wrap:anywhere]">
+          {title}
+        </h2>
         <UntitledEmptyState.Description className="max-w-sm text-body-sm text-tertiary [overflow-wrap:anywhere]">
           {description}
         </UntitledEmptyState.Description>
-      </UntitledEmptyState.Content>
+      </div>
       {action ? (
         <UntitledEmptyState.Footer className="mt-1 flex flex-wrap items-center justify-center gap-3">
           {action}

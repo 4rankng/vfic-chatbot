@@ -8,7 +8,7 @@
 }
 
 .dashboard-workspace-content {
-  width: min(960px, 100%);
+  width: min(1180px, 100%);
   margin: 0 auto;
   padding: clamp(24px, 3vw, 36px);
   padding-bottom: clamp(2.5rem, 4vw, 4rem);
@@ -16,7 +16,7 @@
 
 .recruiting-command {
   display: grid;
-  gap: 16px;
+  gap: 24px;
 }
 
 .recruiting-hero {
@@ -97,14 +97,10 @@
 }
 
 .recruiting-worklist {
-  overflow: hidden;
-  border: 1px solid var(--workspace-border, var(--border));
-  border-radius: var(--radius-uu-lg, 10px);
-  background: color-mix(
-    in srgb,
-    var(--workspace-surface, var(--card)) 78%,
-    var(--workspace-canvas, var(--background))
-  );
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  align-items: start;
+  gap: 20px;
 }
 
 .recruiting-panel {
@@ -113,14 +109,11 @@
 }
 
 .dashboard-workspace .recruiting-panel {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  overflow: hidden;
+  border: 1px solid var(--workspace-border, var(--border));
+  border-radius: var(--radius-panel);
+  background: var(--workspace-surface, var(--card));
   box-shadow: none;
-}
-
-.recruiting-panel + .recruiting-panel {
-  border-top: 1px solid var(--workspace-border, var(--border));
 }
 
 .recruiting-panel-header {
@@ -139,7 +132,6 @@
 }
 
 .recruiting-panel.is-empty .recruiting-panel-header {
-  border-bottom: 0;
   background: transparent;
 }
 
@@ -202,7 +194,7 @@
 .dashboard-candidate-row {
   position: relative;
   width: 100%;
-  min-height: 58px;
+  min-height: 68px;
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
@@ -218,6 +210,49 @@
 
 .dashboard-candidate-row:last-child {
   border-bottom: 0;
+}
+
+.dashboard-candidate-avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.dashboard-candidate-avatar-content:has(> svg) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.dashboard-candidate-avatar-content > svg {
+  width: 20px;
+  height: 20px;
+}
+
+.candidate-data-dialog .candidate-data-form,
+.candidate-data-dialog .candidate-data-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.candidate-data-dialog [class~="group/input"],
+.candidate-data-dialog button.console-button {
+  height: var(--crm-control-height-md, 36px);
+  min-height: var(--crm-control-height-md, 36px);
+  max-height: none;
+}
+
+@media (max-width: 767px) {
+  .candidate-data-dialog [class~="group/input"],
+  .candidate-data-dialog button.console-button {
+    height: var(--crm-control-height-touch, 40px);
+    min-height: var(--crm-control-height-touch, 40px);
+  }
 }
 
 button.dashboard-candidate-row {
@@ -341,6 +376,11 @@ button.dashboard-candidate-row:focus-visible {
   }
 
   .recruiting-command {
+    gap: 20px;
+  }
+
+  .recruiting-worklist {
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
 

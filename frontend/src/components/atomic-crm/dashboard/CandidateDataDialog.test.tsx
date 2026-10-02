@@ -1,6 +1,7 @@
 import { createRef } from "react";
-import { render } from "vitest-browser-react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render } from "vitest-browser-react";
+import { page } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Lead } from "../types";
 import { CandidateDataDialog } from "./CandidateDataDialog";
@@ -21,7 +22,54 @@ const lead: Lead = {
   updated_at: "2026-07-14T08:30:00Z",
 };
 
+afterEach(async () => {
+  await cleanup();
+  await page.viewport(1280, 900);
+});
+
 describe("CandidateDataDialog", () => {
+  it.each([320, 390, 1280])(
+    "keeps the portal form compact on a mouse-operated viewport at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      expect(window.matchMedia("(pointer: fine)").matches).toBe(true);
+      const screen = await render(
+        <TestMessages>
+          <CandidateDataDialog
+            lead={lead}
+            displayName="Bùi Hải Anh"
+            open
+            onOpenChange={vi.fn()}
+            returnFocusRef={createRef<HTMLButtonElement>()}
+            canEdit
+            onSave={vi.fn()}
+          />
+        </TestMessages>,
+      );
+      await screen.getByRole("button", { name: "Chỉnh sửa" }).click();
+      const dialog = screen
+        .getByRole("dialog", { name: "Thông tin ứng viên" })
+        .element();
+      const inputs = dialog.querySelectorAll<HTMLInputElement>("input");
+      expect(inputs.length).toBeGreaterThan(3);
+      for (const input of inputs) {
+        const box = input.closest<HTMLElement>('[class~="group/input"]')!;
+        expect(box.getBoundingClientRect().height).toBe(width < 768 ? 40 : 36);
+        expect(getComputedStyle(input).fontSize).toBe("12px");
+        expect(input.getBoundingClientRect().height).toBeLessThanOrEqual(
+          box.getBoundingClientRect().height,
+        );
+      }
+      const form = dialog.querySelector<HTMLElement>(".candidate-data-form")!;
+      expect(getComputedStyle(form).gap).toBe("12px");
+      expect(
+        screen
+          .getByRole("button", { name: "Lưu thay đổi" })
+          .element()
+          .getBoundingClientRect().height,
+      ).toBe(width < 768 ? 40 : 36);
+    },
+  );
   it("keeps the form open and shows a save error after a conflicting update", async () => {
     const onSave = vi
       .fn()
@@ -41,6 +89,13 @@ describe("CandidateDataDialog", () => {
     );
 
     await screen.getByRole("button", { name: "Chỉnh sửa" }).click();
+    expect(
+      Array.from(
+        document.querySelectorAll<HTMLInputElement>("[role=dialog] input"),
+      )
+        .map((input) => input.name)
+        .slice(0, 4),
+    ).toEqual(["phone", "name", "desired_job", "birth_year"]);
     await expect
       .element(screen.getByLabelText("Số điện thoại"))
       .toHaveAttribute("type", "tel");

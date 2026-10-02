@@ -2,10 +2,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestMemoryRouter } from "ra-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 import type * as ApiClientModule from "@/lib/apiClient";
 import type * as RaCoreModule from "ra-core";
 
 import { TestMessages } from "../providers/commons/TestMessages";
+import "@/index.css";
 
 /**
  * ProfilePage renders the signed-in user's own record and saves it through
@@ -73,7 +75,9 @@ const renderProfile = async () =>
         }
       >
         <TestMessages>
-          <ProfilePage />
+          <div className="workspace-frame-content">
+            <ProfilePage />
+          </div>
         </TestMessages>
       </QueryClientProvider>
     </TestMemoryRouter>,
@@ -92,9 +96,42 @@ beforeEach(() => {
 
 afterEach(async () => {
   await cleanup();
+  await page.viewport(1280, 720);
 });
 
 describe("ProfilePage", () => {
+  it.each([1280, 320, 390])(
+    "uses the available field width when editing at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      const screen = await renderProfile();
+      const icons = screen.container.querySelectorAll<HTMLElement>(
+        ".account-profile-card-icon",
+      );
+      expect(icons.length).toBeGreaterThan(0);
+      for (const icon of icons) {
+        expect(icon.getBoundingClientRect().width).toBe(20);
+        expect(getComputedStyle(icon).borderTopWidth).toBe("0px");
+        expect(getComputedStyle(icon).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      }
+      await screen.getByRole("button", { name: "Sửa" }).click();
+      for (const input of screen.container.querySelectorAll("input")) {
+        const group = input.closest(".account-profile-input")!;
+        const field = input.closest(".account-profile-field-editing")!;
+        expect(
+          group.getBoundingClientRect().width /
+            field.getBoundingClientRect().width,
+        ).toBeGreaterThan(0.98);
+        expect(group.getBoundingClientRect().height).toBe(
+          width < 768 ? 40 : 36,
+        );
+        expect(input.getBoundingClientRect().height).toBeLessThanOrEqual(
+          width < 768 ? 40 : 36,
+        );
+        expect(getComputedStyle(input).fontSize).toBe("12px");
+      }
+    },
+  );
   it("announces a pending profile without presenting blank editable data", async () => {
     mocks.profilePending = true;
     const screen = await renderProfile();
@@ -197,6 +234,21 @@ describe("ProfilePage", () => {
     expect(mocks.apiJson).not.toHaveBeenCalled();
     await expect.element(screen.getByText("Họ tên")).toBeVisible();
     expect(screen.container.querySelectorAll("input")).toHaveLength(0);
+  });
+
+  it("explains malformed email at the field before attempting a save", async () => {
+    const screen = await renderProfile();
+    await screen.getByRole("button", { name: "Sửa" }).click();
+    await screen.getByRole("textbox", { name: /Email/ }).fill("a@b");
+    await screen.getByRole("button", { name: "Lưu" }).click();
+
+    await expect
+      .element(screen.getByText("Email chưa đúng định dạng."))
+      .toBeVisible();
+    expect(mocks.apiJson).not.toHaveBeenCalled();
+    await expect
+      .element(screen.getByRole("textbox", { name: /Email/ }))
+      .toHaveAttribute("aria-invalid", "true");
   });
 
   it("ends the session from the session section", async () => {

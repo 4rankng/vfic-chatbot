@@ -2,19 +2,22 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as RaCore from "ra-core";
 import type { ReactElement, ReactNode } from "react";
 import { render } from "vitest-browser-react";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/apiClient";
 import type { KnowledgeCategoryStatus } from "./project-knowledge-service";
 import type * as KnowledgeServiceModule from "./project-knowledge-service";
 import type { Project } from "../types";
+import "@/index.css";
 import "./projects.css";
 
 let queryClient: QueryClient;
 
 /** The panel's external-source rows read their query from the app's client. */
 const QueryClientWrapper = ({ children }: { children: ReactNode }) => (
-  <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  <QueryClientProvider client={queryClient}>
+    <div className="inbox-bg-container project-workspace">{children}</div>
+  </QueryClientProvider>
 );
 
 const renderPanel = (ui: ReactElement) =>
@@ -260,6 +263,64 @@ describe("ProjectKnowledgePanel", () => {
     );
   });
 
+  it("contains category status and date inside the compound navigation card", async () => {
+    await page.viewport(1280, 900);
+    mocks.getProjectKnowledgeCategories.mockResolvedValue({
+      data: [
+        {
+          ...categories[0],
+          status: "FAILED",
+          updated_at: "2026-07-18T00:00:00Z",
+        },
+      ],
+      total: 1,
+    });
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    await expect
+      .element(screen.getByText("Cập nhật lỗi — nội dung cũ vẫn đang dùng"))
+      .toBeVisible();
+    const card = screen.container.querySelector<HTMLElement>(
+      ".project-category-card",
+    )!;
+    const date = card.querySelector<HTMLElement>(".project-category-date")!;
+    const cardRect = card.getBoundingClientRect();
+    expect(getComputedStyle(card).maxHeight).toBe("none");
+    expect(date.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      cardRect.bottom - 10,
+    );
+  });
+
+  it.each([null, undefined])(
+    "keeps unusable editors hidden for legacy projects with mode %s",
+    async (knowledge_mode) => {
+      const screen = await renderPanel(
+        <ProjectKnowledgePanel
+          project={{ ...project, knowledge_mode }}
+          editable
+          canManageSources
+        />,
+      );
+      await expect
+        .element(
+          screen.getByRole("heading", {
+            name: "Kiến thức chưa được chuyển đổi",
+          }),
+        )
+        .toBeVisible();
+      await expect
+        .element(screen.getByRole("button", { name: "Xuất KB" }))
+        .toBeVisible();
+      expect(mocks.getProjectKnowledgeCategories).not.toHaveBeenCalled();
+      expect(mocks.getProjectKnowledgeCategorySource).not.toHaveBeenCalled();
+      expect(mocks.getProjectSinglePage).not.toHaveBeenCalled();
+      expect(
+        screen.container.querySelector(".project-category-workspace"),
+      ).toBeNull();
+    },
+  );
+
   it("refreshes the inactive project after its first valid single-page save", async () => {
     mocks.getProjectSinglePage.mockRejectedValue(
       new ApiError(404, "Chưa có dữ liệu"),
@@ -328,6 +389,26 @@ describe("ProjectKnowledgePanel", () => {
       390,
     );
     expect(saveButton.getBoundingClientRect().width).toBeGreaterThan(300);
+  });
+
+  it("opens the single-page file picker from the keyboard", async () => {
+    mocks.getProjectSinglePage.mockRejectedValue(
+      new ApiError(404, "Chưa có dữ liệu"),
+    );
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    const picker = screen.getByRole("button", { name: "Chọn file" });
+    await expect.element(picker).toBeVisible();
+    await expect.element(picker).toBeEnabled();
+    const input = screen.container.querySelector<HTMLInputElement>(
+      'input[aria-label="Chọn tệp trang kiến thức"]',
+    )!;
+    const open = vi.spyOn(input, "click").mockImplementation(() => undefined);
+    picker.element().focus();
+    await expect.element(picker).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(1));
   });
 
   it("warns before replacing a page that will reactivate an inactive project", async () => {
@@ -406,8 +487,11 @@ describe("ProjectKnowledgePanel", () => {
       "#single-page-sync-heading",
     )!;
     expect(syncHeading.parentElement?.querySelector("svg")).not.toBeNull();
-    expect(syncHeading.parentElement?.className).toContain("inline-flex");
-    expect(syncHeading.parentElement?.className).toContain("whitespace-nowrap");
+    // Keep the readable flow inside the editor. It may wrap on a narrow phone
+    // instead of enforcing a single line that spills outside the KB surface.
+    const syncFlow = syncHeading.parentElement!;
+    expect(syncFlow.scrollWidth).toBeLessThanOrEqual(syncFlow.clientWidth + 1);
+    expect(syncFlow.getBoundingClientRect().right).toBeLessThanOrEqual(390);
 
     const warning = screen.getByText("Sheet sẽ ghi đè nội dung sửa tay");
     const warningDetail = screen.getByText(
@@ -656,9 +740,7 @@ describe("ProjectKnowledgePanel", () => {
       "Kiểm tra và thay thế mục này",
     );
     expect(screen.container.textContent).not.toContain("Xóa dữ liệu mục");
-    await expect
-      .element(screen.getByText("Nhập từ tệp văn bản (.md khuyến nghị)"))
-      .toBeVisible();
+    await expect.element(screen.getByText("Nhập từ tệp văn bản")).toBeVisible();
     await expect
       .element(
         screen.getByText(
@@ -1403,7 +1485,7 @@ describe("ProjectKnowledgePanel", () => {
     await expect
       .element(
         screen.getByRole("button", {
-          name: "Chuyển sang 12 danh mục — nhập từ tệp .md",
+          name: "Nhập tệp và chuyển đổi",
         }),
       )
       .toBeVisible();

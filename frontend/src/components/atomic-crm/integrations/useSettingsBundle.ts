@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNotify } from "ra-core";
 
 import {
@@ -32,6 +32,8 @@ export type SettingsBundle = {
   zalo: ZaloSettings | null;
   providers: ProviderSettingsBundle;
   statusState: SettingsStatusState;
+  isFetching: boolean;
+  retry: () => void;
 };
 
 /**
@@ -76,6 +78,29 @@ export const useSettingsBundle = (enabled: boolean): SettingsBundle => {
   const queries = [zalo, minimax, openRouter, customLlm, jev];
   const isError = queries.some((query) => query.isError);
   const isPending = queries.some((query) => query.isPending);
+  const isFetching = queries.some((query) => query.isFetching);
+  const { refetch: refetchZalo } = zalo;
+  const { refetch: refetchMinimax } = minimax;
+  const { refetch: refetchOpenRouter } = openRouter;
+  const { refetch: refetchCustomLlm } = customLlm;
+  const { refetch: refetchJev } = jev;
+  const retry = useCallback(() => {
+    if (!enabled) return;
+    void Promise.allSettled([
+      refetchZalo(),
+      refetchMinimax(),
+      refetchOpenRouter(),
+      refetchCustomLlm(),
+      refetchJev(),
+    ]);
+  }, [
+    enabled,
+    refetchZalo,
+    refetchMinimax,
+    refetchOpenRouter,
+    refetchCustomLlm,
+    refetchJev,
+  ]);
 
   useEffect(() => {
     if (isError) {
@@ -99,6 +124,8 @@ export const useSettingsBundle = (enabled: boolean): SettingsBundle => {
         jev: jev.data ?? null,
       },
       statusState,
+      isFetching,
+      retry,
     }),
     [
       zalo.data,
@@ -107,6 +134,8 @@ export const useSettingsBundle = (enabled: boolean): SettingsBundle => {
       customLlm.data,
       jev.data,
       statusState,
+      isFetching,
+      retry,
     ],
   );
 };

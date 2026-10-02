@@ -62,4 +62,22 @@ describe("httpHumanReplyAdapter", () => {
     expect(isHumanReplyFailure(network)).toBe(true);
     expect(network).toMatchObject({ status: "network" });
   });
+
+  it.each(["send", "retry"] as const)(
+    "preserves network status when the API client reports no response during %s",
+    async (operation) => {
+      apiJson.mockRejectedValueOnce(
+        new ApiError(0, "Không thể kết nối. Kiểm tra mạng rồi thử lại."),
+      );
+
+      const failure = await (
+        operation === "send"
+          ? httpHumanReplyAdapter.sendHumanReply("conversation-1", "hello")
+          : httpHumanReplyAdapter.retryHumanReply("conversation-1", "message-1")
+      ).catch((error: unknown) => error);
+
+      expect(isHumanReplyFailure(failure)).toBe(true);
+      expect(failure).toMatchObject({ status: "network", httpStatus: 0 });
+    },
+  );
 });
