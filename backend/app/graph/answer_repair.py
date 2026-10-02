@@ -20,6 +20,8 @@ generation loop and the direct-context lane share one copy of the rules.
 
 from __future__ import annotations
 
+import re
+
 _TRUNCATED_FINISH_REASONS = frozenset(
     {"length", "max_tokens", "max_output_tokens", "max_completion_tokens"}
 )
@@ -35,6 +37,13 @@ _CUT_ANSWER_CONTINUE_INSTRUCTION = (
 _CONTINUATION_OVERLAP_MIN_CHARS = 24
 _CONTINUATION_OVERLAP_MAX_CHARS = 400
 _SEAM_BOUNDARY_CHARS = frozenset(",.;:!?…-")
+# A continuation sometimes re-opens with a sentence the answer already contains,
+# glued to a fresh opener ("Dạ, em xin gửi..." restating "Em xin gửi..."), so the
+# verbatim tail-seam check never matches. Sentences are compared case-folded and
+# whitespace-collapsed; a leading span counts as restated when it is an earlier
+# sentence, or when stripping the best-matching earlier sentence from it leaves
+# less than a sentence's worth of new words behind (pure opener filler).
+_SENTENCE_SPAN_RE = re.compile(r"[^.!?\n]*[.!?\n]+|[^.!?\n]+$")
 
 
 def _answer_was_cut(message) -> bool:
@@ -57,7 +66,12 @@ def _record_answer_continuation(metrics: dict | None, count: int) -> None:
 
 
 def _join_answer_parts(parts: list[str]) -> str:
-    """Join the answer rounds of one generation, dropping a repeated seam."""
+    """Join the answer rounds of one generation, dropping a repeated seam.
+
+    A continuation round either re-emits the tail it was handed (verbatim seam
+    below) or re-opens the answer with a sentence from earlier in it behind a
+    fresh opener — both are dropped, so the candidate reads each sentence once.
+    """
     joined = ""
     for part in parts:
         if not part:
@@ -79,4 +93,55 @@ def _seam_remainder(joined: str, part: str) -> str:
         if preceding and not (preceding.isspace() or preceding in _SEAM_BOUNDARY_CHARS):
             continue
         return part[size:]
-    return part
+    return _strip_restated_prefix(joined, part)
+
+
+def _normalized(text: str) -> str:
+    """Case-folded, whitespace-collapsed form used for restatement checks."""
+    return " ".join(text.casefold().split())
+
+
+def _sentence_spans(text: str) -> list[str]:
+    """Sentence-ish spans of one round, delimiters and newlines kept attached."""
+    return [m.group() for m in _SENTENCE_SPAN_RE.finditer(text) if m.group().strip()]
+
+
+def _strip_restated_prefix(joined: str, part: str) -> str:
+    """``part`` minus its leading run of sentences ``joined`` already contains.
+
+    Only a LEADING run is dropped and the first sentence that says something new
+    ends the scan, so repetition later in a continuation — which can be the
+    model deliberately restating for emphasis — is never touched. A span also
+    counts as restated when it merely wraps an earlier sentence in opener
+    filler: what survives after removing the matched sentence must be shorter
+    than a minimal contentful sentence, so a continuation that embeds an old
+    sentence inside genuinely new prose keeps the new prose.
+    """
+    joined_norm = f" {_normalized(joined)} "
+    restated = {
+        s
+        for s in (_normalized(span) for span in _sentence_spans(joined))
+        if len(s) >= _CONTINUATION_OVERLAP_MIN_CHARS
+    }
+    kept_from = 0
+    for span in _sentence_spans(part):
+        span_norm = _normalized(span)
+        if len(span_norm) < _CONTINUATION_OVERLAP_MIN_CHARS:
+            break
+        if f" {span_norm} " in joined_norm:
+            kept_from += len(span)
+            continue
+        wrapped_leftover = None
+        for sentence in restated:
+            padded = f" {span_norm} "
+            at = padded.find(f" {sentence} ")
+            if at < 0:
+                continue
+            leftover = (padded[:at] + padded[at + len(sentence) + 2 :]).strip()
+            if len(leftover) < _CONTINUATION_OVERLAP_MIN_CHARS:
+                wrapped_leftover = leftover
+                break
+        if wrapped_leftover is None:
+            break
+        kept_from += len(span)
+    return part[kept_from:]

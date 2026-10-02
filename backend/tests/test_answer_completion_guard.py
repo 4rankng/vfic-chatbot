@@ -132,6 +132,76 @@ async def test_repeated_seam_is_not_duplicated():
     assert reply.count("TD Plaza: TD Plaza (06:55)") == 1
 
 
+async def test_continuation_restating_an_earlier_sentence_is_dropped():
+    """The reported shape: a cut continuation re-opens with a mid-answer sentence.
+
+    Round 1 was cut at the output cap; the continuation re-emitted an earlier
+    sentence behind a fresh ``Dạ,`` opener. The verbatim tail-seam check cannot
+    match that, so the restated-prefix check must drop the duplicate instead of
+    shipping it a second time.
+    """
+    cut = (
+        "Dạ, anh/chị muốn xin hotline để liên hệ trực tiếp ạ. "
+        "Em xin gửi anh/chị số tổng đài miễn cước của VFIC: 1800 7228 ạ.\n\n"
+        "Anh/chị gọi vào giờ hành chính sẽ gặp được nhân viên hỗ trợ tư vấn trực tiếp "
+        "về dự án Rorze và các vị trí còn tuyển nhé ạ.\n\n"
+        "Nếu anh/chị để lại số điện thoại di động, em sẽ nhờ chuyên viên chủ động gọi "
+        "lại cho anh/chị, đỡ phải chờ máy ạ 😊"
+    )
+    llm = _CappedLLM(
+        [
+            (cut, "length"),
+            ("Dạ, em xin gửi anh/chị số tổng đài miễn cước của VFIC: 1800 7228 ạ.", "stop"),
+        ]
+    )
+    reply = await _run_agent(llm)
+
+    assert reply == cut
+
+
+async def test_restated_opener_dropping_keeps_the_continuation_new_content():
+    """Only the restated leading run goes; genuinely new sentences stay."""
+    cut = (
+        "Dạ, anh/chị muốn xin hotline để liên hệ trực tiếp ạ. "
+        "Em xin gửi anh/chị số tổng đài miễn cước của VFIC: 1800 7228 ạ.\n\n"
+        "Anh/chị gọi vào giờ hành chính sẽ gặp được nhân viên hỗ trợ trực tiếp nhé ạ."
+    )
+    llm = _CappedLLM(
+        [
+            (cut, "length"),
+            (
+                "Dạ, em xin gửi anh/chị số tổng đài miễn cước của VFIC: 1800 7228 ạ. "
+                "Ngoài ra anh/chị có thể để lại số điện thoại để em chủ động gọi lại ạ.",
+                "stop",
+            ),
+        ]
+    )
+    reply = await _run_agent(llm)
+
+    assert reply == cut + " Ngoài ra anh/chị có thể để lại số điện thoại để em chủ động gọi lại ạ."
+
+
+async def test_repetition_after_new_continuation_content_is_kept():
+    """A restated sentence that is NOT the leading run is never touched."""
+    cut = (
+        "Dạ, anh/chị muốn xin hotline để liên hệ trực tiếp ạ. "
+        "Em xin gửi anh/chị số tổng đài miễn cước của VFIC: 1800 7228 ạ."
+    )
+    repeated = "Em xin gửi anh/chị số tổng đài miễn cước của VFIC: 1800 7228 ạ."
+    llm = _CappedLLM(
+        [
+            (cut, "length"),
+            (
+                f"Về câu hỏi xin số máy lẻ của phòng tuyển dụng, em xin gửi lại ạ: {repeated}",
+                "stop",
+            ),
+        ]
+    )
+    reply = await _run_agent(llm)
+
+    assert reply == cut + f"Về câu hỏi xin số máy lẻ của phòng tuyển dụng, em xin gửi lại ạ: {repeated}"
+
+
 async def test_normal_stop_answer_is_unchanged_and_costs_one_call():
     """A completed generation is never rewritten, and never continued."""
     llm = _CappedLLM([("Câu trả lời trọn vẹn cho người lao động.", "stop")])
