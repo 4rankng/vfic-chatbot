@@ -151,7 +151,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # stored row and replace_hotline reads-then-writes it — the same two
     # configuration `get` reads their reset_oa_id siblings already have, no
     # new egress site.
-    "provider_boundary": 91,
+    # +1: the geo-distance feature ("dự án nào gần nhà") adds exactly one
+    # provider-transport site — app/services/geo/geocoding.py::geocode's
+    # `client.get('/search')` against the Nominatim geocoder. The file stays
+    # free of dict `.get` reads (indexing only), which is why the row is a
+    # single `get` and not a family of them.
+    "provider_boundary": 92,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -244,7 +249,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # Bounded channel dispatch adds the reviewed `_send_parts` adapter.send_text
 # boundary. Each part reuses the same provider and authority/policy fences;
 # no provider endpoint, registry binding, or queue/outbox writer was added.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "6d1e1d29ace876c1d12e0fd9a8decd9bff1cce8de20313c9007f09ea6fdd958c"
+# 2026-10-01: the geo-distance feature added the geocoder as a provider: one
+# reviewed row, app/services/geo/geocoding.py::geocode's `client.get('/search')`
+# (+1 provider_boundary, annotated at the count above). Digest recomputed from
+# the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "f74ea30c98e08c0208da2d6aebefaf312933b9c49c26ab147fe70f933533f5f3"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

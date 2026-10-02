@@ -24,6 +24,8 @@ def _project_row(
     slug: str | None = None,
     card: dict | None = None,
     summary: str = "",
+    latitude: float | None = None,
+    longitude: float | None = None,
 ):
     return SimpleNamespace(
         id=uuid.uuid4(),
@@ -32,6 +34,8 @@ def _project_row(
         summary=summary,
         index_card=card or {},
         updated_at=None,
+        latitude=latitude,
+        longitude=longitude,
     )
 
 
@@ -245,6 +249,37 @@ async def test_catalog_keeps_recruiter_aliases_for_named_project_matching():
 
     assert row.aliases == ("LGD", "LG D")
     assert "projects.aliases" in _sql(db.execute.await_args_list[0].args[0])
+
+
+@pytest.mark.asyncio
+async def test_catalog_carries_project_coordinates_for_distance_evidence():
+    """The geo-distance read rides the catalog select for both feature shapes."""
+    structured = _project_row("Tràng Duệ", latitude=20.86, longitude=106.68)
+    db = _db_with(
+        _result([structured]),
+        _result(
+            [
+                _job_row(
+                    project_id=structured.id,
+                    title="Nhân viên lắp ráp",
+                    province="Hải Phòng",
+                )
+            ]
+        ),
+        _result([]),
+    )
+
+    row = (await _features(db))[0]
+
+    assert (row.latitude, row.longitude) == (20.86, 106.68)
+    select_sql = _sql(db.execute.await_args_list[0].args[0])
+    assert "projects.latitude" in select_sql
+    assert "projects.longitude" in select_sql
+
+    card_only = _project_row("Rorze", card={"roles": ["Lắp ráp"]})
+    db = _db_with(_result([card_only]), _result([]), _result([]))
+
+    assert (await _features(db))[0].latitude is None
 
 
 @pytest.mark.asyncio

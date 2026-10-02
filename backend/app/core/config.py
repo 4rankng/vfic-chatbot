@@ -230,6 +230,22 @@ class Settings(BaseSettings):
     gemini_embedding_model: str = "gemini-embedding-2"
     embedding_dim: int = EMBEDDING_DIM
 
+    # Geocoding for "dự án nào gần nhà" (project work addresses + the
+    # candidate's stated area). The default provider is the public Nominatim
+    # instance: free, no key, but its usage policy caps at 1 request/second and
+    # requires a descriptive User-Agent — the client enforces both, and the
+    # 30-day positive cache keeps repeated areas off the network. If volume
+    # outgrows the policy, repoint ``geocoder_base_url`` at a self-hosted
+    # Nominatim; no code change. Fail-open everywhere: a geocoder outage must
+    # never fail an ingest or a chat turn.
+    geocoder_enabled: bool = True
+    geocoder_base_url: str = "https://nominatim.openstreetmap.org"
+    geocoder_user_agent: str = "tingting-crm/1.0 (+https://bot.tingting.vip)"
+    geocoder_timeout_seconds: float = 3.0
+    geocoder_cache_ttl_seconds: int = 2592000  # 30 days (positive hit)
+    geocoder_negative_ttl_seconds: int = 21600  # 6 hours (unresolvable query)
+    geocoder_min_interval_seconds: float = 1.0  # provider policy floor
+
     # Retrieval scaling. ``rag_ann_enabled`` uses pgvector halfvec HNSW for
     # candidate generation, then exact vector re-ranking preserves result quality.
     rag_ann_enabled: bool = True

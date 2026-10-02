@@ -88,7 +88,11 @@ TOOL_SCHEMAS = [
                     },
                     "location": {
                         "type": "string",
-                        "description": "Tỉnh, quận/huyện hoặc địa chỉ ứng viên mong muốn.",
+                        "description": (
+                            "Khu vực/nơi ở của ứng viên (tỉnh, quận/huyện hoặc địa chỉ). "
+                            "Khi ứng viên hỏi dự án gần nhà, truyền khu vực đang ở của ứng "
+                            "viên vào đây; kết quả trả về distance_km cho từng dự án."
+                        ),
                     },
                     "salary_min_vnd": {
                         "type": "integer",

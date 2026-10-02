@@ -122,7 +122,9 @@ _PRESENTATION_CONTRACT = (
     "(6) văn bản thuần, ngắn gọn cho người đọc trên điện thoại; "
     "(7) khi ứng viên yêu cầu TẤT CẢ/toàn bộ danh sách, phải nêu từng dự án trong projects "
     "đúng một lần, không chỉ chọn vài dự án rồi yêu cầu hỏi thêm; giữ ngắn gọn từng khối "
-    "để hoàn thành danh sách, chỉ dùng các dự án trong phạm vi tool đã trả về."
+    "để hoàn thành danh sách, chỉ dùng các dự án trong phạm vi tool đã trả về; "
+    "(8) khi ứng viên hỏi dự án gần nhà/chỗ ở, nêu distance_km của từng dự án và xếp gần "
+    "nhất trước; không tự bịa khoảng cách hay địa chỉ."
 )
 
 _NO_CRITERIA_REPLY = (
@@ -158,17 +160,23 @@ def _fit_note(fit: ProjectFit, dimension: FitDimension) -> str:
         label = "công ty"
         shown = dimension.actual
     if dimension.score == 0.5 and not dimension.actual:
-        return f"chưa ghi rõ {label}"
-    if dimension.score == 1.0:
-        verdict = "khớp"
-    elif dimension.score == 0.5:
-        verdict = "gần khớp"
-    elif name == "salary":
-        verdict = f"dưới mong muốn {_salary_amount(int(dimension.expected))}"
+        note = f"chưa ghi rõ {label}"
     else:
-        verdict = "khác mong muốn"
-    prefix = f"{label}: {shown}" if name == "job_scope" else f"{label} {shown}"
-    return f"{prefix} · {verdict}"
+        if dimension.score == 1.0:
+            verdict = "khớp"
+        elif dimension.score == 0.5:
+            verdict = "gần khớp"
+        elif name == "salary":
+            verdict = f"dưới mong muốn {_salary_amount(int(dimension.expected))}"
+        else:
+            verdict = "khác mong muốn"
+        prefix = f"{label}: {shown}" if name == "job_scope" else f"{label} {shown}"
+        note = f"{prefix} · {verdict}"
+    # The measured distance is evidence the note itself cannot express; it is
+    # omitted (never guessed) for a project without coordinates.
+    if name == "location" and fit.distance_km is not None:
+        note = f"{note} · cách {fit.distance_km:.1f} km"
+    return note
 
 
 def _project_payload(fit: ProjectFit) -> dict[str, object]:
@@ -188,6 +196,9 @@ def _project_payload(fit: ProjectFit) -> dict[str, object]:
         "salary_min": project.salary_min,
         "salary_max": project.salary_max,
         "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+        "distance_km": (
+            round(fit.distance_km, 1) if fit.distance_km is not None else None
+        ),
         "job_scope": [
             {
                 key: value
@@ -283,6 +294,16 @@ async def list_active_projects(
         if not rows:
             return _project_tool_result("matched", [], _UNKNOWN_SLUG_REPLY, total=0)
 
+    # The candidate's stated area ("Hải Phòng", "An Dương", a street address) is
+    # the origin for the distance evidence. A miss is not an error: the ranker
+    # then behaves exactly as before.
+    origin = None
+    if location:
+        try:
+            origin = await retrieval.geocode_area(location)
+        except Exception:  # noqa: BLE001 — geocoding must never break the tool
+            origin = None
+
     lookup = rank_projects(
         list(rows),
         job_scope=job_scope,
@@ -291,6 +312,7 @@ async def list_active_projects(
         salary_min_vnd=salary_min_vnd,
         sort_by=sort_by,  # type: ignore[arg-type]
         strict_criteria=strict_criteria,
+        origin=origin,
     )
     if lookup.status == "catalog_empty":
         return _project_tool_result("catalog_empty", [], _CATALOG_EMPTY_REPLY, total=0)

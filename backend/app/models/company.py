@@ -11,7 +11,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ARRAY, BigInteger, Boolean, DateTime, ForeignKey, String, Text, text
+from sqlalchemy import (
+    ARRAY,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -65,6 +75,16 @@ class Project(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    # Work-address geocoding ("dự án nào gần nhà"): the AI extracts the work
+    # address from the uploaded brief (``extracted_address`` is that verbatim
+    # value, grounded against the brief and reused as the re-ingest cache) and
+    # the geocoder resolves it to ``latitude``/``longitude``. All three stay
+    # NULL for a project whose brief states no work address or that cannot be
+    # geocoded; the catalog tool then omits ``distance_km`` for it.
+    # Not exposed through the projects API — no caller needs it.
+    extracted_address: Mapped[str | None] = mapped_column(Text)
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
 
 
 class Company(Base):

@@ -241,6 +241,14 @@ class GraphRetrievalPort(
     async def job_features_for_project(self, project_id: Any) -> list[Any]: ...
     async def income_summary_for_active_projects(self) -> Sequence[Any]: ...
 
+    # Geocoding for the catalog's distance evidence ("dự án nào gần nhà"): the
+    # candidate's stated area resolved to ``(lat, lng)``, or ``None`` when it
+    # cannot be resolved. Declared on this composite port because graph runtime
+    # modules consume inward contracts only — the catalog tool must not import
+    # the geocoding service (tests/test_graph_import_guard.py), and the
+    # geocoder is an outbound provider, not a project-knowledge read.
+    async def geocode_area(self, query: str) -> tuple[float, float] | None: ...
+
     # Deployment-wide TingTing password-reset integration (settings-managed).
     # Not project surface: the origin and key come from the integration settings
     # and one workflow serves every tenant, so the tool takes no project scope.

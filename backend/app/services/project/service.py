@@ -51,6 +51,7 @@ from app.schemas.projects import (
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.services.audit_service import record_audit
 from app.shared.domain.errors import ConflictError, NotFoundError
+from app.services.geo.project_address import refresh_from_address
 from app.services.knowledge.job_feature_repository import JobFeatureValueRepo
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.project.faq import ProjectFaqService
@@ -393,6 +394,13 @@ class ProjectService:
             if "summary" in patch:
                 proj.summary = patch["summary"]
             proj.discovery_revision += 1
+            # Geo-distance side effect: the admin-authored card carries the
+            # location a candidate would read. ``refresh_from_address`` defers to
+            # the pipeline's grounded value and never raises, so the PATCH stays
+            # independent of the geocoder (and adds no LLM call).
+            await refresh_from_address(
+                self.db, proj.id, str(proj.index_card.get("location") or "")
+            )
         await record_audit(
             self.db,
             action="update_project",

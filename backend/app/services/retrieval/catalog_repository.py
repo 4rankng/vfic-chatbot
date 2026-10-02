@@ -214,6 +214,8 @@ class CatalogRepository:
                     Project.index_card,
                     Project.aliases,
                     Project.updated_at,
+                    Project.latitude,
+                    Project.longitude,
                 )
                 .where(*project_predicates)
                 .order_by(Project.name.asc(), Project.id.asc())
@@ -315,6 +317,8 @@ class CatalogRepository:
                         salary_max=salary_max,
                         scope=tuple(scope),
                         aliases=tuple(_card_items(getattr(row, "aliases", None))),
+                        latitude=row.latitude,
+                        longitude=row.longitude,
                     )
                 )
                 continue
@@ -337,6 +341,8 @@ class CatalogRepository:
                     salary_max=salary_max,
                     scope=tuple(ProjectScopeItem(title=role) for role in roles),
                     aliases=tuple(_card_items(getattr(row, "aliases", None))),
+                    latitude=row.latitude,
+                    longitude=row.longitude,
                 )
             )
         return features

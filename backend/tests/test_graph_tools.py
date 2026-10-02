@@ -120,6 +120,20 @@ def _make_repo(**methods):
     return _Repo()
 
 
+_ORIGIN = (20.86, 106.68)
+
+
+def _geo_area(origin=_ORIGIN, *, calls: list[str] | None = None):
+    """A ``geocode_area`` port method returning ``origin`` and recording queries."""
+
+    async def geocode_area(self, query):
+        if calls is not None:
+            calls.append(query)
+        return origin
+
+    return geocode_area
+
+
 @pytest.fixture
 def no_cache_io(monkeypatch):
     """Disable RAG caching AND neutralize the cache helpers so no Redis is hit.
@@ -499,6 +513,9 @@ async def test_list_active_projects_surfaces_whole_catalog_without_truncation(no
     assert payload["total"] == 12
     assert len(payload["projects"]) == 12
     assert payload["safe_reply"] == _PRESENTATION_CONTRACT
+    # Rule (8) is the only place the agent is told the distance answers "gần nhà".
+    assert "(8) " in _PRESENTATION_CONTRACT
+    assert "distance_km" in _PRESENTATION_CONTRACT
     surfaced_line = out.splitlines()[1]
     assert surfaced_line.count("id=") == 12
     assert set(surfaced_line.removeprefix("SURFACED_PROJECT_IDS=").split(",")) == {
@@ -578,7 +595,9 @@ async def test_list_active_projects_fit_notes_cover_matches_gaps_and_glosses(no_
         ),
         _features(3, name="Kho Unknown", province="Bình Dương"),
     ]
-    repo = _make_repo(list_active_projects=lambda self: _const(projects))
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(projects), geocode_area=_geo_area()
+    )
 
     out = await list_active_projects(
         retrieval=repo,
@@ -615,7 +634,9 @@ async def test_list_active_projects_ignores_malformed_sort_and_salary_arguments(
 
 @pytest.mark.asyncio
 async def test_list_active_projects_filters_only_when_strictly_requested(no_cache_io):
-    repo = _make_repo(list_active_projects=lambda self: _const(_catalog()))
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(_catalog()), geocode_area=_geo_area()
+    )
     relaxed = await list_active_projects(retrieval=repo, location="Hải Phòng")
     strict = await list_active_projects(
         retrieval=repo, location="Hải Phòng", strict_criteria=True,
@@ -628,8 +649,12 @@ async def test_list_active_projects_filters_only_when_strictly_requested(no_cach
 
 
 @pytest.mark.asyncio
-async def test_list_active_projects_does_not_coerce_string_true_into_strict_filter(no_cache_io):
-    repo = _make_repo(list_active_projects=lambda self: _const(_catalog()))
+async def test_list_active_projects_does_not_coerce_string_true_into_strict_filter(
+    no_cache_io
+):
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(_catalog()), geocode_area=_geo_area()
+    )
     out = await list_active_projects(
         retrieval=repo, location="Hải Phòng", strict_criteria="false", salary_min_vnd=-1,
     )
@@ -1201,3 +1226,96 @@ class TestCachedEmbed:
         assert isinstance(value, str)
         assert unpack_vector(value) == [0.5] * 8
         assert ttl == 60
+
+
+# ---------------------------------------------------------------------------
+# Geo-distance rows ("dự án nào gần nhà")
+# ---------------------------------------------------------------------------
+
+# KCN Tràng Duệ (An Dương) and KCN Nomura (Hồng An) are ~5 km apart; the third
+# project has no coordinates, so it must carry no distance and sort last.
+_DISTANCE_CATALOG = [
+    ProjectFeatures(
+        project_id="bbbbbbbb-1111-4111-8111-111111111111",
+        slug="kcn-nomura",
+        name="Nomura",
+        province="Hải Phòng",
+        district="Hồng An",
+        address="KCN Nhật Bản, Hồng An, Hải Phòng",
+        latitude=20.90,
+        longitude=106.72,
+    ),
+    ProjectFeatures(
+        project_id="cccccccc-1111-4111-8111-111111111111",
+        slug="khong-toa-do",
+        name="Không toạ độ",
+        province="Hải Phòng",
+        district="An Dương",
+    ),
+    ProjectFeatures(
+        project_id="dddddddd-1111-4111-8111-111111111111",
+        slug="kcn-trang-due",
+        name="Tràng Duệ",
+        province="Hải Phòng",
+        district="An Dương",
+        address="KCN Tràng Duệ, An Dương, Hải Phòng",
+        latitude=20.86,
+        longitude=106.68,
+    ),
+]
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_reports_distance_nearest_first(no_cache_io):
+    queried: list[str] = []
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(_DISTANCE_CATALOG),
+        geocode_area=_geo_area(calls=queried),
+    )
+
+    out = await list_active_projects(retrieval=repo, location="An Dương")
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    rows = payload["projects"]
+    assert [row["slug"] for row in rows] == ["kcn-trang-due", "kcn-nomura", "khong-toa-do"]
+    assert rows[0]["distance_km"] == 0.0
+    assert 3.0 <= rows[1]["distance_km"] <= 8.0
+    assert "distance_km" not in rows[2]
+    assert "cách " in " ".join(rows[0]["fit_notes"])
+    assert "cách " in " ".join(rows[1]["fit_notes"])
+    assert "cách " not in " ".join(rows[2]["fit_notes"])
+    assert queried == ["An Dương"]
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_without_geocoded_origin_keeps_the_previous_output(
+    no_cache_io,
+):
+    """A geocoder miss must reproduce the pre-change order, notes, and payload."""
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(_DISTANCE_CATALOG),
+        geocode_area=_geo_area(None),
+    )
+
+    out = await list_active_projects(retrieval=repo, location="An Dương")
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    rows = payload["projects"]
+    assert [row["slug"] for row in rows] == ["khong-toa-do", "kcn-trang-due", "kcn-nomura"]
+    assert all("distance_km" not in row for row in rows)
+    assert all("cách " not in note for row in rows for note in row["fit_notes"])
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_without_location_never_geocodes(no_cache_io):
+    queried: list[str] = []
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(_DISTANCE_CATALOG),
+        geocode_area=_geo_area(calls=queried),
+    )
+
+    out = await list_active_projects(retrieval=repo, company="nomura")
+
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+    assert queried == []
+    assert all("distance_km" not in row for row in payload["projects"])

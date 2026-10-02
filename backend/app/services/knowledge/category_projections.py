@@ -39,6 +39,7 @@ from app.project_knowledge.domain.category_catalog import (
     CATEGORY_DEFINITIONS,
     get_category_definition,
 )
+from app.services.geo.project_address import refresh_from_address
 from app.services.knowledge.category_contracts import (
     validate_category_payload,
 )
@@ -413,6 +414,11 @@ class SqlAlchemyCategoryProjectionWriter:
         project.index_card = card
         project.summary = summary
         project.discovery_revision += 1
+        # Geo-distance side effect: these jobs records carry the recruiter's own
+        # location string, so geocode it here. ``refresh_from_address`` defers to
+        # the pipeline's grounded value and never raises — activating a category
+        # must not depend on the geocoder.
+        await refresh_from_address(self.db, project_id, location)
 
     async def clear(
         self,

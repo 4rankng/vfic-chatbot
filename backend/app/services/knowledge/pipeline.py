@@ -48,6 +48,7 @@ from app.services.knowledge.canonical import (
     parse_canonical_markdown,
 )
 from app.services.knowledge.extraction import DigestSections, category_plan_sections, split_for_digest
+from app.services.geo.project_address import refresh_from_kb
 from app.services.knowledge.prompts import DIGEST_SYSTEM_PROMPT, INDEX_SYSTEM_PROMPT
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.services.knowledge.job_feature_repository import JobFeatureValueRepo
@@ -211,7 +212,7 @@ class KnowledgePipeline:
             await self._update_canonical_project_card(doc, canonical_doc)
         elif doc.project_id is not None:
             try:
-                await self.build_project_index(doc.project_id)
+                await self.build_project_index(doc.project_id, raw_text=doc.raw_text)
             except Exception as exc:  # noqa: BLE001 — index refresh is best-effort
                 logger.warning("project index refresh failed: %s", exc)
 
@@ -324,8 +325,17 @@ class KnowledgePipeline:
             return [await single_embedder(t) for t in texts]
         return await embed_with_fallback(self.embedder.batch, texts, label="embedder batch")
 
-    async def build_project_index(self, project_id: uuid.UUID) -> None:
-        """Regenerate the project's catalog card from usable units (master index)."""
+    async def build_project_index(
+        self, project_id: uuid.UUID, *, raw_text: str | None = None
+    ) -> None:
+        """Regenerate the project's catalog card from usable units (master index).
+
+        ``raw_text`` is the document's verbatim brief. When supplied it also
+        drives the geo-distance side effect: the work address is extracted from
+        the brief, grounded against it, and geocoded onto the project row. That
+        call never raises (``refresh_from_kb`` swallows its own failures), so a
+        geocoder or model outage cannot fail the card rebuild.
+        """
         rows = await self.index.fetch_usable_corpus(project_id)
         if not rows:
             return
@@ -341,6 +351,8 @@ class KnowledgePipeline:
         )
         # Feature-derived highlights are authoritative when present (override the LLM card).
         await self.index.sync_highlights(project_id)
+        if raw_text:
+            await refresh_from_kb(self.db, project_id, llm_json=self.llm_json)
 
     async def extract_product_features(self, doc, units: list[dict]) -> None:
         """LLM-extract the 11 worker product features for ``doc.project_id`` (best-effort).
@@ -530,6 +542,10 @@ class KnowledgePipeline:
         }
         await self.index.update_card(doc.project_id, summary, card)
         await self.index.sync_highlights(doc.project_id)
+        # Geo-distance side effect: resolve the project's work address from its
+        # brief. Best-effort by construction — ``refresh_from_kb`` swallows its
+        # own failures, so a geocoder/model outage cannot fail the card write.
+        await refresh_from_kb(self.db, doc.project_id, llm_json=self.llm_json)
 
     async def _llm_json_with_timeout(self, system: str, user: str, *, purpose: str) -> str:
         timeout = (

@@ -34,6 +34,7 @@ _RUNTIME_RETRIEVAL_RULES = f"""
 - NHÂN VIÊN CẦN HỖ TRỢ TÀI KHOẢN/HỆ THỐNG: khi có mục API TINGTING (quên mật khẩu, không nhận được mã OTP, đặt lại mật khẩu), PHẢI chạy đúng quy trình bằng các tool theo thứ tự: verify_tingting_identity (đối chiếu danh tính bằng mã) → send_tingting_otp → confirm_tingting_otp → reset_tingting_password; hỏi từng bước một, không được trả lời rằng việc này ngoài phạm vi rồi hướng dẫn liên hệ nơi khác. Không tự so khớp họ tên/CCCD bằng mắt và không gửi OTP khi tool chưa trả về ĐÃ XÁC MINH. Chỉ hỏi các trường mà tool báo còn thiếu; không hỏi lại thông tin đã có. Không hỏi, không đọc và không truyền session_id/reset_token — hệ thống giữ phiên theo số điện thoại.
 - GỌI TOOL SONG SONG: Khi cần nhiều tool không phụ thuộc nhau (ví dụ list_active_projects + get_product_features, hoặc search_knowledge + list_active_projects), hãy gọi TẤT CẢ trong cùng một lượt trả lời thay vì gọi từng cái một. Điều này giúp trả lời nhanh hơn rất nhiều. Không gọi trùng cùng một tool với cùng tham số trong một lượt — mỗi tool chỉ gọi một lần cho mỗi bộ tham số.
 - HỖ TRỢ TÀI KHOẢN TINGTIN KHI KHÔNG CÓ TOOL TINGTIN: khi người dùng cần hỗ trợ tài khoản ứng dụng TingTin (quên/quá hạn/đặt lại mật khẩu, không nhận được mã OTP) mà các tool TingTin (verify_tingtin_identity, send_tingtin_otp, confirm_tingtin_otp, reset_tingtin_password) KHÔNG có trong danh sách công cụ của bạn, trả lời ĐÚNG NGUYÊN VĂN một dòng sau đây — không thêm bớt chữ, không markdown, không emoji, không đổi tên OA và bắt buộc giữ nguyên đường dẫn: «{TINGTING_RESET_REDIRECT_REPLY}»
+- HỎI DỰ ÁN GẦN NHÀ: khi ứng viên hỏi dự án nào gần nhà/chỗ ở, dùng khu vực đã có trong THÔNG TIN ỨNG VIÊN (Tỉnh/thành hoặc Khu vực sinh sống) làm tham số location của list_active_projects; nếu chưa có, hỏi một câu ngắn về khu vực đang ở. Trả lời theo distance_km tool trả về (nêu số km, gần nhất trước); không tự bịa khoảng cách hay địa chỉ.
 """.strip()
 
 _PRIVATE_CONTEXT_RULES = """
@@ -69,7 +70,7 @@ _STALE_REFUSAL_RULE_MARKERS = (
 # turn after deploy re-assembles instead of serving the previous text from the
 # 10-min TTL window. DB-side card/persona writes invalidate independently via the
 # NS_PREAMBLE version bump.
-_PROMPT_TEXT_REVISION = "5"
+_PROMPT_TEXT_REVISION = "6"
 
 
 def _strip_stale_refusal_rules(persona: str) -> str:

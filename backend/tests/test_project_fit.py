@@ -29,6 +29,8 @@ def _project(
     salary_max: int | None = None,
     scope: tuple[ProjectScopeItem, ...] = (),
     updated_at: datetime | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
 ) -> ProjectFeatures:
     return ProjectFeatures(
         project_id=project_id,
@@ -43,6 +45,8 @@ def _project(
         salary_min=salary_min,
         salary_max=salary_max,
         scope=scope,
+        latitude=latitude,
+        longitude=longitude,
     )
 
 
@@ -285,3 +289,90 @@ def test_rank_projects_ties_break_by_name_ascending():
     twin_b = _project("b", "Dự án A", province="Hải Phòng")
     lookup = rank_projects([twin_a, twin_b], location="Hải Phòng")
     assert [fit.project.name for fit in lookup.fits] == ["Dự án A", "Dự án B"]
+
+
+# ---------------------------------------------------------------------------
+# Geo-distance ("dự án nào gần nhà"): an ``origin`` adds distance evidence and
+# makes the DEFAULT order nearest-first. It is additive, never a filter.
+# ---------------------------------------------------------------------------
+
+# KCN Tràng Duệ, An Dương (Hải Phòng) and KCN Nhật Bản/Nomura (Hồng An) are ~5 km
+# apart; the third project has no coordinates at all.
+_TRANG_DUE = _project(
+    "trang-due",
+    "Tràng Duệ",
+    province="Hải Phòng",
+    district="An Dương",
+    address="KCN Tràng Duệ, An Dương, Hải Phòng",
+    salary_min=5_000_000,
+    salary_max=7_000_000,
+    latitude=20.86,
+    longitude=106.68,
+)
+_NOMURA = _project(
+    "nomura",
+    "Nomura",
+    province="Hải Phòng",
+    district="Hồng An",
+    address="KCN Nhật Bản, Hồng An, Hải Phòng",
+    salary_min=9_000_000,
+    salary_max=11_000_000,
+    latitude=20.90,
+    longitude=106.72,
+)
+_NO_COORDS = _project(
+    "no-coords",
+    "Không toạ độ",
+    province="Hải Phòng",
+    district="An Dương",
+)
+
+_AN_DUONG_ORIGIN = (20.86, 106.68)
+
+
+def test_rank_projects_with_origin_orders_nearest_first_and_last_without_coordinates():
+    lookup = rank_projects(
+        [_NO_COORDS, _NOMURA, _TRANG_DUE], location="An Dương", origin=_AN_DUONG_ORIGIN
+    )
+
+    assert [fit.project.project_id for fit in lookup.fits] == [
+        "trang-due",
+        "nomura",
+        "no-coords",
+    ]
+    assert lookup.fits[0].distance_km == 0.0
+    assert 3.0 <= lookup.fits[1].distance_km <= 8.0
+    assert lookup.fits[2].distance_km is None
+
+
+def test_rank_projects_without_origin_keeps_the_fit_order_and_no_distance():
+    catalog = [_NO_COORDS, _NOMURA, _TRANG_DUE]
+
+    with_origin = rank_projects(catalog, location="An Dương", origin=_AN_DUONG_ORIGIN)
+    without_origin = rank_projects(catalog, location="An Dương")
+
+    assert [fit.project.project_id for fit in without_origin.fits] == [
+        "no-coords",
+        "trang-due",
+        "nomura",
+    ]
+    assert all(fit.distance_km is None for fit in without_origin.fits)
+    assert without_origin.fits != with_origin.fits
+
+
+def test_rank_projects_explicit_sort_by_ignores_distance_but_still_reports_it():
+    lookup = rank_projects(
+        [_NO_COORDS, _NOMURA, _TRANG_DUE],
+        location="An Dương",
+        sort_by="salary_desc",
+        origin=_AN_DUONG_ORIGIN,
+    )
+
+    assert [fit.project.project_id for fit in lookup.fits] == [
+        "nomura",
+        "trang-due",
+        "no-coords",
+    ]
+    assert lookup.fits[0].distance_km is not None
+    assert lookup.fits[1].distance_km == 0.0
+    assert lookup.fits[2].distance_km is None

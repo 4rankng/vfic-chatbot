@@ -1049,6 +1049,32 @@ be shared by another Project.
   EXPLORE turns remain RAG-only.
 - **Tools exposed to agent:** `list_active_projects`, `search_knowledge`,
   `get_product_features`, `search_user_memory`, `search_bus_timetable`.
+- **Geo-distance ("dự án nào gần nhà"):** the recruiter's brief is the only
+  place a project's verbatim work address lives (`ProjectCreate` shortens it to
+  the city before `buildJobsMarkdown`, so `Job.address` /
+  `index_card['location']` carry the short value; the brief survives as
+  `KnowledgeDocument.raw_text` for `source == 'upload'`). At card-write time
+  `refresh_from_kb` (`services/geo/project_address.py`) has the project's LLM
+  extract the work address from that brief, grounds it against the same text
+  (≥80% of its normalized terms must appear — an LLM-completed address is
+  dropped, never stored), and geocodes it onto
+  `projects.extracted_address`/`latitude`/`longitude`. `extracted_address` is
+  also the cache that keeps a re-ingest from calling the model again; the
+  category `jobs` projection and the admin discovery card only geocode their
+  human-authored location and defer while the pipeline has not resolved the
+  project (no LLM call on either write path). `list_active_projects` geocodes
+  the candidate's stated area into an origin, so each payload row carries
+  `distance_km` and the default fit order becomes nearest-first (an explicit
+  `sort_by` still wins; `origin=None` — a geocoder miss — reproduces the
+  previous output exactly, and a project without coordinates carries no
+  distance and sorts last). Distance is additive evidence, never a filter.
+  Geocoder: Nominatim-compatible `GET /search`, default the public instance
+  (`GEOCODER_BASE_URL`; free, no key, 1 req/s + a descriptive User-Agent, both
+  enforced client-side with a 30-day positive / 6-hour negative Redis cache).
+  Every call is fail-open: a geocoder or model outage degrades to today's
+  token-overlap answer and never fails an ingest, a PATCH, or a turn.
+  `scripts/backfill_project_coordinates.py` resolves existing projects
+  (`--force` re-geocodes, `--re-extract` re-runs the extraction).
 - **Benchmarks:** `scripts/benchmark_rag.py` (golden-case scoring) and
   `scripts/capture_bus_timetable_golden.py`.
 

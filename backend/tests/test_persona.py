@@ -292,6 +292,15 @@ def test_runtime_rules_fixed_facts_do_not_advertise_a_single_project():
     assert "DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG" in _RUNTIME_RETRIEVAL_RULES
 
 
+def test_runtime_rules_answer_near_home_from_tool_distance():
+    """``gần nhà`` must be answered from the tool's ``distance_km``, never invented."""
+    from app.graph.context import _RUNTIME_RETRIEVAL_RULES
+
+    assert "HỎI DỰ ÁN GẦN NHÀ" in _RUNTIME_RETRIEVAL_RULES
+    assert "distance_km" in _RUNTIME_RETRIEVAL_RULES
+    assert "không tự bịa khoảng cách" in _RUNTIME_RETRIEVAL_RULES
+
+
 def test_tingting_support_prompt_excludes_the_recruitment_directory():
     """The support OA's prompt never carries the directory or the vague-seeker rule.
 

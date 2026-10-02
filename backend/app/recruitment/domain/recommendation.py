@@ -9,8 +9,9 @@ candidate's stated preferences and returns the whole ranked catalog.
 
 from __future__ import annotations
 
+import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Literal
@@ -18,6 +19,12 @@ from typing import Literal
 from app.shared.domain.text import normalize_vietnamese_text
 
 SortBy = Literal["updated_at", "salary_desc", "salary_asc", "created_at"]
+
+# Mean Earth radius in kilometres (IUGG). Used only to turn two coordinates into
+# a candidate-facing "cách … km" figure, so the few-hundred-metre difference
+# between this and an ellipsoidal mean is far below the precision the answer
+# needs.
+_EARTH_RADIUS_KM = 6371.0088
 
 _TRIEU_RE = re.compile(r"(\d[\d.]*)\s*trieu|\b(\d[\d.]*)\s*tr", re.IGNORECASE)
 _NGHIN_RE = re.compile(r"(\d[\d.]*)\s*nghin|\b(\d[\d.]*)\s*k\b", re.IGNORECASE)
@@ -130,6 +137,11 @@ class ProjectFeatures:
     salary_max: int | None = None
     scope: tuple[ProjectScopeItem, ...] = ()
     aliases: tuple[str, ...] = ()
+    # The project's geocoded work address. Both are None for a project whose
+    # brief states no work address or that the geocoder could not resolve; the
+    # ranker then carries no distance for it.
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 @dataclass(frozen=True)
@@ -147,6 +159,9 @@ class ProjectFit:
     project: ProjectFeatures
     score: float
     dimensions: tuple[FitDimension, ...]
+    # Straight-line distance from the candidate's stated area, present only when
+    # the caller supplied an ``origin`` and this project has coordinates.
+    distance_km: float | None = None
 
 
 @dataclass(frozen=True)
@@ -292,6 +307,38 @@ def _project_fit(
     return ProjectFit(project=project, score=score, dimensions=tuple(dimensions))
 
 
+def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
+    """Great-circle distance between two ``(lat, lng)`` pairs, in kilometres."""
+    lat_a, lng_a = math.radians(a[0]), math.radians(a[1])
+    lat_b, lng_b = math.radians(b[0]), math.radians(b[1])
+    dlat = lat_b - lat_a
+    dlng = lng_b - lng_a
+    h = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat_a) * math.cos(lat_b) * math.sin(dlng / 2) ** 2
+    )
+    return 2 * _EARTH_RADIUS_KM * math.asin(min(1.0, math.sqrt(h)))
+
+
+def _distance_km(
+    project: ProjectFeatures, origin: tuple[float, float] | None
+) -> float | None:
+    """Distance from ``origin`` to the project's work address, when both exist."""
+    if origin is None or project.latitude is None or project.longitude is None:
+        return None
+    return haversine_km(origin, (project.latitude, project.longitude))
+
+
+def _distance_sort_key(fit: ProjectFit) -> tuple[bool, float, float, str]:
+    """Nearest first; a project without coordinates sorts last."""
+    return (
+        fit.distance_km is None,
+        fit.distance_km or 0.0,
+        -fit.score,
+        fit.project.name.casefold(),
+    )
+
+
 def _salary_sort_key(
     project: ProjectFeatures, *, descending: bool
 ) -> tuple[bool, float, str]:
@@ -315,6 +362,7 @@ def rank_projects(
     salary_min_vnd: int | None = None,
     sort_by: SortBy | None = None,
     strict_criteria: bool = False,
+    origin: tuple[float, float] | None = None,
 ) -> FitLookup:
     """Fit every active project against the stated preferences, best fit first.
 
@@ -325,6 +373,11 @@ def rank_projects(
     ``strict_criteria`` is for an explicit "only matching projects" request;
     every stated criterion then needs source-backed full evidence. Unknown
     values are not silently treated as matches.
+
+    ``origin`` is the candidate's own ``(lat, lng)``. When given, every fit
+    carries ``distance_km`` and the default (fit) order becomes nearest-first,
+    with coordinate-less projects last; an explicit ``sort_by`` still wins, and
+    ``origin=None`` reproduces the previous ordering exactly.
     """
     if not projects:
         return FitLookup("catalog_empty")
@@ -368,6 +421,11 @@ def rank_projects(
             )
         ]
 
+    if origin is not None:
+        # Distance is additive evidence, not a filter: a far project stays in
+        # the list with an honest number. Only the default fit order changes.
+        fits = [replace(fit, distance_km=_distance_km(fit.project, origin)) for fit in fits]
+
     if sort_by in {"salary_desc", "salary_asc"}:
         fits.sort(
             key=lambda fit: _salary_sort_key(
@@ -376,6 +434,8 @@ def rank_projects(
         )
     elif sort_by in {"created_at", "updated_at"}:
         fits.sort(key=lambda fit: _updated_at_sort_key(fit.project), reverse=True)
+    elif origin is not None:
+        fits.sort(key=_distance_sort_key)
     else:
         fits.sort(key=lambda fit: (-fit.score, fit.project.name.casefold()))
 

@@ -771,3 +771,114 @@ async def test_brief_uploads_stay_counted_per_upload(integration_session, monkey
         [project.id]
     )
     assert counts == {project.id: 2}
+
+
+# ------------------------------------------------- geo-distance: work address
+async def _seed_brief(db, project_id, brief: str) -> None:
+    """Upload ``brief`` as the project's newest upload document.
+
+    ``_seed_project_with_active_corpus`` raw-inserts its corpus document inside
+    the same fixture transaction, so ``now()`` gives both documents an identical
+    ``created_at`` and the repository's ``created_at DESC`` has no deterministic
+    winner. Pin this one a minute ahead so "the latest brief" is explicit.
+    """
+    doc = await _make_doc(db, brief, project_id=project_id)
+    await db.execute(
+        text(
+            "UPDATE knowledge_documents SET created_at = now() + interval '1 minute' "
+            "WHERE id = :did"
+        ),
+        {"did": str(doc.id)},
+    )
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_build_project_index_extracts_and_geocodes_the_work_address(
+    integration_session, monkeypatch
+):
+    """A brief with ``Địa chỉ làm việc`` resolves the project's coordinates."""
+    from app.services.knowledge.prompts import ADDRESS_EXTRACTION_SYSTEM_PROMPT
+
+    project_id = await _seed_project_with_active_corpus(
+        integration_session, content="LG Display tuyển operator"
+    )
+    address = "Tầng 2, Công ty LG Electronics, KCN Tràng Duệ, An Dương, Hải Phòng"
+    brief = f"Địa chỉ làm việc: {address}\nMức lương: 7.500.000 VND\n"
+    # The hook reads the project's latest upload document (the verbatim brief),
+    # not the card corpus: that is where the full work address lives.
+    await _seed_brief(integration_session, project_id, brief)
+
+    async def llm_json(system, user):
+        if system == ADDRESS_EXTRACTION_SYSTEM_PROMPT:
+            return json.dumps({"address": address})
+        return json.dumps({"summary": "Nhà máy LG Display", "location": "Hải Phòng"})
+
+    queried: list[str] = []
+
+    async def _geocode(query):
+        queried.append(query)
+        return (20.86, 106.68)
+
+    monkeypatch.setattr("app.services.geo.project_address.geocode", _geocode)
+
+    await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).build_project_index(
+        project_id, raw_text=brief
+    )
+    # The hook does not commit (the pipeline's own stage write does in
+    # production); flush the ORM change before reading the row over SQL.
+    await integration_session.commit()
+
+    row = (
+        await integration_session.execute(
+            text(
+                "SELECT extracted_address, latitude, longitude FROM projects WHERE id = :pid"
+            ),
+            {"pid": str(project_id)},
+        )
+    ).first()
+    assert row.extracted_address == address
+    assert (row.latitude, row.longitude) == (20.86, 106.68)
+    assert queried == [address]
+
+
+@pytest.mark.asyncio
+async def test_build_project_index_leaves_coordinates_null_without_a_work_address(
+    integration_session, monkeypatch
+):
+    """A brief that states no work address stores nothing — and never geocodes."""
+    from app.services.knowledge.prompts import ADDRESS_EXTRACTION_SYSTEM_PROMPT
+
+    project_id = await _seed_project_with_active_corpus(
+        integration_session, content="LG Display tuyển operator"
+    )
+    await _seed_brief(
+        integration_session, project_id, "LG Display tuyển operator tại Hải Phòng.\n"
+    )
+
+    async def llm_json(system, user):
+        if system == ADDRESS_EXTRACTION_SYSTEM_PROMPT:
+            return json.dumps({"address": None})
+        return json.dumps({"summary": "Nhà máy LG Display", "location": "Hải Phòng"})
+
+    async def _geocode(_query):  # pragma: no cover - must not be reached
+        raise AssertionError("a project without an address must not be geocoded")
+
+    monkeypatch.setattr("app.services.geo.project_address.geocode", _geocode)
+
+    await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).build_project_index(
+        project_id, raw_text="LG Display tuyển operator tại Hải Phòng.\n"
+    )
+    await integration_session.commit()
+
+    row = (
+        await integration_session.execute(
+            text(
+                "SELECT extracted_address, latitude, longitude FROM projects WHERE id = :pid"
+            ),
+            {"pid": str(project_id)},
+        )
+    ).first()
+    assert row.extracted_address is None
+    assert row.latitude is None
+    assert row.longitude is None

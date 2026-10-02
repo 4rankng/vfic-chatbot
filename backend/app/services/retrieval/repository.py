@@ -24,6 +24,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.external_api_core import ExternalApiOutcome
+from app.services.geo.geocoding import geocode
 from app.services.retrieval.catalog_repository import CatalogRepository
 from app.services.retrieval.document_repository import DocumentRepository
 from app.services.retrieval.faq_repository import FaqRepository
@@ -125,6 +126,16 @@ class RetrievalRepository:
 
     async def list_active_projects(self) -> list:
         return await self._catalog.list_active_projects()
+
+    async def geocode_area(self, query: str) -> tuple[float, float] | None:
+        """Resolve a candidate's stated area to ``(lat, lng)`` for distance evidence.
+
+        Delegates to the cached, throttled, fail-open geocoding client
+        (``app.services.geo.geocoding``): it never raises, so a geocoder outage
+        degrades the catalog answer to its pre-distance form instead of failing
+        the turn.
+        """
+        return await geocode(query)
 
     async def active_projects_with_card(self) -> list:
         return await self._catalog.active_projects_with_card()
