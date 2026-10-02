@@ -79,7 +79,7 @@ export const StageMatrix = ({ data }: { data: PerfMetrics }) => {
             aria-label="Bảng chẩn đoán độ trễ"
             tabIndex={0}
           >
-            <table className="tt-table tt-table-sm">
+            <table>
               <thead>
                 <tr>
                   <th>Giai đoạn</th>

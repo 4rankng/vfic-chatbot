@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight } from "@untitledui/icons";
 
 import { Button } from "@/components/base/buttons/button";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
@@ -13,7 +13,7 @@ import {
   likelyBottleneck,
 } from "../../../reporting/domain/performanceDiagnostics";
 import type { PerfSlowTurn } from "../../usePerformanceStats";
-import { Status } from "../primitives";
+import { Severity, Status } from "../primitives";
 import { MobileTurnCard } from "./MobileTurnCard";
 import { TurnDetail } from "./TurnDetail";
 
@@ -28,7 +28,7 @@ export const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
   const hiddenCount = slowTurns.length - visibleTurns.length;
   return (
     <section
-      className="performance-panel performance-slow-turns tt-card tt-card-border"
+      className="performance-panel performance-slow-turns"
       id="slow-turns"
       tabIndex={-1}
       aria-labelledby="slow-turns-title"
@@ -53,7 +53,7 @@ export const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
             aria-label="Bảng lượt cần xem"
             tabIndex={0}
           >
-            <table className="tt-table tt-table-sm">
+            <table>
               <thead>
                 <tr>
                   <th>Mức độ</th>
@@ -73,13 +73,7 @@ export const SlowestTurns = ({ slowTurns }: { slowTurns: PerfSlowTurn[] }) => {
                     <Fragment key={turn.id}>
                       <tr className={isOpen ? "is-open" : undefined}>
                         <td>
-                          <Status tone={tone}>
-                            {tone === "danger"
-                              ? "Cao"
-                              : tone === "warning"
-                                ? "Trung bình"
-                                : "Thấp"}
-                          </Status>
+                          <Severity tone={tone} />
                         </td>
                         <td>{formatStartedAt(turn.started_at)}</td>
                         <td>

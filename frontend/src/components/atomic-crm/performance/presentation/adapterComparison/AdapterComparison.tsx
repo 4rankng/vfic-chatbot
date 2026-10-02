@@ -32,7 +32,7 @@ export const AdapterComparison = ({ data }: { data: PerfMetrics }) => {
           aria-label="So sánh kênh giao gửi"
           tabIndex={0}
         >
-          <table className="tt-table tt-table-sm">
+          <table>
             <thead>
               <tr>
                 <th>Kênh</th>

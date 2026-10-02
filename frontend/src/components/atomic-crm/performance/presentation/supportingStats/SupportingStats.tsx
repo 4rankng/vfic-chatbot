@@ -1,7 +1,13 @@
-import { Activity, Database, Send } from "lucide-react";
+import { Dataflow01, Database01, Send01, Zap } from "@untitledui/icons";
 
 import { LANE_LABELS } from "../../../reporting/domain/performanceDiagnostics";
 import type { PerfMetrics } from "../../usePerformanceStats";
+
+const formatTokenTotal = (value: number): string => {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(value);
+};
 
 /**
  * Closing strip of the detail window: delivery reliability, lane mix and how
@@ -15,11 +21,16 @@ export const SupportingStats = ({ data }: { data: PerfMetrics }) => {
   const sent = data.by_outcome.SENT ?? 0;
   const sendRate = total > 0 ? `${Math.round((sent / total) * 100)}%` : "—";
   const lanes = Object.entries(data.by_lane).sort(([, a], [, b]) => b - a);
+  const quality = data.quality;
+  const sync = data.external_source_sync;
+  const tokensTotal =
+    (quality?.prompt_tokens_total ?? 0) +
+    (quality?.completion_tokens_total ?? 0);
   return (
     <section className="performance-supporting" aria-label="Chỉ số hỗ trợ">
       <article>
         <div>
-          <Send aria-hidden="true" />
+          <Send01 aria-hidden="true" />
           <h2>Độ tin cậy giao gửi</h2>
         </div>
         <strong>{sendRate}</strong>
@@ -30,7 +41,7 @@ export const SupportingStats = ({ data }: { data: PerfMetrics }) => {
       </article>
       <article>
         <div>
-          <Activity aria-hidden="true" />
+          <Dataflow01 aria-hidden="true" />
           <h2>Phân bố theo lane</h2>
         </div>
         {lanes.length === 0 ? (
@@ -48,8 +59,29 @@ export const SupportingStats = ({ data }: { data: PerfMetrics }) => {
       </article>
       <article>
         <div>
-          <Database aria-hidden="true" />
-          <h2>Độ đầy đủ dữ liệu</h2>
+          <Zap aria-hidden="true" />
+          <h2>Chất lượng xử lý</h2>
+        </div>
+        <strong>{quality?.prompt_cache_hit_rate ?? "—"}% cache</strong>
+        <p>
+          {quality?.degraded_count ?? 0} lượt suy giảm ·{" "}
+          {quality?.retried_429_count ?? 0} lượt retry 429
+        </p>
+        <ul>
+          <li>
+            <span>Token prompt + completion</span>
+            <b>{formatTokenTotal(tokensTotal)}</b>
+          </li>
+          <li>
+            <span>Token từ cache</span>
+            <b>{formatTokenTotal(quality?.cached_tokens_total ?? 0)}</b>
+          </li>
+        </ul>
+      </article>
+      <article>
+        <div>
+          <Database01 aria-hidden="true" />
+          <h2>Dữ liệu &amp; đồng bộ</h2>
         </div>
         <strong>{data.trend.length > 0 ? "Có dữ liệu" : "Chưa đủ"}</strong>
         <p>
@@ -57,6 +89,14 @@ export const SupportingStats = ({ data }: { data: PerfMetrics }) => {
             ? `${data.trend.length} điểm xu hướng trong khoảng đã chọn.`
             : "Chưa có điểm thời gian để kiểm tra."}
         </p>
+        <ul>
+          <li>
+            <span>Đồng bộ nguồn ngoài</span>
+            <b>
+              {sync?.success_total ?? 0}✓ / {sync?.failure_total ?? 0}✗
+            </b>
+          </li>
+        </ul>
       </article>
     </section>
   );

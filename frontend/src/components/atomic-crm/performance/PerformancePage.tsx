@@ -1,28 +1,28 @@
 import { useMemo, useState } from "react";
 import {
-  Activity,
+  AlertTriangle,
+  BarChart03,
+  CheckCircle,
   ChevronDown,
-  Clock3,
-  Cpu,
-  RefreshCw,
-  Send,
-  Server,
-  ShieldAlert,
-} from "lucide-react";
+  ClockRefresh,
+  CpuChip01,
+  Send01,
+  Server01,
+} from "@untitledui/icons";
 
 import {
   formatMetricDuration as fmtMs,
-  getStageTone,
   type Tone,
 } from "../reporting/domain/performanceDiagnostics";
 import {
   ButtonGroup,
   ButtonGroupItem,
 } from "@/components/base/button-group/button-group";
+import { Button } from "@/components/base/buttons/button";
 import { PerformanceTrendChart } from "./PerformanceTrendChart";
 import { AttentionQueue } from "./presentation/attentionQueue/AttentionQueue";
 import { AdapterComparison } from "./presentation/adapterComparison/AdapterComparison";
-import { Metric } from "./presentation/primitives";
+import { Metric, Status } from "./presentation/primitives";
 import {
   PerformanceError,
   PerformanceLoading,
@@ -31,6 +31,7 @@ import {
 import { SlowestTurns } from "./presentation/slowestTurns/SlowestTurns";
 import { StageMatrix } from "./presentation/stageMatrix/StageMatrix";
 import { SupportingStats } from "./presentation/supportingStats/SupportingStats";
+import { collectSignals, deriveVerdict } from "./presentation/signals";
 import { type PerfMetrics, usePerformanceStats } from "./usePerformanceStats";
 import "./performance.css";
 
@@ -48,10 +49,22 @@ const WINDOWS = [
  */
 export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
   const endToEnd = data.percentiles.end_to_end?.p95;
+  const endToEndP50 = data.percentiles.end_to_end?.p50;
   const totalTurns = Object.values(data.by_outcome).reduce(
     (sum, value) => sum + value,
     0,
   );
+  const sentTurns = data.by_outcome.SENT ?? 0;
+  const successRate =
+    totalTurns > 0 ? Math.round((sentTurns / totalTurns) * 100) : null;
+  const successTone: Tone =
+    successRate == null
+      ? "neutral"
+      : successRate >= 98
+        ? "success"
+        : successRate >= 90
+          ? "warning"
+          : "danger";
   const hasPercentileData = Object.values(data.percentiles).some(
     (stage) => stage.p50 != null || stage.p95 != null || stage.p99 != null,
   );
@@ -75,15 +88,33 @@ export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
       : (data.reliability?.send_unknown_count ?? 0) > 0
         ? "warning"
         : "success";
+  const verdict = deriveVerdict(collectSignals(data));
   return (
     <>
+      <section
+        className={`performance-band is-${verdict.tone}`}
+        aria-label="Đánh giá tổng quan"
+      >
+        <div className="performance-band-verdict">
+          <Status tone={verdict.tone}>{verdict.label}</Status>
+          <p>{verdict.detail}</p>
+        </div>
+        <div className="performance-band-metric">
+          <p>Độ trễ p95</p>
+          <strong>{fmtMs(endToEnd)}</strong>
+          <small>
+            {endToEndP50 != null ? `p50 ${fmtMs(endToEndP50)} · ` : ""}
+            mục tiêu p95 ≤ 10 giây
+          </small>
+        </div>
+      </section>
       <section className="performance-metrics" aria-label="Tình trạng hệ thống">
         <Metric
           label="Hàng đợi"
           value={String(data.live.queue_depth)}
           hint="webhook đang chờ"
           tone={data.live.queue_depth > 0 ? "warning" : "neutral"}
-          icon={Server}
+          icon={Server01}
         />
         <Metric
           label="Mức tải worker"
@@ -98,21 +129,19 @@ export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
               : "chưa ghi nhận worker"
           }
           tone={workerTone}
-          icon={Cpu}
-        />
-        <Metric
-          label="Độ trễ p95"
-          value={fmtMs(endToEnd)}
-          hint="tổng từ webhook · mục tiêu ≤ 10 giây"
-          tone={getStageTone("end_to_end", endToEnd)}
-          icon={Clock3}
+          icon={CpuChip01}
+          meter={
+            data.live.total_workers > 0
+              ? (data.live.busy_workers / data.live.total_workers) * 100
+              : undefined
+          }
         />
         <Metric
           label="LLM 429"
           value={String(data.live.minimax_429s_last_1m)}
           hint="trong 1 phút gần nhất"
           tone={data.live.minimax_429s_last_1m > 0 ? "warning" : "success"}
-          icon={ShieldAlert}
+          icon={AlertTriangle}
         />
         <Metric
           label="Gửi tin cần kiểm tra"
@@ -122,14 +151,21 @@ export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
           )}
           hint="thất bại + không xác định"
           tone={deliveryTone}
-          icon={Send}
+          icon={Send01}
+        />
+        <Metric
+          label="Tỷ lệ thành công"
+          value={successRate == null ? "—" : `${successRate}%`}
+          hint="lượt gửi thành công"
+          tone={successTone}
+          icon={CheckCircle}
         />
         <Metric
           label="Lượt xử lý"
           value={totalTurns.toLocaleString()}
           hint={`trong ${windowLabel}`}
           tone="neutral"
-          icon={Activity}
+          icon={BarChart03}
         />
       </section>
       {!hasHistoricalData ? (
@@ -190,7 +226,6 @@ const PerformancePanel = () => {
     <div className="performance-page" aria-busy={refreshing || undefined}>
       <header className="performance-header">
         <div>
-          <p className="performance-kicker">Vận hành</p>
           <h1>Hiệu suất chatbot</h1>
           <p>
             {isPending
@@ -219,19 +254,23 @@ const PerformancePanel = () => {
               </ButtonGroupItem>
             ))}
           </ButtonGroup>
-          <button
+          <Button
             type="button"
+            color="secondary"
+            size="sm"
             className="performance-refresh"
             onClick={() => void refetch()}
-            disabled={refreshing}
+            isDisabled={refreshing}
             aria-label={
               freshness ? `Cập nhật lúc ${freshness}` : "Cập nhật dữ liệu"
             }
+            iconLeading={
+              <ClockRefresh
+                className={refreshing ? "is-spinning" : undefined}
+                aria-hidden={true}
+              />
+            }
           >
-            <RefreshCw
-              className={refreshing ? "is-spinning" : undefined}
-              aria-hidden="true"
-            />
             {freshness ? (
               <>
                 <span className="performance-refresh-prefix">
@@ -242,7 +281,7 @@ const PerformancePanel = () => {
             ) : (
               "Cập nhật"
             )}
-          </button>
+          </Button>
         </div>
       </header>
       {data && isError ? (

@@ -1,20 +1,31 @@
-import { TriangleAlert } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle } from "@untitledui/icons";
 
-import { formatMetricDuration as fmtMs } from "../reporting/domain/performanceDiagnostics";
+import {
+  formatCompactDuration,
+  formatMetricDuration as fmtMs,
+} from "../reporting/domain/performanceDiagnostics";
 import { formatTrendBucket, getTrendAxisTicks } from "./trendAxis";
 import type { PerfMetrics, PerfTrendBucket } from "./usePerformanceStats";
 
-export const PerformanceTrendChart = ({
-  trend,
-  window,
-}: {
+interface ChartProps {
   trend: PerfTrendBucket[];
   window: PerfMetrics["window"];
-}) => {
+}
+
+export const PerformanceTrendChart = ({ trend, window }: ChartProps) => {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const maxP95 = Math.max(10_000, ...trend.map((bucket) => bucket.p95_ms ?? 0));
   const totalErrors = trend.reduce((sum, bucket) => sum + bucket.errors, 0);
   const axisTicks = getTrendAxisTicks(trend, window === "7d");
-
+  const scaleTicks = [0.25, 0.5, 0.75].map((fraction) => ({
+    fraction,
+    label: formatCompactDuration(Math.round(maxP95 * fraction)),
+  }));
+  const hovered = hoveredIndex != null ? trend[hoveredIndex] : undefined;
+  const hoveredHeight = hovered
+    ? Math.max(2, ((hovered.p95_ms ?? 0) / maxP95) * 100)
+    : 0;
   return (
     <section className="performance-panel performance-trend-panel">
       <div className="performance-section-heading">
@@ -73,7 +84,6 @@ export const PerformanceTrendChart = ({
             className="performance-trend"
             role="img"
             aria-label={`Xu hướng độ trễ p95; ${totalErrors} lượt lỗi trong khoảng đã chọn`}
-            aria-describedby="performance-trend-data"
           >
             <span className="performance-target-label" aria-hidden="true">
               10 giây
@@ -82,6 +92,16 @@ export const PerformanceTrendChart = ({
               className="performance-target-line"
               style={{ bottom: `${Math.min(96, (10_000 / maxP95) * 100)}%` }}
             />
+            {scaleTicks.map((tick) => (
+              <span
+                key={tick.fraction}
+                className="performance-trend-scale"
+                style={{ bottom: `${tick.fraction * 100}%` }}
+                aria-hidden="true"
+              >
+                {tick.label}
+              </span>
+            ))}
             {trend.map((bucket, index) => {
               const height = Math.max(2, ((bucket.p95_ms ?? 0) / maxP95) * 100);
               const p95 = bucket.p95_ms;
@@ -95,18 +115,32 @@ export const PerformanceTrendChart = ({
                       : p95 < 20_000
                         ? " is-warning"
                         : "";
-              const tooltip = `${formatTrendBucket(bucket.bucket, true)} · p95 ${fmtMs(bucket.p95_ms)} · ${bucket.turns} lượt · ${bucket.errors} lỗi`;
-
               return (
                 <span
                   className={`performance-trend-bar${toneClass}`}
                   key={`${bucket.bucket ?? index}`}
                   style={{ height: `${height}%` }}
-                  title={tooltip}
-                  aria-label={tooltip}
+                  title={`${formatTrendBucket(bucket.bucket, true)} · p95 ${fmtMs(bucket.p95_ms)} · ${bucket.turns} lượt · ${bucket.errors} lỗi`}
+                  onPointerEnter={() => setHoveredIndex(index)}
+                  onPointerLeave={() => setHoveredIndex(null)}
                 />
               );
             })}
+            {hovered ? (
+              <div
+                className="performance-tooltip"
+                style={{
+                  left: `${Math.min(88, Math.max(12, ((hoveredIndex! + 0.5) / trend.length) * 100))}%`,
+                  bottom: `calc(${hoveredHeight}% + 8px)`,
+                }}
+              >
+                <strong>{fmtMs(hovered.p95_ms)}</strong>
+                <span>
+                  {formatTrendBucket(hovered.bucket, true)} · {hovered.turns}{" "}
+                  lượt · {hovered.errors} lỗi
+                </span>
+              </div>
+            ) : null}
           </div>
           <div className="performance-trend-axis" aria-hidden="true">
             {axisTicks.map((tick) => (
@@ -128,7 +162,7 @@ export const PerformanceTrendChart = ({
             ))}
           </div>
           <p className="performance-chart-note">
-            <TriangleAlert aria-hidden="true" />{" "}
+            <AlertTriangle aria-hidden="true" />{" "}
             {totalErrors > 0
               ? `${totalErrors} lượt lỗi cần đối chiếu với các phiên vượt ngưỡng.`
               : "Không ghi nhận lượt lỗi trong khoảng đã chọn."}

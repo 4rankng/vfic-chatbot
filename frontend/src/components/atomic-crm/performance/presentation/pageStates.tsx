@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useTranslate } from "ra-core";
-import { Activity, AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, BarChart03, ClockRefresh } from "@untitledui/icons";
 
 import { LoadingIndicator } from "@/components/application/loading-indicator/loading-indicator";
 import { Button } from "@/components/base/buttons/button";
@@ -43,7 +43,7 @@ export const PerformanceError = ({ onRetry }: { onRetry: () => void }) => {
           <>
             <Button
               color="primary"
-              iconLeading={<RefreshCw />}
+              iconLeading={<ClockRefresh />}
               onClick={onRetry}
             >
               {translate("crm.common.retry")}
@@ -64,7 +64,7 @@ export const PerformanceNoActivity = ({
   windowLabel: string;
 }) => (
   <EmptyState
-    icon={<Activity className="size-6" aria-hidden="true" />}
+    icon={<BarChart03 className="size-6" aria-hidden="true" />}
     title={`Chưa có lượt xử lý trong ${windowLabel}`}
     description="Trạng thái trực tiếp vẫn hiển thị phía trên."
   />

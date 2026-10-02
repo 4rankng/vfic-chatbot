@@ -48,7 +48,6 @@
   margin: 0;
   color: var(--foreground);
 }
-
 .performance-header h1 {
   font-size: var(--fs-page-title);
   font-weight: var(--fw-bold);
@@ -58,7 +57,7 @@
 
 /* The kicker is not a muted paragraph: excluding it here lets the rule below
    own its colour without an `!important` escalation (FE-19: same sheet). */
-.performance-header p:not(.performance-kicker),
+.performance-header p,
 .performance-panel p,
 .performance-metric p,
 .performance-metric small,
@@ -71,18 +70,85 @@
   margin: 0.35rem 0 0;
 }
 
-.performance-kicker {
-  margin: 0 0 0.25rem;
-  color: var(--primary);
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-}
-
 .performance-header-actions {
   flex-wrap: wrap;
   gap: 0.375rem;
+}
+
+/* Health verdict band: one strip answering "is the bot OK" — tone lives in the
+   badge and the left accent; everything else stays quiet. */
+.performance-band {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: 12px;
+  background: var(--card);
+}
+.performance-band.is-warning {
+  border-left-color: var(--warning);
+}
+.performance-band.is-danger {
+  border-left-color: var(--danger);
+}
+.performance-band.is-success {
+  border-left-color: var(--success);
+}
+.performance-band-verdict {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.performance-band-verdict p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--fs-body-sm);
+}
+.performance-band-metric {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.75rem;
+}
+.performance-band-metric p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--fs-meta);
+}
+.performance-band-metric strong {
+  color: var(--foreground);
+  font-size: var(--fs-metric);
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+}
+.performance-band-metric small {
+  color: var(--muted-foreground);
+  font-size: var(--fs-meta);
+}
+
+/* Worker saturation meter (Untitled UI ProgressBarBase, slimmed). */
+.performance-metric .performance-metric-meter {
+  margin-top: 0.5rem;
+  height: 4px;
+  border-radius: 999px;
+}
+.performance-metric .performance-metric-meter-fill {
+  background-color: var(--workspace-action);
+}
+.performance-metric .performance-metric-meter-fill.is-success {
+  background-color: var(--workspace-success);
+}
+.performance-metric .performance-metric-meter-fill.is-warning {
+  background-color: var(--workspace-warning);
+}
+.performance-metric .performance-metric-meter-fill.is-danger {
+  background-color: var(--workspace-danger);
 }
 
 .performance-page .performance-window-switcher {
@@ -102,7 +168,6 @@
   line-height: 18px;
 }
 
-.performance-refresh,
 .performance-expand,
 .performance-signal-list button,
 .performance-turn-cards button {
@@ -111,31 +176,16 @@
   color: var(--muted-foreground);
 }
 
+/* The refresh action is the library's own Button; the sheet only pins its
+   height to the console's control scale. */
 .performance-refresh {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-height: 40px;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.55rem;
+  min-height: var(--form-control-height, 36px);
   font-size: var(--fs-body-sm);
-  font-weight: var(--fw-semibold);
 }
 
-.performance-refresh svg {
-  width: 1rem;
-  height: 1rem;
-}
 .performance-refresh:disabled {
-  opacity: 0.6;
   cursor: wait;
 }
-.performance-refresh:not(:disabled):hover {
-  color: var(--primary);
-  background: var(--muted);
-}
-.performance-refresh:focus-visible,
 .performance-expand:focus-visible,
 .performance-turn-cards button:focus-visible,
 .performance-signal-list button:focus-visible {
@@ -158,6 +208,11 @@
 @keyframes performance-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .is-spinning {
+    animation: none;
   }
 }
 
@@ -422,6 +477,90 @@
   color: var(--warning);
 }
 
+/* Bucket tooltip: one React-rendered card, positioned over the hovered bar
+   and never intercepting the pointer itself. */
+.performance-tooltip {
+  position: absolute;
+  z-index: 5;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: 0 4px 12px rgb(23 32 51 / 10%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.performance-tooltip strong {
+  color: var(--foreground);
+  font-size: var(--fs-body-sm);
+  font-variant-numeric: tabular-nums;
+}
+.performance-tooltip span {
+  color: var(--muted-foreground);
+  font-size: var(--fs-meta);
+}
+
+/* Quiet seconds scale at the left edge of the plot. */
+.performance-trend-scale {
+  position: absolute;
+  z-index: 1;
+  left: 0.35rem;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tone-chipped signal icons — the chip colour repeats the row tone so the
+   queue reads at a glance; the glyphs stay decorative. */
+.performance-signal-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--primary);
+}
+.performance-signal-list li.is-danger .performance-signal-icon {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+.performance-signal-list li.is-warning .performance-signal-icon {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+}
+.performance-signal-list li.is-success .performance-signal-icon {
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
+}
+
+/* Quiet severity marker for table rows. */
+.performance-severity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--foreground);
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+.performance-severity i {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--workspace-ink-muted);
+}
+.performance-severity.is-danger i {
+  background: var(--danger);
+}
+.performance-severity.is-warning i {
+  background: var(--warning);
+}
+
 .performance-signal-list {
   display: grid;
   gap: 0;
@@ -627,7 +766,7 @@
 
 .performance-supporting {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: 0.7rem;
 }
 .performance-supporting article {
@@ -792,12 +931,6 @@
     line-height: 28px;
   }
 
-  .performance-kicker {
-    margin-bottom: 2px;
-    font-size: var(--fs-caption);
-    line-height: 16px;
-  }
-
   .performance-header > div > p:last-child {
     margin-top: 4px;
     font-size: var(--fs-body-sm);
@@ -812,15 +945,18 @@
     gap: 6px;
   }
 
+  .performance-band {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
   .performance-refresh {
     flex: 0 0 auto;
     margin-inline-start: auto;
     min-height: 44px;
     justify-content: center;
-    border-radius: 8px;
-    padding: 4px 10px;
-    font-size: var(--fs-body-sm);
-    font-weight: 600;
     white-space: nowrap;
   }
 
@@ -1210,7 +1346,7 @@
   }
 
   .performance-supporting {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
     gap: 0;
     margin-top: 4px;
     border-bottom: 1px solid var(--border);

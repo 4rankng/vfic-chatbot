@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight } from "@untitledui/icons";
 
 import { Button } from "@/components/base/buttons/button";
 
@@ -10,7 +10,7 @@ import {
   likelyBottleneck,
 } from "../../../reporting/domain/performanceDiagnostics";
 import type { PerfSlowTurn } from "../../usePerformanceStats";
-import { Status } from "../primitives";
+import { Severity } from "../primitives";
 
 /**
  * Narrow-screen twin of the slow-turn table row, with its own detail stack.
@@ -55,13 +55,7 @@ export const MobileTurnCard = ({ turn }: { turn: PerfSlowTurn }) => {
   return (
     <article className={`is-${tone}`}>
       <div>
-        <Status tone={tone}>
-          {tone === "danger"
-            ? "Cao"
-            : tone === "warning"
-              ? "Trung bình"
-              : "Thấp"}
-        </Status>
+        <Severity tone={tone} />
         <time>{formatStartedAt(turn.started_at)}</time>
       </div>
       <strong>{fmtMs(turn.total_ms)}</strong>
