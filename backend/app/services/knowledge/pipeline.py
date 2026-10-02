@@ -599,7 +599,12 @@ def _auto_feature_candidates(features, catalog, section) -> list[dict[str, Any]]
         value = _coerce_feature(feature, by_key[key], source_text=section)
         proposed_fact = not feature.get("is_missing", False) and bool(str(feature.get("value_text") or "").strip())
         if proposed_fact and value["is_missing"]:
-            raise ValueError("Product feature evidence does not match its source section")
+            # Evidence did not verify against the source: keep the gate's
+            # conservative outcome (missing) for THIS feature instead of
+            # failing every feature in the document.
+            logger.info(
+                "product feature evidence unverified, marking missing: %s", key
+            )
         candidates.append({"feature_key": key, **value})
     return candidates
 

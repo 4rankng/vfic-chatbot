@@ -105,16 +105,23 @@ async def test_conflicting_facts_preserve_both_values_and_evidence_for_clarifica
     assert first in value["evidence_text"] and second in value["evidence_text"]
 
 
-async def test_feature_evidence_must_be_in_the_exact_provider_section():
+async def test_unverified_feature_evidence_never_fails_the_extraction():
+    """The evidence gate keeps its conservative outcome per candidate.
+
+    A proposed fact whose evidence does not verify against its source section
+    degrades to missing at candidate level — it never fails the extraction
+    (one bad evidence quote used to sink every feature in the document), and
+    the merge keeps the variant whose evidence did verify.
+    """
     tail = "Thu nhập 9 triệu đồng."
     source = "Nội dung trước.\n" * 1800 + tail
     llm = AsyncMock(return_value=json.dumps({"features": [_fact("9 triệu đồng", tail)]}))
     pipeline, doc = _pipeline(source, llm)
-    with pytest.raises(ValueError, match="source section"):
-        await pipeline.extract_product_features(doc, [])
-    assert tail not in llm.call_args.args[1]
-    assert doc.metadata_["project_training"]["feature_extraction"]["completed_sections"] == 0
-    assert "feature_values" not in doc.metadata_["project_training"]
+    await pipeline.extract_product_features(doc, [])
+    values = doc.metadata_["project_training"]["feature_values"]
+    assert values
+    verified = [entry for entry in values if not entry["value"]["is_missing"]]
+    assert verified
 
 
 async def test_provider_failure_keeps_completed_section_then_retry_skips_it():
