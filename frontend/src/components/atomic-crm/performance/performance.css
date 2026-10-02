@@ -8,6 +8,10 @@
   --success: var(--workspace-success);
   --warning: var(--workspace-warning);
   --danger: var(--workspace-danger);
+  height: 100%;
+  min-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   display: grid;
   width: 100%;
   max-width: 1440px;
@@ -769,6 +773,8 @@
 }
 @media (max-width: 720px) {
   .performance-page {
+    height: auto;
+    overflow: visible;
     gap: 12px;
     padding: 18px 14px calc(96px + env(safe-area-inset-bottom));
   }

@@ -11,6 +11,7 @@ describe("ProjectWorkspaceShell", () => {
   });
 
   it("keeps overflowing project content vertically scrollable", async () => {
+    await page.viewport(1280, 720);
     const screen = await render(
       <main
         className="workspace-frame-content"
@@ -28,8 +29,6 @@ describe("ProjectWorkspaceShell", () => {
     expect(panel).toBeInstanceOf(HTMLElement);
 
     const projectPanel = panel as HTMLElement;
-    projectPanel.style.height = "320px";
-    projectPanel.style.maxHeight = "320px";
     expect(projectPanel.scrollHeight).toBeGreaterThan(
       projectPanel.clientHeight,
     );

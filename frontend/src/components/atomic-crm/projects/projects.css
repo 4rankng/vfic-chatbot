@@ -3,14 +3,28 @@
 .inbox-bg-container.project-workspace {
   padding: 0;
 
-  .project-app,
-  .project-center-panel {
+  .project-app {
     display: block;
+    width: 100%;
+    height: 100%;
     min-width: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+  }
+
+  .project-center-panel {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
 
   .project-workspace-content {
@@ -1137,6 +1151,11 @@
   }
 
   @media (max-width: 767px) {
+    .project-center-panel {
+      height: auto;
+      overflow: visible;
+    }
+
     .project-workspace-content {
       padding: 20px 16px calc(96px + env(safe-area-inset-bottom));
     }

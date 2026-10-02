@@ -115,6 +115,7 @@
     overflow: visible;
   }
   .inbox-bg-container.project-workspace .app,
+  .inbox-bg-container.project-workspace .project-center-panel,
   .inbox-bg-container.knowledge-workspace .app,
   .inbox-bg-container.settings-workspace .app,
   .inbox-bg-container.profile-workspace .app,
