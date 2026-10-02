@@ -5,7 +5,6 @@ import uuid
 import pytest
 
 from app.workers import category_worker, utils
-from app.workers.ingest_worker import enqueue_ingest_version
 from app.services.knowledge.document_repository import mark_category_revision_failed_sync
 
 
@@ -34,16 +33,6 @@ def test_category_enqueue_failure_is_not_reported_as_success(
 
     with pytest.raises(RuntimeError, match="category revision enqueue failed"):
         category_worker.enqueue_category_revision(uuid.uuid4())
-
-
-def test_legacy_version_enqueue_uses_same_job_id_contract(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(utils, "enqueue_job", lambda *args, **kwargs: "version-job-456")
-
-    version_id = uuid.uuid4()
-
-    assert enqueue_ingest_version(version_id) == "version-job-456"
 
 
 def test_outer_worker_failure_uses_fenced_marker_and_stable_error(

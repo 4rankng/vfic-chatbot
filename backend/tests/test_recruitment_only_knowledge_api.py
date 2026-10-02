@@ -35,13 +35,4 @@ def test_generic_template_and_structured_fact_routes_are_not_registered() -> Non
     }.isdisjoint(routes)
 
 
-def test_versioned_recruitment_knowledge_routes_remain_registered() -> None:
-    routes = _relative_routes()
 
-    assert {
-        ("POST", "/projects/{project_id}/kb/versions"),
-        ("GET", "/projects/{project_id}/kb/versions"),
-        ("POST", "/projects/{project_id}/kb/versions/{version_id}/files"),
-        ("POST", "/projects/{project_id}/kb/versions/{version_id}/ingest"),
-        ("POST", "/projects/{project_id}/kb/versions/{version_id}/publish"),
-    }.issubset(routes)

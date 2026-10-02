@@ -15,22 +15,17 @@ sources by archiving/replacing them rather than approving a review queue.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Awaitable, Callable
 
-from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import bump_kb_caches
 from app.core.vector import vec_literal
 from app.models.company import Project
 from app.models.knowledge import (
-    KBTextFile,
-    KBVersion,
-    KBVersionStatus,
     KnowledgeDocument,
     KnowledgeStatus,
 )
@@ -43,17 +38,14 @@ from app.services.knowledge import LLMJson
 from app.services.knowledge.canonical import checksum_text
 from app.services.knowledge.file_extraction import (
     DOCX_MIME_TYPE,
-    KB_RELEASE_FORMATS,
     KnowledgeFileExtractionError,
     _detect_upload_format,
     extraction_method_for_format,
     extract_text,
-    mime_type_for_format,
 )
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.services.knowledge.document_repository import KnowledgeDocumentRepo
 from app.services.knowledge.project_index_repository import rebuild_bus_timetable
-from app.services.knowledge.text_ingestion import kb_text_stats
 from app.services.storage import persist_original_upload
 from app.project_knowledge.application.jobs import ProjectKnowledgeJobs
 
@@ -139,251 +131,21 @@ class KnowledgeService:
                 await self.db.commit()
             raise UpstreamError("Hàng đợi xử lý chưa sẵn sàng. Vui lòng thử xử lý lại tệp đã lưu.") from exc
 
-    async def get_version(self, version_id: uuid.UUID) -> KBVersion | None:
-        return await self.db.get(KBVersion, version_id)
+    
 
-    async def create_version(self, project_id: uuid.UUID, *, actor: User) -> KBVersion:
-        project = await self.db.scalar(select(Project).where(Project.id == project_id).with_for_update())
-        if project is None:
-            raise NotFoundError("project not found")
-        if getattr(project, "knowledge_base_id", None) is not None:
-            raise ConflictError(
-                "Project knowledge is managed only through its Single-page or category YAML API"
-            )
-        next_version = int(
-            await self.db.scalar(
-                select(func.coalesce(func.max(KBVersion.version_no), 0) + 1).where(
-                    KBVersion.project_id == project_id
-                )
-            )
-            or 1
-        )
-        version = KBVersion(
-            project_id=project_id,
-            version_no=next_version,
-            status=KBVersionStatus.DRAFT,
-            created_by=actor.id,
-            template_version_id=None,
-        )
-        self.db.add(version)
-        await self.db.commit()
-        await self.db.refresh(version)
-        return version
+    
 
-    async def list_versions(self, project_id: uuid.UUID) -> list[KBVersion]:
-        if await self.db.get(Project, project_id) is None:
-            raise NotFoundError("project not found")
-        return list(
-            (
-                await self.db.scalars(
-                    select(KBVersion)
-                    .where(KBVersion.project_id == project_id)
-                    .order_by(KBVersion.version_no.desc())
-                )
-            ).all()
-        )
+    
 
-    async def list_version_files(self, version_id: uuid.UUID) -> list[KBTextFile]:
-        return list(
-            (
-                await self.db.scalars(
-                    select(KBTextFile)
-                    .where(KBTextFile.kb_version_id == version_id)
-                    .order_by(KBTextFile.created_at.asc())
-                )
-            ).all()
-        )
+    
 
-    async def upload_text_file(
-        self,
-        *,
-        project_id: uuid.UUID,
-        version_id: uuid.UUID,
-        file_name: str,
-        content_type: str,
-        data: bytes,
-        actor: User,
-    ) -> KBTextFile:
-        version = await self.require_version(project_id, version_id)
-        if version.status not in {KBVersionStatus.DRAFT, KBVersionStatus.FAILED}:
-            raise ValueError("Only DRAFT or FAILED KB versions accept uploads.")
-        upload_format = _detect_upload_format(
-            file_name, content_type, allowed_formats=KB_RELEASE_FORMATS
-        )
-        raw = extract_text(
-            file_name,
-            content_type,
-            data,
-            allowed_formats=KB_RELEASE_FORMATS,
-            decode_errors="strict",
-        )
-        if upload_format == "docx" and not raw.strip():
-            raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
-        stats = kb_text_stats(raw)
-        if not stats.normalized_text:
-            raise ValueError("Uploaded knowledge file is empty.")
-        metadata: dict[str, Any] = {}
-        source_version: str | None = str(version.version_no)
-        metadata["kb_version_id"] = str(version.id)
-        metadata["content_sha256"] = stats.content_sha256
-        metadata["source_file"] = {
-            "format": upload_format,
-            "filename": file_name,
-            "extraction": extraction_method_for_format(
-                upload_format, data=data, content_type=content_type
-            ),
-        }
-        doc = KnowledgeDocument(
-            file_name=file_name,
-            source="kb_version",
-            version=source_version,
-            mime_type=mime_type_for_format(upload_format, content_type),
-            raw_text=stats.normalized_text,
-            project_id=project_id,
-            status=KnowledgeStatus.UPLOADED,
-            stage="EXTRACTED",
-            metadata_=metadata,
-        )
-        self.db.add(doc)
-        await self.db.flush()
-        text_file = KBTextFile(
-            project_id=project_id,
-            kb_version_id=version.id,
-            document_id=doc.id,
-            filename=file_name,
-            mime_type=doc.mime_type or "text/plain",
-            raw_text=raw,
-            normalized_text=stats.normalized_text,
-            content_sha256=stats.content_sha256,
-            char_count=stats.char_count,
-            line_count=stats.line_count,
-            uploaded_by=actor.id,
-        )
-        self.db.add(text_file)
-        try:
-            await self.db.commit()
-        except IntegrityError as exc:
-            await self.db.rollback()
-            raise ValueError("This file content already exists in the KB version.") from exc
-        await self.db.refresh(text_file)
-        return text_file
+    
 
-    async def ingest_version(
-        self,
-        embedder: Embedder,
-        version: KBVersion,
-        *,
-        llm_json: LLMJson,
-    ) -> KBVersion:
-        await self.assert_mutable(version.project_id)
-        files = await self.list_version_files(version.id)
-        if not files:
-            raise ValueError("KB version has no uploaded text files.")
-        version.status = KBVersionStatus.INDEXING
-        version.error_message = None
-        await self.db.commit()
-        chunks = KnowledgeChunkRepo(self.db)
-        version_id = version.id
-        try:
-            await chunks.clear_version(version_id)
-            from app.services.knowledge import KnowledgePipeline
+    
 
-            for text_file in files:
-                if text_file.document_id is None:
-                    raise ValueError(f"KB file {text_file.filename} is missing source document.")
-                doc = await self.db.get(KnowledgeDocument, text_file.document_id)
-                if doc is None:
-                    raise ValueError(f"Source document for {text_file.filename} was deleted.")
-                doc.raw_text = text_file.normalized_text
-                doc.project_id = version.project_id
-                doc.status = KnowledgeStatus.UPLOADED
-                doc.stage = "EXTRACTED"
-                doc.error = None
-                await self.db.commit()
-                await KnowledgePipeline(self.db, embedder, llm_json).run(doc)
-                await chunks.attach_doc_chunks_to_file(
-                    doc_id=doc.id,
-                    kb_version_id=version.id,
-                    file_id=text_file.id,
-                    project_id=version.project_id,
-                    source_text=text_file.normalized_text,
-                )
-                await self.db.commit()
-            version.release_manifest_sha256 = hashlib.sha256(
-                "|".join(sorted(item.content_sha256 for item in files)).encode()
-            ).hexdigest()
-            version.error_message = None
-            version.status = KBVersionStatus.READY
-            await self.db.commit()
-        except Exception:
-            # A rejected chunk write leaves PostgreSQL's transaction aborted.
-            # Roll back before recording a retryable receipt and reload fields
-            # explicitly: rollback expires ORM instances even with async I/O.
-            await self.db.rollback()
-            failed = await self.db.scalar(
-                select(KBVersion)
-                .where(KBVersion.id == version_id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            )
-            if failed is not None and failed.status not in {
-                KBVersionStatus.ACTIVE, KBVersionStatus.ARCHIVED,
-            }:
-                failed.status = KBVersionStatus.FAILED
-                failed.error_message = "Chưa hoàn tất xử lý kiến thức. Vui lòng thử xử lý lại tệp đã lưu."
-                await self.db.commit()
-            else:
-                await self.db.rollback()
-            raise
-        await self.db.refresh(version)
-        return version
-
-    async def publish_version(self, project_id: uuid.UUID, version_id: uuid.UUID) -> KBVersion:
-        await self.assert_mutable(project_id)
-        # Serialize concurrent publishes per project so the archive-others-then-
-        # activate pair cannot race the unique partial index on ACTIVE versions.
-        locked_project = await self.db.scalar(
-            select(Project).where(Project.id == project_id).with_for_update()
-        )
-        if locked_project is None:
-            raise NotFoundError("project not found")
-        version = await self.require_version(project_id, version_id)
-        if version.status not in {KBVersionStatus.READY, KBVersionStatus.ACTIVE}:
-            raise ValueError("Only READY KB versions can be published.")
-        await self.db.execute(
-            text(
-                "UPDATE kb_versions "
-                "SET status = 'ARCHIVED' "
-                "WHERE project_id = :pid AND status = 'ACTIVE' AND id <> :vid"
-            ),
-            {"pid": str(project_id), "vid": str(version_id)},
-        )
-        await self.db.execute(
-            text(
-                "UPDATE kb_versions "
-                "SET status = 'ACTIVE', published_at = now(), error_message = NULL "
-                "WHERE id = :vid"
-            ),
-            {"vid": str(version_id)},
-        )
-        await self.db.execute(
-            text(
-                "UPDATE projects SET active_kb_version_id = :vid, updated_at = now() WHERE id = :pid"
-            ),
-            {"pid": str(project_id), "vid": str(version_id)},
-        )
-        await self.db.commit()
-        await bump_kb_caches()
-        await self.db.refresh(version)
-        return version
+    
 
     async def reindex_all(self, actor: User) -> int:
-        active_versioned_document_ids = (
-            select(KBTextFile.document_id)
-            .join(KBVersion, KBVersion.id == KBTextFile.kb_version_id)
-            .where(KBVersion.status == KBVersionStatus.ACTIVE)
-        )
-        has_version_file = select(KBTextFile.id).where(KBTextFile.document_id == KnowledgeDocument.id)
         docs = (
             await self.db.scalars(
                 select(KnowledgeDocument)
@@ -393,10 +155,6 @@ class KnowledgeService:
                     KnowledgeDocument.project_id.is_not(None),
                     Project.knowledge_base_id.is_(None),
                     KnowledgeDocument.raw_text.is_not(None),
-                    (
-                        KnowledgeDocument.id.in_(active_versioned_document_ids)
-                        | ~has_version_file.exists()
-                    ),
                 )
             )
         ).all()
@@ -772,12 +530,7 @@ class KnowledgeService:
         """Drop knowledge_documents whose drive_file_id is no longer in Drive (cascades chunks)."""
         return await KnowledgeDocumentRepo(self.db).delete_orphans_by_drive_ids(current_drive_ids)
 
-    async def require_version(self, project_id: uuid.UUID, version_id: uuid.UUID) -> KBVersion:
-        """Load a KB version owned by ``project_id`` or raise NotFoundError."""
-        version = await self.db.get(KBVersion, version_id)
-        if version is None or version.project_id != project_id:
-            raise NotFoundError("KB version not found")
-        return version
+    
 
     async def assert_mutable(
         self, project_id: uuid.UUID | None, *, allow_authoritative: bool = False

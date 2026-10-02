@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 
 from sqlalchemy import func, select, text
@@ -17,7 +18,7 @@ from app.models.installation import (
 )
 from app.models.integration import IntegrationSetting
 from app.models.job import Job
-from app.models.knowledge import KBVersion
+from app.models.knowledge import KnowledgeCategory, KnowledgeCategoryRevision
 from app.models.lead import Lead
 from app.models.persona import Persona, PersonaVersion
 from app.services.installation.catalog import (
@@ -137,16 +138,39 @@ class InstallationRepository:
         )
 
     async def active_kb_vector(self) -> tuple[tuple[str, str], ...]:
+        """(project_slug, knowledge checksum) for the installation manifest.
+
+        Derived from the ACTIVE category revisions — the category lane owns
+        knowledge now (the legacy KB-version release manifests are gone).
+        A project with categories but an unpinned active revision fails
+        loudly, so the manifest can never ship an unchecksummed knowledge
+        state.
+        """
         rows = await self.db.execute(
-            select(Project.slug, KBVersion.id, KBVersion.release_manifest_sha256)
-            .join(KBVersion, Project.active_kb_version_id == KBVersion.id)
+            select(
+                Project.slug,
+                KnowledgeCategory.category_key,
+                KnowledgeCategoryRevision.content_sha256,
+            )
+            .join(KnowledgeCategory, KnowledgeCategory.project_id == Project.id)
+            .join(
+                KnowledgeCategoryRevision,
+                KnowledgeCategoryRevision.id == KnowledgeCategory.active_revision_id,
+            )
             .where(Project.is_active.is_(True))
+            .order_by(Project.slug, KnowledgeCategory.category_key)
         )
-        vector: list[tuple[str, str]] = []
-        for slug, version_id, checksum in rows.all():
-            if checksum is None:
-                raise ValueError(f"active KB version is not checksum-pinned: {slug}/{version_id}")
-            vector.append((slug, checksum))
+        grouped: dict[str, list[str]] = {}
+        for slug, category_key, checksum in rows.all():
+            if not checksum:
+                raise ValueError(
+                    f"active category revision is not checksum-pinned: {slug}/{category_key}"
+                )
+            grouped.setdefault(slug, []).append(checksum)
+        vector = [
+            (slug, hashlib.sha256(",".join(checksums).encode()).hexdigest())
+            for slug, checksums in grouped.items()
+        ]
         return tuple(sorted(vector))
 
     async def operational_data_kinds(self) -> set[str]:

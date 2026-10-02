@@ -10,17 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import (
-    KBTextFile,
-    KBVersion,
-    KBVersionStatus,
     KnowledgeDocument,
     KnowledgeStatus,
 )
 from app.project_knowledge.application.providers import KnowledgeProviderFactory
 from app.project_knowledge.domain.canonical import CANONICAL_SCHEMA_VERSIONS
 from app.services.integration_settings import IntegrationSettingsService
-from app.services.knowledge import KnowledgePipeline, KnowledgeService
-from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
+from app.services.knowledge import KnowledgePipeline
 from app.shared.domain.errors import ConflictError
 
 logger = logging.getLogger(__name__)
@@ -67,9 +63,6 @@ class SqlAlchemyKnowledgeIngestionAdapter:
                 if embedder is not None
                 else self._providers.embedder(embedding=embedding_config)
             )
-            version_file = await self._db.scalar(
-                select(KBTextFile).where(KBTextFile.document_id == document.id).limit(1)
-            )
             is_canonical = (document.metadata_ or {}).get(
                 "schema_version"
             ) in CANONICAL_SCHEMA_VERSIONS
@@ -98,15 +91,6 @@ class SqlAlchemyKnowledgeIngestionAdapter:
             ).run(document)
             if training is not None:
                 await training.run(document, BatchCategoryEmbedder(resolved_embedder))
-            if version_file is not None:
-                await KnowledgeChunkRepo(self._db).attach_doc_chunks_to_file(
-                    doc_id=document.id,
-                    kb_version_id=version_file.kb_version_id,
-                    file_id=version_file.id,
-                    project_id=version_file.project_id,
-                    source_text=version_file.normalized_text,
-                )
-                await self._db.commit()
         except Exception as exc:  # noqa: BLE001 - preserve recorded failure behavior
             # A failed SQL operation requires rollback before recording failure.
             await self._db.rollback()
@@ -142,59 +126,7 @@ class SqlAlchemyKnowledgeIngestionAdapter:
             if is_training:
                 raise
 
-    async def ingest_version(
-        self,
-        version_id: object,
-        *,
-        embedder: Callable[[str], Awaitable[list[float]]] | None = None,
-        json_extractor: Callable[[str, str], Awaitable[str]] | None = None,
-    ) -> None:
-        version = await self._db.get(KBVersion, version_id)
-        if version is None:
-            logger.warning("ingest job: KB version %s not found", version_id)
-            return
-        try:
-            integration = IntegrationSettingsService(self._db)
-            embedding_config = await integration.resolve_embedding()
-            resolved_embedder = (
-                embedder
-                if embedder is not None
-                else self._providers.embedder(embedding=embedding_config)
-            )
-            if json_extractor is not None:
-                resolved_json_extractor = json_extractor
-            else:
-                minimax = await integration.resolve_minimax()
-                openrouter = await integration.resolve_openrouter()
-                resolved_json_extractor = self._providers.json_extractor(
-                    minimax_api_key=minimax.api_key,
-                    openrouter_api_key=openrouter.api_key,
-                )
-            await KnowledgeService(self._db).ingest_version(
-                resolved_embedder,
-                version,
-                llm_json=resolved_json_extractor,
-            )
-        except Exception as exc:  # noqa: BLE001 - preserve recorded failure behavior
-            await self._db.rollback()
-            failed = await self._db.scalar(
-                select(KBVersion)
-                .where(KBVersion.id == version_id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            )
-            if failed is not None and failed.status not in {
-                KBVersionStatus.ACTIVE, KBVersionStatus.ARCHIVED,
-            }:
-                failed.status = KBVersionStatus.FAILED
-                failed.error_message = "Chưa hoàn tất xử lý kiến thức. Vui lòng thử xử lý lại tệp đã lưu."
-                await self._db.commit()
-            else:
-                await self._db.rollback()
-            logger.error(
-                "knowledge version ingestion failed version_id=%s cause=%s",
-                version_id, type(exc).__name__,
-            )
+    
 
 
 __all__ = ["SqlAlchemyKnowledgeIngestionAdapter"]

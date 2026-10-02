@@ -52,7 +52,7 @@ EXPECTED_ROUTE_COUNTS = {
     # +1 admin-only credentials reveal (audited, no-store)
     "installation": 8,
     "jobs": 7,
-    "knowledge": 25,  # +4 external-source-sync endpoints (list / create / run-now / delete)
+    "knowledge": 18,  # -7 the legacy KB-version lane (versions CRUD/ingest/publish + canonical format template)
     "knowledge_bases": 11,
     "leads": 15,
     "main": 3,
@@ -65,7 +65,9 @@ EXPECTED_ROUTE_COUNTS = {
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
-EXPECTED_ROUTE_INVENTORY_SHA256 = "2990c1f2297d9f7a26c6b3b97096320833beb3ed949cb3d99b063dfd8b902295"
+# The legacy KB-version lane removal (-7 knowledge routes, -3 queue producers)
+# is the re-review this digest records.
+EXPECTED_ROUTE_INVENTORY_SHA256 = "dd45879c7365909a46b499a05ec3a4dac8de7e0dd454a9eedf9f7bc6dd8616c0"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -189,7 +191,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: a turn that held the per-chat mutex hands the conversation to a newer
     # inbound the ingress guard dropped, via chatbot_worker._handoff_to_newer_inbound
     # -> enqueue_latest_unanswered_worker_message.
-    "queue_producer": 42,
+    "queue_producer": 39,  # -3 the legacy KB-version lane enqueue sites
     # -1: the custom provider stopped reading a stored context-window row (the
     # field left the settings UI), so resolve_custom_llm._load's `get` count
     # drops 7→6 at the same site.
@@ -242,7 +244,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # Bounded channel dispatch adds the reviewed `_send_parts` adapter.send_text
 # boundary. Each part reuses the same provider and authority/policy fences;
 # no provider endpoint, registry binding, or queue/outbox writer was added.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "45ad453fac9b035ebe6e617792f18c563e87e3d96c38dc576044479c7845e2fd"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "6d1e1d29ace876c1d12e0fd9a8decd9bff1cce8de20313c9007f09ea6fdd958c"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
@@ -253,7 +255,6 @@ CALL_CATEGORIES = {
         "enqueue_enrich_oa_profile",
         "enqueue_followup",
         "enqueue_ingest",
-        "enqueue_ingest_version",
     },
     "outbox_boundary": {
         "enqueue_outbox",

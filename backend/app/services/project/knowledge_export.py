@@ -12,9 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
 from app.models.knowledge import (
-    KBTextFile,
-    KBVersion,
-    KBVersionStatus,
     KnowledgeBase,
     KnowledgeBaseDirectFile,
     KnowledgeBaseMode,
@@ -114,49 +111,7 @@ async def export_project_knowledge(
             Project.category_authority_started.is_(True),
         )
     )
-    legacy = (
-        select(
-            Project.id.label("project_id"),
-            literal("legacy").label("kind"),
-            literal("").label("source_key"),
-            KBTextFile.filename.label("source_title"),
-            KBTextFile.normalized_text.label("source_text"),
-            KBTextFile.created_at.label("source_created_at"),
-            KBTextFile.id.label("source_id"),
-        )
-        .select_from(Project)
-        .join(KnowledgeBase, owned_base)
-        .join(
-            KBVersion,
-            and_(
-                KBVersion.id == Project.active_kb_version_id,
-                KBVersion.project_id == Project.id,
-                KBVersion.status == KBVersionStatus.ACTIVE,
-            ),
-        )
-        .join(
-            KBTextFile,
-            and_(
-                KBTextFile.kb_version_id == KBVersion.id,
-                KBTextFile.project_id == Project.id,
-            ),
-        )
-        .join(
-            KnowledgeDocument,
-            and_(
-                KnowledgeDocument.id == KBTextFile.document_id,
-                KnowledgeDocument.project_id == Project.id,
-                KnowledgeDocument.category_revision_id.is_(None),
-                KnowledgeDocument.status == KnowledgeStatus.PUBLISHED,
-            ),
-        )
-        .where(
-            Project.id == project_id,
-            KnowledgeBase.mode == KnowledgeBaseMode.RAG,
-            Project.category_authority_started.is_(False),
-        )
-    )
-    sources = union_all(direct, category, legacy).subquery()
+    sources = union_all(direct, category).subquery()
     result = await db.execute(
         select(
             Project.name.label("project_name"),

@@ -215,7 +215,6 @@ def test_project_knowledge_direct_context_jobs_preserve_enqueue_arguments() -> N
 @pytest.mark.parametrize(
     ("method_name", "kind"),
     [
-        ("ingest_version", ProjectKnowledgeJobKind.VERSION_INGEST),
         ("process_category_revision", ProjectKnowledgeJobKind.CATEGORY_REVISION),
     ],
 )
@@ -233,7 +232,6 @@ def test_project_knowledge_jobs_required_receipt_operations_return_the_receipt(
 @pytest.mark.parametrize(
     ("method_name", "message"),
     [
-        ("ingest_version", "knowledge version enqueue failed"),
         ("process_category_revision", "category revision enqueue failed"),
     ],
 )
@@ -273,10 +271,6 @@ _WORKER_FACADES = {
     ProjectKnowledgeJobKind.DOCUMENT_INGEST: (
         "app.workers.ingest_worker",
         "enqueue_ingest",
-    ),
-    ProjectKnowledgeJobKind.VERSION_INGEST: (
-        "app.workers.ingest_worker",
-        "enqueue_ingest_version",
     ),
     ProjectKnowledgeJobKind.CATEGORY_REVISION: (
         "app.workers.category_worker",

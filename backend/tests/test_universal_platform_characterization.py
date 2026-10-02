@@ -201,50 +201,7 @@ def test_digest_fallback_is_source_grounded_and_domain_neutral():
 
 
 @pytest.mark.asyncio
-async def test_knowledge_version_creation_is_template_free(monkeypatch):
-    project_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
-    actor_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
-    version = SimpleNamespace(
-        id=uuid.uuid4(),
-        project_id=project_id,
-        release_manifest_sha256=None,
-        version_no=1,
-        status=KBVersionStatus.DRAFT,
-        created_by=actor_id,
-        created_at=datetime.now(timezone.utc),
-        published_at=None,
-        error_message=None,
-    )
 
-    class PlainKnowledgeService:
-        def __init__(self, _db: object) -> None:
-            pass
-
-        async def create_version(self, _project_id: uuid.UUID, *, actor: object) -> object:
-            assert _project_id == project_id
-            assert actor.id == actor_id
-            return version
-
-    audit_payloads: list[dict] = []
-
-    async def record_audit(_db: object, **kwargs: object) -> None:
-        audit_payloads.append(kwargs["payload"])
-
-    class Database:
-        async def commit(self) -> None:
-            return None
-
-    monkeypatch.setattr(knowledge_api, "KnowledgeService", PlainKnowledgeService)
-    monkeypatch.setattr(knowledge_api, "record_audit", record_audit)
-
-    result = await knowledge_api.create_kb_version(
-        project_id,
-        admin=SimpleNamespace(id=actor_id),
-        db=Database(),
-    )
-
-    assert "template_version_id" not in result.model_dump()
-    assert audit_payloads == [{"project_id": str(project_id)}]
 
 
 @pytest.mark.asyncio

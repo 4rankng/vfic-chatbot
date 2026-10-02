@@ -10,7 +10,6 @@ from typing import Protocol
 
 class ProjectKnowledgeJobKind(StrEnum):
     DOCUMENT_INGEST = "document_ingest"
-    VERSION_INGEST = "version_ingest"
     CATEGORY_REVISION = "category_revision"
     EXTERNAL_SOURCE_SYNC = "external_source_sync"
     SINGLE_PAGE_SOURCE_SYNC = "single_page_source_sync"
@@ -44,17 +43,6 @@ class ProjectKnowledgeJobs:
                 document_id,
             )
         )
-
-    def ingest_version(self, version_id: uuid.UUID) -> str:
-        receipt = self._port.enqueue(
-            ProjectKnowledgeJobRequest(
-                ProjectKnowledgeJobKind.VERSION_INGEST,
-                version_id,
-            )
-        )
-        if receipt is None:
-            raise RuntimeError("knowledge version enqueue failed")
-        return receipt
 
     def process_category_revision(self, revision_id: uuid.UUID) -> str:
         receipt = self._port.enqueue(

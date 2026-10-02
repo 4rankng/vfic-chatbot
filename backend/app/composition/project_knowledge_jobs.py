@@ -32,10 +32,6 @@ class RqProjectKnowledgeJobAdapter:
 
                 enqueue_ingest(aggregate_id)
                 return None
-            if request.kind is ProjectKnowledgeJobKind.VERSION_INGEST:
-                from app.workers.ingest_worker import enqueue_ingest_version
-
-                return enqueue_ingest_version(aggregate_id)
             if request.kind is ProjectKnowledgeJobKind.CATEGORY_REVISION:
                 from app.workers.category_worker import enqueue_category_revision
 

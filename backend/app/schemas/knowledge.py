@@ -195,50 +195,19 @@ class UploadRequest(BaseModel):
         return value
 
 
-class KBVersionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    project_id: uuid.UUID
-    release_manifest_sha256: str | None = None
-    version_no: int
-    status: KBVersionStatus
-    created_by: uuid.UUID | None = None
-    created_at: datetime
-    published_at: datetime | None = None
-    error_message: str | None = None
 
 
-class KBVersionListResponse(BaseModel):
-    data: list[KBVersionOut]
-    total: int
 
 
-class KBTextFileOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    project_id: uuid.UUID
-    kb_version_id: uuid.UUID
-    document_id: uuid.UUID | None = None
-    filename: str
-    mime_type: str
-    content_sha256: str
-    char_count: int
-    line_count: int
-    uploaded_by: uuid.UUID | None = None
-    created_at: datetime
 
 
-class KBTextFileListResponse(BaseModel):
-    data: list[KBTextFileOut]
-    total: int
 
 
-class KBIngestResponse(BaseModel):
-    job_id: str
-    status: str
-    kb_version_id: uuid.UUID
+
+
+
+
+
 
 
 class KnowledgeDocumentUpdate(BaseModel):

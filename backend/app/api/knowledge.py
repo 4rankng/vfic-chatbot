@@ -27,11 +27,6 @@ from app.project_knowledge.domain.legacy_job_references import strip_legacy_job_
 from app.schemas.knowledge import (
     ExternalSourceCreate,
     ExternalSourceSyncStateOut,
-    KBIngestResponse,
-    KBTextFileListResponse,
-    KBTextFileOut,
-    KBVersionListResponse,
-    KBVersionOut,
     KnowledgeChunkListResponse,
     KnowledgeChunkOut,
     KnowledgeDocumentUpdate,
@@ -48,8 +43,6 @@ from app.services.ingestion.limits import read_upload_within_limit
 from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeService
 from app.services.knowledge.canonical import (
     CanonicalValidationError,
-    load_faq_template,
-    load_template,
 )
 from app.services.knowledge.external_source_admin import KnowledgeExternalSourceAdminService
 from app.shared.domain.errors import (
@@ -66,158 +59,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 _project_knowledge_jobs = build_project_knowledge_jobs()
-
-
-@router.get("/format/template", response_class=PlainTextResponse)
-async def get_knowledge_format_template(
-    kind: str = Query("knowledge", pattern="^(knowledge|faq)$"),
-    _admin: Any = Depends(require_admin),
-) -> PlainTextResponse:
-    if kind == "faq":
-        return PlainTextResponse(
-            load_faq_template(),
-            media_type="text/markdown; charset=utf-8",
-            headers={"Content-Disposition": 'attachment; filename="vfic-faq-v1-template.md"'},
-        )
-    return PlainTextResponse(
-        load_template(),
-        media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": 'attachment; filename="vfic-knowledge-v1-template.md"'},
-    )
-
-
-@router.post(
-    "/projects/{project_id}/kb/versions",
-    response_model=KBVersionOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_kb_version(
-    project_id: uuid.UUID,
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> KBVersionOut:
-    version = await KnowledgeService(db).create_version(project_id, actor=admin)
-    await record_audit(
-        db,
-        action="kb_version_created",
-        actor_id=admin.id,
-        target_type="kb_version",
-        target_id=str(version.id),
-        payload={"project_id": str(project_id)},
-    )
-    await db.commit()
-    return KBVersionOut.model_validate(version)
-
-
-@router.get("/projects/{project_id}/kb/versions", response_model=KBVersionListResponse)
-async def list_kb_versions(
-    project_id: uuid.UUID,
-    _admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> KBVersionListResponse:
-    versions = await KnowledgeService(db).list_versions(project_id)
-    return KBVersionListResponse(
-        data=[KBVersionOut.model_validate(version) for version in versions],
-        total=len(versions),
-    )
-
-
-@router.get(
-    "/projects/{project_id}/kb/versions/{version_id}/files",
-    response_model=KBTextFileListResponse,
-)
-async def list_kb_version_files(
-    project_id: uuid.UUID,
-    version_id: uuid.UUID,
-    _admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> KBTextFileListResponse:
-    service = KnowledgeService(db)
-    await service.require_version(project_id, version_id)
-    files = await service.list_version_files(version_id)
-    return KBTextFileListResponse(
-        data=[KBTextFileOut.model_validate(file) for file in files],
-        total=len(files),
-    )
-
-
-@router.post(
-    "/projects/{project_id}/kb/versions/{version_id}/files",
-    response_model=KBTextFileOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def upload_kb_version_file(
-    project_id: uuid.UUID,
-    version_id: uuid.UUID,
-    file: UploadFile = File(...),
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> KBTextFileOut:
-    data = await read_upload_within_limit(file)
-    try:
-        uploaded = await KnowledgeService(db).upload_text_file(
-            project_id=project_id,
-            version_id=version_id,
-            file_name=file.filename or "knowledge.md",
-            content_type=file.content_type or "",
-            data=data,
-            actor=admin,
-        )
-    except ValueError as exc:
-        raise ValidationError(str(exc)) from exc
-    return KBTextFileOut.model_validate(uploaded)
-
-
-@router.post(
-    "/projects/{project_id}/kb/versions/{version_id}/ingest",
-    response_model=KBIngestResponse,
-)
-async def ingest_kb_version(
-    project_id: uuid.UUID,
-    version_id: uuid.UUID,
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> KBIngestResponse:
-    service = KnowledgeService(db)
-    await service.assert_mutable(project_id)
-    await service.require_version(project_id, version_id)
-    job_id = _project_knowledge_jobs.ingest_version(version_id)
-    await record_audit(
-        db,
-        action="kb_ingestion_enqueued",
-        actor_id=admin.id,
-        target_type="kb_version",
-        target_id=str(version_id),
-        payload={"project_id": str(project_id), "job_id": job_id},
-    )
-    await db.commit()
-    return KBIngestResponse(job_id=job_id, status="PENDING", kb_version_id=version_id)
-
-
-@router.post(
-    "/projects/{project_id}/kb/versions/{version_id}/publish",
-    response_model=KBVersionOut,
-)
-async def publish_kb_version(
-    project_id: uuid.UUID,
-    version_id: uuid.UUID,
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> KBVersionOut:
-    try:
-        version = await KnowledgeService(db).publish_version(project_id, version_id)
-    except ValueError as exc:
-        raise ConflictError(str(exc)) from exc
-    await record_audit(
-        db,
-        action="kb_version_published",
-        actor_id=admin.id,
-        target_type="kb_version",
-        target_id=str(version_id),
-        payload={"project_id": str(project_id), "manifest": version.release_manifest_sha256},
-    )
-    await db.commit()
-    return KBVersionOut.model_validate(version)
 
 
 @router.post("/projects/{project_id}/rag/test", response_model=list[SearchTestResult])
@@ -494,7 +335,6 @@ async def search_test(
 async def record_audit_safe(
     db: AsyncSession, action: str, actor_id: uuid.UUID, target_id: str
 ) -> None:
-    from app.services.audit_service import record_audit
 
     await record_audit(
         db, action=action, actor_id=actor_id, target_type="knowledge_document", target_id=target_id

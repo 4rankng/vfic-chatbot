@@ -71,19 +71,7 @@ def test_knowledge_upload_file_rejects_an_oversized_upload(
     upload_bytes.assert_not_awaited()
 
 
-def test_kb_version_file_upload_rejects_an_oversized_upload(
-    monkeypatch, tiny_upload_ceiling
-) -> None:
-    upload_text_file = AsyncMock()
-    monkeypatch.setattr(KnowledgeService, "upload_text_file", upload_text_file)
 
-    response = _client().post(
-        f"/api/v1/knowledge/projects/{uuid.uuid4()}/kb/versions/{uuid.uuid4()}/files",
-        files={"file": ("kb.md", b"x" * (tiny_upload_ceiling + 1), "text/markdown")},
-    )
-
-    assert response.status_code == 413
-    upload_text_file.assert_not_awaited()
 
 
 def test_persona_import_rejects_an_oversized_upload(monkeypatch, tiny_upload_ceiling) -> None:
