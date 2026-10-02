@@ -91,8 +91,14 @@ cho thu nhập; {"weekday":150,"rest_day":200,"holiday":300} cho tăng ca; {} n�
 - is_highlight: true nếu đây là selling point nổi bật (vd lương tuần, thu nhập cao, chỉ cần CCCD, có KTX).
 - is_missing: true nếu tin KHÔNG nhắc đến đặc điểm này.
 - needs_clarification: true nếu có thông tin nhưng mập mờ/cần xác nhận thêm.
-- evidence_text: bắt buộc trích NGUYÊN VĂN câu/khoản trong tin minh chứng cho mọi giá trị không thiếu. Không có câu nguồn thì đặt is_missing=true, không suy đoán.
+- evidence_text: trích NGUYÊN VĂN câu/khoản trong tin minh chứng cho mọi giá trị không thiếu. \
+Nếu câu trả lời nằm rải nhiều dòng, liệt kê các dòng liên quan.
 - strength_score: số thực 0-1 đánh giá độ hấp dẫn (0 nếu missing).
+
+TRƯỚC KHI đặt is_missing=true, hãy đọc lại TOÀN BỘ tin cho đặc điểm đó. Tin tuyển dụng \
+thường trả lời một đặc điểm bằng nhiều dòng hoặc một đoạn với cách diễn đạt khác câu hỏi — \
+chỉ cần tin ĐỀ CẬP nội dung của đặc điểm thì hãy trích xuất và ghép các dòng liên quan \
+thành câu trả lời. is_missing=true chỉ khi tin thực sự không có nội dung liên quan nào.
 
 TUYỆT ĐỐI KHÔNG bịa ra thông tin. Nếu đặc điểm không có trong tin, đặt is_missing=true và \
 value_text="Tin tuyển dụng chưa ghi rõ: <câu hỏi ứng viên>.".
