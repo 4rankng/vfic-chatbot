@@ -5,8 +5,8 @@ severity: low
 area: frontend
 labels: [frontend, visual, empty-state]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-10-02
 ---
 

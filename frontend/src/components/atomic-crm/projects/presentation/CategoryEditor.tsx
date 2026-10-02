@@ -187,7 +187,7 @@ export const CategoryEditor = ({
       ) : hasCurrentSource ? (
         <div className="project-category-source-content">
           <Textarea
-            value={content}
+            value={content.replace(/\\n/g, "\n")}
             readOnly
             rows={14}
             className="project-category-textarea font-mono"

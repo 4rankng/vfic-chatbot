@@ -307,15 +307,16 @@ export const ExternalSourceList = ({
   ) : null;
   if (!rows || rows.length === 0) {
     if (loadError) return loadError;
-    if (!isSinglePage) {
-      return null;
-    }
     return (
       <EmptyState
         icon={<Link2 className="size-6" aria-hidden="true" />}
         variant="inline"
-        title="Nguồn đồng bộ"
-        description="Chưa có nguồn đồng bộ Google Sheet cho trang kiến thức này."
+        title={isSinglePage ? "Nguồn đồng bộ" : "Google Sheet"}
+        description={
+          isSinglePage
+            ? "Chưa có nguồn đồng bộ Google Sheet cho trang kiến thức này."
+            : "Chưa liên kết Google Sheet cho dự án này."
+        }
       />
     );
   }

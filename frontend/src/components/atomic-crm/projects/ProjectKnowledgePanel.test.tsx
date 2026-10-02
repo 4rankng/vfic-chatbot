@@ -791,6 +791,40 @@ describe("ProjectKnowledgePanel", () => {
       .toHaveValue("TEMPLATE compensation");
   });
 
+  it("decodes raw newline escapes in the readonly category view", async () => {
+    // FE-31: KB source escapes rendered as literal \n text in the readonly
+    // markdown textarea, which read as a rendering bug to operators.
+    mocks.getProjectKnowledgeCategorySource.mockImplementation(
+      (_projectId: string, key: string) => {
+        if (key === "jobs") {
+          return Promise.resolve({
+            key,
+            label_vi: "Vị trí tuyển dụng",
+            revision_id: "revision-jobs",
+            revision_no: 2,
+            filename: "jobs-current.yaml",
+            content: 'summary: "Dòng một.\\nDòng hai."',
+            checksum: "checksum",
+            updated_at: "2026-07-18T00:00:00Z",
+          });
+        }
+        return Promise.reject(new ApiError(404, "Chưa có dữ liệu"));
+      },
+    );
+
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+
+    await screen.getByRole("button", { name: "Vị trí tuyển dụng" }).click();
+    const jobsEditor = screen.getByLabelText(
+      "Dữ liệu hiện tại của danh mục Vị trí tuyển dụng",
+    );
+    await expect
+      .element(jobsEditor)
+      .toHaveValue('summary: "Dòng một.\nDòng hai."');
+  });
+
   it("lets an authorized editor save YAML manually through the review pipeline", async () => {
     mocks.getProjectKnowledgeCategorySource.mockResolvedValue({
       key: "jobs",

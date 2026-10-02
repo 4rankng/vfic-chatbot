@@ -126,6 +126,21 @@ describe("ExternalSourceList", () => {
     expect(screen.container.textContent).not.toContain("Đồng bộ gần nhất:");
   });
 
+  it("reads as an intentional empty state when no sheet is linked", async () => {
+    // FE-30: the section previously rendered a bare heading (return null),
+    // which read as a broken sync panel instead of "not linked yet".
+    mocks.listExternalSources.mockResolvedValue([]);
+    const screen = await renderList(
+      <ExternalSourceList projectId="project-1" />,
+    );
+    await expect
+      .element(screen.getByText("Chưa liên kết Google Sheet cho dự án này."))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("heading", { name: "Google Sheet" }))
+      .toBeVisible();
+  });
+
   it("separates source identity, sync state, and actions on wide screens", async () => {
     await page.viewport(1200, 720);
 
