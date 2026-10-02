@@ -18,6 +18,7 @@ from app.models.knowledge import KnowledgeCategoryRevision, KnowledgeDocument, K
 from app.models.worker_feature import JobFeatureValue
 from app.services.knowledge.job_feature_repository import JobFeatureValueRepo
 from app.services.knowledge.project_index_repository import ProjectIndexRepo
+from app.shared.domain.errors import ConflictError
 
 
 def category_snapshot(categories, latest):
@@ -95,6 +96,28 @@ async def same_feature_intent(db, baseline, current):
     return intent(baseline) == intent(current)
 
 
+async def capture_auto_training_feature_baseline(db, project_id):
+    """Retain feature intent before automatic extraction releases its upload lock."""
+    return await snapshot_feature_values(db, project_id)
+
+
+async def auto_training_feature_intent_current(db, doc):
+    """A slow automatic source may replace only the feature intent it observed.
+
+    Its own successful publication becomes the retry baseline. Explicit plans
+    keep their existing publication semantics, and untouched catalog backfill
+    remains a read rather than a new administrator intent.
+    """
+    training = (doc.metadata_ or {}).get("project_training", {})
+    if not training.get("auto_extract"):
+        return True
+    expected = training.get("auto_feature_published_snapshot", training.get("auto_feature_baseline"))
+    if expected is None:
+        return False
+    current = await snapshot_feature_values(db, doc.project_id)
+    return await same_feature_intent(db, expected, current)
+
+
 async def restore_feature_values(db, project_id, snapshot):
     await db.execute(delete(JobFeatureValue).where(JobFeatureValue.project_id == project_id))
     for values in snapshot:
@@ -120,6 +143,11 @@ def feature_publication_state(doc, *, requires_cutover, status):
 
 
 async def publish_training_features(db, doc):
+    if not await auto_training_feature_intent_current(db, doc):
+        raise ConflictError(
+            "Thông tin dự án đã được chỉnh sửa sau khi nạp tệp. "
+            "Vui lòng kiểm tra thông tin hiện tại rồi nạp lại tệp."
+        )
     rows = [
         (SimpleNamespace(id=uuid.UUID(row["feature_id"])), row["value"])
         for row in doc.metadata_["project_training"].get("feature_values", [])
@@ -127,6 +155,15 @@ async def publish_training_features(db, doc):
     await JobFeatureValueRepo(db).merge_for_project(doc.project_id, doc.id, rows, commit=False)
     await db.flush()
     await ProjectIndexRepo(db).sync_highlights(doc.project_id, commit=False)
+    training = (doc.metadata_ or {}).get("project_training", {})
+    if training.get("auto_extract"):
+        doc.metadata_ = {
+            **doc.metadata_,
+            "project_training": {
+                **training,
+                "auto_feature_published_snapshot": await snapshot_feature_values(db, doc.project_id),
+            },
+        }
     feature_publication_state(doc, requires_cutover=False, status="COMPLETED")
 
 

@@ -1,8 +1,8 @@
 """Pure file-format detection and text extraction for knowledge uploads.
 
 Single owner of upload format resolution. Both knowledge upload paths come
-through here under one strict contract: only plain text, markdown, DOCX and
-XLSX resolve, YAML is refused by name, and everything else is rejected so the
+through here under one strict contract: plain-text documents, markdown, DOCX
+and XLSX resolve, YAML is refused by name, and binary formats are rejected so the
 route can answer 422. Every accepted format is normalized to text before
 ingest.
 
@@ -10,16 +10,19 @@ The DOCX and XLSX branches parse the OOXML container with the standard library
 and are recorded on the stored document under those distinct provenance values
 (see :func:`extraction_method_for_format`); a zip container read as UTF-8 is
 mojibake, not text, so those two formats must never fall through to the
-text-decode branch. Every other format is decoded as UTF-8.
+text-decode branch. Text is decoded strictly using a Unicode BOM, an explicitly
+declared supported charset, or UTF-8. Unknown encodings are never guessed.
 
 No DB/ORM imports — only file-format detection and file text extraction.
 """
 
 from __future__ import annotations
 
+import codecs
 import re
 from collections.abc import Callable
 from datetime import date, timedelta
+from email.message import Message
 from io import BytesIO
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
@@ -30,11 +33,51 @@ XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sh
 WORD_XML_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 # The only formats a knowledge upload may carry, on either lane. Each one
-# normalizes to ingestable text (OOXML parse or UTF-8 decode).
+# normalizes to ingestable text (OOXML parse or strict text decode).
 KB_RELEASE_FORMATS = frozenset({"docx", "xlsx", "markdown", "text"})
 
 _MARKDOWN_CONTENT_TYPES = frozenset({"text/markdown", "text/x-markdown"})
-_PLAIN_TEXT_CONTENT_TYPES = frozenset({"text/plain", *_MARKDOWN_CONTENT_TYPES})
+_PLAIN_TEXT_CONTENT_TYPES = frozenset(
+    {
+        "text/plain",
+        "text/csv",
+        "text/tab-separated-values",
+        "application/json",
+        *_MARKDOWN_CONTENT_TYPES,
+    }
+)
+_PLAIN_TEXT_SUFFIXES = frozenset({".txt", ".text", ".csv", ".tsv", ".log", ".json", ".rst"})
+_SUPPORTED_TEXT_ENCODINGS = frozenset(
+    {
+        "utf-8",
+        "utf-8-sig",
+        "utf-16",
+        "utf-16-le",
+        "utf-16-be",
+        "utf-32",
+        "utf-32-le",
+        "utf-32-be",
+        "ascii",
+        "cp1258",
+        "cp1252",
+        "iso8859-1",
+    }
+)
+_BINARY_SIGNATURES = (
+    b"%PDF-",
+    b"PK\x03\x04",
+    b"PK\x05\x06",
+    b"\x89PNG",
+    b"GIF87a",
+    b"GIF89a",
+    b"\x1f\x8b",
+    b"\x7fELF",
+    b"\xd0\xcf\x11\xe0",
+)
+_BINARY_ASCII_SIGNATURES = tuple(
+    signature.decode("ascii") for signature in _BINARY_SIGNATURES if signature.isascii()
+)
+_INVALID_TEXT_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0e-\x1f\x7f-\x84\x86-\x9f\ud800-\udfff]")
 _YAML_CONTENT_TYPES = frozenset({"application/yaml", "text/yaml"})
 _YAML_SUFFIXES = frozenset({".yaml", ".yml"})
 
@@ -52,13 +95,17 @@ def _detect_upload_format(
     """Resolve an upload's format from its name and declared content type.
 
     Both lanes share one strict contract: plain text, markdown, DOCX and XLSX
-    are the only accepted knowledge formats, YAML is refused by name so an old
+    are the only accepted knowledge formats. Common textual suffixes such as
+    CSV and JSON still produce plain text, never category-schema parsing.
+    YAML is refused by name so an old
     habit surfaces as a clear 422 instead of silently ingested markup, and
     anything else raises ``ValueError`` so the route can answer 422.
     ``allowed_formats`` narrows the accepted set for callers that want a
     subset; ``None`` means the full release set.
     """
-    suffix = Path(file_name or "").suffix.lower()
+    if not (file_name or "").strip():
+        raise ValueError("Knowledge filenames must not be empty.")
+    suffix = Path(file_name).suffix.lower()
     normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
     if suffix in _YAML_SUFFIXES or normalized_type in _YAML_CONTENT_TYPES:
         raise ValueError("YAML knowledge files are not accepted; convert to .md or .txt.")
@@ -68,15 +115,18 @@ def _detect_upload_format(
         resolved = "xlsx"
     elif suffix in {".md", ".markdown"}:
         resolved = "markdown"
-    elif suffix == ".txt":
+    elif suffix in _PLAIN_TEXT_SUFFIXES:
         resolved = "text"
     elif suffix == "" and normalized_type in _PLAIN_TEXT_CONTENT_TYPES:
         resolved = "markdown" if "markdown" in normalized_type else "text"
     elif normalized_type not in _PLAIN_TEXT_CONTENT_TYPES:
-        raise ValueError("Only .txt, .md, .docx and .xlsx knowledge files are supported.")
+        raise ValueError(
+            "Only text files (.txt, .text, .md, .markdown, .csv, .tsv, .log, .json, .rst), "
+            ".docx and .xlsx knowledge files are supported."
+        )
     else:
-        raise ValueError("Knowledge filenames must end in .txt, .md, .docx or .xlsx.")
-    if resolved not in (allowed_formats or KB_RELEASE_FORMATS):
+        raise ValueError("Knowledge filenames must end in a supported text, .docx or .xlsx suffix.")
+    if resolved not in (KB_RELEASE_FORMATS if allowed_formats is None else allowed_formats):
         raise ValueError(f"Knowledge files of type {resolved} are not supported.")
     return resolved
 
@@ -157,6 +207,7 @@ def _read_ooxml_part(archive: ZipFile, name: str) -> bytes:
     if len(expanded) > MAX_OOXML_PART_BYTES:
         raise KnowledgeFileExtractionError("Tệp Office vượt quá giới hạn xử lý nội dung.")
     return expanded
+
 
 # Built-in number-format ids that render a date and/or a time. The id space
 # below 164 is reserved by the format itself; 164+ come from <numFmt> entries in
@@ -366,7 +417,9 @@ def _extract_xlsx_text(data: bytes) -> str:
                 sheet_lines = _xlsx_sheet_lines(sheet_xml, shared, date_styles)
                 text_chars += sum(len(line) + 1 for line in sheet_lines)
                 if text_chars > MAX_OOXML_TEXT_CHARS:
-                    raise KnowledgeFileExtractionError("Tệp Office vượt quá giới hạn xử lý nội dung.")
+                    raise KnowledgeFileExtractionError(
+                        "Tệp Office vượt quá giới hạn xử lý nội dung."
+                    )
                 lines.extend(sheet_lines)
     except BadZipFile as exc:
         raise KnowledgeFileExtractionError("XLSX không hợp lệ hoặc không đọc được.") from exc
@@ -391,13 +444,65 @@ _PARSED_FORMAT_EXTRACTORS: dict[str, Callable[[bytes], str]] = {
 }
 
 
-def extraction_method_for_format(file_format: str) -> str:
-    """The provenance value naming how text for ``file_format`` is actually produced."""
-    return _PARSED_FORMAT_METHODS.get(file_format, "utf8_decode")
+def _text_encoding(data: bytes, content_type: str) -> str:
+    # UTF-32 LE starts with the UTF-16 LE marker: test the longer BOM first.
+    for marker, encoding in (
+        (codecs.BOM_UTF32_LE, "utf-32"),
+        (codecs.BOM_UTF32_BE, "utf-32"),
+        (codecs.BOM_UTF16_LE, "utf-16"),
+        (codecs.BOM_UTF16_BE, "utf-16"),
+        (codecs.BOM_UTF8, "utf-8-sig"),
+    ):
+        if data.startswith(marker):
+            return encoding
+    declared = Message()
+    declared["content-type"] = content_type or "text/plain"
+    charset = declared.get_content_charset()
+    if not charset:
+        return "utf-8"
+    try:
+        encoding = codecs.lookup(charset).name
+    except (LookupError, ValueError) as exc:
+        raise KnowledgeFileExtractionError(
+            "Mã hóa văn bản chưa được hỗ trợ. Hãy lưu tệp dưới dạng UTF-8."
+        ) from exc
+    if encoding not in _SUPPORTED_TEXT_ENCODINGS:
+        raise KnowledgeFileExtractionError(
+            "Mã hóa văn bản chưa được hỗ trợ. Hãy lưu tệp dưới dạng UTF-8."
+        )
+    return encoding
+
+
+def _validate_text(text: str) -> str:
+    if _INVALID_TEXT_CHARACTERS.search(text) or text.startswith(_BINARY_ASCII_SIGNATURES):
+        raise KnowledgeFileExtractionError(
+            "Tệp chứa dữ liệu nhị phân hoặc ký tự điều khiển không hợp lệ. "
+            "Hãy xuất nội dung thành tệp văn bản UTF-8."
+        )
+    if not text.replace("\ufeff", "").strip():
+        raise KnowledgeFileExtractionError("Tệp không có nội dung văn bản để xử lý.")
+    return text
+
+
+def extraction_method_for_format(
+    file_format: str, *, data: bytes | str | None = None, content_type: str = ""
+) -> str:
+    """Name the actual parser or decoder; omitted bytes retain the UTF-8 default."""
+    parsed = _PARSED_FORMAT_METHODS.get(file_format)
+    if parsed is not None:
+        return parsed
+    encoding = _text_encoding(data, content_type) if isinstance(data, bytes) else "utf-8"
+    # UTF-8 with a BOM is still UTF-8 decoding, with its signature removed.
+    method = (
+        "utf8"
+        if encoding in {"utf-8", "utf-8-sig"}
+        else encoding.replace("utf-", "utf").replace("-", "_")
+    )
+    return f"{method}_decode"
 
 
 def is_parsed_format(file_format: str) -> bool:
-    """Whether the format is structurally parsed rather than decoded as UTF-8 text."""
+    """Whether the format is structurally parsed rather than decoded as text."""
     return file_format in _PARSED_FORMAT_EXTRACTORS
 
 
@@ -412,20 +517,33 @@ def extract_text(
     """Convert an uploaded source file to ingestable plain text.
 
     Dispatches by detected format: DOCX and XLSX are parsed as OOXML containers;
-    plain text and markdown are decoded as UTF-8. Raises
-    ``KnowledgeFileExtractionError`` on a structurally invalid binary file; an
-    undecodable text file surfaces its ``UnicodeDecodeError`` to the caller
-    (upload handler) as a hard failure unless the caller asks for
-    ``decode_errors="replace"``.
+    plain text and markdown are decoded losslessly using their Unicode BOM or
+    declared charset, with UTF-8 as the default. Invalid bytes, binary content
+    and empty text raise ``KnowledgeFileExtractionError`` for a clear 422.
 
     ``allowed_formats`` narrows resolution to the strict KB-release contract (see
-    :func:`_detect_upload_format`); ``decode_errors`` selects the text-decode
-    policy for everything that is not a parsed binary format.
+    :func:`_detect_upload_format`). ``decode_errors`` remains for caller
+    compatibility, but only ``strict`` is allowed: replacement would silently
+    alter source facts before category extraction.
     """
-    if isinstance(data, str):
-        return data
     fmt = _detect_upload_format(file_name, content_type, allowed_formats=allowed_formats)
     parsed = _PARSED_FORMAT_EXTRACTORS.get(fmt)
     if parsed is not None:
+        if isinstance(data, str):
+            raise KnowledgeFileExtractionError("Tệp Office phải được tải lên dưới dạng tệp gốc.")
         return parsed(data)
-    return data.decode("utf-8", errors=decode_errors)
+    if decode_errors != "strict":
+        raise KnowledgeFileExtractionError(
+            "Nội dung văn bản phải được giải mã mà không thay thế ký tự."
+        )
+    if isinstance(data, str):
+        return _validate_text(data.lstrip("\ufeff"))
+    if data.startswith(_BINARY_SIGNATURES):
+        raise KnowledgeFileExtractionError("Tệp nhị phân không phải là tệp văn bản được hỗ trợ.")
+    try:
+        text = data.decode(_text_encoding(data, content_type), errors="strict")
+    except UnicodeError as exc:
+        raise KnowledgeFileExtractionError(
+            "Không đọc được mã hóa văn bản. Hãy lưu tệp dưới dạng UTF-8 hoặc Unicode có BOM."
+        ) from exc
+    return _validate_text(text)

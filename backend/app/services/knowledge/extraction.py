@@ -1,22 +1,22 @@
-"""Digest section chunker for the LLM training pipeline.
+"""Bounded source sections and resumable extraction of project category facts.
 
-Uploads are assumed to be raw text (see ``KnowledgeService.upload_bytes``), so this
-module no longer parses Office/PDF. It keeps only ``split_for_digest`` — the
-boundary-aware splitter that bounds each digest LLM call to a sane input size
-(the LLM does the real semantic splitting per section).
-
-The splitter returns a :class:`DigestSections` struct so callers (the pipeline)
-can observe whether the ``DIGEST_MAX_SECTIONS`` cap silently dropped content,
-and report it via ``digest_meta`` rather than losing data without a trace.
+File decoding belongs to ``file_extraction``. Digest sections report source beyond
+their provider-call budget so the pipeline can preserve it verbatim. Category
+extraction requires complete source coverage, exact evidence and valid contracts
+before returning a plan; budget exhaustion is an explicit failure.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+import hashlib
+import json
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from app.core.config import DIGEST_MAX_SECTIONS, DIGEST_SECTION_CHARS, DIGEST_SECTION_OVERLAP
+from app.services.knowledge.category_plan_grounding import CategoryPlanExtractionError
 
 if TYPE_CHECKING:
     from app.schemas.knowledge import ProjectTrainingPlan
@@ -160,11 +160,36 @@ def _snap_boundary(text: str, ideal_end: int, min_end: int) -> int:
 # so it runs on the digest LLM through the existing ``json_extractor`` port and
 # the result feeds the SAME training pipeline a parsed plan would.
 
-_MAX_PLAN_EXTRACT_CHARS = 60_000
+CATEGORY_PLAN_VERSION = "category-plan-v2"
+CATEGORY_PLAN_SECTION_CHARS = 12_000
+CATEGORY_PLAN_MAX_SECTIONS = 200
+
+
+def category_plan_sections(text: str) -> list[str]:
+    """Cover the complete source with bounded, overlapping provider inputs."""
+    source = text.strip()
+    sections: list[str] = []
+    start = 0
+    overlap = min(DIGEST_SECTION_OVERLAP, CATEGORY_PLAN_SECTION_CHARS // 4)
+    while start < len(source):
+        if len(sections) >= CATEGORY_PLAN_MAX_SECTIONS:
+            raise CategoryPlanExtractionError(
+                "Source exceeds the category extraction section budget"
+            )
+        end = _snap_boundary(
+            source,
+            min(start + CATEGORY_PLAN_SECTION_CHARS, len(source)),
+            start + CATEGORY_PLAN_SECTION_CHARS // 2,
+        )
+        sections.append(source[start:end])
+        if end == len(source):
+            break
+        start = max(start + 1, end - overlap)
+    return sections
 
 
 def _category_field_spec() -> str:
-    """Human-readable record fields per category, straight from the models."""
+    """Exact record contracts, including required fields, enums and nested data."""
     from app.project_knowledge.domain.category_catalog import (
         CATEGORY_DEFINITIONS,
     )
@@ -175,66 +200,176 @@ def _category_field_spec() -> str:
     for definition in CATEGORY_DEFINITIONS:
         doc_model = CATEGORY_DOCUMENT_MODELS[definition.key]
         record_model = _record_model(doc_model, definition.list_field)
-        fields = ", ".join(record_model.model_fields)
+        schema = record_model.model_json_schema()
+        schema["properties"].pop("id", None)
+        schema["required"] = [name for name in schema.get("required", []) if name != "id"]
         lines.append(
             f"- {definition.key.value} ({definition.label_vi}): "
-            f"mỗi record có các trường: {fields}"
+            + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
         )
     return "\n".join(lines)
 
 
-async def extract_category_plan(text: str, llm_json) -> "ProjectTrainingPlan | None":
-    """Map arbitrary prose into category writes via the digest LLM.
+async def extract_category_plan(
+    text: str,
+    llm_json: Callable[[str, str], Awaitable[str]],
+    *,
+    checkpoint: dict[str, Any] | None = None,
+    on_checkpoint: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+) -> "ProjectTrainingPlan | None":
+    """Extract every section before returning one grounded category plan.
 
-    Returns ``None`` when the text carries no usable facts or extraction
-    fails — callers fall back to plain document ingestion rather than erroring.
+    ``None`` means the reviewed source has no category facts. Provider, schema,
+    evidence, source-identity and coverage errors fail explicitly. Checkpoints
+    retain validated evidence envelopes; replay validates them against the exact
+    source before skipping any provider calls. The caller owns persistence and
+    source/lease guards around the callback.
     """
-    import json
-
     from app.project_knowledge.domain.category_catalog import (
         CATEGORY_DEFINITIONS,
     )
     from app.schemas.knowledge import ProjectTrainingPlan, ProjectTrainingWrite
     from app.services.knowledge.category_contracts import validate_category_payload
-    from app.services.knowledge.category_markdown import build_source_markdown
-
-    system = (
-        "Chia nội dung phiếu thông tin sau vào các danh mục kiến thức tuyển dụng. "
-        "Trả về JSON thuần (không markdown, không giải thích): object; mỗi khóa là "
-        "MỘT tên danh mục tiếng Anh trong danh sách dưới đây (vd: jobs, contacts); "
-        "giá trị là mảng record, mỗi record là object đúng các trường của danh mục đó. "
-        "Chỉ đưa thông tin CÓ THẬT trong văn bản; danh mục không có dữ liệu thì bỏ "
-        "khóa; tuyệt đối không bịa. Giữ nguyên số điện thoại/email/địa chỉ.\n\n"
-        "Danh mục:\n" + _category_field_spec()
+    from app.services.knowledge.category_markdown import (
+        build_source_markdown,
+        parse_category_markdown,
     )
-    try:
-        raw = await llm_json(system, text[:_MAX_PLAN_EXTRACT_CHARS])
-        data = json.loads(raw)
-    except Exception:  # noqa: BLE001 - extraction is best-effort by contract
-        return None
-    if not isinstance(data, dict):
-        return None
+    from app.services.knowledge.category_plan_grounding import (
+        validate_category_envelope,
+    )
+    from app.services.knowledge.prompts import CATEGORY_PLAN_SYSTEM_PROMPT
+
+    sections = category_plan_sections(text)
+    keys = [definition.key.value for definition in CATEGORY_DEFINITIONS]
+    source_checksum = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    completed: list[dict[str, Any]] = []
+
+    def validate_categories(data: Any, source: str) -> dict[str, Any]:
+        if not isinstance(data, dict) or set(data) != set(keys):
+            raise CategoryPlanExtractionError("Extraction must account for every project category")
+        validated: dict[str, Any] = {}
+        for key in keys:
+            records = data[key]
+            if not isinstance(records, list):
+                raise CategoryPlanExtractionError("Category extraction is not a record list")
+            validated[key] = [validate_category_envelope(key, record, source) for record in records]
+        return validated
+
+    if checkpoint is not None:
+        if (
+            checkpoint.get("version") != CATEGORY_PLAN_VERSION
+            or checkpoint.get("source_sha256") != source_checksum
+            or checkpoint.get("total_sections") != len(sections)
+            or type(checkpoint.get("completed_sections")) is not int
+            or not isinstance(checkpoint.get("sections"), list)
+            or checkpoint["completed_sections"] != len(checkpoint["sections"])
+            or not 0 <= checkpoint["completed_sections"] <= len(sections)
+        ):
+            raise CategoryPlanExtractionError("Extraction checkpoint does not match the source")
+        for index, saved in enumerate(checkpoint["sections"]):
+            if (
+                not isinstance(saved, dict)
+                or saved.get("index") != index
+                or saved.get("source_sha256")
+                != hashlib.sha256(sections[index].encode()).hexdigest()
+            ):
+                raise CategoryPlanExtractionError(
+                    "Extraction checkpoint has incomplete source coverage"
+                )
+            completed.append(
+                {
+                    **saved,
+                    "categories": validate_categories(saved.get("categories"), sections[index]),
+                }
+            )
+
+    def state(status: str = "PROCESSING") -> dict[str, Any]:
+        covered = [key for key in keys if any(section["categories"][key] for section in completed)]
+        # Do not hand mutable internal state to caller-owned persistence hooks.
+        return json.loads(
+            json.dumps(
+                {
+                    "version": CATEGORY_PLAN_VERSION,
+                    "source_sha256": source_checksum,
+                    "total_sections": len(sections),
+                    "completed_sections": len(completed),
+                    "sections": completed,
+                    "covered_categories": covered,
+                    "missing_categories": [key for key in keys if key not in covered],
+                    "status": status,
+                }
+            )
+        )
+
+    if on_checkpoint is not None:
+        await on_checkpoint(state())
+    system = CATEGORY_PLAN_SYSTEM_PROMPT.replace("{{CATEGORY_SCHEMAS}}", _category_field_spec())
+    for index in range(len(completed), len(sections)):
+        try:
+            raw = await llm_json(system, sections[index])
+        except Exception:
+            raise CategoryPlanExtractionError(
+                "Category extraction provider failed; retry the retained source"
+            ) from None
+
+        def unique_object(pairs):
+            result = {}
+            for name, value in pairs:
+                if name in result:
+                    raise CategoryPlanExtractionError("Category extraction returned invalid JSON")
+                result[name] = value
+            return result
+
+        try:
+            data = json.loads(raw, object_pairs_hook=unique_object)
+        except (ValueError, TypeError):
+            raise CategoryPlanExtractionError("Category extraction returned invalid JSON") from None
+        validated = validate_categories(data, sections[index])
+        completed.append(
+            {
+                "index": index,
+                "source_sha256": hashlib.sha256(sections[index].encode()).hexdigest(),
+                "categories": validated,
+            }
+        )
+        if on_checkpoint is not None:
+            await on_checkpoint(state())
+
     writes: list[ProjectTrainingWrite] = []
     for definition in CATEGORY_DEFINITIONS:
-        records = data.get(definition.key.value)
-        if not isinstance(records, list) or not records:
+        records = {
+            envelope["record"]["id"]: envelope["record"]
+            for section in completed
+            for envelope in section["categories"][definition.key.value]
+        }
+        if not records:
             continue
         payload = {
             "schema_version": "1.0",
             "category": definition.key.value,
-            definition.list_field: [r for r in records if isinstance(r, dict)],
+            definition.list_field: list(records.values()),
         }
         try:
             document = validate_category_payload(definition.key, payload)
-        except Exception:  # noqa: BLE001 - one junk category skips, not fails
-            continue
+            markdown = build_source_markdown(document.model_dump(mode="json"))
+            parse_category_markdown(definition.key, markdown)
+        except ValueError:
+            raise CategoryPlanExtractionError(
+                "Combined category extraction exceeds its valid schema or size"
+            ) from None
         writes.append(
             ProjectTrainingWrite(
                 key=definition.key,
                 filename=f"{definition.key.value}.md",
-                content=build_source_markdown(document.model_dump(mode="json")) + "\n",
+                content=markdown,
             )
         )
-    if not writes:
-        return None
-    return ProjectTrainingPlan(writes=writes)
+    try:
+        plan = ProjectTrainingPlan(writes=writes) if writes else None
+    except ValueError:
+        raise CategoryPlanExtractionError(
+            "Combined category plan exceeds the training size budget"
+        ) from None
+    if on_checkpoint is not None:
+        await on_checkpoint(state("COMPLETED"))
+    return plan

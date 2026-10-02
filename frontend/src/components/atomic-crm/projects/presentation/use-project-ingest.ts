@@ -50,7 +50,7 @@ export type IngestState =
   | Readonly<{
       phase: "running";
       /** The category the pipeline is reviewing right now. */
-      current: ProjectKnowledgeCategory;
+      current: ProjectKnowledgeCategory | null;
       /** Categories already active, in the order they were written. */
       activated: readonly ProjectKnowledgeCategory[];
       total: number;
@@ -61,7 +61,7 @@ export type IngestState =
     }>
   | Readonly<{
       phase: "failed";
-      failed: ProjectKnowledgeCategory;
+      failed: ProjectKnowledgeCategory | null;
       /** The backend's own words; an empty string when it gave none. */
       message: string;
       activated: readonly ProjectKnowledgeCategory[];
@@ -74,7 +74,11 @@ export type IngestState =
     }>;
 
 export type IngestResult =
-  | Readonly<{ ok: true; requiresCutover: boolean }>
+  | Readonly<{
+      ok: true;
+      requiresCutover: boolean;
+      activated: readonly ProjectKnowledgeCategory[];
+    }>
   | Readonly<{ ok: false }>;
 
 export type ProjectIngest = Readonly<{
@@ -92,7 +96,7 @@ export type ProjectIngest = Readonly<{
    * continues past the chain must check this before treating the knowledge as
    * landed.
    *
-   * With `sourceFile`, upload the file and plan once and observe the worker's
+   * With `sourceFile`, upload the original file once and observe the worker's
    * durable progress. Upload failure blocks the run. Without a source file,
    * replace categories directly and await exact active revision IDs.
    */
@@ -110,7 +114,7 @@ type WaitOutcome =
   | Readonly<{ ok: false; message: string }>;
 
 /**
- * Uploads a brief and its grounded category plan once. The worker owns the
+ * Uploads a brief once for full-source extraction. The worker owns the
  * durable chain; this hook only observes progress, so leaving the page cannot
  * strand half a project. Manual category edits await exact revision activation.
  *
@@ -243,7 +247,7 @@ export const useProjectIngest = (): ProjectIngest => {
       cancel();
       const epoch = epochRef.current;
       const activated: ProjectKnowledgeCategory[] = [];
-      if (writes.length === 0) {
+      if (writes.length === 0 && !sourceFile) {
         setState({
           phase: "failed",
           failed: "jobs",
@@ -254,20 +258,16 @@ export const useProjectIngest = (): ProjectIngest => {
         return { ok: false };
       }
       if (sourceFile) {
-        const first = writes[0].key;
+        let currentCategory: ProjectKnowledgeCategory | null = null;
         setState({
           phase: "running",
-          current: first,
+          current: null,
           activated: [],
-          total: writes.length,
-          items: writes.map((write) => ({ key: write.key, status: "pending" })),
+          total: 0,
+          items: [],
         });
         try {
-          const receipt = await uploadProjectDocument(
-            projectId,
-            sourceFile,
-            writes,
-          );
+          const receipt = await uploadProjectDocument(projectId, sourceFile);
           if (epoch !== epochRef.current) return { ok: false };
           const outcome = await new Promise<WaitOutcome>((resolve) => {
             const finish = (value: WaitOutcome) => {
@@ -294,19 +294,11 @@ export const useProjectIngest = (): ProjectIngest => {
                       return;
                     }
                     const training = document.project_training;
-                    const completed = training?.completed ?? [];
-                    const current =
-                      training?.current ??
-                      writes.find((write) => !completed.includes(write.key))
-                        ?.key ??
-                      first;
-                    activated.splice(
-                      0,
-                      activated.length,
-                      ...writes
-                        .filter((write) => completed.includes(write.key))
-                        .map((write) => write.key),
-                    );
+                    const completed = [...new Set(training?.completed ?? [])];
+                    const planned = [...new Set(training?.planned ?? [])];
+                    const current = training?.current ?? null;
+                    currentCategory = current;
+                    activated.splice(0, activated.length, ...completed);
                     if (
                       document.status === "FAILED" ||
                       document.status === "ARCHIVED" ||
@@ -325,7 +317,10 @@ export const useProjectIngest = (): ProjectIngest => {
                       return;
                     }
                     if (training?.status === "COMPLETED") {
-                      if (activated.length !== writes.length) {
+                      if (
+                        completed.length === 0 ||
+                        planned.some((key) => !completed.includes(key))
+                      ) {
                         finish({
                           ok: false,
                           message:
@@ -343,13 +338,20 @@ export const useProjectIngest = (): ProjectIngest => {
                       phase: "running",
                       current,
                       activated: [...activated],
-                      total: writes.length,
+                      total:
+                        planned.length || completed.length + (current ? 1 : 0),
                       slow: tries >= SOFT_POLL_ATTEMPTS,
-                      items: writes.map((write) => ({
-                        key: write.key,
-                        status: completed.includes(write.key)
+                      items: [
+                        ...new Set([
+                          ...planned,
+                          ...completed,
+                          ...(current ? [current] : []),
+                        ]),
+                      ].map((key) => ({
+                        key,
+                        status: completed.includes(key)
                           ? "active"
-                          : training?.current === write.key
+                          : training?.current === key
                             ? "processing"
                             : "queued",
                       })),
@@ -385,9 +387,7 @@ export const useProjectIngest = (): ProjectIngest => {
             if (outcome.message)
               setState({
                 phase: "failed",
-                failed:
-                  writes.find((write) => !activated.includes(write.key))?.key ??
-                  first,
+                failed: currentCategory,
                 message: outcome.message,
                 activated: [...activated],
               });
@@ -401,12 +401,13 @@ export const useProjectIngest = (): ProjectIngest => {
           return {
             ok: true,
             requiresCutover: outcome.requiresCutover === true,
+            activated: [...activated],
           };
         } catch (error) {
           if (epoch !== epochRef.current) return { ok: false };
           setState({
             phase: "failed",
-            failed: first,
+            failed: null,
             message: (error as Error).message,
             activated: [],
           });
@@ -490,7 +491,7 @@ export const useProjectIngest = (): ProjectIngest => {
       if (epoch !== epochRef.current) return { ok: false };
       if (epoch !== epochRef.current) return { ok: false };
       setState({ phase: "done", activated: [...activated] });
-      return { ok: true, requiresCutover: false };
+      return { ok: true, requiresCutover: false, activated: [...activated] };
     },
     [cancel, waitForActive],
   );

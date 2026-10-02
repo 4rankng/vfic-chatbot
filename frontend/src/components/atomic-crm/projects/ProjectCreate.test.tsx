@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type * as KnowledgeServiceModule from "./project-knowledge-service";
 import { render, type RenderResult } from "vitest-browser-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -58,7 +59,8 @@ vi.mock("ra-core", async () => {
   };
 });
 
-vi.mock("./project-knowledge-service", () => ({
+vi.mock("./project-knowledge-service", async (importOriginal) => ({
+  ...(await importOriginal<typeof KnowledgeServiceModule>()),
   replaceProjectKnowledgeCategory: mocks.replaceCategory,
   getProjectKnowledgeCategories: mocks.catalog,
   uploadProjectDocument: mocks.uploadDoc,
@@ -73,6 +75,11 @@ vi.mock("./ProjectWorkspaceShell", () => ({
 }));
 
 import { ProjectCreate } from "./ProjectCreate";
+import { parseProjectBrief } from "./domain/project-brief-ingest";
+import { planBriefKnowledge } from "./domain/project-knowledge-markdown";
+
+/** Provider receipt fixture; browser previews are never submitted as plans. */
+let backendWrites: ReturnType<typeof planBriefKnowledge>["writes"] = [];
 
 /** The shape of a real brief: an overview table plus Q&A sections. */
 const BRIEF = `# PHIẾU THU THẬP
@@ -124,12 +131,7 @@ const uploadBrief = (
 };
 
 /** A catalog row that has accepted the revision it is asked about. */
-const plannedWrites = () =>
-  (mocks.uploadDoc.mock.calls.at(-1)?.[2] ?? []) as Array<{
-    key: string;
-    filename: string;
-    content: string;
-  }>;
+const plannedWrites = () => backendWrites;
 
 const catalogWith = (
   revisionId: string,
@@ -168,7 +170,13 @@ describe("ProjectCreate", () => {
     mocks.uploadDoc.mockReset();
     mocks.updateCard.mockReset();
     mocks.trainingDoc.mockReset();
-    mocks.uploadDoc.mockResolvedValue({ id: "training-document" });
+    backendWrites = [];
+    mocks.uploadDoc.mockImplementation(async (_id: string, file: File) => {
+      backendWrites = planBriefKnowledge(
+        parseProjectBrief(await file.text()),
+      ).writes;
+      return { id: "training-document" };
+    });
     mocks.trainingDoc.mockImplementation(async () => ({
       id: "training-document",
       status: "PUBLISHED",
@@ -281,7 +289,13 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     mocks.uploadDoc.mockReset();
     mocks.updateCard.mockReset();
     mocks.trainingDoc.mockReset();
-    mocks.uploadDoc.mockResolvedValue({ id: "training-document" });
+    backendWrites = [];
+    mocks.uploadDoc.mockImplementation(async (_id: string, file: File) => {
+      backendWrites = planBriefKnowledge(
+        parseProjectBrief(await file.text()),
+      ).writes;
+      return { id: "training-document" };
+    });
     mocks.trainingDoc.mockImplementation(async () => ({
       id: "training-document",
       status: "PUBLISHED",
@@ -536,12 +550,84 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     uploadBrief(screen, "Tên dự án: Dự án trống\n");
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("Tệp chưa có nội dung kiến thức có thể nạp");
+      .toHaveTextContent("Hệ thống chưa xác nhận đầy đủ các danh mục");
     await expect
       .element(screen.getByRole("button", { name: /Tạo dự án/ }))
       .toBeDisabled();
     expect(mocks.update).not.toHaveBeenCalled();
-    expect(mocks.uploadDoc).not.toHaveBeenCalled();
+    expect(mocks.uploadDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it("trains free-form text with no browser fields and activates without a fabricated roles write", async () => {
+    mocks.trainingDoc.mockResolvedValue({
+      id: "training-document",
+      status: "PUBLISHED",
+      error: null,
+      project_training: {
+        status: "COMPLETED",
+        completed: ["jobs", "benefits", "transportation"],
+        planned: ["jobs", "benefits", "transportation"],
+        current: null,
+        error: null,
+      },
+    });
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(
+      screen,
+      "Công ty tuyển người đóng gói, thu nhập theo sản lượng, có xe đón từ bến xe.",
+      "plain.log",
+      "text/plain",
+    );
+    await vi.waitFor(() => expect(mocks.uploadDoc).toHaveBeenCalledTimes(1));
+    expect(mocks.uploadDoc.mock.calls[0]).toHaveLength(2);
+    expect(mocks.create.mock.calls[0][1].data.slug).toMatch(
+      /^du-an-moi-[a-f0-9]{8}$/,
+    );
+    await screen.getByLabelText(/^Tên dự án/).fill("Dự án văn bản tự do");
+    await expect
+      .element(screen.getByRole("button", { name: /Tạo dự án/ }))
+      .toBeEnabled();
+    await screen.getByRole("button", { name: /Tạo dự án/ }).click();
+    await vi.waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
+    expect(mocks.replaceCategory).not.toHaveBeenCalled();
+  });
+
+  it("drops previous automatic roles and aliases when the next source has no preview fields", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+    await expect
+      .element(screen.getByRole("button", { name: /Tạo dự án/ }))
+      .toBeEnabled();
+    mocks.trainingDoc.mockResolvedValue({
+      id: "training-document",
+      status: "PUBLISHED",
+      error: null,
+      project_training: {
+        status: "COMPLETED",
+        completed: ["jobs"],
+        planned: ["jobs"],
+        current: null,
+        error: null,
+      },
+    });
+    uploadBrief(
+      screen,
+      "Nhà máy đang cần người làm theo ca, mọi thông tin trong văn bản tự do.",
+      "new.log",
+    );
+    await vi.waitFor(() => expect(mocks.uploadDoc).toHaveBeenCalledTimes(2));
+    await expect
+      .element(screen.getByLabelText(/^Vị trí tuyển dụng/))
+      .toHaveValue("");
+    await expect
+      .element(screen.getByLabelText(/^Tên gọi khác/))
+      .toHaveValue("");
+    await expect
+      .element(screen.getByRole("button", { name: /Tạo dự án/ }))
+      .toBeEnabled();
+    await screen.getByRole("button", { name: /Tạo dự án/ }).click();
+    await vi.waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(1));
+    expect(mocks.replaceCategory).not.toHaveBeenCalled();
   });
 
   it("parses a plain-text (.txt) brief instead of demanding markdown", async () => {
@@ -697,7 +783,7 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     expect(mocks.uploadDoc).toHaveBeenCalledTimes(1);
   }, 15000);
 
-  it("lands highlight facts only after the worker confirms the source", async () => {
+  it("leaves source-derived discovery claims to the backend worker", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen);
 
@@ -706,23 +792,8 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     await expect
       .element(screen.getByText(/Đã nạp xong 3 phần kiến thức/))
       .toBeVisible();
-    await vi.waitFor(() => expect(mocks.updateCard).toHaveBeenCalledTimes(1), {
-      timeout: 6000,
-    });
-    // Exactly the brief's facts, and nothing else, in the patch body.
-    expect(mocks.updateCard.mock.calls[0]).toEqual([
-      "7",
-      {
-        discovery_card: {
-          highlights: ["Không yêu cầu bằng cấp.", "Đóng BHXH đầy đủ."],
-        },
-      },
-    ]);
-    // The worker confirms the source before facts enter the recruiting card.
-    await vi.waitFor(() => expect(mocks.uploadDoc).toHaveBeenCalled());
-    expect(mocks.updateCard.mock.invocationCallOrder[0]).toBeGreaterThan(
-      mocks.trainingDoc.mock.invocationCallOrder[0],
-    );
+    expect(mocks.updateCard).not.toHaveBeenCalled();
+    expect(mocks.trainingDoc).toHaveBeenCalled();
   }, 20000);
 
   it("sends no discovery-card patch when the brief carries no highlights", async () => {

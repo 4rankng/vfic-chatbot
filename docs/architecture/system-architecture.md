@@ -968,6 +968,19 @@ be shared by another Project.
   and embedded before a transaction stores indexed evidence and advances only that
   category's active pointer. Revision claims are atomic and each revision can
   own only one evidence document.
+- Automatic text training retains original bytes and strictly decoded text
+  before queuing provider work. The browser's optional brief preview cannot
+  limit the categories scanned. Versioned section checkpoints bind extraction
+  to the exact source, retain grounded record quotes and resume completed
+  sections; every section accounts for all twelve category contracts. Missing
+  categories are reported without clearing existing knowledge, and invalid or
+  unsupported extraction fails visibly rather than silently becoming plain
+  document ingestion. Upload-time category and feature snapshots protect
+  independent administrator edits during slow extraction.
+  Automatic worker feature extraction also covers bounded source sections and
+  persists checkpoints, so a large source cannot hit an unbounded later provider
+  request. Conflicting values retain their variants for clarification and do not
+  overwrite an existing reliable feature.
 - A one-file training source prepares all its proposed categories and features
   durably without publishing them. Categories are Project-scoped and independently
   valid, without Job reference fields or a Jobs-first authoring requirement.

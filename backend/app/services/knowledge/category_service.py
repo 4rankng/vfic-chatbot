@@ -619,6 +619,7 @@ class KnowledgeCategoryService:
         project_id: uuid.UUID,
         category_key: KnowledgeCategoryKey,
         actor: User,
+        expected_revision_no: int | None = None,
     ) -> KnowledgeCategoryRevision:
         await require_category_project(self.db, project_id)
         project = await locked_project(self.db, project_id)
@@ -628,6 +629,10 @@ class KnowledgeCategoryService:
                 KnowledgeCategoryRevision.category_id == category.id
             )
         )
+        if expected_revision_no is not None and int(latest or 0) != expected_revision_no:
+            raise ConflictError(
+                "Danh mục đã thay đổi. Vui lòng tải lại thông tin trước khi tiếp tục."
+            )
         empty_payload = {
             "schema_version": "1.0",
             "category": category_key.value,

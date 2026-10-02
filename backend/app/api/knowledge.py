@@ -46,7 +46,6 @@ from app.schemas.knowledge import (
 from app.services.audit_service import record_audit
 from app.services.ingestion.limits import read_upload_within_limit
 from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeService
-from app.services.knowledge.extraction import extract_category_plan
 from app.services.knowledge.canonical import (
     CanonicalValidationError,
     load_faq_template,
@@ -382,9 +381,8 @@ async def upload_file(
 ) -> KnowledgeDocumentOut:
     """Multipart upload: extract text, store original, enqueue the training pipeline.
 
-    ``auto_extract`` makes ANY txt importable: when no ``category_plan``
-    accompanies the file, the digest LLM maps its content into the twelve
-    categories and the result runs through the normal training pipeline.
+    ``auto_extract`` retains the source and queues complete category extraction.
+    Provider work runs on the ingest worker and is resumable from that source.
     """
     data = await read_upload_within_limit(file)
     plan = None
@@ -393,13 +391,6 @@ async def upload_file(
             plan = ProjectTrainingPlan.model_validate_json(category_plan)
         except ValueError as exc:
             raise ValidationError("Kế hoạch nạp danh mục chưa hợp lệ. Vui lòng kiểm tra tệp rồi thử lại.") from exc
-    elif auto_extract:
-        text = (
-            data.decode("utf-8", errors="replace")
-            if isinstance(data, (bytes, bytearray))
-            else str(data)
-        )
-        plan = await _extract_category_plan(text, db)
     try:
         doc = await KnowledgeService(db).upload_bytes(
             file.filename or "upload",
@@ -407,6 +398,7 @@ async def upload_file(
             data,
             project_id=project_id,
             training_plan=plan,
+            auto_extract=auto_extract and plan is None,
             actor=_admin,
         )
     except CanonicalValidationError as exc:
@@ -428,21 +420,6 @@ async def upload_file(
     await record_audit_safe(db, "upload_knowledge", _admin.id, str(doc.id))
     await _queue_document(doc, db, reuse_completed=True)
     return KnowledgeDocumentOut.model_validate(doc)
-
-
-async def _extract_category_plan(text: str, db: AsyncSession):
-    """Best-effort any-text → ProjectTrainingPlan via the digest LLM."""
-    from app.composition.project_knowledge import build_knowledge_provider_factory
-    from app.services.integration_settings import IntegrationSettingsService
-
-    integration = IntegrationSettingsService(db)
-    minimax = await integration.resolve_minimax()
-    openrouter = await integration.resolve_openrouter()
-    llm_json = build_knowledge_provider_factory().json_extractor(
-        minimax_api_key=minimax.api_key,
-        openrouter_api_key=openrouter.api_key,
-    )
-    return await extract_category_plan(text, llm_json)
 
 
 async def _queue_document(doc, db, *, reuse_completed=False) -> None:

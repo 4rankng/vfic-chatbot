@@ -6,8 +6,10 @@ import {
   parseProjectBrief,
   type ProjectBrief,
 } from "../domain/project-brief-ingest";
-import { PROJECT_KNOWLEDGE_CATEGORY_LABELS } from "../domain/project-knowledge-policy";
-import { planBriefKnowledge } from "../domain/project-knowledge-markdown";
+import {
+  PROJECT_TEXT_FILE_ACCEPT,
+  readProjectBriefPreview,
+} from "../project-knowledge-service";
 
 type Props = {
   /** Fired with the parsed brief AND the file itself. The parent fills the
@@ -21,19 +23,6 @@ type Props = {
   /** True while the parent is creating the draft and running the pipeline. */
   busy?: boolean;
 };
-
-/** Guard rail, not a parser: a brief is a document a person typed, so anything
- *  wildly past a brief's size is a mis-drop, and reading it would freeze the
- *  tab. Any text shape is accepted; markdown is the recommended format. */
-const MAX_BYTES = 2 * 1024 * 1024;
-
-/** Clearly non-text shapes — binary documents, images, media, archives — by
- *  extension or by MIME type. A .md/.txt file, one with no extension, or one
- *  with an unknown extension is text the parser gets to judge. */
-const BINARY_NAME =
-  /\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|png|jpe?g|gif|bmp|tiff?|ico|webp|mp3|mp4|mov|avi|wav|ogg|flac|zip|rar|7z|tar|gz|exe|dmg|apk|bin)$/i;
-const BINARY_TYPE =
-  /^(image|audio|video|font)\/|^application\/(pdf|zip|gzip|x-tar|x-rar-compression|x-7z-compressed|msword|vnd\.ms-|vnd\.openxmlformats-|vnd\.oasis\.)/i;
 
 /**
  * ProjectBriefImport — the recruiter's "I already wrote it down" path.
@@ -58,30 +47,15 @@ export const ProjectBriefImport = ({
   const read = async (file?: File) => {
     if (!file) return;
     setError("");
-    // Text files only, by product ruling: every text shape is parsed —
-    // markdown is just the recommended format — while a clearly binary pick
-    // (pdf, image, office) is rejected before any read.
-    if (BINARY_NAME.test(file.name) || BINARY_TYPE.test(file.type)) {
-      setError("Chỉ chấp nhận tệp văn bản.");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      setError("Tệp quá lớn. Hãy tải lên phiếu thông tin dưới 2 MB.");
-      return;
-    }
     setReading(true);
     try {
-      const text = await file.text();
-      const parsed = parseProjectBrief(text);
-      if (!parsed.name && planBriefKnowledge(parsed).writes.length === 0) {
-        setError(
-          "Không đọc được nội dung dự án từ tệp này. Hãy kiểm tra lại tệp văn bản.",
-        );
-        return;
-      }
+      const text = await readProjectBriefPreview(file);
+      // Preview can be empty/unsupported; the original file still goes to the
+      // authoritative worker and is never replaced with a partial browser plan.
+      const parsed = parseProjectBrief(text ?? "");
       onImported(parsed, file.name, file);
-    } catch {
-      setError("Không đọc được tệp. Hãy thử lại với tệp văn bản.");
+    } catch (readError) {
+      setError((readError as Error).message);
     } finally {
       setReading(false);
       // Allow re-picking the same file after an edit.
@@ -125,7 +99,7 @@ export const ProjectBriefImport = ({
           ref={inputRef}
           type="file"
           hidden
-          accept=".md,.txt,.markdown,text/plain,text/markdown"
+          accept={PROJECT_TEXT_FILE_ACCEPT}
           className="sr-only"
           aria-label="Chọn tệp phiếu thông tin dự án"
           disabled={reading || busy}
@@ -133,8 +107,8 @@ export const ProjectBriefImport = ({
         />
       </div>
       <p className="text-helper text-muted-foreground">
-        Một tệp .txt hoặc .md, tối đa 2 MB. Hệ thống tạo bản nháp và nạp kiến
-        thức từ nội dung trong tệp. Kiểm tra kết quả trước khi bật tuyển dụng.
+        Một tệp văn bản, tối đa 20 MB. Không cần theo mẫu. Hệ thống phân loại
+        nội dung vào 12 danh mục. Kiểm tra kết quả trước khi bật tuyển dụng.
       </p>
       {error ? (
         <p role="alert" className="text-helper text-destructive">
@@ -153,10 +127,6 @@ const ImportSummary = ({
   brief: ProjectBrief;
   filename: string;
 }) => {
-  const filled = Object.keys(
-    brief.categories,
-  ) as (keyof typeof brief.categories)[];
-  const missing = brief.missingCategories;
   return (
     <div
       className="project-brief-import-summary grid gap-1.5"
@@ -166,23 +136,10 @@ const ImportSummary = ({
       <p className="flex items-center gap-2 text-helper text-foreground">
         <FileText className="size-4 shrink-0" aria-hidden="true" />
         <span className="project-brief-summary-copy">
-          Đã đọc <strong>{filename}</strong> — nhận diện {filled.length}/12 phần
-          kiến thức
-          {brief.faqEntries.length > 0
-            ? ` và ${brief.faqEntries.length} câu hỏi thường gặp`
-            : ""}
-          .
+          Đã chọn <strong>{filename}</strong>. Kết quả phân loại được xác nhận
+          sau khi hệ thống xử lý toàn bộ tệp.
         </span>
       </p>
-      {missing.length > 0 ? (
-        <p className="text-helper text-muted-foreground">
-          Chưa có trong tệp (bạn có thể thêm sau):{" "}
-          {missing
-            .map((key) => PROJECT_KNOWLEDGE_CATEGORY_LABELS[key])
-            .join(", ")}
-          .
-        </p>
-      ) : null}
       {brief.unmappedSections.length > 0 ? (
         <details className="text-helper">
           <summary className="cursor-pointer text-muted-foreground">

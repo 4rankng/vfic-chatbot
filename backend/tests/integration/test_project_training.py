@@ -27,6 +27,8 @@ from app.project_knowledge.infrastructure.ingestion import SqlAlchemyKnowledgeIn
 from app.schemas.knowledge import ProjectTrainingPlan
 from app.schemas.projects import ProjectUpdate
 from app.services.knowledge.category_markdown import build_source_markdown
+from app.services.knowledge.category_markdown import parse_category_markdown
+from app.project_knowledge.domain.category_catalog import CATEGORY_DEFINITIONS
 from app.services.knowledge.project_training import ProjectTrainingService
 from app.services.knowledge.category_service import KnowledgeCategoryService
 from app.services.knowledge.category_service import CategoryActivationError
@@ -121,7 +123,7 @@ class _Embedder:
         return [[0.01] * 3072 for _text in texts]
 
 
-async def _upload(db, monkeypatch):
+async def _upload(db, monkeypatch, *, auto_extract=False, source_text=_SOURCE):
     monkeypatch.setattr(
         "app.services.knowledge.service.persist_original_upload", lambda *_args: None
     )
@@ -150,16 +152,29 @@ async def _upload(db, monkeypatch):
     doc = await KnowledgeService(db).upload_bytes(
         "brief.txt",
         "text/plain",
-        _SOURCE.encode(),
+        source_text.encode(),
         project_id=project.id,
-        training_plan=_plan(),
+        training_plan=None if auto_extract else _plan(),
+        auto_extract=auto_extract,
         actor=actor,
     )
     return actor, project, doc
 
 
-async def _train(db, doc, *, embedder=None):
+async def _train(db, doc, *, embedder=None, extraction_calls=None):
     async def llm(system, _user):
+        if "source_quotes" in system:
+            if extraction_calls is not None:
+                extraction_calls.append(_user)
+            data = {definition.key.value: [] for definition in CATEGORY_DEFINITIONS}
+            if "Vị trí tuyển dụng" in _user:
+                for write in _plan().writes:
+                    category = parse_category_markdown(write.key, write.content)
+                    records = category.model_dump(mode="json", exclude_unset=True)[write.key.value]
+                    data[write.key.value] = [
+                        {"record": record, "source_quotes": [_user]} for record in records
+                    ]
+            return json.dumps(data, ensure_ascii=False)
         if "feature_key" in system:
             return json.dumps(
                 {
@@ -269,6 +284,121 @@ async def _visible_knowledge(db, project_id):
         project_ids=[str(project_id)],
     )
     return {row.content for row in rows}
+
+
+async def test_unstructured_upload_extracts_all_twelve_categories_on_worker(
+    atomic_session, monkeypatch
+):
+    db = atomic_session
+    actor, project, source = await _upload(db, monkeypatch, auto_extract=True)
+    assert source.metadata_["project_training"]["writes"] == []
+    assert source.digest_meta["project_training"]["status"] == "QUEUED"
+    assert not any((await _pointers(db, project.id)).values())
+    calls = []
+    await _train(db, source, extraction_calls=calls)
+    await db.refresh(source)
+    await db.refresh(project)
+    project.is_active = True
+    await db.commit()
+    progress = KnowledgeDocumentOut.model_validate(source).project_training
+    keys = {definition.key.value for definition in CATEGORY_DEFINITIONS}
+    assert len(calls) == 1
+    assert progress.status == "COMPLETED"
+    assert set(progress.planned) == set(progress.completed) == keys
+    assert set(progress.covered_categories) == keys
+    assert progress.missing_categories == []
+    assert progress.source_sections_completed == progress.source_sections_total == 1
+    assert all((await _pointers(db, project.id)).values())
+    assert source.metadata_["project_training"]["extraction"]["status"] == "COMPLETED"
+    assert any("0901234567" in content for content in await _visible_knowledge(db, project.id))
+    features = await CatalogRepository(db, page_project_ids=None).job_features_for_project(project.id)
+    assert any("6.000.000" in feature.value_text for feature in features)
+    duplicate = await KnowledgeService(db).upload_bytes(
+        "brief.txt", "text/plain", _SOURCE.encode(), project_id=project.id,
+        actor=actor, auto_extract=True,
+    )
+    assert duplicate.id == source.id
+
+
+async def test_automatic_source_without_facts_fails_and_keeps_every_pointer_unchanged(
+    atomic_session, monkeypatch
+):
+    db = atomic_session
+    _actor, project, source = await _upload(
+        db, monkeypatch, auto_extract=True, source_text="Ghi chú nội bộ không có thông tin tuyển dụng."
+    )
+    before = await _pointers(db, project.id)
+    with pytest.raises(ValueError, match="chưa có thông tin"):
+        await _train(db, source)
+    await db.refresh(source)
+    assert source.status == KnowledgeStatus.FAILED
+    assert source.metadata_["project_training"]["writes"] == []
+    assert source.metadata_["project_training"]["processing_token"] is None
+    assert await _pointers(db, project.id) == before
+    assert await _visible_knowledge(db, project.id) == set()
+
+
+async def test_manual_category_edit_invalidates_auto_source_and_identical_reupload(
+    atomic_session, monkeypatch
+):
+    db = atomic_session
+    actor, project, source = await _upload(db, monkeypatch, auto_extract=True)
+    write = next(write for write in _plan().writes if write.key.value == "contacts")
+    manual, _job_id = await KnowledgeCategoryService(db).stage_replacement(
+        project_id=project.id, category_key=write.key, filename=write.filename,
+        source_markdown=write.content.replace("0901234567", "0907654321"),
+        actor=actor, schedule=False,
+    )
+    calls = []
+    with pytest.raises(ConflictError, match="changed"):
+        await _train(db, source, extraction_calls=calls)
+    assert calls == []
+    await db.refresh(project)
+    await db.refresh(actor)
+    await db.refresh(source)
+    await db.refresh(manual)
+    replacement = await KnowledgeService(db).upload_bytes(
+        "brief.txt", "text/plain", _SOURCE.encode(), project_id=project.id,
+        actor=actor, auto_extract=True,
+    )
+    assert replacement.id != source.id
+    assert replacement.metadata_["project_training"]["extraction_baseline"]["contacts"]["latest"] == manual.revision_no
+
+
+async def test_auto_retry_skips_extraction_and_reuses_prepared_categories(
+    atomic_session, monkeypatch
+):
+    from app.services.knowledge.category_batch import TrainingCategoryBatch
+
+    db = atomic_session
+    _actor, project, source = await _upload(db, monkeypatch, auto_extract=True)
+    original = TrainingCategoryBatch.prepare
+    prepared = []
+
+    async def fail_second(self, doc, revision, embedder):
+        if prepared:
+            raise RuntimeError("simulated category provider failure")
+        await original(self, doc, revision, embedder)
+        prepared.append(revision.id)
+
+    monkeypatch.setattr(TrainingCategoryBatch, "prepare", fail_second)
+    calls = []
+    with pytest.raises(RuntimeError, match="simulated"):
+        await _train(db, source, extraction_calls=calls)
+    await db.refresh(source)
+    assert len(calls) == 1
+    assert len(source.metadata_["project_training"]["writes"]) == 12
+    assert not any((await _pointers(db, project.id)).values())
+    first = await db.get(KnowledgeCategoryRevision, prepared[0])
+    prepared_doc = first.quality_result["prepared_document_id"]
+    monkeypatch.setattr(TrainingCategoryBatch, "prepare", original)
+    await _train(db, source, extraction_calls=calls)
+    await db.refresh(source)
+    await db.refresh(first)
+    assert len(calls) == 1
+    assert first.quality_result["prepared_document_id"] == prepared_doc
+    assert source.digest_meta["project_training"]["status"] == "COMPLETED"
+    assert all((await _pointers(db, project.id)).values())
 
 
 @pytest.mark.parametrize("existing_feature", [True, False])

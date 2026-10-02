@@ -34,6 +34,7 @@ from app.services.knowledge.category_service import (
 )
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.services.knowledge.training_features import (
+    auto_training_feature_intent_current,
     category_snapshot,
     feature_publication_state,
     publish_training_features,
@@ -48,17 +49,45 @@ from app.services.knowledge.training_guard import ensure_training_owner
 from app.shared.domain.errors import ConflictError
 
 
+async def _locked_category_state(db, project_id):
+    rows = list((await db.scalars(
+        select(KnowledgeCategory)
+        .where(KnowledgeCategory.project_id == project_id)
+        .order_by(KnowledgeCategory.category_key)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).all())
+    latest = dict((await db.execute(
+        select(
+            KnowledgeCategoryRevision.category_id,
+            func.max(KnowledgeCategoryRevision.revision_no),
+        )
+        .where(KnowledgeCategoryRevision.category_id.in_([row.id for row in rows]))
+        .group_by(KnowledgeCategoryRevision.category_id)
+    )).all())
+    return rows, latest
+
+
+async def capture_training_baseline(db, project_id):
+    """Capture category intent while upload holds the project's write lock."""
+    await _ensure_category_rows(db, project_id)
+    rows, latest = await _locked_category_state(db, project_id)
+    return category_snapshot(rows, latest)
+
+
 async def training_source_reusable(db, doc) -> bool:
     """An identical file is a retry only while its category intent is current."""
     training = (doc.metadata_ or {}).get("project_training", {})
     progress = (doc.digest_meta or {}).get("project_training", {})
     if (doc.digest_meta or {}).get("features", {}).get("status") == "SUPERSEDED":
         return False
+    if not await auto_training_feature_intent_current(db, doc):
+        return False
     completed = progress.get("status") == "COMPLETED"
     expected = (
         training.get("published_snapshot")
         if completed or training.get("published_snapshot")
-        else training.get("batch_snapshot")
+        else training.get("batch_snapshot") or training.get("extraction_baseline")
     )
     if expected is None and not (doc.digest_meta or {}).get("project_training", {}).get(
         "completed"
@@ -113,30 +142,20 @@ class TrainingCategoryBatch:
 
     async def _lock(self, doc):
         doc.metadata_ = await ensure_training_owner(self.db, doc.id, doc.project_id, self.token)
-        rows = list(
-            (
-                await self.db.scalars(
-                    select(KnowledgeCategory)
-                    .where(KnowledgeCategory.project_id == doc.project_id)
-                    .order_by(KnowledgeCategory.category_key)
-                    .with_for_update()
-                    .execution_options(populate_existing=True)
-                )
-            ).all()
+        return await _locked_category_state(self.db, doc.project_id)
+
+    async def check_extraction_baseline(self, doc):
+        rows, latest = await self._lock(doc)
+        training = doc.metadata_["project_training"]
+        # A resumed source owns its staged revisions; compare against that
+        # checkpoint instead of treating those writes as an administrator edit.
+        expected = (
+            training.get("published_snapshot")
+            or training.get("batch_snapshot")
+            or training.get("extraction_baseline")
         )
-        latest = dict(
-            (
-                await self.db.execute(
-                    select(
-                        KnowledgeCategoryRevision.category_id,
-                        func.max(KnowledgeCategoryRevision.revision_no),
-                    )
-                    .where(KnowledgeCategoryRevision.category_id.in_([row.id for row in rows]))
-                    .group_by(KnowledgeCategoryRevision.category_id)
-                )
-            ).all()
-        )
-        return rows, latest
+        if expected is not None and self._snapshot(rows, latest) != expected:
+            raise ConflictError("Project knowledge changed after this training source was uploaded")
 
     @staticmethod
     def _snapshot(rows, latest):
@@ -154,6 +173,9 @@ class TrainingCategoryBatch:
         await _ensure_category_rows(self.db, doc.project_id)
         rows, latest = await self._lock(doc)
         training = dict(doc.metadata_["project_training"])
+        if training.get("batch_snapshot") is None and training.get("extraction_baseline") is not None:
+            if self._snapshot(rows, latest) != training["extraction_baseline"]:
+                raise ConflictError("Project knowledge changed after this training source was uploaded")
         proposed = {
             write.key.value: parse_category_markdown(write.key, write.content)
             for write in plan.writes

@@ -16,6 +16,7 @@ about its own origin, and downstream audit reads that field as fact.
 
 from __future__ import annotations
 
+import codecs
 import io
 from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -216,13 +217,10 @@ def _legacy(file_name: str, content_type: str) -> str:
     return _detect_upload_format(file_name, content_type)
 
 
-def test_both_lanes_refuse_a_csv() -> None:
-    # The lanes are unified: a CSV is neither plain text nor markdown, so both
-    # refuse it instead of ingesting spreadsheet noise as a document.
-    with pytest.raises(ValueError, match="Only .txt, .md, .docx and .xlsx"):
-        _legacy("a.csv", "text/csv")
-    with pytest.raises(ValueError, match="Only .txt, .md, .docx and .xlsx"):
-        _release("a.csv", "text/csv")
+@pytest.mark.parametrize("lane", [_legacy, _release])
+@pytest.mark.parametrize("suffix", ["csv", "tsv", "log", "text", "json", "rst"])
+def test_both_lanes_accept_common_text_files_as_unstructured_text(lane, suffix) -> None:
+    assert lane(f"brief.{suffix}", "application/octet-stream") == "text"
 
 
 @pytest.mark.parametrize(
@@ -230,23 +228,18 @@ def test_both_lanes_refuse_a_csv() -> None:
     [
         ("a.pdf", "application/pdf"),
         ("a.doc", "application/msword"),
-        ("a.csv", "text/csv"),
     ],
 )
 def test_the_release_upload_refuses_every_non_text_format(file_name, content_type) -> None:
-    with pytest.raises(
-        ValueError, match="Only .txt, .md, .docx and .xlsx knowledge files are supported."
-    ):
+    with pytest.raises(ValueError, match="Only text files"):
         _release(file_name, content_type)
 
 
-def test_a_csv_declared_as_plain_text_is_refused_for_its_suffix() -> None:
-    # A wrong-but-plausible Content-Type must not smuggle a .csv past the
+def test_a_binary_format_declared_as_plain_text_is_refused_for_its_suffix() -> None:
+    # A wrong-but-plausible Content-Type must not smuggle a .pdf past the
     # release contract: the suffix is checked, so this is the other error.
-    with pytest.raises(
-        ValueError, match="Knowledge filenames must end in .txt, .md, .docx or .xlsx."
-    ):
-        _release("a.csv", "text/plain")
+    with pytest.raises(ValueError, match="Knowledge filenames must end in"):
+        _release("a.pdf", "text/plain")
 
 
 @pytest.mark.parametrize(
@@ -285,10 +278,9 @@ def test_the_release_upload_refuses_a_format_outside_the_allowed_set() -> None:
         _detect_upload_format("a.docx", DOCX_MIME, allowed_formats=frozenset({"markdown", "text"}))
 
 
-def test_a_release_upload_replaces_undecodable_bytes_instead_of_failing() -> None:
-    # The release path decodes with replacement: a stray byte in an otherwise
-    # valid .md must not turn the whole upload into a 500.
-    assert (
+def test_a_release_upload_rejects_replacement_decoding() -> None:
+    # Corrupt source facts must fail before category extraction, never become U+FFFD.
+    with pytest.raises(KnowledgeFileExtractionError, match="không thay thế"):
         extract_text(
             "kb.md",
             "text/markdown",
@@ -296,15 +288,105 @@ def test_a_release_upload_replaces_undecodable_bytes_instead_of_failing() -> Non
             allowed_formats=KB_RELEASE_FORMATS,
             decode_errors="replace",
         )
-        == "n�i dung"
+
+
+def test_the_default_decode_returns_an_actionable_error_on_undecodable_bytes() -> None:
+    with pytest.raises(KnowledgeFileExtractionError, match="UTF-8"):
+        extract_text("kb.md", "text/markdown", b"n\xf8i dung")
+
+
+@pytest.mark.parametrize(
+    "encoding, marker, expected_method",
+    [
+        ("utf-8", codecs.BOM_UTF8, "utf8_decode"),
+        ("utf-16-le", codecs.BOM_UTF16_LE, "utf16_decode"),
+        ("utf-16-be", codecs.BOM_UTF16_BE, "utf16_decode"),
+        ("utf-32-le", codecs.BOM_UTF32_LE, "utf32_decode"),
+        ("utf-32-be", codecs.BOM_UTF32_BE, "utf32_decode"),
+    ],
+)
+def test_unicode_text_preserves_all_vietnamese_source_facts_and_encoding_provenance(
+    encoding, marker, expected_method
+) -> None:
+    source = "Dự án Đông Anh\r\nLương: 10 triệu\r\nXe đưa đón: 06:30"
+    data = marker + source.encode(encoding)
+
+    assert extract_text("brief.txt", "text/plain", data) == source
+    assert extraction_method_for_format("text", data=data) == expected_method
+
+
+@pytest.mark.parametrize("charset", ["utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be"])
+def test_explicit_unicode_charset_accepts_unmarked_text_without_guessing(charset) -> None:
+    source = "Dự án: Hà Nội\nLương: 10 triệu"
+    content_type = f'text/plain; charset="{charset}"'
+
+    assert extract_text("brief.txt", content_type, source.encode(charset)) == source
+    assert (
+        extraction_method_for_format("text", data=source.encode(charset), content_type=content_type)
+        == charset.replace("utf-", "utf").replace("-", "_") + "_decode"
     )
 
 
-def test_the_default_decode_still_fails_loudly_on_undecodable_bytes() -> None:
-    # The permissive default is unchanged: a caller that does not opt into
-    # replacement gets the UnicodeDecodeError.
-    with pytest.raises(UnicodeDecodeError):
-        extract_text("kb.md", "text/markdown", b"n\xf8i dung")
+def test_explicit_windows_charset_is_decoded_strictly_instead_of_guessed() -> None:
+    source = "Luơ\u0300ng 10 triê\u0323u"
+    data = source.encode("cp1258")
+
+    assert extract_text("brief.txt", "text/plain; charset=windows-1258", data) == source
+    with pytest.raises(KnowledgeFileExtractionError, match="UTF-8"):
+        extract_text("brief.txt", "text/plain", data)
+
+
+@pytest.mark.parametrize("charset", ["imaginary", "base64_codec", "utf-7", "rot13", "utf-8\x00"])
+def test_unknown_or_non_text_transformation_charsets_are_refused(charset) -> None:
+    with pytest.raises(KnowledgeFileExtractionError, match="Mã hóa"):
+        extract_text("brief.txt", f"text/plain; charset={charset}", b"salary 10000000")
+
+
+@pytest.mark.parametrize(
+    "data",
+    [b"", b" \r\n\t", codecs.BOM_UTF8, codecs.BOM_UTF16_LE, codecs.BOM_UTF32_BE],
+)
+def test_empty_text_is_refused_before_ingestion(data) -> None:
+    with pytest.raises(KnowledgeFileExtractionError, match="không có nội dung"):
+        extract_text("brief.txt", "text/plain", data)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"salary\x00benefits",
+        b"salary\x01benefits",
+        b"salary\x7fbenefits",
+        b"%PDF-1.7\nsalary 10 million",
+        b"PK\x03\x04",
+        b"GIF89a",
+    ],
+)
+def test_binary_content_cannot_be_disguised_with_a_text_suffix(data) -> None:
+    with pytest.raises(KnowledgeFileExtractionError, match="nhị phân"):
+        extract_text("brief.txt", "text/plain", data)
+
+
+def test_truncated_unicode_is_refused_instead_of_silently_replaced() -> None:
+    data = codecs.BOM_UTF16_LE + "Lương 10 triệu".encode("utf-16-le")[:-1]
+    with pytest.raises(KnowledgeFileExtractionError, match="mã hóa"):
+        extract_text("brief.txt", "text/plain", data)
+
+
+def test_an_explicitly_empty_allowed_set_refuses_all_formats() -> None:
+    with pytest.raises(ValueError, match="not supported"):
+        extract_text("brief.txt", "text/plain", b"salary", allowed_formats=frozenset())
+
+
+def test_predecoded_content_does_not_bypass_format_or_binary_validation() -> None:
+    with pytest.raises(ValueError, match="YAML"):
+        extract_text("brief.yaml", "text/yaml", "salary: 10 million")
+    with pytest.raises(KnowledgeFileExtractionError, match="nhị phân"):
+        extract_text("brief.txt", "text/plain", "salary\x00benefits")
+    with pytest.raises(KnowledgeFileExtractionError, match="nhị phân"):
+        extract_text("brief.txt", "text/plain", "%PDF-1.7\nsalary 10 million")
+    with pytest.raises(KnowledgeFileExtractionError, match="tệp gốc"):
+        extract_text("brief.docx", DOCX_MIME, "salary 10 million")
 
 
 def test_the_legacy_upload_records_the_extraction_it_actually_used() -> None:
@@ -322,14 +404,19 @@ def test_the_legacy_upload_records_the_extraction_it_actually_used() -> None:
     assert source_metadata["text_checksum"].startswith("sha256:")
 
 
-def test_the_legacy_upload_replaces_undecodable_bytes_in_a_text_upload() -> None:
-    text, source_metadata = KnowledgeService._extract_upload_text(
-        "notes.txt", "text/plain", b"ten,l\xe9u"
+def test_the_legacy_upload_records_unicode_source_provenance() -> None:
+    source = "Dự án Hà Nội\nLương 10 triệu"
+    text, metadata = KnowledgeService._extract_upload_text(
+        "brief.txt", "text/plain", source.encode("utf-16")
     )
 
-    assert "l�u" in text
-    assert source_metadata["format"] == "text"
-    assert source_metadata["extraction"] == "utf8_decode"
+    assert text == source
+    assert metadata["extraction"] == "utf16_decode"
+
+
+def test_the_legacy_upload_rejects_undecodable_bytes_in_a_text_upload() -> None:
+    with pytest.raises(KnowledgeFileExtractionError, match="UTF-8"):
+        KnowledgeService._extract_upload_text("notes.txt", "text/plain", b"ten,l\xe9u")
 
 
 def test_a_docx_without_any_text_is_refused_on_the_legacy_path() -> None:
@@ -480,5 +567,7 @@ def test_the_json_upload_lane_enforces_the_same_format_contract() -> None:
     assert UploadRequest(file_name="kb.md", content="nội dung").file_name == "kb.md"
     with pytest.raises(ValueError, match="YAML knowledge files are not accepted"):
         UploadRequest(file_name="kb.yaml", content="category: jobs")
-    with pytest.raises(ValueError, match="Knowledge filenames must end in"):
-        UploadRequest(file_name="bang.csv", content="a,b")
+    assert UploadRequest(file_name="bang.csv", content="a,b").file_name == "bang.csv"
+    assert UploadRequest(file_name="brief", content="Lương 10 triệu").file_name == "brief"
+    with pytest.raises(ValueError, match="must not be empty"):
+        UploadRequest(file_name="   ", content="Lương 10 triệu")

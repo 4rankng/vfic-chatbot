@@ -81,6 +81,12 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
 }));
 
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
+import { parseProjectBrief } from "./domain/project-brief-ingest";
+import { planBriefKnowledge } from "./domain/project-knowledge-markdown";
+import { PROJECT_KNOWLEDGE_CATEGORIES } from "./domain/project-knowledge-policy";
+
+/** Provider receipt fixture; browser previews are never submitted as plans. */
+let backendWrites: ReturnType<typeof planBriefKnowledge>["writes"] = [];
 // The real recruiter brief the ingestion contract is proven against.
 import amtranBrief from "./domain/fixtures/amtran-vsip-hai-phong.md?raw";
 import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
@@ -95,12 +101,7 @@ const project: Project = {
   updated_at: "2026-07-18T00:00:00Z",
 };
 
-const plannedWrites = () =>
-  (mocks.uploadProjectDocument.mock.calls.at(-1)?.[2] ?? []) as Array<{
-    key: string;
-    filename: string;
-    content: string;
-  }>;
+const plannedWrites = () => backendWrites;
 
 const singlePageProject: Project = {
   ...project,
@@ -223,7 +224,15 @@ describe("ProjectKnowledgePanel", () => {
     mocks.getProjectKnowledgeCategorySource.mockRejectedValue(
       new ApiError(404, "Chưa có dữ liệu"),
     );
-    mocks.uploadProjectDocument.mockResolvedValue({ id: "training-document" });
+    backendWrites = [];
+    mocks.uploadProjectDocument.mockImplementation(
+      async (_id: string, file: File) => {
+        backendWrites = planBriefKnowledge(
+          parseProjectBrief(await file.text()),
+        ).writes;
+        return { id: "training-document" };
+      },
+    );
     mocks.getProjectTrainingDocument.mockImplementation(async () => ({
       id: "training-document",
       status: "PUBLISHED",
@@ -1352,7 +1361,7 @@ describe("ProjectKnowledgePanel", () => {
     expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
   });
 
-  it("re-ingest re-lands the brief's highlight facts on the discovery card", async () => {
+  it("leaves full-source discovery claims to the worker after a re-ingest", async () => {
     // Each written revision is accepted immediately (the catalog tracks older
     // revisions), so the chain completes without stalls.
     mocks.getProjectKnowledgeCategories.mockResolvedValue({
@@ -1386,20 +1395,11 @@ describe("ProjectKnowledgePanel", () => {
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
 
-    await vi.waitFor(
-      () => expect(mocks.updateProjectDiscoveryCard).toHaveBeenCalledTimes(1),
-      { timeout: 30000 },
-    );
-    // Exactly the brief's facts, and nothing else, in the patch body.
-    expect(mocks.updateProjectDiscoveryCard.mock.calls[0]).toEqual([
-      "project-1",
-      {
-        discovery_card: {
-          highlights: ["Không yêu cầu bằng cấp.", "Đóng BHXH đầy đủ."],
-        },
-      },
-    ]);
-    // The card patch rides every re-ingest; the category writes all landed.
+    await expect
+      .element(screen.getByText(/Đã nạp xong 3 phần kiến thức/))
+      .toBeVisible();
+    expect(mocks.updateProjectDiscoveryCard).not.toHaveBeenCalled();
+    // Source-derived discovery claims belong to the backend's full-source pass.
     expect(plannedWrites().map((write) => write.key)).toEqual([
       "jobs",
       "compensation",
@@ -1563,7 +1563,86 @@ describe("ProjectKnowledgePanel", () => {
     expect(cleared).not.toContain("benefits");
     expect(cleared).not.toContain("faq");
     expect(cleared).toContain("contacts");
+    expect(
+      mocks.clearProjectKnowledgeCategory.mock.calls.every(
+        (call) => call[2] === 0,
+      ),
+    ).toBe(true);
     expect(mocks.refresh).toHaveBeenCalled();
+  }, 30000);
+
+  it("stops migration if another administrator writes a previously empty category", async () => {
+    mocks.clearProjectKnowledgeCategory.mockRejectedValue(
+      new ApiError(
+        409,
+        "Danh mục đã được cập nhật. Hãy làm mới trước khi thử lại.",
+      ),
+    );
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    dropBrief(migrationInput(screen), REUPLOAD_BRIEF, "guarded-migration.md");
+    await expect
+      .element(screen.getByText(/chưa chuyển được sang 12 danh mục/))
+      .toBeVisible();
+    expect(mocks.clearProjectKnowledgeCategory).toHaveBeenCalledWith(
+      "project-rorze",
+      "requirements",
+      0,
+    );
+    expect(mocks.cutoverProjectKnowledgeCategories).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("leaves an existing unpublished category revision for review instead of clearing it", async () => {
+    mocks.getProjectKnowledgeCategories.mockResolvedValue({
+      data: [
+        ...categories,
+        {
+          key: "requirements",
+          label_vi: "Yêu cầu",
+          latest_revision_id: "unpublished",
+          latest_revision_no: 3,
+          status: "FAILED",
+        },
+      ],
+      total: 3,
+    });
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={singlePageProject} editable />,
+    );
+    dropBrief(migrationInput(screen), REUPLOAD_BRIEF, "retained-revision.md");
+    await expect
+      .element(screen.getByText(/đã có phiên bản chưa được kích hoạt/))
+      .toBeVisible();
+    expect(mocks.clearProjectKnowledgeCategory).not.toHaveBeenCalled();
+    expect(mocks.cutoverProjectKnowledgeCategories).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("reports the current category ordinal even before the atomic activation receipt", async () => {
+    mocks.getProjectTrainingDocument.mockResolvedValue({
+      id: "training-document",
+      status: "PROCESSING",
+      error: null,
+      project_training: {
+        status: "PROCESSING",
+        current: "benefits",
+        completed: [],
+        planned: PROJECT_KNOWLEDGE_CATEGORIES,
+        error: null,
+      },
+    });
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    dropBrief(input, REUPLOAD_BRIEF, "all-categories.md");
+    await expect
+      .element(screen.getByText("Đang nạp «Phúc lợi» (5/12)…"))
+      .toBeVisible();
+    expect(screen.container.textContent).not.toContain("(1/12)");
+    expect(mocks.cutoverProjectKnowledgeCategories).not.toHaveBeenCalled();
   }, 30000);
 
   it("cuts a migrated single-page project over exactly once after the chain lands", async () => {
@@ -1659,7 +1738,7 @@ describe("ProjectKnowledgePanel", () => {
     );
 
     await expect
-      .element(screen.getByText(/Chưa xác nhận hoàn tất «Vị trí tuyển dụng»/))
+      .element(screen.getByText(/Chưa nạp được tệp: hệ thống quá tải/))
       .toBeVisible();
     // No clears, no cutover: nothing moved while the chain never landed.
     expect(mocks.clearProjectKnowledgeCategory).not.toHaveBeenCalled();

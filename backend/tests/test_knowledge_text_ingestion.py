@@ -56,6 +56,22 @@ def test_line_range_for_quote_tolerates_whitespace_differences():
     assert line_range_for_quote(source, "Area: Thủ Đức Pickup point: Vincom") == (1, 2)
 
 
+def test_line_range_tracks_actual_source_when_tabs_and_blank_lines_are_collapsed():
+    source = "Lương:\t\t10 triệu\n\nPhụ cấp:\t500 nghìn\nDòng sau"
+
+    assert line_range_for_quote(source, "Lương: 10 triệu Phụ cấp: 500 nghìn") == (1, 3)
+    assert line_range_for_quote(source, "Phụ cấp:      500 nghìn") == (3, 3)
+
+
+def test_plain_text_page_and_unicode_line_separators_preserve_boundaries():
+    source = "Lương 10 triệu\fPhụ cấp 500 nghìn\u0085Ca ngày\u2028Xe đưa đón\u2029Hồ sơ"
+
+    assert (
+        normalize_kb_text(source) == "Lương 10 triệu\nPhụ cấp 500 nghìn\nCa ngày\nXe đưa đón\nHồ sơ"
+    )
+    assert kb_text_stats(source).line_count == 5
+
+
 def test_metadata_helpers_extract_section_path_and_chunk_type():
     metadata = {
         "chunk_metadata": {

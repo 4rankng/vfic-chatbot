@@ -16,12 +16,11 @@ import { Select as UntitledSelect } from "@/components/base/select/select";
 import type { SelectItemType } from "@/components/base/select/select-shared";
 import { cn } from "@/lib/utils";
 import type { Project } from "../types";
-import { parseProjectBrief } from "./domain/project-brief-ingest";
-import { PROJECT_KNOWLEDGE_CATEGORY_LABELS } from "./domain/project-knowledge-policy";
 import {
-  planBriefKnowledge,
-  type BriefKnowledgePlan,
-} from "./domain/project-knowledge-markdown";
+  PROJECT_KNOWLEDGE_CATEGORIES,
+  PROJECT_KNOWLEDGE_CATEGORY_LABELS,
+  type ProjectKnowledgeCategory,
+} from "./domain/project-knowledge-policy";
 import { useCategoryDraft } from "./presentation/use-category-draft";
 import { useFaqAutoSyncNotice } from "./presentation/use-faq-auto-sync-notice";
 import { useProjectKnowledgeCatalog } from "./presentation/use-project-knowledge-catalog";
@@ -42,7 +41,8 @@ import {
   clearProjectKnowledgeCategory,
   cutoverProjectKnowledgeCategories,
   getProjectKnowledgeCategories,
-  updateProjectDiscoveryCard,
+  PROJECT_TEXT_FILE_ACCEPT,
+  assertProjectTextFile,
   type KnowledgeCategoryKey,
 } from "./project-knowledge-service";
 
@@ -141,32 +141,10 @@ const SinglePagePanel = ({
   );
 };
 
-/** A brief is a document a person typed; anything wildly past that is a
- *  mis-drop, and reading it would freeze the tab. */
-const MAX_BRIEF_BYTES = 2 * 1024 * 1024;
-
-/** Clearly non-text shapes — binary documents, images, media, archives — by
- *  extension or by MIME type. A .md/.txt file, one with no extension, or one
- *  with an unknown extension is text the parser gets to judge. Mirrors the
- *  guard in ProjectBriefImport. */
-const BINARY_NAME =
-  /\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|png|jpe?g|gif|bmp|tiff?|ico|webp|mp3|mp4|mov|avi|wav|ogg|flac|zip|rar|7z|tar|gz|exe|dmg|apk|bin)$/i;
-const BINARY_TYPE =
-  /^(image|audio|video|font)\/|^application\/(pdf|zip|gzip|x-tar|x-rar-compression|x-7z-compressed|msword|vnd\.ms-|vnd\.openxmlformats-|vnd\.oasis\.)/i;
-
 /**
  * Text-brief ingestion for an EXISTING RAG project: the recruiter picks one
- * text brief (markdown is the recommended format), the domain parser proposes,
- * and the create flow's own ingest chain writes every genuinely-carried
- * category jobs-first, awaiting real activation per category. A section the
- * sheet does not carry — or only carries as a template instruction — is named
- * "cần nhập tay", never invented.
- *
- * Every pick is a full re-ingest: the file is parsed fresh and the complete
- * write set runs again — an already-active category is superseded, never a
- * reason to skip — with the file itself uploaded as a project document. No
- * confirmation gates the run: a superseded revision stays archived and
- * auditable, so a re-ingest is an update, not a destructive act.
+ * text source; the backend reviews its full content and owns category writes.
+ * A browser preview never determines the category set or completion.
  */
 const BriefIngestSection = ({
   projectId,
@@ -183,9 +161,13 @@ const BriefIngestSection = ({
    * Refreshes the catalog after review. This does not authorize publishing a
    * shadow source's highlights or hand knowledge authority to its categories.
    */
-  onIngested?: (plan: BriefKnowledgePlan) => Promise<void>;
+  onIngested?: (
+    categories: readonly ProjectKnowledgeCategory[],
+  ) => Promise<void>;
   /** Resolves only after the explicit category-authority cutover succeeds. */
-  onCutover?: (plan: BriefKnowledgePlan) => Promise<void>;
+  onCutover?: (
+    categories: readonly ProjectKnowledgeCategory[],
+  ) => Promise<void>;
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const { state, ingest } = useProjectIngest();
@@ -197,57 +179,27 @@ const BriefIngestSection = ({
     if (!file) return;
     setError("");
     setNeedsHuman(null);
-    // Text files only, by product ruling: every text shape is parsed —
-    // markdown is just the recommended format — while a clearly binary pick
-    // (pdf, image, office) is rejected before any read.
-    if (BINARY_NAME.test(file.name) || BINARY_TYPE.test(file.type)) {
-      setError("Chỉ chấp nhận tệp văn bản.");
-      return;
-    }
-    if (file.size > MAX_BRIEF_BYTES) {
-      setError("Tệp quá lớn. Hãy tải lên phiếu thông tin dưới 2 MB.");
-      return;
-    }
     try {
-      const brief = parseProjectBrief(await file.text());
-      const plan = planBriefKnowledge(brief);
-      if (plan.writes.length === 0) {
-        // Neither brief nor category bundle: ANY txt still imports — the
-        // server maps the file into categories with the digest LLM and the
-        // normal training pipeline runs on the result (uploadDocument sends
-        // auto_extract when no plan accompanies the file).
-        setNeedsHuman(null);
-        const result = await ingest(projectId, [], file);
-        if (result.ok) await onIngested?.(plan);
-        return;
-      }
+      assertProjectTextFile(file);
+      const result = await ingest(projectId, [], file);
+      if (!result.ok) return;
       setNeedsHuman(
-        plan.needsHuman.map((key) => PROJECT_KNOWLEDGE_CATEGORY_LABELS[key]),
+        PROJECT_KNOWLEDGE_CATEGORIES.filter(
+          (key) => !result.activated.includes(key),
+        ).map((key) => PROJECT_KNOWLEDGE_CATEGORY_LABELS[key]),
       );
       // Review can finish as a shadow batch while the single-page source is
       // still live. Complete the explicit migration before publishing claims.
-      const result = await ingest(projectId, plan.writes, file);
-      if (!result.ok) return;
       if (result.requiresCutover && !onCutover) {
         // Another admin may have rolled back while this RAG panel was open.
         // A catalog reload cannot make the prepared source authoritative.
-        await onIngested?.(plan);
+        await onIngested?.(result.activated);
         return;
       }
       // The migration's explicit intent also applies to older receipts that
       // omit requires_cutover. Never infer successful cutover from a reload.
-      await onCutover?.(plan);
-      // Non-shadow updates retain the existing recruiter-highlight behavior.
-      // A brief with no highlights sends no discovery-card patch.
-      // Shadow-source facts are adopted atomically by the backend cutover,
-      // which can preserve newer independent edits. Do not replay older file
-      // highlights after that transaction has decided their ownership.
-      if (!result.requiresCutover && brief.highlights.length > 0) {
-        await updateProjectDiscoveryCard(projectId, {
-          discovery_card: { highlights: brief.highlights },
-        });
-      }
-      await onIngested?.(plan);
+      await onCutover?.(result.activated);
+      await onIngested?.(result.activated);
     } catch (readError) {
       setError((readError as Error).message);
     } finally {
@@ -266,7 +218,7 @@ const BriefIngestSection = ({
         <div>
           <p className="text-body font-semibold">Cập nhật kiến thức từ tệp</p>
           <p className="text-helper text-muted-foreground">
-            Một tệp .txt hoặc .md, tối đa 2 MB.
+            Một tệp văn bản, tối đa 20 MB. Không cần theo mẫu.
           </p>
         </div>
         {/*
@@ -292,7 +244,7 @@ const BriefIngestSection = ({
           ref={inputRef}
           type="file"
           hidden
-          accept=".md,.txt,.markdown,text/plain,text/markdown"
+          accept={PROJECT_TEXT_FILE_ACCEPT}
           className="sr-only"
           aria-label="Chọn tệp phiếu thông tin dự án"
           disabled={disabled || ingesting}
@@ -302,8 +254,9 @@ const BriefIngestSection = ({
       {state.phase === "running" ? (
         <>
           <p role="status" className="text-helper text-foreground">
-            Đang nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (
-            {state.activated.length + 1}/{state.total})…
+            {state.current
+              ? `Đang nạp «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (${state.items.findIndex((item) => item.key === state.current) + 1}/${state.total})…`
+              : "Đang phân loại nội dung tệp…"}
           </p>
           <IngestProgressBoard items={state.items} slow={state.slow} />
         </>
@@ -320,8 +273,9 @@ const BriefIngestSection = ({
       ) : null}
       {state.phase === "failed" ? (
         <p role="alert" className="text-helper text-destructive">
-          Chưa xác nhận hoàn tất «
-          {PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}»
+          {state.failed
+            ? `Chưa xác nhận hoàn tất «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}»`
+            : "Chưa nạp được tệp"}
           {state.message ? `: ${state.message}` : "."} Kiểm tra trạng thái danh
           mục trước khi nạp lại. Các phần đã xác nhận vẫn được giữ.
         </p>
@@ -350,15 +304,15 @@ const MigrationSection = ({ projectId }: { projectId: string }) => {
   const refresh = useRefresh();
   const [migrating, setMigrating] = useState(false);
 
-  const migrate = async (plan: BriefKnowledgePlan) => {
+  const migrate = async (confirmed: readonly ProjectKnowledgeCategory[]) => {
     setMigrating(true);
     try {
       // A partial brief must preserve existing revisions, including categories
       // that still need review. Only a genuinely empty, unwritten category
       // needs an explicit empty state before cutover.
       const catalog = await getProjectKnowledgeCategories(projectId);
-      const writtenKeys = new Set(plan.writes.map((write) => write.key));
-      for (const key of plan.needsHuman) {
+      const writtenKeys = new Set(confirmed);
+      for (const key of PROJECT_KNOWLEDGE_CATEGORIES) {
         const category = catalog.data.find((item) => item.key === key);
         if (
           writtenKeys.has(key) ||
@@ -368,12 +322,16 @@ const MigrationSection = ({ projectId }: { projectId: string }) => {
           continue;
         }
         if (
+          category?.latest_revision_id ||
+          category?.latest_revision_no ||
           category?.status === "STAGED" ||
           category?.status === "PROCESSING"
         ) {
-          throw new Error("Một danh mục vẫn đang được xử lý. Hãy thử lại sau.");
+          throw new Error(
+            "Một danh mục đã có phiên bản chưa được kích hoạt. Hãy kiểm tra trước khi chuyển đổi.",
+          );
         }
-        await clearProjectKnowledgeCategory(projectId, key);
+        await clearProjectKnowledgeCategory(projectId, key, 0);
       }
       await cutoverProjectKnowledgeCategories(projectId);
       notify("Dự án đã chuyển sang kiến thức 12 danh mục.", {

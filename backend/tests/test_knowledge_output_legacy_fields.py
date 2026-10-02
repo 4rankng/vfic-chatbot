@@ -100,9 +100,12 @@ def test_document_output_cleans_nested_metadata_and_keeps_original_progress_and_
     assert output.digest_meta["facts"] == [{"description": "Cơm ca miễn phí"}]
     assert output.digest_meta["notes"] == row["digest_meta"]["notes"]
     assert output.digest_meta["project_training"] == row["digest_meta"]["project_training"]
-    assert output.project_training.model_dump(mode="json") == row["digest_meta"]["project_training"]
+    assert output.project_training.model_dump(mode="json", exclude_unset=True) == row["digest_meta"]["project_training"]
+    assert output.project_training.planned == []
+    assert output.project_training.covered_categories == []
+    assert output.project_training.source_sections_completed is None
     assert (
-        output.model_dump(mode="json")["project_training"] == row["digest_meta"]["project_training"]
+        output.model_dump(mode="json", exclude_unset=True)["project_training"] == row["digest_meta"]["project_training"]
     )
 
 

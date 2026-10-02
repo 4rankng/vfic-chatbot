@@ -215,7 +215,7 @@ class KnowledgeService:
             content_type,
             data,
             allowed_formats=KB_RELEASE_FORMATS,
-            decode_errors="replace",
+            decode_errors="strict",
         )
         if upload_format == "docx" and not raw.strip():
             raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
@@ -229,7 +229,9 @@ class KnowledgeService:
         metadata["source_file"] = {
             "format": upload_format,
             "filename": file_name,
-            "extraction": extraction_method_for_format(upload_format),
+            "extraction": extraction_method_for_format(
+                upload_format, data=data, content_type=content_type
+            ),
         }
         doc = KnowledgeDocument(
             file_name=file_name,
@@ -446,6 +448,7 @@ class KnowledgeService:
         *,
         project_id: uuid.UUID | None = None,
         training_plan=None,
+        auto_extract: bool = False,
         actor=None,
     ) -> KnowledgeDocument:
         """Multipart upload: extract text, persist the original, create doc."""
@@ -453,6 +456,9 @@ class KnowledgeService:
         # the service is the single entry point both upload paths funnel through.
         assert_upload_size(len(data))
         training_created_at = None
+        is_training = training_plan is not None or auto_extract
+        if is_training and (project_id is None or actor is None):
+            raise KnowledgeFileExtractionError("Chọn dự án và dùng tài khoản quản trị để nạp kiến thức.")
         if training_plan is not None:
             from app.services.knowledge.project_training import validate_training_plan
 
@@ -470,7 +476,7 @@ class KnowledgeService:
         # else → LLM category mapping). The legacy vfic-knowledge-v1 canonical
         # contract no longer intercepts or rejects uploads.
         raw_text = extracted_text
-        if training_plan is None:
+        if not is_training:
             await self.assert_mutable(project_id, allow_authoritative=True)
         else:
             from app.services.knowledge.category_authority import require_category_project
@@ -478,23 +484,39 @@ class KnowledgeService:
             if project_id is None or actor is None:
                 raise KnowledgeFileExtractionError("Chọn dự án và dùng tài khoản quản trị để nạp kiến thức.")
             await require_category_project(self.db, project_id)
-        if training_plan is not None:
+        if is_training:
             # Serialize source retention against a worker's final category
             # cutover check, so an older source cannot publish over this one.
             await self.db.scalar(select(Project).where(Project.id == project_id).with_for_update())
         metadata: dict[str, Any] = {}
         version: str | None = None
         metadata["source_file"] = source_metadata
-        if training_plan is not None:
+        if is_training:
             if actor is None:
                 raise KnowledgeFileExtractionError("Dùng tài khoản quản trị để nạp kiến thức.")
             if not raw_text.strip():
                 raise KnowledgeFileExtractionError("Tệp kiến thức không có nội dung. Vui lòng chọn tệp khác.")
-            metadata["project_training"] = {
-                **training_plan.model_dump(mode="json"),
-                "actor_id": str(actor.id),
-                "plan_sha256": checksum_text(training_plan.model_dump_json()),
-            }
+            if training_plan is not None:
+                metadata["project_training"] = {
+                    **training_plan.model_dump(mode="json"),
+                    "actor_id": str(actor.id),
+                    "plan_sha256": checksum_text(training_plan.model_dump_json()),
+                }
+            else:
+                from app.services.knowledge.extraction import CATEGORY_PLAN_VERSION
+                from app.services.knowledge.category_batch import capture_training_baseline
+                from app.services.knowledge.training_features import capture_auto_training_feature_baseline
+
+                metadata["project_training"] = {
+                    "writes": [],
+                    "auto_extract": True,
+                    "actor_id": str(actor.id),
+                    "plan_sha256": checksum_text(
+                        f"{CATEGORY_PLAN_VERSION}:{source_metadata['text_checksum']}"
+                    ),
+                    "extraction_baseline": await capture_training_baseline(self.db, project_id),
+                    "auto_feature_baseline": await capture_auto_training_feature_baseline(self.db, project_id),
+                }
             existing = await self.db.scalar(
                 select(KnowledgeDocument).where(
                     KnowledgeDocument.project_id == project_id,
@@ -535,7 +557,7 @@ class KnowledgeService:
             stage="EXTRACTED" if raw_text.strip() else "UPLOADED",
             digest_meta={"project_training": {
                 "status": "QUEUED", "current": None, "completed": [], "error": None,
-            }} if training_plan is not None else {},
+            }} if is_training else {},
         )
         self.db.add(doc)
         if training_created_at is not None:
@@ -555,7 +577,7 @@ class KnowledgeService:
         recorded provenance cannot drift from what the code did.
         """
         file_format = _detect_upload_format(file_name, content_type)
-        text = extract_text(file_name, content_type, data, decode_errors="replace")
+        text = extract_text(file_name, content_type, data, decode_errors="strict")
         if file_format == "docx" and not text.strip():
             raise KnowledgeFileExtractionError("DOCX không có văn bản để ingest.")
         if file_format == "xlsx" and not text.strip():
@@ -563,7 +585,9 @@ class KnowledgeService:
         return text, {
             "format": file_format,
             "mime_type": content_type or (DOCX_MIME_TYPE if file_format == "docx" else None),
-            "extraction": extraction_method_for_format(file_format),
+            "extraction": extraction_method_for_format(
+                file_format, data=data, content_type=content_type
+            ),
             "text_checksum": checksum_text(text),
         }
 

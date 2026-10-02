@@ -197,19 +197,12 @@ describe("HTTP project-knowledge adapter", () => {
     expect(listeners.size).toBe(0);
   });
 
-  it("uploads the retained file and all category proposals in one durable request", async () => {
+  it("uploads the intact source for full backend extraction without a browser category plan", async () => {
     const receipt = {
       id: "document-1",
       project_training: { status: "QUEUED" },
     };
     mocks.apiRequest.mockResolvedValue({ ok: true, json: async () => receipt });
-    const writes = [
-      {
-        key: "jobs" as const,
-        filename: "jobs.md",
-        content: "source-derived category",
-      },
-    ];
 
     const result = await httpProjectKnowledgeAdapter.uploadDocument(
       "project-1",
@@ -218,15 +211,16 @@ describe("HTTP project-knowledge adapter", () => {
         type: "text/plain",
         bytes: new TextEncoder().encode("brief").buffer,
       },
-      writes,
     );
 
     expect(result).toEqual(receipt);
     const [path, options] = mocks.apiRequest.mock.calls[0];
     expect(path).toBe("/api/v1/knowledge/documents/upload-file");
     expect(options.body.get("project_id")).toBe("project-1");
-    expect(JSON.parse(options.body.get("category_plan"))).toEqual({ writes });
+    expect(options.body.get("auto_extract")).toBe("true");
+    expect(options.body.has("category_plan")).toBe(false);
     expect(options.body.get("file").name).toBe("brief.txt");
+    expect(await options.body.get("file").text()).toBe("brief");
   });
 
   it("reads actual training checkpoints from the retained document receipt", async () => {
@@ -234,6 +228,26 @@ describe("HTTP project-knowledge adapter", () => {
     expect(mocks.apiJson).toHaveBeenCalledWith(
       "/api/v1/knowledge/documents/document%20%2F%201",
     );
+  });
+
+  it("guards migration empty initialization while preserving ordinary clear requests", async () => {
+    mocks.apiJson.mockResolvedValue({});
+    await httpProjectKnowledgeAdapter.clearCategory(
+      "project / 1",
+      "benefits",
+      0,
+    );
+    await httpProjectKnowledgeAdapter.clearCategory("project / 1", "benefits");
+    expect(mocks.apiJson.mock.calls).toEqual([
+      [
+        "/api/v1/knowledge/projects/project%20%2F%201/categories/benefits/clear?expected_revision_no=0",
+        { method: "POST", body: { confirmation: "CLEAR" } },
+      ],
+      [
+        "/api/v1/knowledge/projects/project%20%2F%201/categories/benefits/clear",
+        { method: "POST", body: { confirmation: "CLEAR" } },
+      ],
+    ]);
   });
 
   it("preserves category, feature, FAQ and bus endpoint contracts", async () => {

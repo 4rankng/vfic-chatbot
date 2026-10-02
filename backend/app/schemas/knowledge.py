@@ -14,6 +14,7 @@ from app.project_knowledge.domain.legacy_job_references import (
 )
 from app.project_knowledge.domain.statuses import KBVersionStatus, KnowledgeStatus
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
+from app.services.knowledge.file_extraction import _detect_upload_format
 
 
 class ProjectTrainingWrite(BaseModel):
@@ -42,8 +43,13 @@ class ProjectTrainingPlan(BaseModel):
 class ProjectTrainingProgress(BaseModel):
     status: Literal["QUEUED", "PROCESSING", "COMPLETED", "FAILED"]
     current: KnowledgeCategoryKey | None = None
+    planned: list[KnowledgeCategoryKey] = Field(default_factory=list, max_length=12)
     completed: list[KnowledgeCategoryKey] = Field(default_factory=list)
     error: str | None = None
+    source_sections_total: int | None = Field(default=None, ge=0)
+    source_sections_completed: int | None = Field(default=None, ge=0)
+    covered_categories: list[KnowledgeCategoryKey] = Field(default_factory=list, max_length=12)
+    missing_categories: list[KnowledgeCategoryKey] = Field(default_factory=list, max_length=12)
     requires_cutover: bool = Field(
         default=False,
         description="Preparation is completed but legacy knowledge still requires explicit category cutover.",
@@ -171,9 +177,6 @@ class KnowledgeDocumentListResponse(BaseModel):
     total: int
 
 
-_UPLOAD_FILE_SUFFIXES = frozenset({".txt", ".md", ".markdown", ".docx", ".xlsx"})
-
-
 class UploadRequest(BaseModel):
     """JSON text upload (kept for the Drive path / programmatic clients)."""
 
@@ -188,13 +191,8 @@ class UploadRequest(BaseModel):
     @classmethod
     def _accepts_knowledge_file_formats(cls, value: str) -> str:
         """The JSON lane obeys the same format contract as the multipart lanes."""
-        normalized = value.strip().lower()
-        if normalized.endswith((".yaml", ".yml")):
-            raise ValueError("YAML knowledge files are not accepted; convert to .md or .txt.")
-        dot = normalized.rfind(".")
-        if dot != -1 and normalized[dot:] in _UPLOAD_FILE_SUFFIXES:
-            return value
-        raise ValueError("Knowledge filenames must end in .txt, .md, .docx or .xlsx.")
+        _detect_upload_format(value.strip(), "text/plain")
+        return value
 
 
 class KBVersionOut(BaseModel):

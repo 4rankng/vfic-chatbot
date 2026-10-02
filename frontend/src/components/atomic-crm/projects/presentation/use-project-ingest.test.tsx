@@ -36,7 +36,13 @@ const training = (
   id: "document-1",
   status: "PROCESSING",
   error: null,
-  project_training: { status, completed, current, error: null },
+  project_training: {
+    status,
+    completed,
+    current,
+    planned: ["jobs", "compensation"],
+    error: null,
+  },
 });
 
 beforeEach(() => {
@@ -61,7 +67,7 @@ const tick = async (
 };
 
 describe("useProjectIngest durable source upload", () => {
-  it("uploads one source with its plan and reports only worker-confirmed categories", async () => {
+  it("uploads one intact source and reports only worker-confirmed categories", async () => {
     mocks.document
       .mockResolvedValueOnce(training("PROCESSING", ["jobs"], "compensation"))
       .mockResolvedValueOnce(training("COMPLETED", ["jobs", "compensation"]));
@@ -70,7 +76,7 @@ describe("useProjectIngest durable source upload", () => {
     await hook.act(async () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
-    expect(mocks.upload).toHaveBeenCalledWith("project-1", source, writes);
+    expect(mocks.upload).toHaveBeenCalledWith("project-1", source);
     expect(mocks.replace).not.toHaveBeenCalled();
     await tick(hook);
     expect(hook.result.current.state).toMatchObject({
@@ -83,7 +89,11 @@ describe("useProjectIngest durable source upload", () => {
       ],
     });
     await tick(hook);
-    expect(await outcome).toEqual({ ok: true, requiresCutover: false });
+    expect(await outcome).toEqual({
+      ok: true,
+      requiresCutover: false,
+      activated: ["jobs", "compensation"],
+    });
     expect(hook.result.current.state).toEqual({
       phase: "done",
       activated: ["jobs", "compensation"],
@@ -102,7 +112,37 @@ describe("useProjectIngest durable source upload", () => {
     expect(await outcome).toEqual({ ok: false });
     expect(hook.result.current.state).toMatchObject({
       phase: "failed",
-      failed: "compensation",
+      failed: null,
+    });
+  });
+
+  it("keeps source-wide processing and failures distinct from a category", async () => {
+    mocks.document
+      .mockResolvedValueOnce(training("PROCESSING"))
+      .mockResolvedValueOnce({
+        ...training("FAILED"),
+        error: "Feature extraction failed",
+      });
+    const hook = await renderHook(() => useProjectIngest());
+    let outcome!: Promise<IngestResult>;
+    await hook.act(async () => {
+      outcome = hook.result.current.ingest("project-1", [], source);
+    });
+    await tick(hook);
+    expect(hook.result.current.state).toMatchObject({
+      phase: "running",
+      current: null,
+      items: [
+        { key: "jobs", status: "queued" },
+        { key: "compensation", status: "queued" },
+      ],
+    });
+    await tick(hook);
+    expect(await outcome).toEqual({ ok: false });
+    expect(hook.result.current.state).toMatchObject({
+      phase: "failed",
+      failed: null,
+      message: "Feature extraction failed",
     });
   });
 
@@ -121,7 +161,11 @@ describe("useProjectIngest durable source upload", () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
     await tick(hook);
-    expect(await outcome).toEqual({ ok: true, requiresCutover: true });
+    expect(await outcome).toEqual({
+      ok: true,
+      requiresCutover: true,
+      activated: ["jobs", "compensation"],
+    });
     expect(hook.result.current.state).toEqual({
       phase: "done",
       activated: ["jobs", "compensation"],
@@ -136,7 +180,11 @@ describe("useProjectIngest durable source upload", () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
     await tick(hook);
-    expect(await outcome).toEqual({ ok: true, requiresCutover: false });
+    expect(await outcome).toEqual({
+      ok: true,
+      requiresCutover: false,
+      activated: ["jobs", "compensation"],
+    });
     expect(hook.result.current.state).toEqual({
       phase: "done",
       activated: ["jobs", "compensation"],
@@ -169,7 +217,11 @@ describe("useProjectIngest durable source upload", () => {
       outcome = hook.result.current.ingest("project-1", writes, source);
     });
     await tick(hook, 4000);
-    expect(await outcome).toEqual({ ok: true, requiresCutover: false });
+    expect(await outcome).toEqual({
+      ok: true,
+      requiresCutover: false,
+      activated: ["jobs", "compensation"],
+    });
     expect(mocks.upload).toHaveBeenCalledTimes(1);
   });
 
@@ -214,11 +266,40 @@ describe("useProjectIngest durable source upload", () => {
     });
   });
 
-  it("rejects an empty knowledge plan before upload", async () => {
+  it("allows arbitrary layouts and categories absent from browser preview", async () => {
+    mocks.document.mockResolvedValue({
+      ...training("COMPLETED"),
+      project_training: {
+        status: "COMPLETED",
+        completed: ["benefits", "transportation"],
+        planned: ["benefits", "transportation"],
+        current: null,
+        error: null,
+      },
+    });
     const hook = await renderHook(() => useProjectIngest());
-    let outcome: IngestResult = { ok: true, requiresCutover: false };
+    let outcome!: Promise<IngestResult>;
     await hook.act(async () => {
-      outcome = await hook.result.current.ingest("project-1", [], source);
+      outcome = hook.result.current.ingest("project-1", [], source);
+    });
+    await tick(hook);
+    expect(await outcome).toEqual({
+      ok: true,
+      requiresCutover: false,
+      activated: ["benefits", "transportation"],
+    });
+    expect(hook.result.current.state).toMatchObject({
+      phase: "done",
+      activated: ["benefits", "transportation"],
+    });
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty manual knowledge plan before upload", async () => {
+    const hook = await renderHook(() => useProjectIngest());
+    let outcome: IngestResult = { ok: false };
+    await hook.act(async () => {
+      outcome = await hook.result.current.ingest("project-1", []);
     });
     expect(outcome).toEqual({ ok: false });
     expect(mocks.upload).not.toHaveBeenCalled();
@@ -248,7 +329,11 @@ describe("useProjectIngest manual revision confirmation", () => {
     await tick(hook, 4000);
     expect(hook.result.current.state.phase).toBe("running");
     await tick(hook);
-    expect(await outcome).toEqual({ ok: true, requiresCutover: false });
+    expect(await outcome).toEqual({
+      ok: true,
+      requiresCutover: false,
+      activated: ["jobs"],
+    });
     expect(mocks.upload).not.toHaveBeenCalled();
   });
 

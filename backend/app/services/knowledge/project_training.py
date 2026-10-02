@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -14,6 +15,7 @@ from app.models.knowledge import (
     KnowledgeStatus,
 )
 from app.schemas.knowledge import ProjectTrainingPlan
+from app.services.knowledge.canonical import checksum_text
 from app.services.knowledge.category_markdown import parse_category_markdown
 from app.services.knowledge.category_service import KnowledgeCategoryService
 from app.services.knowledge.training_guard import ensure_training_owner
@@ -79,7 +81,7 @@ class ProjectTrainingService:
         ).isoformat()
         training["processing_token"] = str(self.processing_token)
         locked.metadata_ = {**(locked.metadata_ or {}), "project_training": training}
-        training_progress(locked, status="PROCESSING", error=None)
+        training_progress(locked, status="PROCESSING", current=None, error=None)
         await self.db.commit()
         return True
 
@@ -89,6 +91,79 @@ class ProjectTrainingService:
         doc.metadata_ = await ensure_training_owner(
             self.db, doc.id, doc.project_id, self.processing_token
         )
+
+    async def prepare_plan(self, doc: KnowledgeDocument, llm_json) -> None:
+        """Map a retained source before any digest, features or category writes."""
+        from app.services.knowledge.extraction import (
+            CategoryPlanExtractionError,
+            extract_category_plan,
+        )
+
+        training = dict((doc.metadata_ or {})["project_training"])
+        if not training.get("auto_extract"):
+            plan = ProjectTrainingPlan.model_validate({"writes": training["writes"]})
+            validate_training_plan(plan)
+            training_progress(doc, planned=[write.key.value for write in plan.writes])
+            return
+        await self._guard(doc)
+        await self.batch.check_extraction_baseline(doc)
+        # Release every project/source lock before provider work.
+        doc.status = KnowledgeStatus.PROCESSING
+        doc.stage = "EXTRACTING_CATEGORIES"
+        await self.db.commit()
+        training = dict(doc.metadata_["project_training"])
+        checkpoint = training.get("extraction") or None
+        if training.get("writes"):
+            plan = ProjectTrainingPlan.model_validate({"writes": training["writes"]})
+            validate_training_plan(plan)
+            source_sha256 = hashlib.sha256((doc.raw_text or "").encode()).hexdigest()
+            if (
+                not checkpoint
+                or checkpoint.get("status") != "COMPLETED"
+                or checkpoint.get("source_sha256") != source_sha256
+                or training.get("extracted_plan_sha256") != checksum_text(plan.model_dump_json())
+            ):
+                raise CategoryPlanExtractionError("Saved category plan does not match the source")
+            training_progress(doc, planned=[write.key.value for write in plan.writes])
+            await self.db.commit()
+            return
+
+        async def save_checkpoint(state):
+            await self._guard(doc)
+            await self.batch.check_extraction_baseline(doc)
+            current = dict(doc.metadata_["project_training"])
+            doc.metadata_ = {**doc.metadata_, "project_training": {**current, "extraction": state}}
+            training_progress(
+                doc,
+                source_sections_total=state["total_sections"],
+                source_sections_completed=state["completed_sections"],
+                covered_categories=state["covered_categories"],
+                missing_categories=state["missing_categories"],
+            )
+            await self.db.commit()
+
+        plan = await extract_category_plan(
+            doc.raw_text or "",
+            llm_json,
+            checkpoint=checkpoint,
+            on_checkpoint=save_checkpoint,
+        )
+        if plan is None:
+            raise CategoryPlanExtractionError("Source has no recruitment category facts")
+        validate_training_plan(plan)
+        await self._guard(doc)
+        await self.batch.check_extraction_baseline(doc)
+        training = dict(doc.metadata_["project_training"])
+        doc.metadata_ = {
+            **doc.metadata_,
+            "project_training": {
+                **training,
+                "writes": plan.model_dump(mode="json")["writes"],
+                "extracted_plan_sha256": checksum_text(plan.model_dump_json()),
+            },
+        }
+        training_progress(doc, planned=[write.key.value for write in plan.writes])
+        await self.db.commit()
 
     async def run(self, doc: KnowledgeDocument, embedder) -> None:
         training = dict((doc.metadata_ or {})["project_training"])

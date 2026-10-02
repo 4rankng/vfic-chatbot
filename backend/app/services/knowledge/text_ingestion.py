@@ -48,6 +48,9 @@ def normalize_kb_text(raw: str) -> str:
 
 def _normalize_kb_text(raw: str, *, rstrip_lines: bool) -> str:
     text = raw.replace("\r\n", "\n").replace("\r", "\n")
+    # Plain-text exports use these Unicode/page separators as real boundaries.
+    # Dropping form feeds would merge the last word of one page with the next.
+    text = re.sub(r"[\f\u0085\u2028\u2029]", "\n", text)
     text = text.replace("\ufeff", "")
     text = unicodedata.normalize("NFC", text)
     text = "".join(ch for ch in text if ch == "\n" or ch == "\t" or ch >= " ")
@@ -95,6 +98,7 @@ def line_range_for_quote(source_text: str, quote: str | None) -> tuple[int | Non
         return (None, None)
     haystack = normalize_kb_text(source_text)
     index = haystack.find(needle)
+    end_index = index + len(needle)
     if index < 0:
         compact_needle = _compact(needle)
         if not compact_needle:
@@ -104,8 +108,12 @@ def line_range_for_quote(source_text: str, quote: str | None) -> tuple[int | Non
         if compact_index < 0:
             return (None, None)
         index = _original_index_for_compact_offset(haystack, compact_index)
+        end_index = (
+            _original_index_for_compact_offset(haystack, compact_index + len(compact_needle) - 1)
+            + 1
+        )
     start = haystack.count("\n", 0, index) + 1
-    end = start + haystack[index : index + len(needle)].count("\n")
+    end = start + haystack[index:end_index].count("\n")
     return (start, end)
 
 

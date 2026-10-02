@@ -25,7 +25,7 @@ import logging
 import re
 import uuid
 from datetime import UTC, datetime
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,7 +46,7 @@ from app.services.knowledge.canonical import (
     checksum_text,
     parse_canonical_markdown,
 )
-from app.services.knowledge.extraction import DigestSections, split_for_digest
+from app.services.knowledge.extraction import DigestSections, category_plan_sections, split_for_digest
 from app.services.knowledge.prompts import DIGEST_SYSTEM_PROMPT, INDEX_SYSTEM_PROMPT
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
 from app.services.knowledge.job_feature_repository import JobFeatureValueRepo
@@ -61,6 +61,7 @@ logger = logging.getLogger(__name__)
 # stays free of provider SDK imports and is unit-testable with a fake.
 LLMJson = Callable[[str, str], Awaitable[str]]
 Embedder = Callable[[str], Awaitable[list[float]]]
+AUTO_FEATURE_EXTRACTION_VERSION = "auto-features-v1"
 
 
 class KnowledgePipeline:
@@ -355,22 +356,24 @@ class KnowledgePipeline:
         corpus = (doc.raw_text or "").strip() or "\n".join(u["content"] for u in units)
         if not corpus.strip():
             return
-        raw = await self._llm_json_with_timeout(
-            _product_feature_prompt(catalog), corpus, purpose="product feature extraction"
-        )
-        payload = _parse_json_lenient(raw)
-        feats = payload.get("features") if isinstance(payload, dict) else None
-        if not isinstance(feats, list):
-            raise ValueError("Product feature extraction returned no feature list")
-        # Parse the LLM list into a by-key map, then coerce one row per catalog feature
-        # (missing features fall back to the is_missing marker) in catalog display order.
-        by_key: dict[str, dict] = {}
-        for f in feats:
-            if isinstance(f, dict):
-                key = str(f.get("feature_key") or f.get("key") or "").strip()
-                if key:
-                    by_key[key] = f
-        rows = [(c, _coerce_feature(by_key.get(c.feature_key), c, source_text=corpus)) for c in catalog]
+        if (doc.metadata_ or {}).get("project_training", {}).get("auto_extract"):
+            rows = await self._extract_auto_product_feature_rows(doc, catalog, corpus)
+        else:
+            raw = await self._llm_json_with_timeout(
+                _product_feature_prompt(catalog), corpus, purpose="product feature extraction"
+            )
+            payload = _parse_json_lenient(raw)
+            feats = payload.get("features") if isinstance(payload, dict) else None
+            if not isinstance(feats, list):
+                raise ValueError("Product feature extraction returned no feature list")
+            # Preserve the existing single-call explicit-plan and legacy contract.
+            by_key: dict[str, dict] = {}
+            for f in feats:
+                if isinstance(f, dict):
+                    key = str(f.get("feature_key") or f.get("key") or "").strip()
+                    if key:
+                        by_key[key] = f
+            rows = [(c, _coerce_feature(by_key.get(c.feature_key), c, source_text=corpus)) for c in catalog]
         await self._guard_training(doc)
         if (doc.metadata_ or {}).get("project_training") is not None:
             # Keep candidates on the previous published profile until every
@@ -387,6 +390,77 @@ class KnowledgePipeline:
         await self.index.sync_highlights(doc.project_id)
         doc.digest_meta = {**(doc.digest_meta or {}), "features": {"status": "COMPLETED"}}
         await self.db.commit()
+
+    async def _extract_auto_product_feature_rows(self, doc, catalog, corpus):
+        """Resume complete bounded source coverage without publishing partial features."""
+        sections = category_plan_sections(corpus)
+        identity = {
+            "version": AUTO_FEATURE_EXTRACTION_VERSION,
+            "source_sha256": checksum_text(corpus),
+            "catalog": sorted((str(c.id), c.feature_key) for c in catalog),
+            "total_sections": len(sections),
+        }
+        # JSON storage converts tuple pairs to lists; compare a serialized identity.
+        identity = json.loads(json.dumps(identity))
+        checkpoint = (doc.metadata_ or {}).get("project_training", {}).get("feature_extraction")
+        completed: list[dict[str, Any]] = []
+        if checkpoint:
+            if checkpoint.get("source_sha256") != identity["source_sha256"]:
+                raise ValueError("Feature extraction checkpoint does not match the retained source")
+            # A catalog/algorithm change invalidates cached extraction, not its source.
+            if checkpoint.get("version") == identity["version"] and checkpoint.get("catalog") == identity["catalog"]:
+                if (
+                    checkpoint.get("total_sections") != len(sections)
+                    or type(checkpoint.get("completed_sections")) is not int
+                    or not isinstance(checkpoint.get("sections"), list)
+                    or checkpoint["completed_sections"] != len(checkpoint["sections"])
+                    or not 0 <= checkpoint["completed_sections"] <= len(sections)
+                    or (checkpoint.get("status") == "COMPLETED" and checkpoint["completed_sections"] != len(sections))
+                ):
+                    raise ValueError("Feature extraction checkpoint has incomplete source coverage")
+                for index, saved in enumerate(checkpoint["sections"]):
+                    if (
+                        not isinstance(saved, dict)
+                        or saved.get("index") != index
+                        or saved.get("source_sha256") != checksum_text(sections[index])
+                    ):
+                        raise ValueError("Feature extraction checkpoint has invalid section identity")
+                    candidates = _auto_feature_candidates(saved.get("features"), catalog, sections[index])
+                    completed.append({**saved, "features": candidates})
+
+        async def save_checkpoint():
+            await self._guard_training(doc)
+            training = dict(doc.metadata_["project_training"])
+            state = {
+                **identity,
+                "completed_sections": len(completed),
+                "sections": completed,
+                "status": "COMPLETED" if len(completed) == len(sections) else "PROCESSING",
+            }
+            doc.metadata_ = {**doc.metadata_, "project_training": {
+                **training, "feature_extraction": json.loads(json.dumps(state)),
+            }}
+            doc.digest_meta = {**(doc.digest_meta or {}), "features": {
+                "status": "EXTRACTING",
+                "source_sections_total": len(sections),
+                "source_sections_completed": len(completed),
+            }}
+            await self.db.commit()
+
+        await save_checkpoint()  # Drop all source locks before provider work.
+        system = _product_feature_prompt(catalog)
+        for index in range(len(completed), len(sections)):
+            raw = await self._llm_json_with_timeout(system, sections[index], purpose="product feature extraction")
+            payload = _parse_json_lenient(raw)
+            features = payload.get("features") if isinstance(payload, dict) else None
+            candidates = _auto_feature_candidates(features, catalog, sections[index])
+            completed.append({
+                "index": index,
+                "source_sha256": checksum_text(sections[index]),
+                "features": candidates,
+            })
+            await save_checkpoint()
+        return _merge_auto_feature_candidates(catalog, completed)
 
     async def sync_canonical_product_features(
         self, doc, canonical_doc: ParsedKnowledgeDocument
@@ -490,6 +564,66 @@ async def sync_project_highlights(db: AsyncSession, project_id: uuid.UUID) -> No
     edit without instantiating the full pipeline.
     """
     await ProjectIndexRepo(db).sync_highlights(project_id)
+
+
+def _auto_feature_candidates(features, catalog, section) -> list[dict[str, Any]]:
+    if not isinstance(features, list):
+        raise ValueError("Product feature extraction returned no feature list")
+    by_key = {c.feature_key: c for c in catalog}
+    candidates = []
+    for feature in features:
+        if not isinstance(feature, dict):
+            raise ValueError("Product feature extraction returned an invalid feature")
+        key = str(feature.get("feature_key") or feature.get("key") or "").strip()
+        if key not in by_key:
+            raise ValueError("Product feature extraction returned an unknown feature")
+        if any(name in feature and type(feature[name]) is not bool for name in (
+            "is_missing", "is_highlight", "needs_clarification"
+        )):
+            raise ValueError("Product feature extraction returned an invalid boolean")
+        value = _coerce_feature(feature, by_key[key], source_text=section)
+        proposed_fact = not feature.get("is_missing", False) and bool(str(feature.get("value_text") or "").strip())
+        if proposed_fact and value["is_missing"]:
+            raise ValueError("Product feature evidence does not match its source section")
+        candidates.append({"feature_key": key, **value})
+    return candidates
+
+
+def _merge_auto_feature_candidates(catalog, sections):
+    rows = []
+    for catalog_row in catalog:
+        candidates = [
+            feature for section in sections for feature in section["features"]
+            if feature["feature_key"] == catalog_row.feature_key and not feature["is_missing"]
+        ]
+        variants = {}
+        for candidate in candidates:
+            identity = json.dumps({
+                "text": normalized_source_text(candidate["value_text"]).casefold(),
+                "json": candidate["value_json"],
+            }, sort_keys=True, ensure_ascii=False)
+            variants.setdefault(identity, candidate)
+        if not variants:
+            value = _coerce_feature(None, catalog_row)
+        elif len(variants) == 1:
+            value = {key: item for key, item in next(iter(variants.values())).items() if key != "feature_key"}
+            value["needs_clarification"] = any(item["needs_clarification"] for item in candidates)
+            value["is_highlight"] = any(item["is_highlight"] for item in candidates) and not value["needs_clarification"]
+            value["strength_score"] = max(item["strength_score"] for item in candidates)
+        else:
+            # Contradictions are retained for review, never resolved by source order.
+            facts = [{key: item[key] for key in ("value_text", "value_json", "evidence_text")} for item in variants.values()]
+            value = {
+                "value_text": "\n".join(item["value_text"] for item in facts),
+                "value_json": {"extracted_variants": facts},
+                "evidence_text": "\n".join(dict.fromkeys(item["evidence_text"] for item in facts)),
+                "is_missing": False,
+                "needs_clarification": True,
+                "is_highlight": False,
+                "strength_score": 0.0,
+            }
+        rows.append((catalog_row, value))
+    return rows
 
 
 def _fallback_blocks(section: str) -> list[str]:

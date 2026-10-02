@@ -519,8 +519,20 @@ Category content is authored in Category Markdown v1: the `PUT
 document (`---` front-matter plus one `## <list_field>` section of
 `### record: <stable-id>` blocks; `GET .../categories/{key}/template` returns
 the fill-in questionnaire template as `text/markdown`). Document uploads accept
-`.txt`, `.md`, `.markdown`, `.docx` and `.xlsx` and are normalized to plain
-text before ingest; YAML and PDF are not accepted.
+`.txt`, `.text`, `.md`, `.markdown`, `.csv`, `.tsv`, `.log`, `.json`, `.rst`,
+`.docx` and `.xlsx`. Extensionless text filenames require a
+supported text MIME type. CSV/JSON are read as source text, without assuming a
+recruitment schema. Text decoding is strict UTF-8 by default, with UTF-8/16/32
+BOM support and an allowlisted declared charset for legacy text. Invalid,
+truncated, empty or binary data is rejected instead of replacing characters.
+Uploads are limited to 20 MB; YAML and PDF are not accepted.
+
+`POST /api/v1/knowledge/projects/{project_id}/categories/{category_key}/clear`
+accepts an optional `expected_revision_no` query parameter. The service compares
+it with the latest revision under the publication locks and returns `409` if it
+changed. Migration uses `0` only to initialize a genuinely unwritten category;
+a concurrent administrator write is preserved. Explicit manual clears retain
+their existing behavior when the parameter is omitted.
 
 `GET /api/v1/knowledge/projects/{project_id}/knowledge-template` downloads
 `mau-kb-du-an.md` as a `text/plain; charset=utf-8` attachment for recruiters and
@@ -543,13 +555,35 @@ role has unknown capacity rather than an invented vacancy count.
 `{"writes":[{"key":"jobs","filename":"jobs.md","content":"..."}]}`.
 The plan contains at most twelve unique category keys; the backend validates
 the complete proposal before storing it. This admin-only operation retains
-the source and queues a resumable project training batch. Omitting the plan
-preserves the existing document upload contract.
+the source and queues a resumable project training batch. Alternatively,
+`auto_extract=true` retains the original source and queues automatic extraction
+on the worker. The console uses this path for every project brief; its browser
+parser only proposes form values and cannot limit the categories reviewed.
+Omitting both fields preserves the existing plain document upload contract.
+
+Automatic extraction reviews the complete text in overlapping sections of up
+to 12,000 characters, checks all twelve category contracts, and retains source
+quotes for every record. Missing information is reported and does not clear an
+existing category. Unmatched evidence, invalid schemas, provider failures and
+sources without recruitment facts produce a failed receipt, without publishing
+a partial mapping. A section checkpoint resumes validated extraction after a
+failure; the retained plan also resumes category preparation. The processing
+budget is 200 sections and 2,000,000 category-content characters; oversized
+sources fail explicitly with a request to split the file. Administrator edits
+to categories or features after upload supersede the automatic source instead
+of being overwritten. Identical reuploads reuse a source only while its intent
+is still current.
+Worker feature extraction uses the same bounded source sections with its own
+retry checkpoints. Contradictory values are retained for review with
+`needs_clarification=true`; they do not replace an existing reliable feature.
 
 Document responses expose an additive `project_training` receipt, or `null`
-for uploads without a plan. Its `status` is `QUEUED`, `PROCESSING`, `COMPLETED`,
-or `FAILED`; `current` identifies the current category, `completed` lists
+for uploads without training intent. Its `status` is `QUEUED`, `PROCESSING`, `COMPLETED`,
+or `FAILED`; `planned` lists categories extracted from the source, `current`
+identifies the current category, `completed` lists
 confirmed category keys, and `error` is a sanitized failure message. Read it
+alongside `source_sections_total`, `source_sections_completed`,
+`covered_categories` and `missing_categories` for automatic extraction progress
 through `GET /api/v1/knowledge/documents/{id}`. Retry a retained failed source
 through `POST /api/v1/knowledge/documents/{id}/process`. An accepted upload
 continues in the worker when the browser disconnects; a `201` upload response

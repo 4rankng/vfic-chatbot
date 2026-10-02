@@ -50,6 +50,8 @@ export type ProjectTrainingDocument = Readonly<{
     status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
     current: ProjectKnowledgeCategory | null;
     completed: readonly ProjectKnowledgeCategory[];
+    /** Categories extracted from this source by the backend worker. */
+    planned?: readonly ProjectKnowledgeCategory[];
     error: string | null;
     /** Reviewed shadow categories still await an explicit authority cutover. */
     requires_cutover?: boolean;
@@ -105,6 +107,7 @@ export type ProjectKnowledgePort = Readonly<{
   clearCategory: (
     projectId: string,
     key: ProjectKnowledgeCategory,
+    expectedRevisionNo?: number,
   ) => Promise<KnowledgeCategoryRevision>;
   /**
    * Hand the project's knowledge authority to its category revisions: the
@@ -117,7 +120,6 @@ export type ProjectKnowledgePort = Readonly<{
   uploadDocument: (
     projectId: string,
     file: ProjectDocumentUpload,
-    writes?: readonly ProjectTrainingWrite[],
   ) => Promise<ProjectTrainingDocument>;
   getTrainingDocument: (documentId: string) => Promise<ProjectTrainingDocument>;
   getSinglePage: (projectId: string) => Promise<SinglePageKnowledge>;

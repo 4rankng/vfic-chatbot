@@ -10,7 +10,6 @@ import type {
   ProjectDiscoveryCardPatch,
   ProjectDocumentUpload,
   ProjectKnowledgePort,
-  ProjectTrainingWrite,
 } from "./project-knowledge-port";
 
 export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
@@ -30,14 +29,14 @@ export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
       filename: string,
       content: string,
     ) => port.replaceCategory(projectId, key, filename, content),
-    clearCategory: (projectId: string, key: ProjectKnowledgeCategory) =>
-      port.clearCategory(projectId, key),
-    cutoverCategories: (projectId: string) => port.cutoverCategories(projectId),
-    uploadDocument: (
+    clearCategory: (
       projectId: string,
-      file: ProjectDocumentUpload,
-      writes?: readonly ProjectTrainingWrite[],
-    ) => port.uploadDocument(projectId, file, writes),
+      key: ProjectKnowledgeCategory,
+      expectedRevisionNo?: number,
+    ) => port.clearCategory(projectId, key, expectedRevisionNo),
+    cutoverCategories: (projectId: string) => port.cutoverCategories(projectId),
+    uploadDocument: (projectId: string, file: ProjectDocumentUpload) =>
+      port.uploadDocument(projectId, file),
     getTrainingDocument: (documentId: string) =>
       port.getTrainingDocument(documentId),
     getSinglePage: (projectId: string) => port.getSinglePage(projectId),

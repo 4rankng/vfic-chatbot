@@ -9,7 +9,7 @@ status codes.
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import PlainTextResponse, Response
@@ -351,11 +351,13 @@ async def clear_project_category(
     _body: CategoryClearRequest,
     admin: Any = Depends(require_admin),
     db: AsyncSession = Depends(get_project_knowledge_db),
+    expected_revision_no: Annotated[int | None, Query(ge=0)] = None,
 ) -> CategoryRevisionOut:
     revision = await KnowledgeCategoryService(db).clear(
         project_id=project_id,
         category_key=category_key,
         actor=admin,
+        expected_revision_no=expected_revision_no,
     )
     return CategoryRevisionOut.model_validate(revision)
 

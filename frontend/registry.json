@@ -243,6 +243,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/infrastructure/project-text-file.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/infrastructure/http-project-knowledge-adapter.ts",
           "type": "registry:component"
         },

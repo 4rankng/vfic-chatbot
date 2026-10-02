@@ -16,12 +16,8 @@ import {
   PROJECT_KNOWLEDGE_CATEGORY_LABELS,
 } from "./domain/project-knowledge-policy";
 import type { ProjectBrief } from "./domain/project-brief-ingest";
-import {
-  buildJobsMarkdown,
-  planBriefKnowledge,
-} from "./domain/project-knowledge-markdown";
+import { buildJobsMarkdown } from "./domain/project-knowledge-markdown";
 import { slugifyVietnamese } from "./domain/vietnamese-slug";
-import { updateProjectDiscoveryCard } from "./project-knowledge-service";
 import { IngestProgressBoard } from "./presentation/IngestProgressBoard";
 import { ProjectBriefImport } from "./presentation/ProjectBriefImport";
 import { useProjectIngest } from "./presentation/use-project-ingest";
@@ -32,7 +28,7 @@ import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
  *  a discovery card on a RAG project ("RAG discovery cards are derived from
  *  active categories"), so the summary and location reach the assistant through
  *  the category markdown the pipeline writes, not through this form. The highlights
- *  are the one card key the chain does carry — see the PATCH in `onImported`. */
+ *  are preview-only here; the backend derives recruiting claims from the source. */
 const CarriedSummary = ({ brief }: { brief: ProjectBrief }) => (
   <dl className="project-brief-carried grid gap-1 text-helper text-muted-foreground">
     {brief.summary ? (
@@ -105,8 +101,12 @@ const ProjectCreateForm = () => {
     setBrief(parsed);
     setSourceReady(false);
     setBriefFilename(filename);
-    if (parsed.aliases.length > 0) setAliases(parsed.aliases.join(", "));
-    if (parsed.roles.length > 0) setRoles(parsed.roles.join(", "));
+    // Replace prior automatic suggestions, while retaining explicit edits.
+    // A new free-form source must not replay the previous file's roles/aliases.
+    if (!aliases.trim() || aliases === brief?.aliases.join(", "))
+      setAliases(parsed.aliases.join(", "));
+    if (!roles.trim() || roles.trim() === ingestedRoles.trim())
+      setRoles(parsed.roles.join(", "));
     // The typed name wins: the pipeline fills what the recruiter left empty,
     // never overwrites a decision already made.
     if (!name.trim() && parsed.name) setName(parsed.name);
@@ -120,35 +120,23 @@ const ProjectCreateForm = () => {
       // project documents.
       let id = draftId;
       if (!id) {
+        const knownName = name.trim() || parsed.name;
+        const draftSlug = knownName
+          ? slugifyVietnamese(knownName)
+          : `du-an-moi-${crypto.randomUUID().slice(0, 8)}`;
         const created = await dataProvider.create("projects", {
           data: {
-            name: (name.trim() || parsed.name || "Dự án mới").trim(),
-            slug: slugifyVietnamese(name.trim() || parsed.name || "du-an-moi"),
+            name: (knownName || "Dự án mới").trim(),
+            slug: draftSlug,
             ...buildProjectCreation({ aliases: parsed.aliases.join(", ") }),
           },
         });
         id = String(created.data.id);
         setDraftId(id);
-        setSlug(
-          String(
-            created.data.slug ??
-              slugifyVietnamese(name.trim() || parsed.name || "du-an-moi"),
-          ),
-        );
+        setSlug(String(created.data.slug ?? draftSlug));
       }
       setIngestedRoles(parsed.roles.join(", "));
-      const result = await ingest(id, planBriefKnowledge(parsed).writes, file);
-      // Only confirmed source content can become recruiting claims. A failed
-      // upload must not leave highlights that a later retry could publish.
-      if (
-        result.ok &&
-        !result.requiresCutover &&
-        parsed.highlights.length > 0
-      ) {
-        await updateProjectDiscoveryCard(id, {
-          discovery_card: { highlights: parsed.highlights },
-        });
-      }
+      const result = await ingest(id, [], file);
       setSourceReady(result.ok && !result.requiresCutover);
     } catch (error) {
       notify((error as Error).message, { type: "error" });
@@ -325,8 +313,9 @@ const ProjectCreateForm = () => {
           {state.phase === "running" ? (
             <>
               <p role="status" className="text-helper text-foreground">
-                Đang nạp «{PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (
-                {state.activated.length + 1}/{state.total})…
+                {state.current
+                  ? `Đang nạp «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (${state.items.findIndex((item) => item.key === state.current) + 1}/${state.total})…`
+                  : "Đang phân loại nội dung tệp…"}
               </p>
               <IngestProgressBoard items={state.items} slow={state.slow} />
             </>
@@ -340,8 +329,9 @@ const ProjectCreateForm = () => {
           ) : null}
           {ingestBlocked ? (
             <p role="alert" className="text-helper text-destructive">
-              Chưa xác nhận hoàn tất «
-              {PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}»
+              {state.failed
+                ? `Chưa xác nhận hoàn tất «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}»`
+                : "Chưa nạp được tệp"}
               {state.message ? `: ${state.message}` : "."} Dự án vẫn là bản nháp
               và chưa hiển thị với ứng viên. Kiểm tra trạng thái trong bản nháp;
               nếu hệ thống báo lỗi nội dung, chỉnh sửa rồi nạp lại.

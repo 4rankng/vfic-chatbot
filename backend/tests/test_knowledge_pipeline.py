@@ -26,8 +26,7 @@ VEC = [0.01] * 3072
 def _docx_bytes(*paragraphs: str) -> bytes:
     """Build the minimal DOCX archive accepted by the stdlib extractor."""
     body = "".join(
-        f"<w:p><w:r><w:t>{escape(paragraph)}</w:t></w:r></w:p>"
-        for paragraph in paragraphs
+        f"<w:p><w:r><w:t>{escape(paragraph)}</w:t></w:r></w:p>" for paragraph in paragraphs
     )
     document_xml = (
         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
@@ -72,9 +71,8 @@ def _units_payload(*contents):
 
 
 # --------------------------------------------------------------------------- extract
-def test_extract_text_txt_md_only():
-    with pytest.raises(ValueError):
-        extract_text("a.csv", "text/csv", b"x,y\n1,2\n")
+def test_extract_text_preserves_common_text_layouts():
+    assert extract_text("a.csv", "text/csv", b"x,y\n1,2\n") == "x,y\n1,2\n"
     assert extract_text("a.txt", "text/plain", "nội dung".encode("utf-8")) == "nội dung"
     assert extract_text("a.md", "text/markdown", b"# title") == "# title"
     assert extract_text("a.md", "text/markdown", b"# title") == "# title"
@@ -105,7 +103,6 @@ def test_release_upload_extracts_docx_text():
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         _docx_bytes("Yêu cầu tuyển dụng có xe đưa đón"),
         allowed_formats=KB_RELEASE_FORMATS,
-        decode_errors="replace",
     )
 
     assert file_format == "docx"
@@ -225,9 +222,9 @@ def test_split_for_digest_tail_not_duplicated():
     assert result.dropped_chars == 0
     assert result.total_chars == 6001
     # Full coverage: every source index appears in at least one chunk.
-    covered = sum(len(s) for s in result.sections) - (
-        len(result.sections) - 1
-    ) * 400  # subtract one overlap window per adjacent pair
+    covered = (
+        sum(len(s) for s in result.sections) - (len(result.sections) - 1) * 400
+    )  # subtract one overlap window per adjacent pair
     assert covered >= 6001
 
 
@@ -263,8 +260,8 @@ def test_split_for_digest_preserves_vietnamese_diacritics_at_seam():
         # Round-trips cleanly through UTF-8 (catches surrogate-edge issues).
         chunk.encode("utf-8").decode("utf-8")
         # No leading/trailing combining diacritical mark (U+0300..U+036F).
-        assert not chunk.startswith("\u0300") and not chunk.startswith("\u036F")
-        assert not chunk.endswith("\u0300") and not chunk.endswith("\u036F")
+        assert not chunk.startswith("\u0300") and not chunk.startswith("\u036f")
+        assert not chunk.endswith("\u0300") and not chunk.endswith("\u036f")
 
 
 def test_split_for_digest_preserves_cjk_at_seam():

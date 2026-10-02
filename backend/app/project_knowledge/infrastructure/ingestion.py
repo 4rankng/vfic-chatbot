@@ -21,6 +21,7 @@ from app.project_knowledge.domain.canonical import CANONICAL_SCHEMA_VERSIONS
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.knowledge import KnowledgePipeline, KnowledgeService
 from app.services.knowledge.chunk_repository import KnowledgeChunkRepo
+from app.shared.domain.errors import ConflictError
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class SqlAlchemyKnowledgeIngestionAdapter:
             ProjectTrainingService,
             training_progress,
         )
+        from app.services.knowledge.category_plan_grounding import CategoryPlanExtractionError
 
         document = await self._db.get(KnowledgeDocument, document_id)
         if document is None:
@@ -87,6 +89,8 @@ class SqlAlchemyKnowledgeIngestionAdapter:
                     minimax_api_key=minimax.api_key,
                     openrouter_api_key=openrouter.api_key,
                 )
+            if training is not None:
+                await training.prepare_plan(document, resolved_json_extractor)
             await KnowledgePipeline(
                 self._db,
                 resolved_embedder,
@@ -123,6 +127,10 @@ class SqlAlchemyKnowledgeIngestionAdapter:
                 failed.status = KnowledgeStatus.FAILED
                 failed.stage = "FAILED"
                 failed.error = "Chưa hoàn tất xử lý kiến thức. Vui lòng thử xử lý lại tệp đã lưu."
+                if isinstance(exc, CategoryPlanExtractionError):
+                    failed.error = str(exc)
+                elif isinstance(exc, ConflictError):
+                    failed.error = "Dữ liệu dự án đã thay đổi. Vui lòng tải lại tệp để cập nhật kiến thức theo dữ liệu hiện tại."
                 if is_training:
                     training_progress(failed, status="FAILED", error=failed.error)
                     failed.metadata_ = {**(failed.metadata_ or {}), "project_training": {

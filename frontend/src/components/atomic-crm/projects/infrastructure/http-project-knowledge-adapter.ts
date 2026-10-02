@@ -151,9 +151,9 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       body: { filename, content },
     }),
 
-  clearCategory: (projectId, key) =>
+  clearCategory: (projectId, key, expectedRevisionNo) =>
     apiJson(
-      `${projectPath(projectId)}/categories/${encodeURIComponent(key)}/clear`,
+      `${projectPath(projectId)}/categories/${encodeURIComponent(key)}/clear${expectedRevisionNo === undefined ? "" : `?expected_revision_no=${expectedRevisionNo}`}`,
       { method: "POST", body: { confirmation: "CLEAR" } },
     ),
 
@@ -163,15 +163,13 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       body: { confirmation: "CUTOVER" },
     }),
 
-  uploadDocument: async (projectId, file, writes) => {
+  uploadDocument: async (projectId, file) => {
     const form = new FormData();
     form.append("file", new Blob([file.bytes], { type: file.type }), file.name);
     form.append("project_id", projectId);
-    if (writes?.length)
-      form.append("category_plan", JSON.stringify({ writes }));
-    // Any-txt import: without a plan the server maps the file into categories
-    // with the digest LLM (same training pipeline as a parsed plan).
-    else form.append("auto_extract", "true");
+    // A browser preview recognizes only some layouts. Always classify the
+    // entire original source on the worker, even when preview found headings.
+    form.append("auto_extract", "true");
     const response = await apiRequest(DOCUMENT_UPLOAD_PATH, {
       method: "POST",
       body: form,
