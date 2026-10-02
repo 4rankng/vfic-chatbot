@@ -2934,13 +2934,6 @@ async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch)
         knowledge_mode="DIRECT_CONTEXT",
     )
 
-    class _Trace:
-        def __init__(self) -> None:
-            self.decisions: list[tuple[str, str]] = []
-
-        def record_decision(self, key, value) -> None:
-            self.decisions.append((key, value))
-
     class _LaneAgent:
         def __init__(self) -> None:
             self.kwargs: dict | None = None
@@ -2951,7 +2944,6 @@ async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch)
 
     async def _run(conv, project_context):
         agent = _LaneAgent()
-        trace = _Trace()
         resolution = await _resolve_lane(
             state=_state(),
             deps=_deps(_FakeZalo(), conversation=object()),
@@ -2965,7 +2957,6 @@ async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch)
             provider="zalo_oa",
             recipient_id="oa:u1",
             timings={},
-            trace_sink=trace,
             started=None,
             lock_owner=None,
             status_task=None,
@@ -2973,16 +2964,16 @@ async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch)
             tingting_reset_allowed=False,
             agent_turn=agent,
         )
-        return resolution, agent, trace
+        return resolution, agent
 
     # A stale clarification on the support OA must not read like recruitment.
-    resolution, agent, trace = await _run(tingting_conv, clarification_ctx)
+    resolution, agent = await _run(tingting_conv, clarification_ctx)
     assert resolution.lane == "agent"
     assert agent.kwargs["tingting_support_account"] is True
     assert agent.kwargs["mandatory_instruction"] == ""
 
     # Control: the same context on the recruitment OA still asks the question.
-    control, agent, _ = await _run(recruit_conv, clarification_ctx)
+    control, agent = await _run(recruit_conv, clarification_ctx)
     assert control.lane == "agent"
     assert "PHẢI hỏi lại ứng viên muốn hỏi dự án nào" in agent.kwargs["mandatory_instruction"]
 
@@ -2994,13 +2985,13 @@ async def test_support_oa_never_takes_the_curated_recruitment_lanes(monkeypatch)
         state="EXPLORE",
         knowledge_mode="DIRECT_CONTEXT",
     )
-    resolution, agent, _ = await _run(tingting_conv, direct_ctx)
+    resolution, agent = await _run(tingting_conv, direct_ctx)
     assert resolution.lane == "agent"
     assert agent.kwargs["tingting_support_account"] is True
     assert agent.kwargs["mandatory_instruction"] == ""
 
     # Control: the recruitment OA keeps the agent lane with no withheld flag.
-    control, agent, _ = await _run(recruit_conv, direct_ctx)
+    control, agent = await _run(recruit_conv, direct_ctx)
     assert control.lane == "agent"
     assert agent.kwargs["tingting_support_account"] is False
     assert agent.kwargs["mandatory_instruction"] == ""

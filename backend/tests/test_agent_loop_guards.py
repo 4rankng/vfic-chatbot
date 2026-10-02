@@ -32,7 +32,6 @@ class _ScriptedLLM:
         self._replies = list(replies)
         self.calls = 0
         self.model_name = "scripted-model"
-        self.trace_provider = "minimax"
 
     def bind_tools(self, tools, **_kwargs):  # noqa: ARG002
         return self

@@ -44,7 +44,6 @@ class _ScriptedLLM:
     def __init__(self, contents: list[str]) -> None:
         self._contents = list(contents)
         self.model_name = "scripted-model"
-        self.trace_provider = "minimax"
         self.calls = 0
 
     def bind_tools(self, _tools, **_kwargs):
@@ -108,6 +107,5 @@ def test_the_converged_boundary_strips_markup_and_thinking():
         generated=True,
         user_text="hotline?",
         timings={},
-        trace_sink=None,
     )
     assert reply.strip() == "Dạ, để em kiểm tra thông tin liên hệ của VFIC ngay ạ."

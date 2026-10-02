@@ -33,7 +33,6 @@ class _CappedLLM:
         self.calls = 0
         self.messages: list = []
         self.model_name = "capped-model"
-        self.trace_provider = "minimax"
 
     def bind_tools(self, tools, **_kwargs):  # noqa: ARG002
         return self

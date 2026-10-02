@@ -42,7 +42,7 @@ EXPECTED_ROUTE_COUNTS = {
     # fail this gate and force an explicit authority-classification review.
     "auth": 7,  # +1 server-side logout (SEC-03)
     "bot_runs": 2,
-    "conversations": 19,
+    "conversations": 18,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
     "dashboard": 2,
     "integrations": 34,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints
     # +2 the TingTing support OA: save-and-check the four credentials (PUT /tingting)
@@ -67,7 +67,7 @@ EXPECTED_ROUTE_COUNTS = {
 }
 # The legacy KB-version lane removal (-7 knowledge routes, -3 queue producers)
 # is the re-review this digest records.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "dd45879c7365909a46b499a05ec3a4dac8de7e0dd454a9eedf9f7bc6dd8616c0"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "5be3f3b01b54b85450a04b2bf256a29a94fab30c0a1136b6014bb8d69b6409e7"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

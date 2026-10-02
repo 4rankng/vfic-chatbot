@@ -169,7 +169,6 @@ async def _run(
     print(f"model            : {model}")
     print(f"grounded         : {with_evidence}")
     print(f"tools bound      : {with_tools}")
-    print(f"provider         : {getattr(llm, 'trace_provider', None)}")
     print(f"max_tokens       : {getattr(llm, 'max_tokens', None)}")
     print(f"extra_body       : {getattr(llm, 'extra_body', None) or {}}")
     print(f"stream_usage     : {getattr(llm, 'stream_usage', None)}")

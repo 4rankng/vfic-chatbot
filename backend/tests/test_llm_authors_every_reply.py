@@ -33,7 +33,6 @@ class _ScriptedLLM:
         self._replies = list(replies)
         self.calls = 0
         self.model_name = "scripted-model"
-        self.trace_provider = "minimax"
 
     def bind_tools(self, _tools, **_kwargs):
         return self
@@ -252,10 +251,6 @@ async def test_project_clarification_is_a_mandatory_instruction_to_the_client():
             captured.update(kwargs)
             return "**Bạn muốn hỏi Rorze hay LG Display?**"
 
-    class _Trace:
-        def record_decision(self, key, value) -> None:
-            pass
-
     conv = SimpleNamespace(channel_identity=SimpleNamespace(provider="zalo_bot", account_key=""))
     project_context = SimpleNamespace(
         clarification="Bạn đang muốn hỏi dự án nào: Rorze, LG Display?",
@@ -278,7 +273,6 @@ async def test_project_clarification_is_a_mandatory_instruction_to_the_client():
         provider="zalo_bot",
         recipient_id="z1",
         timings={},
-        trace_sink=_Trace(),
         started=None,
         lock_owner=None,
         status_task=None,
