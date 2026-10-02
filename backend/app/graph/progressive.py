@@ -29,6 +29,7 @@ from contextlib import suppress
 from inspect import iscoroutinefunction
 from typing import Any, NamedTuple
 
+from app.graph import absence_guard
 from app.graph.dispatch import (
     _build_outbox_payload,
     _cancel_status_task,
@@ -377,6 +378,13 @@ async def _await_first_bubble(
             rejected_for_substance = True
             min_offset = offset + 1
             continue
+        if absence_guard.reply_asserts_place_absence(visible_bubble):
+            # An early bubble would ship a project-absence claim before the
+            # unevidenced-absence guard in the agent lane can verify it against
+            # the catalog. Defer to the whole-reply path, which owns the
+            # self-check retry.
+            timings["progressive_first_bubble_skipped"] = "absence_guard"
+            return None
         first_bubble_ms = int(round((time.monotonic() - t0) * 1000))
         grounded_bubble = ground_reply(
             visible_bubble,

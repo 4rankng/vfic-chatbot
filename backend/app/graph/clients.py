@@ -312,6 +312,8 @@ class _AgentTurn:
                 breakdown[name] = breakdown.get(name, 0) + int(
                     (time.monotonic() - tool_call_t0) * 1000
                 )
+                counts = metrics.setdefault("tool_call_counts", {})
+                counts[name] = counts.get(name, 0) + 1
 
 
 class MiniMaxAgent:
@@ -714,6 +716,8 @@ class MiniMaxAgent:
         turn.authority_tool_dispatched = bool(
             required_tool == "list_active_projects" and turn.required_tool_called
         )
+        if metrics is not None:
+            metrics["prefetch_tool_names"] = sorted(prefetched_tools)
         return _CONTINUE_TURN
     async def _run_generation_round(self, turn: _AgentTurn) -> str | _ContinueTurn:
         """Loop model rounds and tool dispatches until the turn answers.

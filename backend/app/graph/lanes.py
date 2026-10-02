@@ -19,6 +19,7 @@ import time
 from inspect import Parameter, signature
 from typing import Any, NamedTuple
 
+from app.graph import absence_guard
 from app.graph.answer_cache import (
     answer_cache_get,
     answer_cache_put,
@@ -327,6 +328,87 @@ async def _compose_reply_without_tools(
     return reply or ""
 
 
+async def _absence_self_check(
+    *,
+    deps: GraphDeps,
+    reply: str,
+    route: TurnRoute,
+    agent_kwargs: dict,
+    timings: dict,
+    system: str,
+    user_text: str,
+    chat_id: str,
+    recent_messages: list[Any],
+    lead_profile: str,
+    lead_collection_instruction: str,
+    tingting_reset_allowed: bool,
+    tingting_support_account: bool,
+) -> str:
+    """Verify an unevidenced project absence against the catalog before sending.
+
+    A reply asserting "chưa có dự án ..." on a turn that never ran
+    ``list_active_projects`` can ship a confident false negative: the catalog
+    card may not match the place, the KB search may miss it, and nothing
+    re-checks the claim. One forced self-check re-runs the agent with the
+    catalog required (an unscoped knowledge search allowed beside it); a check
+    that still finds nothing ships the instructed hedge + hotline instead. At
+    most one retry, never a loop, and the stored conversation focus is never
+    touched.
+    """
+    if (
+        timings is None
+        or not absence_guard.enabled()
+        or route.intent not in absence_guard.GUARD_INTENTS
+        or tingting_reset_allowed
+        or tingting_support_account
+        or not absence_guard.reply_asserts_place_absence(reply)
+        or absence_guard.catalog_evidence_this_turn(timings)
+    ):
+        return reply
+    hotline = await _tingting_hotline(deps)
+
+    def _retry_text(route_hint: str) -> str:
+        return build_agent_user_text(
+            chat_id=chat_id,
+            current_user_text=user_text,
+            recent_messages=recent_messages,
+            lead_profile=lead_profile,
+            lead_collection_instruction=lead_collection_instruction,
+            route_hint=route_hint,
+        )
+
+    registry = agent_kwargs.get("resolved_tool_registry")
+    if registry is not None and "list_active_projects" not in registry:
+        # The turn's registry cannot reach the catalog: one tool-free round
+        # writes the honest hedge (the model authors every reply; an empty
+        # generation suppresses the turn instead of shipping the false claim).
+        reply = await _compose_reply_without_tools(
+            deps,
+            _retry_text(absence_guard.hedge_route_hint(hotline)),
+            system=system,
+            metrics=timings,
+        )
+        if (reply or "").strip():
+            timings["absence_guard"] = "hedged"
+            return reply
+        timings["absence_guard"] = "retry_suppressed"
+        return ""
+    retry_reply = await deps.agent.agent(
+        _retry_text(absence_guard.retry_route_hint(hotline)),
+        **absence_guard.build_retry_kwargs(agent_kwargs),
+    )
+    if not (retry_reply or "").strip():
+        timings["absence_guard"] = "retry_suppressed"
+        return ""
+    timings["absence_guard"] = (
+        "hedged"
+        if absence_guard.reply_asserts_place_absence(retry_reply)
+        or absence_guard.is_hedge_form(retry_reply)
+        else "retry_verified"
+    )
+    return retry_reply
+
+
 async def _agent_turn(
     state: BotRunState,
     deps: GraphDeps,
@@ -554,6 +636,7 @@ async def _agent_turn(
     if timings is not None:
         timings.setdefault("intent", route.intent)
         timings.setdefault("route_strategy", route.strategy)
+        timings.setdefault("route_reason", route.reason)
         timings.setdefault("route_confidence", round(route.confidence, 2))
     # Hard tool-gate: a confident route constrains which tools the LLM may call.
     # Low-confidence routes fall through to the full toolset (filter_tool_schemas
@@ -815,6 +898,26 @@ async def _agent_turn(
         contextual_user_text,
         **agent_kwargs,
     )
+    reply = await _absence_self_check(
+        deps=deps,
+        reply=reply,
+        route=route,
+        agent_kwargs=agent_kwargs,
+        timings=timings,
+        system=system,
+        user_text=user_text,
+        chat_id=chat_id,
+        recent_messages=recent_messages,
+        lead_profile=lead_profile,
+        lead_collection_instruction=lead_collection_instruction,
+        tingting_reset_allowed=tingting_reset_allowed,
+        tingting_support_account=tingting_support_account,
+    )
+    if timings is not None:
+        timings["tools_invoked"] = sorted(
+            set(timings.get("tool_call_counts") or {})
+            | set(timings.get("prefetch_tool_names") or ())
+        )
     # Answer cache (write): only a turn that serves stateless Project
     # information and whose reply was built from tool evidence depends on the
     # question alone. Two evidence signals are accepted because only the
