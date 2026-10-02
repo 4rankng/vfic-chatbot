@@ -1,6 +1,7 @@
 """Tests for graph clients + tool schemas/dispatch."""
 
 import json
+import logging
 
 import pytest
 
@@ -186,6 +187,26 @@ def test_semantically_invalid_project_payload_does_not_replace_llm_answer(payloa
 async def test_dispatch_tool_unknown_name_returns_marker():
     assert await _dispatch_tool(None, None, "does_not_exist", {}) == "unknown tool"
     assert await _dispatch_tool(None, None, "", None) == "unknown tool"
+
+
+@pytest.mark.asyncio
+async def test_tool_dispatch_logs_neither_arguments_nor_exception_content(caplog) -> None:
+    """An unknown tool must never leak its arguments or exception text to logs."""
+    sentinel = "SENTINEL_PHONE_0900000000"
+
+    class _Retrieval:
+        async def search_knowledge(self, *_args, **_kwargs):
+            raise RuntimeError(sentinel)
+
+    with caplog.at_level(logging.WARNING):
+        await _dispatch_tool(
+            _Retrieval(),
+            None,
+            "unknown_tool",
+            {"query": sentinel},
+        )
+
+    assert sentinel not in caplog.text
 
 
 @pytest.mark.asyncio

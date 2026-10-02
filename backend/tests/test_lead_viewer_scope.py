@@ -40,6 +40,7 @@ from app.core.errors import register_domain_exception_handlers
 from app.models.lead import FollowUpTask, Lead, LeadEvent
 from app.models.user import Role
 from app.recruitment.domain.statuses import FollowupStatus, LeadStage
+from app.schemas.bot_run import BotRunDetailOut
 from app.services.lead import LeadService
 from app.services.lead.repository import LeadRepository
 from app.shared.domain.errors import BadRequestError
@@ -429,6 +430,17 @@ class _FakeBotRunService:
             )
         ], 1
 
+    async def get_run_detail(self, run_id):
+        if run_id != 42:
+            return None
+        return BotRunDetailOut(
+            id=42,
+            conversation_id=OTHER_ID,
+            started_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
+            ended_at=None,
+            outcome=BotRunOutcome.SENT,
+        )
+
 
 @pytest.fixture()
 def bot_runs_client(monkeypatch):
@@ -474,3 +486,26 @@ async def test_bot_run_list_drops_the_draft_for_a_recruiter(bot_runs_client):
     assert row["id"] == 42
     assert row["outcome"] == "SENT"
     assert response.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_bot_run_detail_returns_only_the_fact_fields_for_an_admin(bot_runs_client):
+    """The detail endpoint is the audit row's facts — no execution summary."""
+    async with bot_runs_client(_viewer(Role.admin)) as http:
+        response = await http.get("/api/v1/bot_runs/42")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"id", "conversation_id", "started_at", "ended_at", "outcome"}
+    assert body["id"] == 42
+    assert body["conversation_id"] == str(OTHER_ID)
+    assert body["ended_at"] is None
+    assert body["outcome"] == "SENT"
+
+
+@pytest.mark.asyncio
+async def test_bot_run_detail_is_admin_only(bot_runs_client):
+    async with bot_runs_client(_viewer(Role.recruiter)) as http:
+        response = await http.get("/api/v1/bot_runs/42")
+
+    assert response.status_code == 403
