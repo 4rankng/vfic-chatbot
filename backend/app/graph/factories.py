@@ -81,10 +81,9 @@ def make_minimax_llm_json(
     """(system, user) -> json_text callable for the LLM training pipeline.
 
     The KB lane (document digestion + any-txt category mapping) runs on
-    OpenRouter's digest model — ``google/gemini-3.5-flash``: strict
-    ``response_format`` JSON and 1M context make it the structured-extraction
-    pick — falling back to whatever provider is enabled when OpenRouter is
-    off. Imported lazily by the ingest worker only, so the app/tests never
+    OpenRouter's digest model — ``deepseek/deepseek-v4.1-flash`` — falling
+    back to whatever provider is enabled when OpenRouter is off. Imported
+    lazily by the ingest worker only, so the app/tests never
     need langchain-openai at import time.
     """
     from langchain_core.messages import HumanMessage, SystemMessage

@@ -189,7 +189,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_agent_model: str = OPENROUTER_DEFAULT_MODEL
     openrouter_extractor_model: str = OPENROUTER_DEFAULT_MODEL
-    openrouter_digest_model: str = "google/gemini-3.5-flash"
+    openrouter_digest_model: str = OPENROUTER_DEFAULT_MODEL
     # OpenRouter fast-tier for low-complexity intents (Phase 5). Empty = use agent model.
     openrouter_fast_model: str = ""
     openrouter_request_timeout: int = 60
