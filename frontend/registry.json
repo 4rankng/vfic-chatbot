@@ -567,6 +567,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/GeocoderSection.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/integrations/FacebookMessengerPageCard.tsx",
           "type": "registry:component"
         },

@@ -13,6 +13,7 @@ import {
   MessengerSettingsSection,
   UsersSettingsSection,
 } from "./EmbeddedSettingsSections";
+import { GeocoderSection } from "./GeocoderSection";
 import { JevSection } from "./JevSection";
 import { LlmProvidersSection } from "./LlmProvidersSection";
 import { TingtingSection } from "./TingtingSection";
@@ -95,6 +96,8 @@ export const SettingsConsolePage = () => {
         );
       case "settings-tingting":
         return <TingtingSection />;
+      case "settings-geocoder":
+        return <GeocoderSection />;
       case "settings-users":
         return <UsersSettingsSection />;
       case "settings-facebook-messenger":

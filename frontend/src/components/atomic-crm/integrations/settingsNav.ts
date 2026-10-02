@@ -2,6 +2,7 @@ import {
   Bot,
   Brain,
   KeyRound,
+  MapPin,
   MessageCircle,
   MessagesSquare,
   UsersRound,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react";
 
 /**
- * Settings navigation: the six entries of the console rail and the header copy
+ * Settings navigation: the seven entries of the console rail and the header copy
  * each one shows. Kept free of JSX so the rail, the mobile drawer and the
  * header all read one source.
  */
@@ -20,6 +21,7 @@ export type SettingsItemId =
   | "settings-llm-providers"
   | "settings-jev"
   | "settings-tingting"
+  | "settings-geocoder"
   | "settings-users";
 
 export type SettingsSectionNavItem = {
@@ -61,6 +63,12 @@ export const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     Icon: KeyRound,
   },
   {
+    itemId: "settings-geocoder",
+    label: "Geocoder",
+    description: "Khoảng cách dự án",
+    Icon: MapPin,
+  },
+  {
     itemId: "settings-users",
     label: "Người dùng",
     description: "Tài khoản & quyền",
@@ -98,6 +106,12 @@ export const SETTINGS_VIEW_COPY: Record<
     title: "TingTing · Đặt lại mật khẩu",
     description:
       "API key dùng để tra cứu nhân sự và gửi OTP đặt lại mật khẩu qua TingTing.",
+  },
+  "settings-geocoder": {
+    kicker: "Tích hợp",
+    title: "Geocoder · Khoảng cách dự án",
+    description:
+      "Khoá geocoder dùng để tính khoảng cách từ nơi ứng viên nêu đến từng dự án.",
   },
   "settings-users": {
     kicker: "Không gian cài đặt",

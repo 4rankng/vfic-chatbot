@@ -143,6 +143,15 @@ export type TingtingSettingsUpdate = {
   zalo_oa_refresh_token?: string;
 };
 
+export type GeocoderSettings = {
+  google_maps_api_key: SecretStatus;
+};
+
+/** PUT body. Omit `google_maps_api_key` to keep the stored key. */
+export type GeocoderSettingsUpdate = {
+  google_maps_api_key?: string;
+};
+
 export type ZaloChannelTestResult = {
   configured: boolean;
   connected: boolean;
@@ -361,6 +370,17 @@ export const zaloIntegrationGateway = {
     body: TingtingSettingsUpdate,
   ): Promise<TingtingSettings> =>
     apiJson<TingtingSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/tingting`, {
+      method: "PUT",
+      body,
+    }),
+
+  loadGeocoderSettings: async (): Promise<GeocoderSettings> =>
+    apiJson<GeocoderSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/geocoder`),
+
+  saveGeocoderSettings: async (
+    body: GeocoderSettingsUpdate,
+  ): Promise<GeocoderSettings> =>
+    apiJson<GeocoderSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/geocoder`, {
       method: "PUT",
       body,
     }),
