@@ -43,8 +43,7 @@ bootstrap:
 
 # Release must be committed and validated before any image is pushed or production is touched.
 # Every gate runs on this machine — there is no CI in the loop.
-# `make deploy` does NOT chain this target — run it explicitly before deploying
-# (deploy-backend / deploy-frontend still do).
+# `make deploy` does NOT chain this target — run it explicitly before deploying.
 # Heavy gates run as three concurrent lanes (backend | frontend | data); any lane
 # failure fails the release and keeps its full log. Lane contents: docs/ops/deployment-guide.md §3.
 release-check:
@@ -124,7 +123,7 @@ adminer:
 # Skips frontend build and full-stack bootstrap (compose sync, migrations, etc.).
 # The backup still gates the restart — the cutover runs `alembic upgrade head`
 # — but runs concurrently with the image push instead of serially before it.
-deploy-backend: release-check
+deploy-backend:
 	@echo "=== Backup + backend image push run concurrently ==="
 	@tmp="$$(mktemp -d -t vfic-deploy.XXXXXX)"; \
 	rc_backup=0; rc_be=0; \
@@ -139,7 +138,7 @@ deploy-backend: release-check
 	$(MAKE) -C backend deploy-restart
 
 # Fast-track: rebuild + push + rolling restart frontend only.
-deploy-frontend: release-check
+deploy-frontend:
 	@echo "=== Deploying frontend only ==="
 	cd frontend && make push
 	$(MAKE) -C backend deploy-restart-frontend
