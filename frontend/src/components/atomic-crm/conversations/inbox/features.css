@@ -1103,11 +1103,19 @@
   border-color: transparent;
 }
 
+/* The header packs a title, an optional meta cluster and a status chip on one
+   line, but a narrow card (the three-up provider board is ~259px wide) cannot
+   hold them: the title's single word cannot shrink below its own width, so the
+   meta cluster used to be pushed onto the title's overflowing text and the
+   reorder chevrons painted over the provider name. Wrapping is the fallback —
+   the meta drops to its own row and stays right-aligned — and the title wraps
+   inside its box instead of painting outside it. */
 .settings-group-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   min-height: auto;
   padding: 16px 18px 14px;
   border-right: 0;
@@ -1117,6 +1125,7 @@
 
 .settings-group-title-group {
   display: flex;
+  flex: 1 1 auto;
   align-items: flex-start;
   gap: 10px;
   min-width: 0;
@@ -1143,6 +1152,9 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 6px;
+  /* Keeps the cluster flush right both inline (where `space-between` already
+     put it) and after it wraps to its own row. */
+  margin-inline-start: auto;
 }
 
 .settings-group-header [data-slot="settings-group-title"] {
@@ -1150,6 +1162,8 @@
   font-size: var(--crm-fs-body);
   font-weight: var(--chat-fw-bold);
   line-height: var(--crm-lh-title);
+  /* A long single-word name breaks rather than overflowing its shrunk box. */
+  overflow-wrap: anywhere;
 }
 
 .settings-group-description {
