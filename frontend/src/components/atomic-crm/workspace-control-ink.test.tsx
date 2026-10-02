@@ -10,7 +10,7 @@ import "@/components/atomic-crm/conversations/inbox/base.css";
 // utility (they all live in `@layer utilities`). So `.inbox-bg-container button
 // { color: inherit }` beat each button's own `text-*`: the projects workspace
 // painted `--primary` ink on the `--primary` action fill (3.4:1) and the
-// bot-run "Đã chặn" label (white on cream) disappeared entirely. It is in
+// bot-run suppressed label (white on cream) disappeared entirely. It is in
 // `@layer base` now, so a declared utility wins while a plain button still
 // inherits the workspace ink.
 //

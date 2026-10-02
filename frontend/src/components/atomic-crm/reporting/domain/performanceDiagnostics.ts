@@ -26,7 +26,7 @@ export const LANE_LABELS: Record<string, string> = {
 
 export const OUTCOME_LABELS: Record<string, string> = {
   SENT: "Đã gửi",
-  SUPPRESSED: "Đã chặn",
+  SUPPRESSED: "Không gửi được",
   ERROR: "Lỗi xử lý",
 };
 

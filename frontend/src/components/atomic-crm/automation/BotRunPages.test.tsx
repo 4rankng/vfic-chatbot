@@ -281,7 +281,7 @@ describe("Bot run pages", () => {
   // A `-foreground` token is the ink for text sitting ON a filled warning
   // surface. The outcome marker paints itself and its label with `currentColor`
   // straight onto the cream card, so a `-foreground` token there is white on
-  // cream and the "Đã chặn" run simply vanished. Every outcome owes a plain ink.
+  // cream and the suppressed run simply vanished. Every outcome owes a plain ink.
   it("gives every outcome an ink, never a filled-surface foreground", async () => {
     for (const outcome of ["sent", "suppressed", "error"] as const) {
       const indicator = outcomeMeta(outcome).indicatorClasses;
@@ -296,7 +296,7 @@ describe("Bot run pages", () => {
     );
 
     expect(marker).not.toBeNull();
-    expect(marker!.textContent).toBe("Đã chặn");
+    expect(marker!.textContent).toBe("Không gửi được");
     expect(getComputedStyle(marker!).color).not.toBe("rgb(255, 255, 255)");
   });
 });

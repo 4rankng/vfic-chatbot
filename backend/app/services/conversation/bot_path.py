@@ -379,7 +379,7 @@ class BotConversationState(
         server-side at commit time, so bumping the version or releasing the lock
         here makes the claim lose and the handoff reply never reaches the
         employee (the reply the employee is waiting for is recorded SUPPRESSED,
-        the console's "Đã chặn" badge). With the flag the transition writes only
+        the console's suppressed badge). With the flag the transition writes only
         ``mode``/``status``/``needs_human`` (+ the monotonic ``conversation_seq``)
         and leaves ``version`` and the ``bot_lock_*`` trio to the owning turn,
         which releases the lock in ``record_bot_outcome`` once the reply is out.

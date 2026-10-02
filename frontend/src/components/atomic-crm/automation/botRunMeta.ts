@@ -21,7 +21,7 @@ export const OUTCOME_META: Record<
     indicatorClasses: "text-success",
   },
   suppressed: {
-    label: "Đã chặn",
+    label: "Không gửi được",
     badgeColor: "warning",
     // `text-warning-foreground` is white — it is the ink for a filled warning
     // surface, not for a bare label on the cream card. The row paints the

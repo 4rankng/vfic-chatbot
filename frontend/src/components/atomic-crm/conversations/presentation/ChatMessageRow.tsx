@@ -34,7 +34,7 @@ const formatTime = (iso?: string) => {
 const deliveryStatusLabel = (status?: Message["delivery_status"]) => {
   if (status === "failed") return "Gửi lỗi";
   if (status === "send_unknown") return "Chưa xác nhận gửi";
-  if (status === "suppressed") return "Đã chặn";
+  if (status === "suppressed") return "Không gửi được";
   if (status === "sent") return "Đã gửi";
   return "";
 };

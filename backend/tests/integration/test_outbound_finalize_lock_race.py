@@ -5,7 +5,7 @@ recovery sweep finalized a prior turn's stale outbox row (msg 439, SEND_UNKNOWN)
 while a NEWER turn (254, replying to Thúy) held the conversation's bot lock.
 ``finalize_outbound_dispatch`` cleared ``bot_lock_owner``/``bot_locked_until``
 unconditionally, so the in-flight turn's ``claim_send`` guard evaluated false
-and the reply was SUPPRESSED — surfaced as the "Đã chặn" badge in the console.
+and the reply was SUPPRESSED — surfaced as the suppressed badge in the console.
 
 These tests prove the conditional lock-clear invariant against a real database:
 

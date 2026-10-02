@@ -49,7 +49,7 @@ const SUMMARY_LABELS: Readonly<Record<string, string>> = Object.freeze({
   search_knowledge: "Tra cứu cơ sở kiến thức",
   search_user_memory: "Tra cứu thông tin đã ghi nhận",
   skipped: "Không cần kiểm tra căn cứ",
-  suppressed: "Đã chặn gửi",
+  suppressed: "Không gửi được",
   timetable_terms: "Câu hỏi về lịch xe",
   truncated: "Nội dung đã được rút gọn an toàn",
   vacancy_listing: "Yêu cầu danh sách việc làm",

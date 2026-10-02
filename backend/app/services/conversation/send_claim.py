@@ -270,7 +270,7 @@ class SendClaimMixin:
             # row exceeds ``chat_turn_job_timeout`` without a receipt). By then a
             # NEWER turn may already hold this conversation's lock — and clearing
             # it unconditionally here steals that live lock, causing the in-flight
-            # turn's ``claim_send`` to suppress (the "Đã chặn" / SUPPRESSED bug).
+            # turn's ``claim_send`` to suppress (the SUPPRESSED-reply bug).
             # Only clear a lock that is NOT live: one with no owner or whose TTL
             # already expired. A still-live lock belongs to a concurrent turn and
             # is left for its own ``record_bot_outcome`` / the reconciler's TTL
