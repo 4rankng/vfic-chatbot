@@ -91,6 +91,8 @@ def test_full_template_carries_leading_questions_per_category() -> None:
         for question in definition.leading_questions:
             assert question in template
     # The fill-and-upload workflow header teaches the contract.
-    assert "GIỮ NGUYÊN dòng frontmatter" in template
+    assert "ĐỊNH DẠNG CHÍNH XÁC MÀ HỆ THỐNG ĐỌC ĐƯỢC" in template
+    assert "KHÔNG bắt buộc" in template
+    assert "### record: vi-cong-nhan" in template
     # The filename rides the HTTP Content-Disposition header, not the content.
     assert "mau-kb-du-an.md" not in template

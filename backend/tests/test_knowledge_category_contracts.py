@@ -241,7 +241,10 @@ def test_markdown_parser_accepts_one_record_document():
 @pytest.mark.parametrize(
     ("source", "message"),
     [
-        ("## jobs\n", "must start with --- front-matter"),
+        (
+            '## jobs\n\n### record: a\ntitle: "X"\n\n## jobs\n',
+            "duplicate section heading",
+        ),
         (
             "---\n"
             'schema_version: "1.0"\n'
