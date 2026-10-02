@@ -5,10 +5,11 @@ p50/p95/p99 per stage, plus by-lane/outcome counts and the slowest recent turns.
 Live tiles reuse the ``/health/queue`` snapshot via ``collect_queue_health``. Admin-only.
 
 Latency strategy (migration 0033 + concurrent reads + Redis cache):
-- The five time-windowed reads (``_percentiles``, ``_lane_outcome_counts``,
-  ``_slow_turns``, ``_trend``, ``_reliability``) run concurrently via
+- The nine time-windowed reads (``_percentiles``, ``_llm_call_percentiles``,
+  ``_lane_outcome_counts``, ``_adapter_breakdown``, ``_slow_turns``, ``_trend``,
+  ``_reliability``, ``_quality``, ``_external_source_sync``) run concurrently via
   ``asyncio.gather``, each on its own ``AsyncSession`` (a single session is not
-  safe for concurrent use). Pool ``pool_size=10`` has ample headroom for 5 reads.
+  safe for concurrent use). Pool ``pool_size=10`` still has headroom for 9 reads.
 - The assembled payload is cached in Redis for 30 s (``_CACHE_TTL_SECONDS``),
   matching the frontend ``staleTime``. Auth always runs before the cache lookup.
 - Cache tradeoff: on a hit, the ``live`` tile (queue depth / worker saturation)
@@ -180,6 +181,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
         slow_turns,
         trend,
         reliability,
+        quality,
         external_source_sync,
     ) = await asyncio.gather(
         asyncio.to_thread(collect_queue_health),
@@ -190,6 +192,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
         _with_session(_slow_turns, interval),
         _with_session(_trend, interval),
         _with_session(_reliability, interval),
+        _with_session(_quality, interval),
         _with_session(_external_source_sync, interval),
     )
     percentiles.update(llm_call_pct)
@@ -203,6 +206,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
         "slow_turns": slow_turns,
         "trend": trend,
         "reliability": reliability,
+        "quality": quality,
         "external_source_sync": external_source_sync,
     }
 
@@ -284,6 +288,45 @@ async def _reliability(db: AsyncSession, interval: timedelta) -> dict:
         "send_unknown_count": int(row.send_unknown or 0) if row else 0,
         "suppressed_count": int(row.suppressed or 0) if row else 0,
         "failed_count": int(row.failed or 0) if row else 0,
+    }
+
+
+async def _quality(db: AsyncSession, interval: timedelta) -> dict:
+    """Turn-quality and token-consumption aggregates over the window.
+
+    Complements the latency view: ``degraded_count`` (explicit flag or legacy
+    throttle key) counts turns the bot served in a reduced state,
+    ``retried_429_count`` counts turns that hit LLM rate limiting (the windowed
+    counterpart of the 1-minute live tile), and the prompt-cache hit rate plus
+    token sums expose cost/efficiency. All read from ``stage_timings`` in one
+    round-trip; the cache rate is None when no turn reported the flag.
+    """
+    sql = text(
+        "SELECT "
+        "COUNT(*) FILTER (WHERE COALESCE((stage_timings->>'degraded')::bool, "
+        "(stage_timings->>'throttle')::bool, false)) AS degraded_count, "
+        "COUNT(*) FILTER (WHERE COALESCE((stage_timings->>'retried_429')::bool, false)) "
+        "AS retried_429_count, "
+        "COUNT(*) FILTER (WHERE COALESCE((stage_timings->>'system_prompt_cache_hit')::bool, false)) "
+        "AS prompt_cache_hits, "
+        "COUNT(*) FILTER (WHERE stage_timings ? 'system_prompt_cache_hit') AS prompt_cache_known, "
+        "COALESCE(SUM((stage_timings->>'prompt_tokens')::int), 0) AS prompt_tokens_total, "
+        "COALESCE(SUM((stage_timings->>'completion_tokens')::int), 0) AS completion_tokens_total, "
+        "COALESCE(SUM((stage_timings->>'cached_tokens')::int), 0) AS cached_tokens_total "
+        "FROM bot_runs WHERE started_at >= now() - (:interval)::interval "
+        "AND stage_timings IS NOT NULL"
+    )
+    row = (await db.execute(sql, {"interval": interval})).one_or_none()
+    known = int(row.prompt_cache_known or 0) if row else 0
+    return {
+        "degraded_count": int(row.degraded_count or 0) if row else 0,
+        "retried_429_count": int(row.retried_429_count or 0) if row else 0,
+        "prompt_cache_hit_rate": (
+            round(100.0 * int(row.prompt_cache_hits or 0) / known, 1) if known else None
+        ),
+        "prompt_tokens_total": int(row.prompt_tokens_total or 0) if row else 0,
+        "completion_tokens_total": int(row.completion_tokens_total or 0) if row else 0,
+        "cached_tokens_total": int(row.cached_tokens_total or 0) if row else 0,
     }
 
 

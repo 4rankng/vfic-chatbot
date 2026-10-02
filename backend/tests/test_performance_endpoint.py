@@ -100,6 +100,7 @@ _ROUTE_RELIABILITY = "messages m"
 _ROUTE_LLM_CALL_LATENCY = "jsonb_array_elements_text"
 _ROUTE_LLM_CALL_COUNT = "llm_calls_per_p50"
 _ROUTE_ADAPTER_BREAKDOWN = "outbound_adapter"
+_ROUTE_QUALITY = "retried_429_count"
 _ROUTE_EXTERNAL_SOURCE_SYNC = "external_source_sync_state"
 
 
@@ -188,6 +189,20 @@ def _standard_routes() -> list[tuple[str, _FakeResult]]:
                     SimpleNamespace(lane="agent", outcome="SENT", n=5),
                     SimpleNamespace(lane="agent", outcome="SENT", n=3),
                 ]
+            ),
+        ),
+        (
+            _ROUTE_QUALITY,
+            _FakeResult(
+                one=SimpleNamespace(
+                    degraded_count=1,
+                    retried_429_count=2,
+                    prompt_cache_hits=6,
+                    prompt_cache_known=8,
+                    prompt_tokens_total=9600,
+                    completion_tokens_total=640,
+                    cached_tokens_total=1200,
+                )
             ),
         ),
         (
@@ -369,13 +384,27 @@ async def test_performance_bundle_shape(monkeypatch):
     assert t["p50_ms"] == 1500
     assert t["turns"] == 10
     assert t["errors"] == 1
-    # Eight distinct SQL statements issued: stage percentiles, LLM detail,
-    # lane/outcome, adapter comparison, slow turns, trend, and reliability.
-    assert len(queries) == 8
+    # Nine distinct SQL statements issued: stage percentiles, LLM detail,
+    # lane/outcome, adapter comparison, slow turns, trend, reliability, and
+    # turn-quality/token aggregates.
+    assert len(queries) == 9
     # reliability section: SEND_UNKNOWN + suppressed + failed counts.
     assert out["reliability"]["send_unknown_count"] == 2
     assert out["reliability"]["suppressed_count"] == 5
     assert out["reliability"]["failed_count"] == 1
+    # quality section: degraded/429 counters, prompt-cache hit rate, token sums.
+    assert out["quality"] == {
+        "degraded_count": 1,
+        "retried_429_count": 2,
+        "prompt_cache_hit_rate": 75.0,
+        "prompt_tokens_total": 9600,
+        "completion_tokens_total": 640,
+        "cached_tokens_total": 1200,
+    }
+    quality_query = next(query for query in queries if _ROUTE_QUALITY in query)
+    # The legacy throttle key counts as degraded so historical rows keep
+    # contributing after the flag rename.
+    assert "(stage_timings->>'throttle')::bool" in quality_query
     reliability_query = next(query for query in queries if _ROUTE_RELIABILITY in query)
     # This query must run before migration 0030 adds SEND_UNKNOWN to the enum.
     # Casting to text makes the dashboard deploy-safe during a rolling migration.
@@ -431,6 +460,20 @@ async def test_performance_empty_window_returns_nulls(monkeypatch):
             _ROUTE_RELIABILITY,
             _FakeResult(one=SimpleNamespace(send_unknown=0, suppressed=0, failed=0)),
         ),
+        (
+            _ROUTE_QUALITY,
+            _FakeResult(
+                one=SimpleNamespace(
+                    degraded_count=0,
+                    retried_429_count=0,
+                    prompt_cache_hits=0,
+                    prompt_cache_known=0,
+                    prompt_tokens_total=0,
+                    completion_tokens_total=0,
+                    cached_tokens_total=0,
+                )
+            ),
+        ),
     ]
     _install_compute_stubs(monkeypatch, routes=routes)
 
@@ -441,6 +484,11 @@ async def test_performance_empty_window_returns_nulls(monkeypatch):
     assert out["slow_turns"] == []
     assert out["trend"] == []
     assert out["reliability"] == {"send_unknown_count": 0, "suppressed_count": 0, "failed_count": 0}
+    # No turns -> the cache rate is None (unknown), counters are zero.
+    assert out["quality"]["degraded_count"] == 0
+    assert out["quality"]["retried_429_count"] == 0
+    assert out["quality"]["prompt_cache_hit_rate"] is None
+    assert out["quality"]["prompt_tokens_total"] == 0
     # _percentile_row had real ints, so just confirm shape keys exist for every stage
     # (the llm_call extras are merged in separately — asserted just below).
     assert set(perf_mod._STAGE_KEYS).issubset(out["percentiles"])
@@ -635,6 +683,28 @@ async def test_performance_queries_dispatched_concurrently(monkeypatch):
                 return _FakeResult(all_rows=[])
             if _ROUTE_RELIABILITY in sql:
                 return _FakeResult(one=SimpleNamespace(send_unknown=0, suppressed=0, failed=0))
+            if _ROUTE_QUALITY in sql:
+                return _FakeResult(
+                    one=SimpleNamespace(
+                        degraded_count=0,
+                        retried_429_count=0,
+                        prompt_cache_hits=0,
+                        prompt_cache_known=0,
+                        prompt_tokens_total=0,
+                        completion_tokens_total=0,
+                        cached_tokens_total=0,
+                    )
+                )
+            if _ROUTE_ADAPTER_BREAKDOWN in sql:
+                return _FakeResult(all_rows=[])
+            if _ROUTE_LLM_CALL_LATENCY in sql:
+                return _FakeResult(
+                    one=SimpleNamespace(llm_call_per_p50=None, llm_call_per_p95=None, llm_call_per_p99=None)
+                )
+            if _ROUTE_LLM_CALL_COUNT in sql:
+                return _FakeResult(
+                    one=SimpleNamespace(llm_calls_per_p50=None, llm_calls_per_p95=None, llm_calls_per_p99=None)
+                )
             if _ROUTE_EXTERNAL_SOURCE_SYNC in sql:
                 return _FakeResult(one=SimpleNamespace(n=0, last=None))
             raise AssertionError(f"unmatched SQL: {sql[:80]}")
