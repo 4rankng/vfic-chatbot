@@ -91,10 +91,16 @@ async def test_provider_failure_is_safe_and_does_not_return_partial_success():
     assert "private" not in str(error.value)
 
 
-async def test_one_invalid_category_cannot_publish_the_valid_subset():
+async def test_unverifiable_records_are_dropped_without_voiding_the_valid_ones():
+    """One record with no usable evidence must not void the whole upload.
+
+    The dropped category simply does not appear in the plan (the ingest summary
+    lists it under "needs manual entry"), and the grounded record still trains.
+    """
     llm = AsyncMock(return_value=_response(jobs=[_JOB], contacts=[{"nonsense": True}]))
-    with pytest.raises(CategoryPlanExtractionError):
-        await extract_category_plan(_JOB_SOURCE, llm)
+    plan = await extract_category_plan(_JOB_SOURCE, llm)
+    assert plan is not None
+    assert [write.key.value for write in plan.writes] == ["jobs"]
 
 
 @pytest.mark.parametrize(
@@ -125,7 +131,6 @@ async def test_quote_grounding_accepts_whitespace_and_unicode_equivalence():
 @pytest.mark.parametrize(
     "record,quote",
     [
-        ({"name": "Cường", "phone": "0909999999"}, _CONTACT_SOURCE),
         ({"base_salary_vnd": 9000000}, "Lương cơ bản: 6,5 triệu đồng/tháng."),
         ({"base_salary_vnd": 65}, "Lương cơ bản: 6,5 triệu đồng/tháng."),
         ({"provided": False}, "Không phục vụ bữa sáng, cung cấp cơm ca trưa."),
@@ -133,11 +138,10 @@ async def test_quote_grounding_accepts_whitespace_and_unicode_equivalence():
         ({"available": True}, "Không có KTX."),
     ],
 )
-async def test_valid_schema_cannot_sneak_unsupported_values_into_quotes(record, quote):
+async def test_records_with_no_supported_fact_fail_the_extraction(record, quote):
+    """Every cleared value leaves the record empty: the mapping failed, not "no source"."""
     key = (
-        "contacts"
-        if "name" in record
-        else "compensation"
+        "compensation"
         if "base_salary_vnd" in record
         else "meals"
         if "provided" in record
@@ -147,6 +151,40 @@ async def test_valid_schema_cannot_sneak_unsupported_values_into_quotes(record, 
         await extract_category_plan(
             quote, AsyncMock(return_value=_response(**{key: [_envelope(record, quote)]}))
         )
+
+
+async def test_unsupported_field_is_cleared_while_the_grounded_fields_publish():
+    """A fabricated value never publishes, and it no longer sinks its own record.
+
+    The phone is not in the brief, so it is cleared; the quoted name survives.
+    """
+    record = _envelope({"name": "Cường", "phone": "0909999999"}, _CONTACT_SOURCE)
+    plan = await extract_category_plan(
+        _CONTACT_SOURCE, AsyncMock(return_value=_response(contacts=[record]))
+    )
+    assert plan is not None
+    document = parse_category_markdown(plan.writes[0].key, plan.writes[0].content)
+    contact = document.contacts[0]
+    assert contact.name == "Cường"
+    assert contact.phone is None
+
+
+async def test_unsupported_list_item_is_dropped_and_its_siblings_kept():
+    source = "## Câu hỏi thường gặp\n- **Có xe đưa đón không?**  Không có xe đưa đón.\n"
+    record = _envelope(
+        {
+            "question": "Có xe đưa đón không?",
+            "answer": "Không có xe đưa đón.",
+            "tags": ["đưa đón", "miễn phí"],
+        },
+        "- **Có xe đưa đón không?**  Không có xe đưa đón.",
+    )
+    plan = await extract_category_plan(
+        source, AsyncMock(return_value=_response(faq=[record]))
+    )
+    assert plan is not None
+    document = parse_category_markdown(plan.writes[0].key, plan.writes[0].content)
+    assert document.faq[0].tags == ["đưa đón"]
 
 
 async def test_long_plain_text_extracts_facts_after_character_60000():
@@ -517,16 +555,6 @@ async def test_pay_date_and_foreign_currency_do_not_ground_a_vnd_salary():
     [
         ("accommodation", {"available": True}, "Có ký túc xá không?"),
         ("meals", {"provided": True}, "Thông tin cơm ca chưa rõ."),
-        (
-            "accommodation",
-            {"available": True, "monthly_cost_vnd": 0},
-            "Có KTX nhưng không miễn phí.",
-        ),
-        (
-            "accommodation",
-            {"available": True, "monthly_cost_vnd": 0},
-            "Housing is available but not free.",
-        ),
     ],
 )
 async def test_questions_unknown_services_and_negated_free_are_not_positive_facts(
@@ -536,6 +564,68 @@ async def test_questions_unknown_services_and_negated_free_are_not_positive_fact
         await extract_category_plan(
             quote, AsyncMock(return_value=_response(**{key: [_envelope(record, quote)]}))
         )
+
+
+@pytest.mark.parametrize(
+    "quote", ["Có KTX nhưng không miễn phí.", "Housing is available but not free."]
+)
+async def test_denied_free_price_clears_the_free_claim_but_keeps_availability(quote):
+    """A cost invented from "not free" is cleared; the sourced availability stays."""
+    record = _envelope({"available": True, "monthly_cost_vnd": 0}, quote)
+    plan = await extract_category_plan(
+        quote, AsyncMock(return_value=_response(accommodation=[record]))
+    )
+    assert plan is not None
+    document = parse_category_markdown(plan.writes[0].key, plan.writes[0].content)
+    assert document.accommodation[0].available is True
+    assert document.accommodation[0].monthly_cost_vnd is None
+
+
+async def test_quote_grounding_ignores_markdown_emphasis_and_bullets():
+    """The provider cites a brief line's words, not the brief's markdown."""
+    source = "# 4P Electronics\n\n- **Lương cơ bản:** 6.200.000 – 6.300.000 VNĐ / tháng.\n"
+    record = _envelope(
+        {"base_salary_vnd": 6200000}, "Lương cơ bản: 6.200.000 – 6.300.000 VNĐ / tháng."
+    )
+    plan = await extract_category_plan(
+        source, AsyncMock(return_value=_response(compensation=[record]))
+    )
+    assert plan is not None
+    assert [write.key.value for write in plan.writes] == ["compensation"]
+
+
+async def test_composed_field_is_grounded_against_the_whole_section():
+    """A field may rest on a line the record did not list in its own quotes.
+
+    The provider routinely cites a subset of the lines a composed field draws on
+    (here the FAQ answer restating the commute allowance), and a subset citation
+    is not a fabrication.
+    """
+    source = (
+        "## Đưa đón & lịch xe\n"
+        "- **Phụ cấp đi lại:** Hỗ trợ 300.000 VNĐ / tháng tiền đi lại vào lương.\n"
+        "## Câu hỏi thường gặp\n"
+        "- **Có xe đưa đón không?**\n"
+        "  Không có xe đưa đón. Công ty hỗ trợ 300.000 VNĐ/tháng tiền phụ cấp đi lại trực tiếp "
+        "vào lương.\n"
+    )
+    record = _envelope(
+        {
+            "name": "Phụ cấp đi lại",
+            "direction": "round_trip",
+            "notes": (
+                "Không có xe đưa đón. Công ty hỗ trợ 300.000 VNĐ/tháng tiền phụ cấp đi lại "
+                "trực tiếp vào lương."
+            ),
+        },
+        "- **Phụ cấp đi lại:** Hỗ trợ 300.000 VNĐ / tháng tiền đi lại vào lương.",
+    )
+    plan = await extract_category_plan(
+        source, AsyncMock(return_value=_response(transportation=[record]))
+    )
+    assert plan is not None
+    document = parse_category_markdown(plan.writes[0].key, plan.writes[0].content)
+    assert document.transportation[0].notes.startswith("Không có xe đưa đón.")
 
 
 @pytest.mark.parametrize(

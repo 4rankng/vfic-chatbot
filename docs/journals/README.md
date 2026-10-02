@@ -51,3 +51,4 @@ regression analysis and onboarding.
 | 2026-07-23 | Candidate display-name overwrite fix | [260723-2046-candidate-display-name-overwrite-fix.md](260723-2046-candidate-display-name-overwrite-fix.md) |
 | 2026-07-26 | Release and Frontend Hardening Learned the Hard Way | [260726-2119-release-frontend-hardening-retrospective.md](260726-2119-release-frontend-hardening-retrospective.md) |
 | 2026-09-06 | Journal: Facebook Messenger webhook-subscription readiness check | [260906-0020-facebook-subscription-readiness-check.md](260906-0020-facebook-subscription-readiness-check.md) |
+| 2026-10-02 | KB evidence grounding — compare words, not formatting | [261002-evidence-grounding-word-tokens.md](261002-evidence-grounding-word-tokens.md) |

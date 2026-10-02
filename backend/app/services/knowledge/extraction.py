@@ -8,6 +8,7 @@ before returning a plan; budget exhaustion is an explicit failure.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 import hashlib
@@ -17,6 +18,8 @@ from typing import TYPE_CHECKING, Any
 
 from app.core.config import DIGEST_MAX_SECTIONS, DIGEST_SECTION_CHARS, DIGEST_SECTION_OVERLAP
 from app.services.knowledge.category_plan_grounding import CategoryPlanExtractionError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.schemas.knowledge import ProjectTrainingPlan
@@ -243,8 +246,16 @@ async def extract_category_plan(
     keys = [definition.key.value for definition in CATEGORY_DEFINITIONS]
     source_checksum = hashlib.sha256(text.encode("utf-8")).hexdigest()
     completed: list[dict[str, Any]] = []
+    dropped: list[tuple[str, str]] = []
 
     def validate_categories(data: Any, source: str) -> dict[str, Any]:
+        """Keep every grounded record; drop the ones the source cannot support.
+
+        One record with unverifiable evidence must not void the whole upload:
+        the record is dropped (the operator sees its category in the "needs
+        manual entry" list) and the rest of the file still trains. Nothing
+        ungrounded is published either way.
+        """
         if not isinstance(data, dict) or set(data) != set(keys):
             raise CategoryPlanExtractionError("Extraction must account for every project category")
         validated: dict[str, Any] = {}
@@ -252,7 +263,14 @@ async def extract_category_plan(
             records = data[key]
             if not isinstance(records, list):
                 raise CategoryPlanExtractionError("Category extraction is not a record list")
-            validated[key] = [validate_category_envelope(key, record, source) for record in records]
+            accepted = []
+            for record in records:
+                try:
+                    accepted.append(validate_category_envelope(key, record, source))
+                except CategoryPlanExtractionError as exc:
+                    dropped.append((key, str(exc)))
+                    logger.info("category record rejected key=%s cause=%s", key, exc)
+            validated[key] = accepted
         return validated
 
     if checkpoint is not None:
@@ -364,6 +382,10 @@ async def extract_category_plan(
                 content=markdown,
             )
         )
+    if not writes and dropped:
+        # Records were proposed but none could be grounded: that is a failed
+        # mapping, not an empty source. Report it instead of importing nothing.
+        raise CategoryPlanExtractionError("Extracted category records do not match the source")
     try:
         plan = ProjectTrainingPlan(writes=writes) if writes else None
     except ValueError:

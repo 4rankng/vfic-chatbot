@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -11,8 +12,14 @@ from typing import Any
 from app.schemas.knowledge_categories import CATEGORY_DOCUMENT_MODELS
 from app.services.knowledge.category_contracts import validate_category_payload
 from app.services.knowledge.category_markdown import _record_model
-from app.services.knowledge.coercion import normalized_source_text
+from app.services.knowledge.coercion import (
+    normalized_source_text,
+    source_tokens,
+    token_run_present,
+)
 from app.project_knowledge.domain.category_catalog import get_category_definition
+
+logger = logging.getLogger(__name__)
 
 
 class CategoryPlanExtractionError(ValueError):
@@ -31,6 +38,7 @@ class CategoryPlanExtractionError(ValueError):
             "Category extraction returned invalid JSON": "Dịch vụ phân tích trả về dữ liệu chưa hợp lệ. Vui lòng thử lại.",
             "Combined category extraction exceeds its valid schema or size": "Danh mục trích xuất vượt giới hạn hoặc chưa đúng định dạng. Hãy kiểm tra tệp rồi thử lại.",
             "Combined category plan exceeds the training size budget": "Nội dung danh mục trích xuất vượt giới hạn. Hãy chia tệp rồi thử lại.",
+            "Extracted category records do not match the source": "Bản ghi trích xuất chưa khớp với nguồn tệp. Vui lòng kiểm tra tệp rồi thử lại.",
         }
         super().__init__(
             messages.get(
@@ -179,27 +187,58 @@ def _resolve_schema(schema: dict[str, Any], definitions: dict[str, Any]) -> dict
     return schema
 
 
-def _validate_values(
-    value: Any, schema: dict[str, Any], quote: str, definitions: dict[str, Any], field: str = ""
-) -> None:
+def _value_problems(
+    value: Any,
+    schema: dict[str, Any],
+    source: str,
+    source_token_text: str,
+    definitions: dict[str, Any],
+    field: str = "",
+    path: tuple[Any, ...] = (),
+) -> list[tuple[tuple[Any, ...], str]]:
+    """Every field the source does not support, with its path inside the record.
+
+    ``source`` is the whitespace-folded section (numbers, times and service
+    denials need its punctuation); ``source_token_text`` is the same section in
+    word tokens, for the "is this text in the source" checks. Problems are
+    COLLECTED rather than raised: an unsupported value is cleared from the
+    record by :func:`_clear_problem_paths`, so one paraphrased field cannot
+    discard an otherwise well-grounded record — and a value the source does not
+    contain is still never published.
+    """
     schema = _resolve_schema(schema, definitions)
+    problems: list[tuple[tuple[Any, ...], str]] = []
     if value is None:
-        return
+        return problems
     if "anyOf" in schema:
         schema = next((item for item in schema["anyOf"] if item.get("type") != "null"), {})
         schema = _resolve_schema(schema, definitions)
     if isinstance(value, dict):
         for key, item in value.items():
             if key != "id":
-                _validate_values(
-                    item, schema.get("properties", {}).get(key, {}), quote, definitions, key
+                problems += _value_problems(
+                    item,
+                    schema.get("properties", {}).get(key, {}),
+                    source,
+                    source_token_text,
+                    definitions,
+                    key,
+                    (*path, key),
                 )
     elif isinstance(value, list):
-        for item in value:
-            _validate_values(item, schema.get("items", {}), quote, definitions, field)
+        for index, item in enumerate(value):
+            problems += _value_problems(
+                item,
+                schema.get("items", {}),
+                source,
+                source_token_text,
+                definitions,
+                field,
+                (*path, index),
+            )
     elif isinstance(value, bool):
         if field == "crosses_midnight":
-            return  # Computed from the two grounded shift times.
+            return problems  # Computed from the two grounded shift times.
         # A denial of free housing/meals does not prove absence of the service.
         if field in {"available", "provided"}:
             service = (
@@ -211,19 +250,17 @@ def _validate_values(
                 rf"\bkhông\s+(?:(?:có|cung cấp|bố trí|phục vụ|hỗ trợ)\s+)?{service}(?!\s+(?:miễn phí|sáng|trưa|tối))"
                 rf"|\bno\s+{service}(?!\s+(?:allowance|subsidy))"
                 rf"|\b{service}\s+(?:(?:is|are)\s+)?not\s+(?:available|provided)",
-                quote,
+                source,
                 re.IGNORECASE,
             )
-            if bool(denial) == value or not re.search(service, quote, re.IGNORECASE):
-                raise CategoryPlanExtractionError(
-                    "Category record has an unsupported service denial"
-                )
-            if value:
+            if bool(denial) == value or not re.search(service, source, re.IGNORECASE):
+                problems.append((path, "unsupported service denial"))
+            elif value:
                 affirmed = False
                 affirmative_service = (
                     f"(?:{service}|bữa\\s+(?:sáng|trưa|tối))" if field == "provided" else service
                 )
-                for clause in _assertion_clauses(quote):
+                for clause in _assertion_clauses(source):
                     clause = re.sub(r"không mất tiền", "miễn phí", clause, flags=re.IGNORECASE)
                     clause = re.sub(
                         r"không miễn phí|not free", "có phí", clause, flags=re.IGNORECASE
@@ -245,60 +282,101 @@ def _validate_values(
                         affirmed = True
                         break
                 if not affirmed:
-                    raise CategoryPlanExtractionError(
-                        "Category record has no affirmative service evidence"
-                    )
+                    problems.append((path, "no affirmative service evidence"))
     elif isinstance(value, int):
         if field != "order" and value not in _source_numbers(
-            quote, monetary=field.endswith("_vnd")
+            source, monetary=field.endswith("_vnd")
         ):
-            raise CategoryPlanExtractionError("Category record contains an unsupported number")
+            problems.append((path, "unsupported number"))
     elif isinstance(value, str):
-        folded_value = normalized_source_text(value).casefold()
-        folded_quote = normalized_source_text(quote).casefold()
         if "enum" in schema:
             aliases = (value, *_ENUM_EVIDENCE.get(value, ()))
-            if not any(
-                re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", folded_quote) for alias in aliases
-            ):
-                raise CategoryPlanExtractionError("Category record contains an unsupported enum")
+            if not any(token_run_present(source_token_text, alias) for alias in aliases):
+                problems.append((path, "unsupported enum"))
         elif field in {"phone", "zalo"} and re.fullmatch(r"[+\d\s().-]+", value):
-            compact = re.sub(r"[\s().-]", "", folded_value)
-            if compact not in re.sub(r"[\s().-]", "", folded_quote):
-                raise CategoryPlanExtractionError(
-                    "Category record contains an unsupported contact number"
-                )
+            compact = re.sub(r"[\s().-]", "", source_tokens(value))
+            if compact not in re.sub(r"[\s().-]", "", source_token_text):
+                problems.append((path, "unsupported contact number"))
         elif field in {"time", "start_time", "end_time"}:
-            if value not in _source_times(folded_quote):
-                raise CategoryPlanExtractionError("Category record contains an unsupported time")
-        elif folded_value and folded_value not in folded_quote:
-            raise CategoryPlanExtractionError(
-                "Category record contains text absent from its evidence"
-            )
+            if value not in _source_times(source):
+                problems.append((path, "unsupported time"))
+        elif value.strip() and not token_run_present(source_token_text, value):
+            problems.append((path, "text absent from source"))
+    return problems
+
+
+def _clear_problem_paths(
+    record: dict[str, Any], problems: list[tuple[tuple[Any, ...], str]]
+) -> None:
+    """Drop the unsupported values, keeping every other fact in the record.
+
+    A scalar list item leaves its list; any other value becomes null. The caller
+    re-validates the cleared record, so a required field that cannot stand alone
+    still drops the whole record.
+    """
+    removals: list[tuple[list[Any], int]] = []
+    for path, _reason in problems:
+        if not path:
+            continue
+        parent: Any = record
+        for step in path[:-1]:
+            parent = parent[step]
+        last = path[-1]
+        if isinstance(parent, list) and isinstance(last, int):
+            removals.append((parent, last))
+        elif isinstance(parent, dict):
+            parent[last] = None
+    for items, index in sorted(removals, key=lambda removal: -removal[1]):
+        if 0 <= index < len(items):
+            items.pop(index)
+
+
+def _has_facts(fields: dict[str, Any]) -> bool:
+    return any(
+        value is not None and value != "" and value != [] and value != {}
+        for value in fields.values()
+    )
 
 
 def validate_category_envelope(key: str, envelope: Any, source: str) -> dict[str, Any]:
+    """One grounded record, or a rejection the caller drops.
+
+    Quotes must be verbatim source text (word-for-word; the model's markdown and
+    bullets are not evidence). Field values are grounded against the WHOLE
+    source section rather than only the cited quotes: the model routinely cites
+    a subset of the lines a composed field draws on (a note that restates an FAQ
+    answer, a location it cited under another category), and a subset citation
+    is not a fabrication. What cannot be verified is CLEARED, not published; a
+    record left with no facts, or whose remaining facts no longer satisfy its
+    schema, is rejected.
+    """
     if not isinstance(envelope, dict) or set(envelope) != {"record", "source_quotes"}:
         raise CategoryPlanExtractionError("Category record has no evidence envelope")
     record, quotes = envelope["record"], envelope["source_quotes"]
     if not isinstance(record, dict) or not isinstance(quotes, list) or not quotes:
         raise CategoryPlanExtractionError("Category record has invalid evidence")
-    folded_source = normalized_source_text(source)
+    source_token_text = source_tokens(source)
     for quote in quotes:
-        if (
-            not isinstance(quote, str)
-            or not normalized_source_text(quote)
-            or normalized_source_text(quote) not in folded_source
-        ):
+        if not isinstance(quote, str) or not token_run_present(source_token_text, quote):
             raise CategoryPlanExtractionError("Category record has no matching source quote")
     definition = get_category_definition(key)
     record_model = _record_model(CATEGORY_DOCUMENT_MODELS[definition.key], definition.list_field)
     fields = {field: value for field, value in record.items() if field != "id"}
-    if not any(
-        value is not None and value != "" and value != [] and value != {}
-        for value in fields.values()
-    ):
+    if not _has_facts(fields):
         raise CategoryPlanExtractionError("Category record contains no source facts")
+    schema = record_model.model_json_schema()
+    problems = _value_problems(
+        fields, schema, normalized_source_text(source), source_token_text, schema.get("$defs", {})
+    )
+    if problems:
+        logger.info(
+            "category record degraded key=%s cleared=%s",
+            key,
+            [f"{'.'.join(str(step) for step in path)}:{reason}" for path, reason in problems],
+        )
+        _clear_problem_paths(fields, problems)
+        if not _has_facts(fields):
+            raise CategoryPlanExtractionError("Category record contains no source facts")
     payload = {"category": key, key: [{"id": "pending", **fields}]}
     try:
         document = validate_category_payload(definition.key, payload)
@@ -320,10 +398,6 @@ def validate_category_envelope(key: str, envelope: Any, source: str) -> dict[str
         json.dumps(normalized_facts(canonical_fields), ensure_ascii=False, sort_keys=True).encode()
     ).hexdigest()[:24]
     validated_record["id"] = f"auto-{key}-{stable}"
-    schema = record_model.model_json_schema()
-    _validate_values(
-        fields, schema, normalized_source_text("\n".join(quotes)), schema.get("$defs", {})
-    )
     # Explicit shift flags must agree with the grounded times.
     for shift in validated_record.get("shifts", []):
         if shift["crosses_midnight"] != (shift["end_time"] < shift["start_time"]):

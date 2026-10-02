@@ -62,6 +62,55 @@ def normalized_source_text(value: str) -> str:
     return re.sub(r"\s+", " ", unicodedata.normalize("NFC", value)).strip()
 
 
+_TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+
+
+def source_tokens(value: str) -> str:
+    """Word-token form of source/evidence text — what grounding compares.
+
+    Grounding exists to catch FABRICATED facts, not reformatted ones. A model
+    quote that drops the markdown emphasis of the line it cites
+    (``- **Lương cơ bản:** …`` → ``Lương cơ bản: …``), or that joins two cited
+    lines, is still verbatim source text; comparing raw strings rejected both
+    and sank whole imports. Punctuation, bullets and dashes therefore collapse
+    to word boundaries; letters (diacritics and case intact) and digits are what
+    must match.
+    """
+    return " ".join(_TOKEN_RE.findall(unicodedata.normalize("NFC", value).casefold()))
+
+
+def token_run_present(haystack_tokens: str, needle: str) -> bool:
+    """True when ``needle``'s words occur as one uninterrupted run of ``haystack_tokens``.
+
+    ``haystack_tokens`` must already be :func:`source_tokens` output; passing raw
+    text can match across a punctuation boundary the token form would not.
+    """
+    tokens = source_tokens(needle)
+    return bool(tokens) and f" {tokens} " in f" {haystack_tokens} "
+
+
+def evidence_is_grounded(evidence: str | None, source_text: str) -> bool:
+    """True when every cited evidence segment is verbatim source text.
+
+    The extraction prompt asks for the lines that support an answer, and the
+    model lists them either as separate lines or joined into one; segments are
+    therefore split on line breaks AND sentence ends, and each must appear as
+    one uninterrupted word run in the source. Punctuation, markdown emphasis
+    and the model's own joins cannot invalidate genuine evidence — but words the
+    source does not contain still do.
+    """
+    segments = [
+        segment.strip()
+        for line in re.split(r"\n+", evidence or "")
+        for segment in re.split(r"(?<=[.!?;])\s+", line)
+        if segment.strip()
+    ]
+    if not segments:
+        return False
+    source_token_text = source_tokens(source_text)
+    return all(token_run_present(source_token_text, segment) for segment in segments)
+
+
 def validate_digest(payload: Any, *, source_text: str | None = None) -> tuple[str, list[dict]]:
     """Validate/coerce the LLM digest payload -> (document_summary, units)."""
     if isinstance(payload, str):
@@ -149,16 +198,19 @@ def _coerce_feature(raw: Any, catalog_row: Any, *, source_text: str | None = Non
         value_json = {}
     evidence = str(raw.get("evidence_text") or raw.get("evidence") or "").strip() or None
     # Extraction is grounded in a quote, not merely the model's assertion that
-    # a benefit exists. Whitespace folding accepts source formatting changes.
-    if source_text is not None and not is_missing:
-        folded_source = normalized_source_text(source_text)
-        folded_quote = normalized_source_text(evidence or "")
-        if not folded_quote or folded_quote not in folded_source:
-            return {
-                "value_text": _missing_feature_text(catalog_row), "value_json": {},
-                "is_highlight": False, "is_missing": True, "needs_clarification": True,
-                "evidence_text": None, "strength_score": 0.0,
-            }
+    # a benefit exists. Evidence is verified segment by segment under word-token
+    # folding, so source formatting (markdown emphasis, bullets, an answer the
+    # model joined into one line) can never make a genuine quote look fabricated.
+    if (
+        source_text is not None
+        and not is_missing
+        and not evidence_is_grounded(evidence, source_text)
+    ):
+        return {
+            "value_text": _missing_feature_text(catalog_row), "value_json": {},
+            "is_highlight": False, "is_missing": True, "needs_clarification": True,
+            "evidence_text": None, "strength_score": 0.0,
+        }
     return {
         "value_text": value_text,
         "value_json": value_json,

@@ -48,6 +48,60 @@ def test_extracted_feature_quote_accepts_source_whitespace_formatting():
     assert value["is_missing"] is False
 
 
+_BRIEF_SOURCE = (
+    "# 4P Electronics\n\n"
+    "## Lương & thu nhập\n"
+    "- **Lương cơ bản:** 6.200.000 – 6.300.000 VNĐ / tháng.\n"
+    "- **Tăng ca:** Tính theo Luật Lao động (ngày thường nhân 1.5, ngày nghỉ nhân 2.0).\n\n"
+    "## Đưa đón & lịch xe\n"
+    "- **Xe đưa đón:** Không có xe đưa đón.\n"
+    "- **Phụ cấp đi lại:** Hỗ trợ 300.000 VNĐ / tháng tiền đi lại vào lương cho người lao động "
+    "tự túc xe máy.\n\n"
+    "## Câu hỏi thường gặp\n"
+    "- **Có xe đưa đón không?**\n"
+    "  Không có xe đưa đón. Công ty hỗ trợ 300.000 VNĐ/tháng tiền phụ cấp đi lại trực tiếp vào "
+    "lương.\n"
+)
+
+
+def test_extracted_feature_evidence_accepts_a_bulleted_briefs_lines():
+    """The provider cites the brief's words, not its markdown emphasis."""
+    raw = {
+        "value_text": "Tăng ca: ngày thường x1.5, ngày nghỉ x2.0",
+        "evidence_text": (
+            "Lương cơ bản: 6.200.000 – 6.300.000 VNĐ / tháng.\n"
+            "Tăng ca: Tính theo Luật Lao động (ngày thường nhân 1.5, ngày nghỉ nhân 2.0)."
+        ),
+    }
+    value = _coerce_feature(raw, _catalog(), source_text=_BRIEF_SOURCE)
+    assert value["is_missing"] is False
+    assert value["evidence_text"] is not None
+
+
+def test_extracted_feature_evidence_accepts_lines_the_provider_joined():
+    """Joined evidence (the model's own line breaks dropped) is still verbatim source."""
+    raw = {
+        "value_text": "Không có xe đưa đón; hỗ trợ 300.000 VNĐ/tháng tiền đi lại",
+        "evidence_text": (
+            "Xe đưa đón: Không có xe đưa đón. Phụ cấp đi lại: Hỗ trợ 300.000 VNĐ / tháng tiền "
+            "đi lại vào lương cho người lao động tự túc xe máy. Không có xe đưa đón. Công ty hỗ "
+            "trợ 300.000 VNĐ/tháng tiền phụ cấp đi lại trực tiếp vào lương."
+        ),
+    }
+    value = _coerce_feature(raw, _catalog(), source_text=_BRIEF_SOURCE)
+    assert value["is_missing"] is False
+
+
+def test_extracted_feature_evidence_still_rejects_invented_text():
+    raw = {
+        "value_text": "Có ký túc xá miễn phí",
+        "evidence_text": "Ký túc xá miễn phí cho công nhân ở xa.",
+    }
+    value = _coerce_feature(raw, _catalog(), source_text=_BRIEF_SOURCE)
+    assert value["is_missing"] is True
+    assert value["needs_clarification"] is True
+
+
 # --------------------------------------------------------------------------- _coerce_unit
 def test_coerce_unit_happy_preserves_fields():
     unit = _coerce_unit(
