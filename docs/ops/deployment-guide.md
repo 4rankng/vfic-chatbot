@@ -278,13 +278,18 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0059_category_markdown_source` (1 Oct 2026). This line is
+- **HEAD:** `0061_project_coordinates` (2 Oct 2026). This line is
   grepped by the `release-check` docs-drift gate against the live
   `alembic heads` value, so a new migration that does not update it blocks the
-  release. `0058` adds the deployment-wide `tingting_hotline` integration
-  setting and seeds the approved hotline value so TingTing OA escalations end
-  with a real contact line; the value stays editable from the integrations
-  settings. Preceding `0057` drops the unused
+  release. `0061` adds the geo-distance columns on `projects`
+  (`extracted_address`, `latitude`, `longitude`) that let the catalog tool
+  report `distance_km` for "dự án nào gần nhà"; all three are nullable with no
+  backfill, so old and new code run against either schema. Preceding `0060`
+  dropped the retired per-run decision-trace column; `0059` renamed category
+  revision source to `source_markdown`; `0058` adds the deployment-wide
+  `tingting_hotline` integration setting and seeds the approved hotline value so
+  TingTing OA escalations end with a real contact line; the value stays editable
+  from the integrations settings. `0057` drops the unused
   `match_memories(vector, integer, jsonb)` overload so the memories retrieval
   path resolves to the `halfvec` signature and uses
   `memories_embedding_halfvec_hnsw_idx`.
@@ -419,6 +424,19 @@ Sourced from `backend/.env.example` (committed template) and
 | Name | Purpose |
 |---|---|
 | `DASHBOARD_CACHE_ENABLED` / `DASHBOARD_CACHE_TTL_SECONDS` | Dashboard metrics cache (30s default). |
+
+### Geocoding (geo-distance "dự án nào gần nhà")
+| Name | Purpose |
+|---|---|
+| `GEOCODER_ENABLED` | Default `true`. Off → every lookup is a cached miss and the catalog returns no `distance_km`. |
+| `GEOCODER_BASE_URL` | Default the public Nominatim instance. Repoint at a self-hosted Nominatim (or any Nominatim-compatible endpoint) for better Vietnamese coverage; no code change. |
+| `GEOCODER_USER_AGENT` | Descriptive UA required by the provider's usage policy. |
+| `GEOCODER_TIMEOUT_SECONDS` | 3s per attempt; a timeout is a miss. |
+| `GEOCODER_CACHE_TTL_SECONDS` / `GEOCODER_NEGATIVE_TTL_SECONDS` | 30 days for a hit / 6 hours for a miss (Redis, key version `geo:geocode:v2:`). |
+| `GEOCODER_MIN_INTERVAL_SECONDS` | 1.0 — the provider policy floor, enforced process-wide. |
+
+All seven have code defaults, so a deployment whose `/opt/vfic/.env` predates
+this feature needs no env change.
 
 ### Scaling knobs (in `config.py`, env-tunable)
 | Name | Default | Purpose |
