@@ -365,16 +365,24 @@ class KnowledgePipeline:
             # commute/contacts/shifts still answered "chưa ghi rõ").
             rows = []
             for c in catalog:
-                raw = await self._llm_json_with_timeout(
-                    _single_product_feature_prompt(c),
-                    corpus,
-                    purpose="product feature extraction",
-                )
-                payload = _parse_json_lenient(raw)
-                feats = payload.get("features") if isinstance(payload, dict) else None
-                one = feats[0] if isinstance(feats, list) and feats else (
-                    payload if isinstance(payload, dict) else None
-                )
+                try:
+                    raw = await self._llm_json_with_timeout(
+                        _single_product_feature_prompt(c),
+                        corpus,
+                        purpose="product feature extraction",
+                    )
+                    payload = _parse_json_lenient(raw)
+                    feats = payload.get("features") if isinstance(payload, dict) else None
+                    one = feats[0] if isinstance(feats, list) and feats else (
+                        payload if isinstance(payload, dict) else None
+                    )
+                except Exception:  # noqa: BLE001 - one criterion must not sink the rest
+                    logger.warning(
+                        "product feature extraction failed feature=%s",
+                        c.feature_key,
+                        exc_info=True,
+                    )
+                    one = None
                 rows.append((c, _coerce_feature(one, c, source_text=corpus)))
         await self._guard_training(doc)
         if (doc.metadata_ or {}).get("project_training") is not None:
