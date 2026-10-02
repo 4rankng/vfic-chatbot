@@ -55,6 +55,7 @@ from app.graph.tingting_guide import (
     tingting_support_system_prompt,
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
+from app.prompts.vfic_persona import vfic_hotline_reply
 from app.recruitment.application.lead_lookup import (
     LeadLookup,
     UNRESOLVED_LEAD,
@@ -80,10 +81,12 @@ _INCOME_COMPARE_HINT = (
 # escalation returns the fixed hotline reply instead (tingting_guide.py). The
 # reply is the whole handoff; there is no queue write to keep honest.
 #
-# This and the support-OA hotline reply in ``_agent_turn`` are the ONLY two
-# candidate-facing code-authored replies in the turn path (operator-approved
-# verbatim strings, 2026-09-29). Every other reply is authored by the LLM agent;
-# an off-scope turn is refused by the model under the routing instruction.
+# This, the support-OA hotline reply in ``_agent_turn``, and the recruitment-OA
+# hotline gates in ``_agent_turn`` (operator rule 2026-10-03: not-job-seeker or
+# a confident off-domain read ships ``vfic_hotline_reply()`` verbatim) are the
+# ONLY candidate-facing code-authored replies in the turn path (operator-approved
+# verbatim strings). Every other reply is authored by the LLM agent; an
+# uncertain off-scope turn is refused by the model under the routing instruction.
 
 
 # The legacy keyword volatile-markers list and the recent-vacancy body scan
@@ -461,6 +464,24 @@ async def _agent_turn(
             )
         else:
             return tingting_hotline_reply(await _tingting_hotline(deps))
+    if not tingting_support_account and (
+        route.reason == "not_job_seeking"
+        or (route.intent == "out_of_scope" and route.confidence >= ROUTE_CONFIDENCE_FLOOR)
+    ):
+        # Operator rule (2026-10-03): when the real intention is not new work
+        # (an existing worker's contract/HR matter) or a confident reading says
+        # the request is clearly beyond the bot (tax, legal, procedures), the
+        # hotline IS the reply — the model never runs, so there is no project
+        # pitch and no attempted answer to go wrong. The Jev "unknown" choice
+        # and the 0.5 confidence floor are what keep an uncertain turn on the
+        # normal agent path below; the TingTing support account never lands
+        # here (its branches above own that channel).
+        if timings is not None:
+            timings.setdefault("intent", route.intent)
+            timings.setdefault("route_strategy", route.strategy)
+            timings.setdefault("route_reason", route.reason)
+            timings.setdefault("route_confidence", round(route.confidence, 2))
+        return vfic_hotline_reply()
     focused_project = bool(
         project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
     )

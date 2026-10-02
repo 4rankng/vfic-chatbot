@@ -59,6 +59,7 @@ RouteReason = Literal[
     "employee_support_clarify",
     "phone_number",
     "profile_terms",
+    "not_job_seeking",
     "fallback",
 ]
 
@@ -128,6 +129,23 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
             "agent",
             reason="small_talk_terms",
             confidence=max(decisions.intent_confidence, 0.9 if decisions.pleasantry else 0.0),
+        )
+
+    # Real-intention gate (operator rule 2026-10-03): a confident "not looking
+    # for new work" reading — an existing worker with a contract/HR matter or an
+    # explicit stay-put — must never reach the recommendation lanes (the
+    # "Hợp đồng thử việc cũng hết rồi" case answered with project pitches).
+    # Placed before the phone-capture upgrade: a number does not turn a
+    # non-seeker into a lead. Employee account support and contact questions
+    # stay reachable whatever the job intention is; pleasantry and mid-flow
+    # continuation already returned above.
+    if decisions.job_seeking == "not_seeking" and intent not in _NOT_JOB_SEEKING_EXEMPT:
+        return TurnRoute(
+            intent,  # type: ignore[arg-type]
+            "safe_redirect",
+            tools=(),
+            reason="not_job_seeking",
+            confidence=decisions.intent_confidence,
         )
 
     if intent in {"general", "out_of_scope"} and decisions.contact_info:
@@ -204,6 +222,11 @@ TURN_INTENTS: frozenset[str] = frozenset(
 # đặt lại mật khẩu ứng dụng TingTing phải không ạ?), so the reset flow can start
 # from the answer (see ``lanes._agent_turn``).
 _SUPPORT_CLARIFY_INTENTS: frozenset[str] = frozenset({"general", "small_talk"})
+
+# Intents a "not looking for new work" message may still legitimately mean on
+# this OA: account support and contact questions are in scope whatever the job
+# intention is, so the hotline gate must not intercept them.
+_NOT_JOB_SEEKING_EXEMPT: frozenset[str] = frozenset({"employee_support", "contact"})
 
 
 def employee_support_route(*, reason: RouteReason, confidence: float) -> TurnRoute:
@@ -299,6 +322,8 @@ def routing_instruction(route: TurnRoute) -> str:
             "từ chối. "
             "Chỉ khi không có hướng dẫn phù hợp mới từ chối nhẹ nhàng và kéo cuộc trò chuyện về "
             "tìm việc, hồ sơ, lịch xe, hoặc vấn đề của nhân viên tại dự án VFIC. "
+            "KHÔNG được trả lời nội dung câu hỏi (ví dụ cách tính thuế) hay hướng dẫn cách làm "
+            "cho việc ngoài phạm vi — chỉ mời gọi. "
             "Khi phải từ chối, PHẢI mời ứng viên gọi đúng số hotline VFIC đã nêu trong mục "
             "SỰ THẬT CỐ ĐỊNH của system prompt; không nêu hotline, email hay người liên hệ nào khác."
         )

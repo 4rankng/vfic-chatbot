@@ -15,6 +15,7 @@ import app.graph.decisions as decisions_module
 from app.graph.decisions import (
     _GENDER_CRITERIA,
     _INTENT_CRITERIA,
+    _JOB_SEEKING_CRITERIA,
     JEV_RETRY_BACKOFF_S,
     JevDecisionClient,
     _retry_after_seconds,
@@ -70,6 +71,7 @@ async def test_questions_match_contract() -> None:
     questions = build_turn_questions()
     assert set(questions) == {
         "intent",
+        "job_seeking",
         "vacancy_listing",
         "pleasantry",
         "recent_vacancy",
@@ -80,6 +82,7 @@ async def test_questions_match_contract() -> None:
     }
     assert set(build_turn_questions(include_gender=False)) == {
         "intent",
+        "job_seeking",
         "vacancy_listing",
         "pleasantry",
         "recent_vacancy",
@@ -91,6 +94,7 @@ async def test_questions_match_contract() -> None:
     assert "profile_name_is_name" not in build_turn_questions(include_gender=False)
     assert set(build_turn_questions(include_profile_name=True)) == {
         "intent",
+        "job_seeking",
         "vacancy_listing",
         "pleasantry",
         "recent_vacancy",
@@ -101,6 +105,9 @@ async def test_questions_match_contract() -> None:
         "profile_name_is_name",
     }
     assert set(_GENDER_CRITERIA) == {"male", "female", "unknown"}
+    # "unknown" must stay first-class: only an explicit "not_seeking" may gate
+    # a turn to the hotline (operator rule 2026-10-03).
+    assert set(_JOB_SEEKING_CRITERIA) == {"seeking", "not_seeking", "unknown"}
     assert set(_INTENT_CRITERIA) == {
         "small_talk",
         "recommend",
@@ -215,6 +222,62 @@ async def test_route_degraded_falls_to_agent() -> None:
     assert route.reason == "fallback"
 
 
+async def test_route_not_job_seeking_gates_to_hotline() -> None:
+    """Operator rule (2026-10-03): a non-seeker never reaches the pitch lanes.
+
+    The prod failure this pins: "Hợp đồng thử việc cũng hết rồi" read as
+    ``recommend`` and came back with project suggestions instead of a handoff.
+    """
+    route = route_from_decisions(
+        "Hợp đồng thử việc cũng hết rồi",
+        TurnDecisions(intent="recommend", intent_confidence=0.91, job_seeking="not_seeking"),
+    )
+    assert route.reason == "not_job_seeking"
+    assert route.strategy == "safe_redirect"
+    assert route.tools == ()
+
+
+async def test_route_not_job_seeking_gates_before_phone_capture() -> None:
+    """A phone number does not turn a non-seeker into a lead."""
+    route = route_from_decisions(
+        "số em 0969956104, việc thì em không cần tìm nữa",
+        TurnDecisions(intent="general", intent_confidence=0.7, contact_info=True,
+                      job_seeking="not_seeking"),
+    )
+    assert route.reason == "not_job_seeking"
+
+
+async def test_route_not_job_seeking_keeps_exempt_intents_reachable() -> None:
+    """Account support and contact questions are in scope whatever the intention."""
+    support = route_from_decisions(
+        "em quên mật khẩu",
+        TurnDecisions(intent="employee_support", job_seeking="not_seeking"),
+    )
+    assert support.reason == "employee_support_terms"
+    contact = route_from_decisions(
+        "cho xin số hotline",
+        TurnDecisions(intent="contact", job_seeking="not_seeking"),
+    )
+    assert contact.reason == "contact_terms"
+
+
+async def test_route_pleasantry_outranks_not_job_seeking() -> None:
+    route = route_from_decisions(
+        "cảm ơn nhiều nha",
+        TurnDecisions(pleasantry=True, job_seeking="not_seeking"),
+    )
+    assert route.reason == "small_talk_terms"
+
+
+async def test_route_unknown_job_seeking_does_not_gate() -> None:
+    """Jev missing/degraded reads (the default) keep the normal lane."""
+    route = route_from_decisions(
+        "cho em xin việc near home",
+        TurnDecisions(intent="recommend", intent_confidence=0.9),
+    )
+    assert route.reason == "recommendation_terms"
+
+
 async def test_client_parses_full_fan_out() -> None:
     client = _client()
     client._system_one = AsyncMock(  # noqa: SLF001 — test seam
@@ -229,9 +292,29 @@ async def test_client_parses_full_fan_out() -> None:
     assert decisions.intent_confidence == 0.97
     assert decisions.pleasantry is False
     assert decisions.recent_vacancy is True
+    assert decisions.job_seeking == "unknown"  # absent answer never gates
     assert decisions.degraded is False
     assert decisions.model == _MODEL
     assert decisions.input_tokens == 650
+
+
+async def test_client_parses_job_seeking_answer() -> None:
+    client = _client()
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(job_seeking=_choice("not_seeking", 0.94)))
+    )
+    decisions = await client.decide_turn(user_text="x", recent_messages=[])
+    assert decisions.job_seeking == "not_seeking"
+    assert decisions.degraded is False
+
+
+async def test_client_invalid_job_seeking_reads_unknown() -> None:
+    client = _client()
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(job_seeking=_choice("maybe", 0.9)))
+    )
+    decisions = await client.decide_turn(user_text="x", recent_messages=[])
+    assert decisions.job_seeking == "unknown"
 
 
 async def test_client_parses_gender_answer() -> None:

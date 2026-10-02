@@ -265,7 +265,15 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # the vietmap_geocode scope. No other boundary moved: the Nominatim ladder, the
 # 1 req/s throttle, the durable geocode_cache mapping and the admin credential
 # routes are all unchanged. Digest recomputed from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "b65e57424f7f379e442490d392471fed62c202874fc1b4a493319b4911b307d7"
+# 2026-10-03: the real-intention gate added the `job_seeking` answer parse to
+# JevDecisionClient.decide_turn (a provider-transport scope, so its dict `.get`
+# reads count) — +2 `get` invocations at that one reviewed site (18→20: one
+# `answers.get("job_seeking")`, one `.get("choice")`). No site was added,
+# removed, or moved, so EXPECTED_BROAD_BOUNDARY_COUNTS is unchanged; the digest
+# was recomputed from the post-change scan and the prior digest reconstructs
+# exactly from that single count change (verified by re-hashing the scan with
+# the count reverted to 18), so nothing else moved.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "459527a969bbe0dddae263ce0838b1dade86a7af422264a38ba698347a450944"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

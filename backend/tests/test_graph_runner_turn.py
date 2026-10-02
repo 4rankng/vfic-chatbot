@@ -2554,14 +2554,18 @@ def test_the_recruitment_handoff_points_at_the_fixed_facts_hotline():
 
 
 @pytest.mark.asyncio
-async def test_a_confident_off_domain_turn_is_answered_by_the_model_with_the_hotline_instruction():
-    """An out-of-scope question is refused by the model, not by a canned line.
+async def test_a_confident_off_domain_turn_ships_the_fixed_hotline_reply():
+    """A confident off-scope turn is answered by the fixed hotline reply.
 
-    Operator rule (2026-09-29): the hotline IS the handoff — no phone-number
-    interlude, no human queue write. The number rides as an instruction (the
-    fixed-facts block plus the route hint); the agent authors the refusal.
+    Supersedes the 2026-09-29 model-authored refusal: the tax-question case
+    (operator rule 2026-10-03) showed the model answering content it should
+    hand off, so a confident read now returns the approved verbatim line and
+    the model never runs. The hotline IS the handoff — no phone-number
+    interlude, no human queue write. Below the floor a reading means "cannot
+    tell" and the model still authors (next test).
     """
     from app.graph.runner import _agent_turn
+    from app.prompts.vfic_persona import vfic_hotline_reply
 
     captured: dict[str, object] = {}
     escalations: list[dict] = []
@@ -2570,7 +2574,7 @@ async def test_a_confident_off_domain_turn_is_answered_by_the_model_with_the_hot
         async def agent(self, user_text, **kwargs):
             captured["user_text"] = user_text
             captured["system"] = kwargs.get("system", "")
-            return "Dạ phần này em chưa hỗ trợ được. Anh/chị gọi hotline 1800 7228 nhé ạ."
+            return "model prose must never ship here"
 
     class _Conversations:
         async def get(self, _conversation_id):
@@ -2584,9 +2588,9 @@ async def test_a_confident_off_domain_turn_is_answered_by_the_model_with_the_hot
     deps.agent = _FakeAgent()
 
     reply = await _agent_turn(
-        BotRunState(conversation_id=CONV_ID, version_at_start=7, user_text="mua thuốc ở đâu"),
+        BotRunState(conversation_id=CONV_ID, version_at_start=7, user_text="tính thuế TNCN cho em"),
         deps,
-        "mua thuốc ở đâu",
+        "tính thuế TNCN cho em",
         provider="zalo_bot",
         chat_id="z1",
         recent_messages=[],
@@ -2594,11 +2598,61 @@ async def test_a_confident_off_domain_turn_is_answered_by_the_model_with_the_hot
         decisions=TurnDecisions(intent="out_of_scope", intent_confidence=0.9),
     )
 
-    assert reply == "Dạ phần này em chưa hỗ trợ được. Anh/chị gọi hotline 1800 7228 nhé ạ."
-    assert captured != {}  # the model ran
-    assert "1800 7228" in captured["system"]
-    assert "SỰ THẬT CỐ ĐỊNH" in captured["user_text"]
+    assert reply == vfic_hotline_reply()
+    assert "1800 7228" in reply
+    assert captured == {}  # the model never runs on a confident handoff
     assert escalations == []  # the hotline is the handoff — nobody is queued
+
+
+@pytest.mark.asyncio
+async def test_a_not_job_seeker_never_reaches_the_model():
+    """Operator rule (2026-10-03): a non-seeker's turn ships the hotline reply.
+
+    Pins the first prod failure: an existing worker whose probation contract
+    expired ("Hợp đồng thử việc cũng hết rồi") read as ``recommend`` and got
+    project pitches. The route reason gates before any model or tool work, so
+    the pitch cannot happen, and the reason is stamped for the dashboard.
+    """
+    from app.graph.runner import _agent_turn
+    from app.prompts.vfic_persona import vfic_hotline_reply
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured["user_text"] = user_text
+            return "Dạ anh đang muốn tìm công việc mới phải không ạ?"
+
+    class _Conversations:
+        async def get(self, _conversation_id):
+            return SimpleNamespace(id=CONV_ID, version=7)
+
+        async def escalate_extracted_intent(self, conv, **kwargs):  # noqa: ARG001
+            return True
+
+    deps = _deps(_FakeZalo(), conversation=_Conversations())
+    deps.agent = _FakeAgent()
+    timings: dict = {"lane": "agent"}
+
+    reply = await _agent_turn(
+        BotRunState(
+            conversation_id=CONV_ID, version_at_start=7, user_text="Hợp đồng thử việc cũng hết rồi"
+        ),
+        deps,
+        "Hợp đồng thử việc cũng hết rồi",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings=timings,
+        decisions=TurnDecisions(
+            intent="recommend", intent_confidence=0.91, job_seeking="not_seeking"
+        ),
+    )
+
+    assert reply == vfic_hotline_reply()
+    assert captured == {}  # the model never runs — no pitch, no nonsense
+    assert timings["route_reason"] == "not_job_seeking"
+    assert "tool_call_counts" not in timings  # no tool round happened
 
 
 @pytest.mark.asyncio

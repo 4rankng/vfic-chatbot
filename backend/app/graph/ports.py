@@ -92,6 +92,12 @@ class TurnDecisions:
 
     intent: str = "general"
     intent_confidence: float = 0.1
+    # Real intention toward NEW work: "seeking" | "not_seeking" | "unknown".
+    # "not_seeking" — an existing worker with a contract/HR matter or an explicit
+    # stay-put — routes to the hotline handoff instead of the recommendation
+    # lanes (operator rule 2026-10-03). "unknown" covers every missing,
+    # invalid, or degraded answer and never gates a turn.
+    job_seeking: str = "unknown"
     vacancy_listing: bool = False
     pleasantry: bool = False
     recent_vacancy: bool = False

@@ -46,7 +46,9 @@ _BOT_CONTEXT = (
     "Tro ly tuyen dung tren Zalo cho cac du an cong nghiep/nha may. "
     "Ung vien hoi ve viec lam, luong, ca lam, ky tuc xa, xe dua don, ho so ung tuyen. "
     "Nhan vien dang lam cua du an hoi ve tai khoan/he thong cua chinh du an (quen mat khau, "
-    "khong nhan duoc OTP, khong dang nhap duoc) la trong pham vi ho tro."
+    "khong nhan duoc OTP, khong dang nhap duoc) la trong pham vi ho tro. "
+    "Thue, phap luat, bao hiem hay quy trinh tinh/tien thue la ngoai pham vi — "
+    "khong tra loi noi dung."
 )
 
 # 300 chars keeps a history message meaningful without letting old turns
@@ -61,17 +63,35 @@ _NOUL_GATE = 0.5
 # Intent taxonomy — mirrors the TurnIntent Literal in app.graph.router.
 _INTENT_CRITERIA = {
     "small_talk": "Chào hỏi, cảm ơn, tạm biệt hoặc câu xã giao, không có nội dung chính",
-    "recommend": "Muốn được gợi ý việc làm phù hợp hoặc xem việc đang tuyển",
+    "recommend": "Muốn được gợi ý việc làm phù hợp hoặc xem việc đang tuyển — tức muốn tìm "
+    "việc MỚI hoặc đổi việc; nhân viên nêu vấn đề hợp đồng/chế độ của nơi đang làm "
+    "(hết hạn hợp đồng, ký hợp đồng chính thức) không thuộc nhóm này",
     "profile_update": "Cung cấp thông tin cá nhân: tên, khu vực sống, lương mong muốn, kinh nghiệm",
     "timetable": "Hỏi về xe đưa đón, tuyến xe, điểm đón, giờ đón",
     "contact": "Hỏi số điện thoại, admin, hotline, cách thức liên hệ",
-    "faq_detail": "Hỏi chi tiết tuyển dụng: lương, ca làm, ký túc xá, yêu cầu, nội dung công việc",
+    "faq_detail": "Hỏi chi tiết về việc đang tuyển: lương theo công việc, ca làm, ký túc xá, "
+    "yêu cầu, nội dung công việc; không gồm hỏi về thuế hay pháp luật",
     "employee_support": "Nhân viên đang làm cần hỗ trợ tài khoản hoặc hệ thống của dự án: quên/quá "
     "hạn mật khẩu, đặt lại hoặc đổi mật khẩu, không nhận được mã OTP, tài khoản không đăng nhập "
     "được",
     "out_of_scope": "Ngoài phạm vi tuyển dụng và hỗ trợ nhân viên của công ty, và không thuộc "
-    "nhóm hỗ trợ tài khoản/hệ thống ở trên",
+    "nhóm hỗ trợ tài khoản/hệ thống ở trên — ví dụ hỏi về thuế, pháp luật, bảo hiểm, "
+    "quy trình tính lương hay việc riêng không liên quan",
     "general": "Liên quan đến tuyển dụng nhưng ý định chưa rõ",
+}
+
+# Real-intention taxonomy — mirrors the ``job_seeking`` field in TurnDecisions.
+# "unknown" is a first-class answer (like gender): a wrong "not_seeking" hands a
+# live recruiting conversation to the hotline, so the model must not guess when
+# the messages do not say. The criteria carry the observed failure cases.
+_JOB_SEEKING_CRITERIA = {
+    "seeking": "Muốn tìm việc mới, đổi việc hoặc xem việc đang tuyển — kể cả khi hiện đang "
+    "đi làm ở nơi khác nhưng muốn công việc khác",
+    "not_seeking": "Không muốn tìm việc mới: là nhân viên/người đang gắn bó và chỉ muốn giải "
+    "quyết việc với công ty hiện tại (hết hạn hợp đồng thử việc, ký hoặc gia hạn hợp "
+    "đồng chính thức, lương/phúc lợi/khiếu nại tại nơi đang làm), hoặc nói rõ không "
+    "quan tâm việc mới",
+    "unknown": "Không đủ căn cứ để kết luận — không đoán",
 }
 
 _NOUL_CRITERIA = {"true": "Có", "false": "Không"}
@@ -142,6 +162,17 @@ def build_turn_questions(
             "type": "choice",
             "instructions": "Ý định chính của tin nhắn `message` là gì?",
             "criteria": _INTENT_CRITERIA,
+        },
+        # The real-intention gate: judged over `message` + `recent` so a
+        # multi-turn reveal ("làm cho bên mình lâu rồi" → "hợp đồng thử việc hết")
+        # reads as one conversation, not one line.
+        "job_seeking": {
+            "type": "choice",
+            "instructions": (
+                "Ý định THỰC SỰ của người gửi trong `message` (kèm `recent`): người này "
+                "CÓ muốn tìm việc làm MỚI không?"
+            ),
+            "criteria": _JOB_SEEKING_CRITERIA,
         },
         "vacancy_listing": {
             "type": "noul",
@@ -310,9 +341,16 @@ class JevDecisionClient:
         if gender not in _GENDER_CRITERIA:
             gender = "unknown"
 
+        # Missing/invalid reads stay "unknown" — only an explicit "not_seeking"
+        # may gate a turn to the hotline (see router.route_from_decisions).
+        job_seeking = str((answers.get("job_seeking") or {}).get("choice") or "unknown").strip().lower()
+        if job_seeking not in _JOB_SEEKING_CRITERIA:
+            job_seeking = "unknown"
+
         return TurnDecisions(
             intent=intent,
             intent_confidence=self._confidence(answers.get("intent")),
+            job_seeking=job_seeking,
             vacancy_listing=self._noul(answers.get("vacancy_listing")),
             pleasantry=self._noul(answers.get("pleasantry")),
             gender=gender,

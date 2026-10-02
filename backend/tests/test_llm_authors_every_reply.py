@@ -1,19 +1,24 @@
-"""The LLM authors every candidate-facing reply (invariant).
+"""Candidate-facing replies are model-authored except operator-approved lines.
 
-End state of the "one author" refactor: the only text that can reach
-``zalo.sent`` is either ``MiniMaxAgent.agent``'s own prose or the empty string
-(suppression). Every retired seam now hands the model evidence or a mandatory
-instruction and lets it write the reply:
+End state of the "one author" refactor: text that can reach ``zalo.sent`` is
+``MiniMaxAgent.agent``'s own prose, the empty string (suppression), or an
+operator-approved fixed reply. Every retired seam hands the model evidence or
+a mandatory instruction and lets it write the reply:
 
 * project clarification — a mandatory route hint, not a code-built question;
-* out-of-scope handoff — a routing instruction naming the fixed-facts hotline;
+* uncertain out-of-scope handoff (below the route floor) — a routing
+  instruction naming the fixed-facts hotline;
 * income authority (prefetch and in-round) — the verified render as evidence;
 * tool-loop exhaustion — one final tool-free composition round;
 * contact veto — one model rewrite round (a second violation suppresses).
 
-The two operator-approved TingTing verbatim returns (``lanes.py``) are the sole
-exceptions and are covered elsewhere. These tests drive each seam and assert the
-delivered reply is the scripted model output, never a canned constant.
+The operator-approved verbatim returns in ``lanes.py`` are the exceptions: the
+two TingTing replies (2026-09-29) and the recruitment-OA hotline gates (rule
+2026-10-03 — a confident off-domain read or a non-job-seeker ships
+``vfic_hotline_reply()`` and the model never runs; the tax-question case showed
+why a confident handoff must not be left to the model). These tests drive each
+seam and assert the delivered reply is the scripted model output, except where
+the fixed line is the point.
 """
 
 from __future__ import annotations
@@ -288,18 +293,26 @@ async def test_project_clarification_is_a_mandatory_instruction_to_the_client():
 
 
 @pytest.mark.asyncio
-async def test_out_of_scope_reply_is_authored_by_the_model():
+async def test_confident_out_of_scope_ships_the_operator_hotline_reply():
+    """The confident handoff seam ships the fixed line — the model never runs.
+
+    Inverted on purpose (operator rule 2026-10-03): the tax-question case
+    showed the model answering out-of-scope content despite the routing
+    instruction, so a confident read returns ``vfic_hotline_reply()``. Below
+    the route floor the instruction seam still has the model author the
+    refusal (covered in test_graph_runner_turn).
+    """
     from app.graph.lanes import _agent_turn
     from app.graph.ports import TurnDecisions
+    from app.prompts.vfic_persona import vfic_hotline_reply
 
-    captured: dict = {}
-    model_text = "Dạ phần này em chưa hỗ trợ được. Anh/chị gọi hotline 1800 7228 nhé ạ."
+    calls = 0
 
     class _Agent:
-        async def agent(self, user_text, **kwargs):
-            captured["user_text"] = user_text
-            captured["system"] = kwargs.get("system", "")
-            return model_text
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            nonlocal calls
+            calls += 1
+            return "model prose must never ship here"
 
     deps = SimpleNamespace(
         agent=_Agent(),
@@ -320,7 +333,6 @@ async def test_out_of_scope_reply_is_authored_by_the_model():
         decisions=TurnDecisions(intent="out_of_scope", intent_confidence=0.9),
     )
 
-    assert reply == model_text
-    assert captured != {}
-    # The hotline is an instruction (fixed facts + route hint), never a constant.
-    assert "SỰ THẬT CỐ ĐỊNH" in captured["user_text"]
+    assert reply == vfic_hotline_reply()
+    assert "1800 7228" in reply
+    assert calls == 0  # the confident handoff never reaches the model
