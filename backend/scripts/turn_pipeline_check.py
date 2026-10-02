@@ -25,7 +25,7 @@ deploy gap still passes once the queue drains.
 Usage (inside the active color / any app container):
 
     python -m scripts.turn_pipeline_check
-    python -m scripts.turn_pipeline_check --window 600 --stale-after 300
+    python -m scripts.turn_pipeline_check --window 600 --stale-after 300 --min-age 60
 
 Self-test — proves the gate's failure path actually fails (the consumer
 assertion, which is the one that would have caught 2026-09-26):
@@ -61,6 +61,11 @@ CRITICAL_QUEUE = "webhook_high"
 
 DEFAULT_WINDOW_SECONDS = 300
 DEFAULT_STALE_AFTER_SECONDS = 120
+# An inbound younger than this cannot be a stall yet: the webhook writes the
+# message before the RQ turn creates its bot_run, so a seconds-old message is
+# invisible to the in-flight exclusion and must not fail a deploy (production
+# incidents 2026-10-02: turns answered in 6-7s tripped two blue/green gates).
+DEFAULT_MIN_AGE_SECONDS = 60
 
 
 def _fail(message: str) -> None:
@@ -101,7 +106,9 @@ def _live_worker_queues(client: redis_lib.Redis) -> dict[str, int]:
     return counts
 
 
-async def _stalled_conversations(db, window_seconds: int) -> list[tuple[str, str]]:
+async def _stalled_conversations(
+    db, window_seconds: int, min_age_seconds: int
+) -> list[tuple[str, str]]:
     """Bot-eligible conversations whose newest inbound has no BOT reply after it.
 
     Filtered to avoid the legitimate non-reply cases, which are not stalls:
@@ -110,9 +117,14 @@ async def _stalled_conversations(db, window_seconds: int) -> list[tuple[str, str
         SEMI_AUTO-with-active-human starve the bot by design), so only ``BOT``
         mode is considered;
       * turns that are still in flight — a conversation with an open
-        ``bot_runs`` row started after its newest inbound is being worked on.
+        ``bot_runs`` row started after its newest inbound is being worked on;
+      * inbounds younger than ``min_age_seconds`` — the webhook writes the
+        message before the turn's ``bot_runs`` row exists, so a seconds-old
+        message with no reply yet is arrival, not stall.
     """
-    since = datetime.now(UTC) - timedelta(seconds=window_seconds)
+    now = datetime.now(UTC)
+    since = now - timedelta(seconds=window_seconds)
+    age_cutoff = now - timedelta(seconds=min_age_seconds)
     inbound = (
         select(
             Message.conversation_id.label("conversation_id"),
@@ -121,6 +133,7 @@ async def _stalled_conversations(db, window_seconds: int) -> list[tuple[str, str
         .where(
             Message.sender == MessageSender.WORKER.value,
             Message.created_at > since,
+            Message.created_at <= age_cutoff,
         )
         .group_by(Message.conversation_id)
         .subquery()
@@ -186,6 +199,7 @@ async def _run_check(
     *,
     window_seconds: int,
     stale_after_seconds: int,
+    min_age_seconds: int = DEFAULT_MIN_AGE_SECONDS,
     min_consumers: int = 1,
 ) -> int:
     settings = get_settings()
@@ -200,7 +214,9 @@ async def _run_check(
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with session_factory() as db:
-            stalled = await _stalled_conversations(db, window_seconds)
+            stalled = await _stalled_conversations(
+                db, window_seconds, min_age_seconds
+            )
             stale = await _stale_pending(db, stale_after_seconds)
     finally:
         await engine.dispose()
@@ -255,6 +271,15 @@ def main() -> int:
         help="seconds a PENDING outbound row may wait before it counts as stalled",
     )
     parser.add_argument(
+        "--min-age",
+        type=int,
+        default=DEFAULT_MIN_AGE_SECONDS,
+        help=(
+            "an inbound must be at least this old before a missing reply counts "
+            "as a stall (seconds-old arrivals are in flight, not stalled)"
+        ),
+    )
+    parser.add_argument(
         "--min-consumers",
         type=int,
         default=1,
@@ -268,6 +293,7 @@ def main() -> int:
         _run_check(
             window_seconds=args.window,
             stale_after_seconds=args.stale_after,
+            min_age_seconds=args.min_age,
             min_consumers=args.min_consumers,
         )
     )
