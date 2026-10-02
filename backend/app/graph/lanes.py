@@ -334,7 +334,7 @@ async def _absence_self_check(
     reply: str,
     route: TurnRoute,
     agent_kwargs: dict,
-    timings: dict,
+    timings: dict | None,
     system: str,
     user_text: str,
     chat_id: str,
