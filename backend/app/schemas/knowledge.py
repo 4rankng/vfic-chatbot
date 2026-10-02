@@ -12,7 +12,7 @@ from app.project_knowledge.domain.legacy_job_references import (
     strip_legacy_job_reference_fields,
     strip_legacy_job_reference_source,
 )
-from app.project_knowledge.domain.statuses import KBVersionStatus, KnowledgeStatus
+from app.project_knowledge.domain.statuses import KnowledgeStatus
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.knowledge.file_extraction import _detect_upload_format
 

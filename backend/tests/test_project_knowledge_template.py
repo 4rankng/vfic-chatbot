@@ -21,7 +21,6 @@ from app.api import projects
 from app.api.auth_dependencies import get_current_user, require_recruiter
 from app.api.projects import get_project_knowledge_template
 from app.services.knowledge.category_contracts import (
-    CATEGORY_DEFINITIONS,
     build_project_knowledge_template,
 )
 

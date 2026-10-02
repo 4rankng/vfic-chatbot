@@ -8,19 +8,15 @@ from __future__ import annotations
 
 import importlib
 import json
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api import knowledge as knowledge_api
 from app.graph.ports import TurnDecisions
 from app.graph.router import route_from_decisions
 from app.graph.context import build_system_prompt
-from app.models.knowledge import KBVersionStatus
 from app.graph.types import BotRunState
 from app.services.knowledge.pipeline import KnowledgePipeline, _fallback_unit
 from tests.fixtures.universal_platform.factories import (
