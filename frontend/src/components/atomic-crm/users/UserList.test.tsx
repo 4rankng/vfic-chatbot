@@ -214,15 +214,25 @@ describe("UserList", () => {
     expect(avatars[0]?.querySelector("img")).toBeNull();
   });
 
-  it("names each account's row action and keeps create reachable", async () => {
+  it("names each account's row actions and keeps create reachable", async () => {
     const screen = await render(mountList());
-    await expect
-      .element(
-        screen.getByRole("button", {
-          name: "Mở thao tác cho Nguyễn Minh Anh",
-        }),
-      )
-      .toBeVisible();
+    // The row exposes every action as its own labelled control: the edit link
+    // and the three buttons, each named for the account it acts on.
+    for (const name of [
+      "Sửa Nguyễn Minh Anh",
+      "Vô hiệu hóa Nguyễn Minh Anh",
+      "Đổi mật khẩu Nguyễn Minh Anh",
+      "Xóa vĩnh viễn Nguyễn Minh Anh",
+    ]) {
+      await expect
+        .element(
+          screen.getByRole(name.startsWith("Sửa") ? "link" : "button", {
+            name,
+            exact: true,
+          }),
+        )
+        .toBeVisible();
+    }
 
     const create = screen.getByRole("link", { name: "Tạo tài khoản" });
     await expect.element(create).toBeVisible();

@@ -7,23 +7,15 @@ import {
 } from "ra-core";
 import { useHref } from "react-router";
 import { useRef, useState } from "react";
-import type { Key } from "react-aria-components";
-import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { Input } from "@/components/base/input/input";
 import {
   Dialog,
   Modal,
   ModalOverlay,
 } from "@/components/application/modals/modal";
-import {
-  KeyRound,
-  MoreHorizontal,
-  Pencil,
-  Power,
-  PowerOff,
-  Trash2,
-} from "lucide-react";
+import { KeyRound, Pencil, Power, PowerOff, Trash2 } from "lucide-react";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
 import type { UserAccount } from "../types";
 
@@ -31,7 +23,12 @@ import type { UserAccount } from "../types";
  * Row actions for one account: edit, enable/disable, password reset and a hard
  * delete.
  *
- * The menu and both dialogs are Untitled UI (React Aria) rather than Radix,
+ * Every action is its own icon button in the row — no overflow menu — so the
+ * actions column states what it can do instead of hiding it behind an ellipsis,
+ * and each button carries its own tooltip and accessible name (`Sửa <who>`,
+ * `Vô hiệu hóa <who>`, …).
+ *
+ * The buttons and both dialogs are Untitled UI (React Aria) rather than Radix,
  * because this cell is rendered inside the account directory's React Aria table
  * and the two primitive runtimes must not nest. Copy, data verbs and visible
  * names are unchanged: `enableUser` / `disableUser` / `resetUserPassword` /
@@ -64,7 +61,8 @@ export const UserActions = () => {
   const editHref = useHref(editPath);
   if (!record) return null;
 
-  const actionLabel = `Mở thao tác cho ${record.full_name || record.email}`;
+  const subject = record.full_name || record.email;
+  const actionsDisabled = resetPending || deletePending || togglePending;
 
   const toggleDisabled = async () => {
     if (mutationPending.current) return;
@@ -147,50 +145,50 @@ export const UserActions = () => {
     }
   };
 
-  const handleAction = (key: Key) => {
-    if (mutationPending.current) return;
-    if (key === "toggle") void toggleDisabled();
-    if (key === "reset") setResetOpen(true);
-    if (key === "delete") setDeleteOpen(true);
-  };
-
   return (
     <>
-      <Dropdown.Root>
-        <span title={actionLabel}>
-          <Button
-            data-allow-tall
-            color="tertiary"
+      <div className="user-directory-actions">
+        <ButtonUtility
+          href={editHref}
+          tooltip={`Sửa ${subject}`}
+          size="sm"
+          color="tertiary"
+          className="user-directory-action"
+          icon={Pencil}
+          isDisabled={actionsDisabled}
+        />
+        <ButtonUtility
+          tooltip={
+            record.disabled ? `Kích hoạt ${subject}` : `Vô hiệu hóa ${subject}`
+          }
+          size="sm"
+          color="tertiary"
+          className="user-directory-action"
+          icon={record.disabled ? Power : PowerOff}
+          isDisabled={actionsDisabled}
+          onClick={() => void toggleDisabled()}
+        />
+        {!record.disabled ? (
+          <ButtonUtility
+            tooltip={`Đổi mật khẩu ${subject}`}
             size="sm"
-            className="user-directory-menu size-10"
-            iconLeading={MoreHorizontal}
-            aria-label={actionLabel}
-            isDisabled={resetPending || deletePending || togglePending}
+            color="tertiary"
+            className="user-directory-action"
+            icon={KeyRound}
+            isDisabled={actionsDisabled}
+            onClick={() => setResetOpen(true)}
           />
-        </span>
-        <Dropdown.Popover className="uu-scope w-64">
-          <Dropdown.Menu onAction={handleAction}>
-            <Dropdown.Item
-              id="edit"
-              href={editHref}
-              icon={Pencil}
-              label="Sửa"
-            />
-            <Dropdown.Item
-              id="toggle"
-              icon={record.disabled ? Power : PowerOff}
-              label={record.disabled ? "Kích hoạt" : "Vô hiệu hóa"}
-            />
-            {!record.disabled ? (
-              <Dropdown.Item id="reset" icon={KeyRound} label="Đổi mật khẩu" />
-            ) : null}
-            <Dropdown.Separator />
-            <Dropdown.Item id="delete" icon={Trash2}>
-              <span className="text-error-primary">Xóa vĩnh viễn</span>
-            </Dropdown.Item>
-          </Dropdown.Menu>
-        </Dropdown.Popover>
-      </Dropdown.Root>
+        ) : null}
+        <ButtonUtility
+          tooltip={`Xóa vĩnh viễn ${subject}`}
+          size="sm"
+          color="tertiary"
+          className="user-directory-action user-directory-action-danger"
+          icon={Trash2}
+          isDisabled={actionsDisabled}
+          onClick={() => setDeleteOpen(true)}
+        />
+      </div>
 
       <ModalOverlay
         isOpen={resetOpen}

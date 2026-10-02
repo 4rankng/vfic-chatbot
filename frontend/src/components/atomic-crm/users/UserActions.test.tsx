@@ -45,28 +45,49 @@ afterEach(async () => {
 
 describe("account actions", () => {
   it.each([320, 390])(
-    "keeps the mobile action target44px and unboxed at %ipx",
+    "keeps every mobile action target 44px and unboxed at %ipx",
     async (width) => {
       await page.viewport(width, 844);
       const screen = await mount();
-      const action = screen.getByRole("button", {
-        name: "Mở thao tác cho Nguyễn Minh Anh",
-      });
-      await expect.element(action).toBeVisible();
-      const element = action.element();
-      expect(element.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
-      expect(element.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-      expect(getComputedStyle(element).borderTopWidth).toBe("0px");
-      expect(getComputedStyle(element).backgroundColor).toBe(
-        "rgba(0, 0, 0, 0)",
-      );
-      await action.click();
-      await expect
-        .element(screen.getByRole("menuitem", { name: "Đổi mật khẩu" }))
-        .toBeVisible();
+      // All four actions are on the row itself — no overflow menu — so each one
+      // is a real touch target.
+      const actions = [
+        screen.getByRole("link", {
+          name: "Sửa Nguyễn Minh Anh",
+          exact: true,
+        }),
+        screen.getByRole("button", {
+          name: "Vô hiệu hóa Nguyễn Minh Anh",
+          exact: true,
+        }),
+        screen.getByRole("button", {
+          name: "Đổi mật khẩu Nguyễn Minh Anh",
+          exact: true,
+        }),
+        screen.getByRole("button", {
+          name: "Xóa vĩnh viễn Nguyễn Minh Anh",
+          exact: true,
+        }),
+      ];
+      for (const action of actions) {
+        await expect.element(action).toBeVisible();
+        const element = action.element();
+        expect(element.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+          44,
+        );
+        expect(element.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+          44,
+        );
+        expect(getComputedStyle(element).borderTopWidth).toBe("0px");
+        expect(getComputedStyle(element).backgroundColor).toBe(
+          "rgba(0, 0, 0, 0)",
+        );
+      }
     },
   );
+
   it("locks a confirmed delete and explains its pending state", async () => {
+    // `Promise.withResolvers` is ES2024 and the app's tsconfig lib is older.
     let finish!: (value: object) => void;
     mocks.remove.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -75,10 +96,14 @@ describe("account actions", () => {
     );
     const screen = await mount();
     await screen
-      .getByRole("button", { name: "Mở thao tác cho Nguyễn Minh Anh" })
+      .getByRole("button", {
+        name: "Xóa vĩnh viễn Nguyễn Minh Anh",
+        exact: true,
+      })
       .click();
-    await screen.getByRole("menuitem", { name: "Xóa vĩnh viễn" }).click();
-    await screen.getByRole("button", { name: "Xóa vĩnh viễn" }).click();
+    await screen
+      .getByRole("button", { name: "Xóa vĩnh viễn", exact: true })
+      .click();
     await expect.poll(() => mocks.remove.mock.calls.length).toBe(1);
     await expect
       .element(screen.getByRole("button", { name: "Đang xóa…" }))
@@ -99,9 +124,11 @@ describe("account actions", () => {
     );
     const screen = await mount();
     await screen
-      .getByRole("button", { name: "Mở thao tác cho Nguyễn Minh Anh" })
+      .getByRole("button", {
+        name: "Đổi mật khẩu Nguyễn Minh Anh",
+        exact: true,
+      })
       .click();
-    await screen.getByRole("menuitem", { name: "Đổi mật khẩu" }).click();
     await screen.getByRole("button", { name: "Đặt mật khẩu" }).click();
     await expect
       .element(screen.getByText("Mật khẩu phải có ít nhất 8 ký tự."))

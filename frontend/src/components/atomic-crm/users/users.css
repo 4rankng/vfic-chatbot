@@ -103,18 +103,39 @@
   height: 20px;
 }
 
-.user-directory-menu {
-  border: 0;
-  background: transparent;
+/* Every account action is its own icon button in the row — no overflow menu —
+   so the actions column shows what it can do. The buttons stay boxless quiet
+   icon actions; the box is the 36px hit target, not a painted surface. */
+.user-directory-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
 }
 
-.user-directory-menu:focus-visible {
+.user-directory-actions .user-directory-action {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  /* The console caps every button at 40px (`index.css` § control height
+     ceiling); a row action is a hit target, not a control row. */
+  max-height: none;
+}
+
+.user-directory-actions .user-directory-action:focus-visible {
   outline: 2px solid var(--workspace-action);
   outline-offset: 2px;
 }
 
+/* The hard delete is the one action that must not read like the others.
+   `ButtonUtility` only ships secondary/tertiary, so the ink comes from the
+   console's own danger token. */
+.user-directory-actions .user-directory-action-danger {
+  color: var(--workspace-danger);
+}
+
 @media (max-width: 767px) {
-  .user-directory-menu[data-icon-only] {
+  .user-directory-actions .user-directory-action {
     width: 44px;
     height: 44px;
     max-height: none;
@@ -293,10 +314,10 @@
     flex: 0 0 auto;
   }
 
-  /* A phone row is a two-band card, not a table row: drop the table box roles
+  /* A phone row is a three-band card, not a table row: drop the table box roles
      first (a block inside a table box would be re-wrapped in anonymous table
-     boxes), then place the six cells on two tracks. The metadata band's tracks
-     sit under the identity so it keeps the full width above them. */
+     boxes), then place the cells on two tracks plus a full-width action band
+     the row's four icon buttons need. */
   .user-directory-table,
   .user-directory-body {
     display: block;
@@ -318,7 +339,7 @@
 
   .user-directory-row {
     display: grid;
-    grid-template-columns: 36px auto auto minmax(0, 1fr) 44px;
+    grid-template-columns: 36px auto auto minmax(0, 1fr);
     align-items: center;
     column-gap: 10px;
     row-gap: 4px;
@@ -343,8 +364,10 @@
     min-width: 0;
   }
 
+  /* The four actions take the band under the metadata: a 44px touch row of
+     their own is the only way they fit a phone without crushing the identity. */
   .user-directory-cell-actions {
-    grid-area: 1 / 5;
+    grid-area: 3 / 1 / 4 / 5;
     justify-self: end;
   }
 
@@ -361,10 +384,9 @@
   }
 
   .user-directory-cell-created {
-    /* Spans the band's tail so the date has the room the actions column leaves
-       free on the second line (the phone equivalent of the desktop date
-       column, right-aligned). */
-    grid-area: 2 / 4 / 3 / 6;
+    /* Spans the metadata band's tail so the date is right-aligned against the
+       card edge. */
+    grid-area: 2 / 4 / 3 / 5;
     width: auto;
     justify-self: end;
   }
@@ -442,10 +464,6 @@
     grid-area: 1 / 2;
   }
 
-  .user-directory-cell-actions {
-    grid-area: 1 / 3;
-  }
-
   .user-directory-cell-status {
     grid-area: 2 / 3;
     justify-self: end;
@@ -454,5 +472,12 @@
   .user-directory-cell-created {
     grid-area: 3 / 2 / 4 / 4;
     justify-self: start;
+  }
+
+  /* The action band closes the card: the four 44px buttons need the full row,
+     which at this width nothing else can spare. */
+  .user-directory-cell-actions {
+    grid-area: 4 / 1 / 5 / 4;
+    justify-self: end;
   }
 }

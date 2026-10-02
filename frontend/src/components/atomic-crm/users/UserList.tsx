@@ -213,6 +213,9 @@ const UserAccountTable = ({ className }: { className?: string }) => (
       head: "user-directory-head",
       body: "user-directory-body",
       row: "user-directory-row even:bg-[var(--workspace-surface-muted)]",
+      // Four 36px icon buttons plus the cell's `p-3`: the column states its own
+      // width instead of splitting the table's slack with the name column.
+      actionsHead: "w-[184px]",
       actionsCell: "user-directory-cell-actions",
     }}
     empty={{

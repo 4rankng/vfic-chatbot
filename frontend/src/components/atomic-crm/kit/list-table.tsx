@@ -61,6 +61,8 @@ export type ListTableClassNames = {
   head?: string;
   body?: string;
   row?: string;
+  /** The trailing actions column's header cell (e.g. a fixed width). */
+  actionsHead?: string;
   actionsCell?: string;
 };
 
@@ -103,6 +105,7 @@ export const ListTable = <RecordType extends { id: string | number }>({
   const { data, isPending, error, refetch } = useListContext<RecordType>();
   const records = data ?? [];
   const actionsCellClassName = classNames?.actionsCell;
+  const actionsHeadClassName = classNames?.actionsHead;
   // A stable identity matters: React Aria rebuilds its column collection when
   // the `columns` array changes, so a fresh array on every render would thrash
   // the table (and, with a render prop, loop).
@@ -114,12 +117,19 @@ export const ListTable = <RecordType extends { id: string | number }>({
             {
               id: "__actions",
               header: actionsLabel,
+              headClassName: actionsHeadClassName,
               cell: (record) => rowActions(record),
               cellClassName: cx("text-right", actionsCellClassName),
             },
           ]
         : columns,
-    [actionsLabel, actionsCellClassName, columns, rowActions],
+    [
+      actionsHeadClassName,
+      actionsLabel,
+      actionsCellClassName,
+      columns,
+      rowActions,
+    ],
   );
   // Passed through `cx` (and through the PRO components' own `cx`), so the
   // console's `text-caption` role token is written as an explicit length:
