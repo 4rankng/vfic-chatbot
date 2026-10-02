@@ -1,8 +1,16 @@
 # ADR-0010: Preserve provider-returned agent reasoning
 
-- **Status:** Accepted
+- **Status:** Superseded (2026-10-02) — the thinking log was removed end to end
 - **Date:** 2026-07-18
 - **Decider:** Product owner
+
+> **Superseded:** on 2026-10-02 the operator removed the decision trace: the
+> `bot_runs.decision_trace` column, the per-turn recording path, the 30-day
+> retention tick, the admin trace routes and the conversation-page "Suy luận
+> chatbot" panel are all gone (migration `0060_drop_bot_run_decision_trace`).
+> The reasoning-field preservation this ADR introduced on the chat adapter
+> stays, because the tool loop needs those fields on the assistant message;
+> only the storage and display of reasoning went away.
 
 ## Context
 

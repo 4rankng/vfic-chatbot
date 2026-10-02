@@ -414,9 +414,6 @@ class Settings(BaseSettings):
     reconcile_grace_seconds: int = 120  # min age before a msg is considered stuck
     reconcile_max_age_seconds: int = 86400  # 24h cap
     reconcile_batch_size: int = 50  # per-tick candidate cap
-    decision_trace_retention_days: int = 30
-    decision_trace_retention_batch_size: int = 200
-    decision_trace_retention_interval_seconds: int = 86400  # daily
     # External knowledge-source sync (public Google Sheet → category revision /
     # single-page direct-context file) has no global kill switch: per-link
     # auto_sync_enabled on each *_sync_state row is the sole control. The daily

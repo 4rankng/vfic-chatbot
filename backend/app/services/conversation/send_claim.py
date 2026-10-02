@@ -249,18 +249,6 @@ class SendClaimMixin:
                             "lane": "outbox_recovery",
                             **telemetry_timings,
                         },
-                        decision_trace={
-                            "version": 1,
-                            "events": [
-                                {
-                                    "seq": 1,
-                                    "kind": "decision",
-                                    "code": "recovery_reason",
-                                    "summary_code": "outbox_recovery",
-                                }
-                            ],
-                            "truncated": False,
-                        },
                     )
                     self.db.add(run)
                     await self.db.flush()

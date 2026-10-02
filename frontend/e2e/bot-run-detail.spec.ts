@@ -1,7 +1,7 @@
 import { expect, test } from "./fixtures";
 
-test.describe("bot-run trace journey", () => {
-  test("renders the seeded run row and its decision-trace detail", async ({
+test.describe("bot-run audit journey", () => {
+  test("renders the seeded run row and its fact sheet", async ({
     loginAsAdmin,
     page,
   }) => {
@@ -37,6 +37,8 @@ test.describe("bot-run trace journey", () => {
     await expect(
       page.getByRole("heading", { name: /Lần chạy bot #/ }),
     ).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText("minimax-m2").first()).toBeVisible();
+    // The detail page is a fact sheet only: the run carries no thinking log.
+    await expect(page.getByText("Dấu vết quyết định")).toHaveCount(0);
+    await expect(page.getByText("Lượt suy luận")).toHaveCount(0);
   });
 });

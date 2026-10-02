@@ -236,7 +236,6 @@ class ConversationState:
         delivery_status: DeliveryStatus | None = None,
         trace_id: str | None = None,
         outcome_metadata: dict | None = None,
-        decision_trace: dict | None = None,
         outbox_channel: str | None = None,
         outbox_payload: dict | None = None,
     ) -> Message:
@@ -254,7 +253,6 @@ class ConversationState:
             delivery_status=delivery_status,
             trace_id=trace_id,
             outcome_metadata=outcome_metadata,
-            decision_trace=decision_trace,
             outbox_channel=outbox_channel,
             outbox_payload=outbox_payload,
         )

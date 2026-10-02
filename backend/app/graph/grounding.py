@@ -467,7 +467,6 @@ def ground_reply(
     tool_results: list[str],
     *,
     allowed_text: str = "",
-    trace_sink=None,
 ) -> "str | _UngroundedContact":
     """Validate LLM prose against surfaced evidence without replacing it.
 
@@ -493,15 +492,11 @@ def ground_reply(
         from app.core.config import get_settings
 
         if not getattr(get_settings(), "grounding_check_enabled", True):
-            if trace_sink is not None:
-                trace_sink.record_decision("grounding_verdict", "skipped")
             return reply
         surfaced = extract_surfaced_ids(tool_results)
         surfaced_entities = extract_surfaced_entities(tool_results)
         result = validate_grounding(reply, surfaced, surfaced_entities)
-        sanitized = False
         if not result.is_grounded:
-            sanitized = True
             logger.warning(
                 "grounding_hallucination_stripped: %s cited ids, %s unsupported entities",
                 len(result.hallucinated_ids),
@@ -512,19 +507,11 @@ def ground_reply(
             evidence = "\n".join(str(r or "") for r in tool_results or []) + "\n" + allowed_text
             unverified = validate_contact_grounding(reply, evidence)
             if unverified:
-                if trace_sink is not None:
-                    trace_sink.record_decision("grounding_verdict", "sanitized")
                 logger.warning(
                     "grounding_contact_unverified: %s channel(s)", len(unverified)
                 )
                 return _UngroundedContact(channels=tuple(sorted(unverified)))
-        if trace_sink is not None:
-            trace_sink.record_decision(
-                "grounding_verdict", "sanitized" if sanitized else "grounded"
-            )
         return reply
     except Exception:  # noqa: BLE001
-        if trace_sink is not None:
-            trace_sink.record_decision("grounding_verdict", "skipped")
         logger.debug("grounding check skipped (non-fatal)", exc_info=True)
         return reply

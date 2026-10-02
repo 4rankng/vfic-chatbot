@@ -40,7 +40,6 @@ REQUIRED_KWARGS = {
     "delivery_status",
     "trace_id",
     "outcome_metadata",
-    "decision_trace",
     "outbox_channel",
     "outbox_payload",
 }
@@ -85,7 +84,6 @@ async def test_public_record_bot_outcome_forwards_extended_outcome_fields():
     conversation = MagicMock()
     started_at = datetime.now(timezone.utc)
     outcome_metadata = {"faq_id": "faq-1"}
-    decision_trace = {"version": 1, "events": [], "truncated": False}
 
     await service.record_bot_outcome(
         conversation,
@@ -96,7 +94,6 @@ async def test_public_record_bot_outcome_forwards_extended_outcome_fields():
         delivery_status=DeliveryStatus.SEND_UNKNOWN,
         trace_id="trace-123",
         outcome_metadata=outcome_metadata,
-        decision_trace=decision_trace,
     )
 
     service.state.record_bot_outcome.assert_awaited_once_with(
@@ -113,7 +110,6 @@ async def test_public_record_bot_outcome_forwards_extended_outcome_fields():
         delivery_status=DeliveryStatus.SEND_UNKNOWN,
         trace_id="trace-123",
         outcome_metadata=outcome_metadata,
-        decision_trace=decision_trace,
         outbox_channel=None,
         outbox_payload=None,
     )

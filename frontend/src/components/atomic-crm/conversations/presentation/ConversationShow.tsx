@@ -17,13 +17,12 @@ import { ChatThread } from "./ChatThread";
 import { useConversationActions } from "./use-conversation-actions";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { Dropdown } from "@/components/base/dropdown/dropdown";
-import { History, MoreHorizontal, Trash2 } from "lucide-react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import { ConversationHeader } from "./ConversationHeader";
 import { ConversationReplyMode } from "./ConversationReplyMode";
 import { useIsMobile, useIsWideDesktop } from "@/hooks/use-mobile";
 import { ConversationContextAdapter } from "../conversation-capability";
 import { useConversationCapabilitySlots } from "../useConversationCapabilitySlots";
-import { DecisionTracePanel } from "../../automation/DecisionTracePanel";
 
 /**
  * Inbox center pane: the conversation header (mobile list-toggle + candidate
@@ -61,7 +60,6 @@ export const ConversationShowContent = ({
   const [searchParams, setSearchParams] = useSearchParams();
   const shouldOpenCandidatePanel = searchParams.get("panel") === "candidate";
   const [isContextOpen, setIsContextOpen] = useState(false);
-  const [isDecisionTraceOpen, setIsDecisionTraceOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const {
@@ -84,7 +82,6 @@ export const ConversationShowContent = ({
 
   useEffect(() => {
     setIsContextOpen(isWideDesktop || shouldOpenCandidatePanel);
-    setIsDecisionTraceOpen(false);
   }, [isWideDesktop, record?.id, shouldOpenCandidatePanel]);
 
   const openContextPanel = (trigger?: HTMLButtonElement) => {
@@ -171,14 +168,6 @@ export const ConversationShowContent = ({
                     >
                       <Dropdown.Menu>
                         <Dropdown.Item
-                          id="decision-trace"
-                          className="conversation-actions-item"
-                          icon={History}
-                          label="Suy luận chatbot"
-                          onPress={() => setIsDecisionTraceOpen(true)}
-                        />
-                        <Dropdown.Separator />
-                        <Dropdown.Item
                           id="delete-conversation"
                           className="conversation-actions-item conversation-actions-item-danger"
                           icon={Trash2}
@@ -253,16 +242,6 @@ export const ConversationShowContent = ({
                 },
               })
             : null}
-          {permissions === "admin" && record ? (
-            <DecisionTracePanel
-              key={record.id}
-              conversationId={String(record.id)}
-              open={isDecisionTraceOpen}
-              onOpenChange={setIsDecisionTraceOpen}
-              showTrigger={false}
-              returnFocusRef={conversationActionsTriggerRef}
-            />
-          ) : null}
           <Confirm
             isOpen={deleteOpen}
             loading={isDeleting}

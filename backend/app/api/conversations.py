@@ -22,7 +22,6 @@ from app.conversation_messaging.domain.statuses import ConversationMode, Convers
 from app.conversation_messaging.infrastructure.http import load_conversation_record
 from app.identity.application.http import AuthenticatedUser
 from app.identity.domain.role import Role
-from app.schemas.bot_run import BotRunTraceSummaryListResponse
 from app.schemas.conversation import (
     ConversationListResponse,
     ConversationOut,
@@ -34,7 +33,6 @@ from app.schemas.dashboard import AttentionReason
 from app.shared.domain.errors import ConflictError, NotFoundError, ValidationError
 from app.shared.infrastructure.db import get_request_db
 from app.shared.infrastructure.rate_limits import enforce_web_chat_turn_rate_limit
-from app.services.bot_run_service import BotRunService
 from app.services.conversation import ConversationConflict, ConversationService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -187,23 +185,6 @@ async def get_conversation(
     db: AsyncSession = Depends(get_request_db),
 ) -> ConversationOut:
     return ConversationOut.model_validate(await _load(conv_id, db, user))
-
-
-@router.get("/{conv_id}/bot-runs", response_model=BotRunTraceSummaryListResponse)
-async def list_conversation_bot_runs(
-    conv_id: uuid.UUID,
-    page: int = Query(1, ge=1),
-    per_page: int = Query(10, ge=1, le=50),
-    _admin: AuthenticatedUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_request_db),
-) -> BotRunTraceSummaryListResponse:
-    await _load(conv_id, db)
-    rows, total = await BotRunService(db).list_conversation_trace_summaries(
-        conversation_id=conv_id,
-        page=page,
-        per_page=per_page,
-    )
-    return BotRunTraceSummaryListResponse(data=rows, total=total)
 
 
 @router.delete("/{conv_id}", status_code=status.HTTP_204_NO_CONTENT)

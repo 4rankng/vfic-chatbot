@@ -29,7 +29,6 @@ from contextlib import suppress
 from inspect import iscoroutinefunction
 from typing import Any, NamedTuple
 
-from app.graph.decision_trace import DecisionTraceBuilder
 from app.graph.dispatch import (
     _build_outbox_payload,
     _cancel_status_task,
@@ -305,7 +304,6 @@ async def _await_first_bubble(
     stream: _ProgressiveStream,
     lane_task: asyncio.Task,
     timings: dict,
-    trace_sink: DecisionTraceBuilder,
     lock_owner: str | None,
     recipient_id: str | None,
     allowed_text: str,
@@ -387,7 +385,6 @@ async def _await_first_bubble(
             # a channel the employee already typed in an earlier turn is not
             # an invention, and the system prompt carries none of its own.
             allowed_text=allowed_text,
-            trace_sink=trace_sink,
         )
         if isinstance(grounded_bubble, _UngroundedContact):
             # The bubble named a channel the evidence never had. Send nothing
@@ -405,7 +402,6 @@ async def _await_first_bubble(
             generated=True,
             user_text=state.user_text,
             timings=timings,
-            trace_sink=trace_sink,
         )
         if not bubble_text.strip():
             # Grounding stripped the whole bubble or the reply policy found
@@ -438,7 +434,6 @@ async def _await_first_bubble(
             # Takeover / newer inbound / dead lock: send NOTHING and let the
             # existing stand-down path handle the turn (no partial message).
             return None
-        trace_sink.record_decision("ownership_verdict", "claimed")
         await _cancel_status_task(status_task)
         send_t0 = time.monotonic()
         send_result = await _dispatch_claimed_message(
@@ -481,7 +476,6 @@ async def _complete_progressive_prefix(
     conv,
     svc,
     timings: dict,
-    trace_sink: DecisionTraceBuilder,
     lock_owner: str | None,
     recipient_id: str | None,
     allowed_text: str,
@@ -528,7 +522,6 @@ async def _complete_progressive_prefix(
         timings["progressive_stream_mismatch_chars"] = abs(
             len(raw_stream) - len(full_text)
         )
-        trace_sink.record_decision("degradation_reason", "progressive_stream_mismatch")
         logger.error(
             "progressive streamed text differs from the returned reply "
             "conversation=%s trace=%s streamed=%d returned=%d",
@@ -571,7 +564,6 @@ async def _complete_progressive_prefix(
             manifest_policy=manifest_policy,
             allow_recruitment_fast_lane=allow_recruitment_fast_lane,
             t0=t0,
-            decision_trace=trace_sink.snapshot_payload(),
         )
         return "", outcome
     # Terminalize the early bubble now (its own message + outbox row) WITHOUT a
@@ -604,7 +596,6 @@ async def _complete_progressive_prefix(
         remainder_raw,
         list(stream.evidence),
         allowed_text=allowed_text,
-        trace_sink=trace_sink,
     )
     if isinstance(grounded_remainder, _UngroundedContact):
         # A channel the evidence never had: suppress the remainder rather than

@@ -26,7 +26,6 @@ from inspect import iscoroutinefunction
 from typing import Any
 
 from app.conversation_messaging.domain.delivery import DeliveryState
-from app.graph.decision_trace import DecisionTraceBuilder
 from app.graph.chat_status import native_status_heartbeat
 from app.graph.ports import (
     ChatStatusSenderPort,
@@ -86,7 +85,6 @@ def _finalize_user_visible_reply(
     generated: bool,
     user_text: str,
     timings: dict,
-    trace_sink: DecisionTraceBuilder,
 ) -> str:
     """Converged reply boundary: strip provider thinking, ship the answer as-is.
 
@@ -206,7 +204,6 @@ async def _claim_and_dispatch(
     zalo: DirectMessageSenderPort,
     candidate: str,
     timings: dict,
-    trace_sink: DecisionTraceBuilder,
     started,
     lock_owner: str | None,
     status_task,
@@ -247,8 +244,6 @@ async def _claim_and_dispatch(
     if not owned:
         return None
 
-    trace_sink.record_decision("ownership_verdict", "claimed")
-    decision_trace = trace_sink.snapshot_payload()
     await _cancel_status_task(status_task)
     send_t0 = time.monotonic()
     send_result = await _dispatch_claimed_message(
@@ -277,7 +272,6 @@ async def _claim_and_dispatch(
         manifest_policy=manifest_policy,
         allow_recruitment_fast_lane=allow_recruitment_fast_lane,
         t0=t0,
-        decision_trace=decision_trace,
     )
 
 
@@ -298,14 +292,12 @@ async def _record_dispatched_outcome(
     manifest_policy,
     allow_recruitment_fast_lane: bool,
     t0: float,
-    decision_trace,
 ) -> TurnOutcome:
     """Record an already-dispatched candidate: BotRun, message, outbox, lock.
 
     Shared by the normal claim→send→record tail and the progressive path's
     already-sent bubble, so the delivery classification and the audit row cannot
-    drift between the two. ``decision_trace`` is snapshotted by the caller at the
-    moment the send was claimed.
+    drift between the two.
     """
     timings["total_ms"] = round((time.monotonic() - t0) * 1000)
     _stamp_end_to_end(state, timings)
@@ -335,7 +327,6 @@ async def _record_dispatched_outcome(
         delivery_status=override_status,
         trace_id=state.trace_id or None,
         outcome_metadata=faq_metadata,
-        decision_trace=decision_trace,
         outbox_channel=_channel_for_conversation(conv),
         outbox_payload=_build_outbox_payload(
             recipient_id, candidate, state.reply_to_message_id

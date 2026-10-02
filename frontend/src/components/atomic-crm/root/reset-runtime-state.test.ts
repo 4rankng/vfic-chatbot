@@ -91,16 +91,17 @@ describe("runtime generation reset", () => {
     expect(realtime.closeRealtimeSocket).toHaveBeenCalledOnce();
   });
 
-  it("removes sensitive decision traces during an explicit runtime reset", async () => {
+  it("removes cached bot-run data during an explicit runtime reset", async () => {
     const bundle = await ensureRuntimeGeneration(1);
-    bundle.queryClient.setQueryData(["decision-trace", "admin-1", "run", 71], {
-      decision_trace: { version: 1, events: [], truncated: false },
+    bundle.queryClient.setQueryData(["bot-runs", "admin-1", "run", 71], {
+      id: 71,
+      outcome: "sent",
     });
 
     await resetActiveRuntimeState();
 
     expect(
-      bundle.queryClient.getQueryData(["decision-trace", "admin-1", "run", 71]),
+      bundle.queryClient.getQueryData(["bot-runs", "admin-1", "run", 71]),
     ).toBeUndefined();
   });
 });

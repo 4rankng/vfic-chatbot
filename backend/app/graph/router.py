@@ -3,7 +3,7 @@
 The meaning judgments (intent, sort direction, vacancy listing, pleasantry
 kind, context flags) come from the Jev fan-out (``graph/decisions.py``) behind
 the ``TurnDecisionsPort``; this module owns only the policy that maps those
-raw judgments onto a retrieval strategy, tool set, and trace label. It never
+raw judgments onto a retrieval strategy, tool set, and reason label. It never
 calls a model and does not decide the final answer.
 """
 
@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.graph.ports import TurnDecisions
-from app.schemas.bot_run import DecisionTraceSummaryCode
 
 TurnIntent = Literal[
     "small_talk",
@@ -43,6 +42,26 @@ TurnStrategy = Literal[
 # accuracy beats the seconds a faster model saves.
 FAST_MODEL_STRATEGIES: frozenset[str] = frozenset({"safe_redirect"})
 
+# Reason code for a route decision: the label explaining why this strategy and
+# tool set were chosen. "empty" is the unrouted default.
+RouteReason = Literal[
+    "empty",
+    "internal_retry_prompt",
+    "small_talk_terms",
+    "off_domain_terms",
+    "timetable_terms",
+    "contact_terms",
+    "vacancy_listing",
+    "recommendation_terms",
+    "job_detail_terms",
+    "employee_support_terms",
+    "employee_support_continuation",
+    "employee_support_clarify",
+    "phone_number",
+    "profile_terms",
+    "fallback",
+]
+
 
 def should_use_fast_model(route: "TurnRoute") -> bool:
     """Whether this route's strategy qualifies for the fast-tier model.
@@ -59,9 +78,8 @@ class TurnRoute:
     intent: TurnIntent
     strategy: TurnStrategy
     tools: tuple[str, ...] = ()
-    # Reason codes reuse the decision-trace summary literals (schemas/bot_run.py)
-    # so the trace contract stays intact; "empty" is the unrouted default.
-    reason: DecisionTraceSummaryCode = "empty"
+    # Why this strategy/tool set was chosen; "empty" is the unrouted default.
+    reason: RouteReason = "empty"
     confidence: float = 0.0
 
 
@@ -77,8 +95,7 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
     Mirrors the keyword router it replaced: a pure pleasantry wins first
     (small_talk intent, agent strategy); ``vacancy_listing`` refines
     ``recommend``; contact-info presence upgrades an otherwise-unrouted turn to
-    profile capture. Reason codes reuse the existing decision-trace literals
-    (schemas/bot_run.py) so the trace contract stays intact.
+    profile capture. Reason codes label the chosen route.
     """
     text = (user_text or "").strip()
     if not text:
@@ -140,10 +157,10 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
     )
 
 
-# intent -> (strategy, tools, trace reason) — one place for the whole mapping.
+# intent -> (strategy, tools, reason) — one place for the whole mapping.
 # Keys are runtime intent names, so the dict stays open (not keyed by TurnIntent).
 _INTENT_ROUTES: dict[
-    str, tuple[TurnStrategy, tuple[str, ...], DecisionTraceSummaryCode]
+    str, tuple[TurnStrategy, tuple[str, ...], RouteReason]
 ] = {
     "recommend": (
         "recommendation",
@@ -189,8 +206,8 @@ TURN_INTENTS: frozenset[str] = frozenset(
 _SUPPORT_CLARIFY_INTENTS: frozenset[str] = frozenset({"general", "small_talk"})
 
 
-def employee_support_route(*, reason: DecisionTraceSummaryCode, confidence: float) -> TurnRoute:
-    """The employee-support route with the caller's own trace reason.
+def employee_support_route(*, reason: RouteReason, confidence: float) -> TurnRoute:
+    """The employee-support route with the caller's own reason.
 
     Shared by the mid-flow continuation (``route_from_decisions``) and the
     support OA's clarifying turn (``lanes._agent_turn``) so the reset tool set

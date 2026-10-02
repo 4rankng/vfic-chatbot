@@ -71,7 +71,6 @@ from app.graph.providers import _custom_chat as _custom_chat
 from app.graph.providers import _minimax_chat as _minimax_chat
 from app.graph.providers import _openrouter_chat as _openrouter_chat
 from app.graph.providers import _resolve_reasoning_mode as _resolve_reasoning_mode
-from app.graph.reasoning_compat import _extract_returned_reasoning
 from app.graph.think_strip import extract_text_tool_calls, strip_provider_artifacts
 from app.graph.schemas import _dispatch_tool
 from app.graph.usage import record_token_usage as _record_token_usage
@@ -152,7 +151,6 @@ class _AgentTurn:
         "conversation_scope",
         "on_delta",
         "on_evidence",
-        "trace_sink",
         "active_llm",
         "schemas",
         "messages",
@@ -191,7 +189,6 @@ class _AgentTurn:
         conversation_scope: str = "",
         on_delta,
         on_evidence,
-        trace_sink,
         active_llm,
         schemas,
         messages,
@@ -216,7 +213,6 @@ class _AgentTurn:
         self.conversation_scope = conversation_scope
         self.on_delta = on_delta
         self.on_evidence = on_evidence
-        self.trace_sink = trace_sink
         self.active_llm = active_llm
         self.schemas = schemas
         self.messages = messages
@@ -369,7 +365,6 @@ class MiniMaxAgent:
         retry_empty_generation: bool = False,
         on_delta=None,
         on_evidence=None,
-        trace_sink=None,
     ) -> str:
         """Run the tool-calling turn: prefetch, generate, finalize.
 
@@ -382,10 +377,6 @@ class MiniMaxAgent:
         from langchain_core.messages import SystemMessage
 
         active_llm = self.fast_llm if (use_fast and self.fast_llm is not None) else self.llm
-        if trace_sink is not None:
-            trace_sink.record_decision("model_selected", "fast" if use_fast else "primary")
-        if trace_sink is not None and required_tool is not None:
-            trace_sink.record_decision("required_tool_selected", required_tool)
         schemas = filter_tool_schemas(allowed_tools, resolved_registry=resolved_tool_registry)
         _init_turn_metrics(metrics)
         turn = _AgentTurn(
@@ -403,7 +394,6 @@ class MiniMaxAgent:
             conversation_scope=conversation_scope,
             on_delta=on_delta,
             on_evidence=on_evidence,
-            trace_sink=trace_sink,
             active_llm=active_llm,
             schemas=schemas,
             messages=[SystemMessage(content=system)],
@@ -441,7 +431,6 @@ class MiniMaxAgent:
         resolved_tool_registry = turn.resolved_tool_registry
         retrieval = turn.retrieval
         embedder = turn.embedder
-        trace_sink = turn.trace_sink
 
         knowledge_lookup_route = allowed_tools in (
             ("search_knowledge",),
@@ -460,8 +449,6 @@ class MiniMaxAgent:
             and not faq_detail_route
         ):
             try:
-                if trace_sink is not None:
-                    trace_sink.record_tool_selection("search_knowledge", selected_by="policy")
                 prefetched = await _dispatch_tool(
                     retrieval,
                     embedder,
@@ -487,8 +474,6 @@ class MiniMaxAgent:
                     )
                 )
         if knowledge_lookup_route:
-            if trace_sink is not None:
-                trace_sink.record_tool_selection("search_knowledge", selected_by="prefetch")
             prefetched, turn.prefetch_hit = await _prefetch_tool(
                 retrieval,
                 embedder,
@@ -517,8 +502,6 @@ class MiniMaxAgent:
             # model to repeat the same search in a second tool round.
             turn.schemas = []
         elif timetable_route:
-            if trace_sink is not None:
-                trace_sink.record_tool_selection("search_bus_timetable", selected_by="prefetch")
             prefetched, turn.prefetch_hit = await _prefetch_tool(
                 retrieval,
                 embedder,
@@ -549,8 +532,6 @@ class MiniMaxAgent:
                 # model→tool→model loop for already-resolved timetable data.
                 turn.schemas = []
         elif income_compare_route:
-            if trace_sink is not None:
-                trace_sink.record_tool_selection("compare_income", selected_by="prefetch")
             prefetched, turn.prefetch_hit = await _prefetch_tool(
                 retrieval,
                 embedder,
@@ -568,8 +549,6 @@ class MiniMaxAgent:
                     ),
                 )
                 if safe_reply is not None:
-                    if trace_sink is not None:
-                        trace_sink.record_decision("grounding_verdict", "grounded")
                     # The verified render is an authority CONTRACT, not the
                     # answer: hand it to the model as the only allowed source
                     # and let the agent author the candidate-facing prose.
@@ -594,8 +573,6 @@ class MiniMaxAgent:
                     if metrics is not None:
                         metrics["prefetch_hit"] = False
         elif faq_detail_route:
-            if trace_sink is not None:
-                trace_sink.record_tool_selection("search_knowledge", selected_by="prefetch")
             # A focused turn may combine the project feature catalog with RAG evidence.
             # EXPLORE mode deliberately stays RAG-only: loading every project's full
             # feature catalog would violate the bounded-context invariant and grow work
@@ -621,10 +598,6 @@ class MiniMaxAgent:
                         return "", False
 
             if focused_slug:
-                if trace_sink is not None:
-                    trace_sink.record_tool_selection(
-                        "get_product_features", selected_by="prefetch"
-                    )
                 knowledge_args = turn.scoped_args(
                     "search_knowledge", {"query": effective_query}
                 )
@@ -758,7 +731,6 @@ class MiniMaxAgent:
         required_tool = turn.required_tool
         required_tool_args = turn.required_tool_args
         schemas = turn.schemas
-        trace_sink = turn.trace_sink
 
         if schemas and hasattr(active_llm, "bind_tools"):
             bound = (
@@ -826,27 +798,6 @@ class MiniMaxAgent:
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None)
             turn.last_round_cut = _answer_was_cut(ai)
-            record_model_turn = getattr(trace_sink, "record_model_turn", None)
-            if callable(record_model_turn):
-                provider = getattr(active_llm, "trace_provider", "unknown")
-                # "fallback" is the admin-configured custom provider
-                # (schema literal DecisionTraceProvider); without it here a
-                # custom-provider turn is recorded as "unknown".
-                if provider not in {"minimax", "openrouter", "fallback"}:
-                    provider = "unknown"
-                model = str(
-                    getattr(active_llm, "model_name", None)
-                    or getattr(active_llm, "model", None)
-                    or "unknown"
-                )
-                phase = "retry" if was_empty_retry else "tool_request" if calls else "final"
-                record_model_turn(
-                    phase=phase,
-                    provider=provider,
-                    model=model,
-                    reasoning=_extract_returned_reasoning(ai),
-                    tool_names=[call["name"] if "name" in call else "" for call in calls or []],
-                )
             if tool_free_round and calls:
                 # A completion round has no authority to re-enter tool work,
                 # even if the provider emits a call despite the tool-free bind.
@@ -892,11 +843,6 @@ class MiniMaxAgent:
                         len(text_calls),
                         ", ".join(call["name"] for call in text_calls),
                     )
-                    if trace_sink is not None:
-                        for call in text_calls:
-                            trace_sink.record_tool_selection(
-                                call["name"], selected_by="model_text"
-                            )
                     text_outs = [await turn.dispatch_one(call) for call in text_calls]
                     for call, out in zip(text_calls, text_outs):
                         turn.tool_results.append(str(out))
@@ -963,12 +909,6 @@ class MiniMaxAgent:
                 metrics["tool_calls"] = metrics.get("tool_calls", 0) + len(calls)
                 metrics["tool_rounds"] = metrics.get("tool_rounds", 0) + 1
             tool_t0 = time.monotonic()
-
-            if trace_sink is not None and not callable(
-                getattr(trace_sink, "record_model_turn", None)
-            ):
-                for tool_call in calls:
-                    trace_sink.record_tool_selection(tool_call.get("name", ""), selected_by="model")
 
             # --- Tool dispatch -------------------------------------------------
             # When the LLM returns multiple tool_calls in one response, run them
@@ -1151,7 +1091,6 @@ class MiniMaxAgent:
         """
         required_tool = turn.required_tool
         metrics = turn.metrics
-        trace_sink = turn.trace_sink
         if required_tool and not turn.required_tool_called:
             return await self._compose_with_instruction(
                 turn,
@@ -1170,8 +1109,6 @@ class MiniMaxAgent:
         # candidate. Give the model one tool-free composition round over the
         # transcript instead of a code-authored unavailable line; an empty
         # composition suppresses the turn.
-        if trace_sink is not None:
-            trace_sink.record_decision("degradation_reason", "tool_loop_exhausted")
         if metrics is not None:
             metrics["tool_loop_exhausted"] = True
         composed = await self._compose_with_instruction(
@@ -1180,8 +1117,6 @@ class MiniMaxAgent:
             "NGAY bằng tiếng Việt, chỉ dùng dữ liệu công cụ ở trên. Nếu dữ liệu không đủ, "
             "nói thật là chưa thể kiểm tra thông tin này và đề nghị ứng viên thử lại sau.",
         )
-        if composed and trace_sink is not None:
-            trace_sink.record_decision("degradation_reason", "tool_loop_composed")
         return composed
 
     async def _ground_or_repair(self, turn: _AgentTurn, reply: str) -> str:
@@ -1194,7 +1129,6 @@ class MiniMaxAgent:
         """
         from langchain_core.messages import SystemMessage
 
-        trace_sink = turn.trace_sink
         if turn.last_round_cut:
             # A trimmed tail is still an incomplete answer (for example two
             # rows of a requested five-project list). Give the model one final
@@ -1208,13 +1142,10 @@ class MiniMaxAgent:
             reply,
             turn.tool_results,
             allowed_text=turn.contact_evidence,
-            trace_sink=trace_sink,
         )
         if not isinstance(grounded, _UngroundedContact):
             return grounded
         if turn.contact_repair_depth >= 1:
-            if trace_sink is not None:
-                trace_sink.record_decision("grounding_verdict", "suppressed")
             return ""
         turn.contact_repair_depth += 1
         channels = ", ".join(grounded.channels)
@@ -1238,11 +1169,7 @@ class MiniMaxAgent:
         turn.continuing_answer = False
         repaired = await self._run_generation_round(turn)
         if isinstance(repaired, _ContinueTurn) or not repaired:
-            if trace_sink is not None:
-                trace_sink.record_decision("grounding_verdict", "suppressed")
             return ""
-        if trace_sink is not None:
-            trace_sink.record_decision("grounding_verdict", "repaired")
         return repaired
 
     async def _rewrite_cut_answer(self, turn: _AgentTurn) -> str:

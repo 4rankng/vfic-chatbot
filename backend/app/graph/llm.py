@@ -15,22 +15,6 @@ Embedder = Callable[[str], Awaitable[list[float]]]
 MakeRetrieval = Callable[[], AsyncContextManager]
 
 
-class DecisionTraceSink(Protocol):
-    def record_decision(self, code: str, summary_code: str) -> None: ...
-
-    def record_tool_selection(self, name: str, *, selected_by: str) -> None: ...
-
-    def record_model_turn(
-        self,
-        *,
-        phase: str,
-        provider: str,
-        model: str,
-        reasoning: str | None,
-        tool_names: list[str] | None = None,
-    ) -> None: ...
-
-
 class AgentModel(Protocol):
     """A tool-calling agent: system prompt + user turn -> reply text.
 
@@ -64,5 +48,4 @@ class AgentModel(Protocol):
         required_tool_args: dict | None = None,
         on_delta: Callable[[str], Awaitable[None]] | None = None,
         on_evidence: Callable[[list[str]], Awaitable[None]] | None = None,
-        trace_sink: DecisionTraceSink | None = None,
     ) -> str: ...

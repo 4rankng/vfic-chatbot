@@ -11,60 +11,9 @@ the chat factories that consume :func:`_reasoning_chat_class` live in
 
 from __future__ import annotations
 
-import re
 from functools import lru_cache
 
 _REASONING_RESPONSE_FIELDS = ("reasoning_details", "reasoning_content", "reasoning")
-_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>(.*?)</think\s*>", re.IGNORECASE | re.DOTALL)
-
-
-def _reasoning_text_from_value(value: object) -> str:
-    if isinstance(value, str):
-        return value.strip()
-    if isinstance(value, list):
-        return "\n\n".join(
-            part for item in value if (part := _reasoning_text_from_value(item))
-        ).strip()
-    if isinstance(value, dict):
-        for key in ("text", "reasoning", "summary"):
-            if key in value and (text := _reasoning_text_from_value(value[key])):
-                return text
-    return ""
-
-
-def _extract_returned_reasoning(ai: object) -> str | None:
-    """Extract provider-returned reasoning without including the final answer."""
-    additional_kwargs = getattr(ai, "additional_kwargs", {})
-    if isinstance(additional_kwargs, dict):
-        for key in _REASONING_RESPONSE_FIELDS:
-            if key in additional_kwargs and (
-                text := _reasoning_text_from_value(additional_kwargs[key])
-            ):
-                return text
-
-    try:
-        content_blocks = getattr(ai, "content_blocks", [])
-    except Exception:  # noqa: BLE001 - provider message compatibility is best-effort
-        content_blocks = []
-    if isinstance(content_blocks, list):
-        reasoning_blocks = [
-            block
-            for block in content_blocks
-            if isinstance(block, dict)
-            and (block["type"] if "type" in block else None) in {"reasoning", "thinking"}
-        ]
-        if text := _reasoning_text_from_value(reasoning_blocks):
-            return text
-
-    content = getattr(ai, "content", "")
-    if isinstance(content, str):
-        blocks = [match.strip() for match in _THINK_BLOCK_RE.findall(content) if match.strip()]
-        if blocks:
-            return "\n\n".join(blocks)
-        opening = re.search(r"<think\b[^>]*>", content, re.IGNORECASE)
-        if opening and (unfinished := content[opening.end() :].strip()):
-            return unfinished
-    return None
 
 
 @lru_cache(maxsize=1)
@@ -80,7 +29,6 @@ def _reasoning_chat_class():
     from langchain_openai import ChatOpenAI
 
     class ReasoningPreservingChatOpenAI(ChatOpenAI):
-        trace_provider: str = "unknown"
         # Wire-level cache marker attached to the leading system message. Set
         # only where the provider documents an explicit marker for this
         # endpoint: OpenRouter's prompt caching takes an Anthropic-style

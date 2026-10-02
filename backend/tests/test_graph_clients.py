@@ -16,10 +16,7 @@ from app.graph.clients import (
 from app.graph.grounding import ground_reply as _ground_reply
 from app.graph.income_contract import IncomeVerdict, build_income_verdict, safe_reply_from
 from app.graph.prefetch import _scope_project_tool_args
-from app.graph.reasoning_compat import (
-    _extract_returned_reasoning,
-    _reasoning_chat_class,
-)
+from app.graph.reasoning_compat import _reasoning_chat_class
 from app.graph.schemas import TOOL_SCHEMAS, _dispatch_tool
 
 
@@ -397,33 +394,6 @@ def test_openrouter_chat_missing_key_names_openrouter(monkeypatch):
         _chat_for_role("agent", temperature=0.1)
 
 
-def test_extract_returned_reasoning_prefers_provider_field_over_think_block():
-    langchain_core = pytest.importorskip("langchain_core.messages")
-    message = langchain_core.AIMessage(
-        content="<think>fallback reasoning</think>candidate answer",
-        additional_kwargs={"reasoning_content": "provider reasoning"},
-    )
-
-    assert _extract_returned_reasoning(message) == "provider reasoning"
-
-
-def test_extract_returned_reasoning_from_minimax_think_blocks_only():
-    langchain_core = pytest.importorskip("langchain_core.messages")
-    message = langchain_core.AIMessage(
-        content="<think>first step</think><think>second step</think>candidate answer"
-    )
-
-    assert _extract_returned_reasoning(message) == "first step\n\nsecond step"
-    assert "candidate answer" not in _extract_returned_reasoning(message)
-
-
-def test_extract_returned_reasoning_from_unclosed_minimax_think_block():
-    langchain_core = pytest.importorskip("langchain_core.messages")
-    message = langchain_core.AIMessage(content="<think>provider output ended mid-reasoning")
-
-    assert _extract_returned_reasoning(message) == "provider output ended mid-reasoning"
-
-
 def test_reasoning_chat_adapter_preserves_openrouter_reasoning_across_tool_rounds():
     messages = pytest.importorskip("langchain_core.messages")
     chat_class = _reasoning_chat_class()
@@ -431,7 +401,6 @@ def test_reasoning_chat_adapter_preserves_openrouter_reasoning_across_tool_round
         model="provider/model",
         api_key="test-key",
         base_url="https://example.invalid/v1",
-        trace_provider="openrouter",
     )
     raw_reasoning = [
         {"type": "reasoning.text", "text": "Need current data."},
@@ -467,9 +436,6 @@ def test_reasoning_chat_adapter_preserves_openrouter_reasoning_across_tool_round
     result = chat._create_chat_result(response)
     ai_message = result.generations[0].message
     assert ai_message.additional_kwargs["reasoning_details"] == raw_reasoning
-    assert _extract_returned_reasoning(ai_message) == (
-        "Need current data.\n\nUse the lookup tool."
-    )
 
     payload = chat._get_request_payload(
         [
@@ -485,9 +451,8 @@ def test_reasoning_chat_adapter_preserves_openrouter_reasoning_across_tool_round
 def test_openrouter_agent_client_disables_reasoning_by_default(monkeypatch):
     """The agent lane no longer pins effort=high; it asks for no reasoning.
 
-    ``effort: high`` was only there to capture chain-of-thought into the decision
-    trace, which the candidate never sees, and it multiplied wall time on
-    reasoning models. Default is now ``off``.
+    ``effort: high`` multiplied wall time on reasoning models and its output was
+    never shown to anyone. Default is now ``off``.
     """
 
     class _OpenRouter(_Settings):
@@ -501,7 +466,6 @@ def test_openrouter_agent_client_disables_reasoning_by_default(monkeypatch):
         reasoning_mode="off",
     )
 
-    assert chat.trace_provider == "openrouter"
     assert chat.extra_body == {"reasoning": {"enabled": False}}
 
 

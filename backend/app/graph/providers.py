@@ -123,7 +123,6 @@ def _minimax_chat(
         timeout=s.minimax_request_timeout,
         temperature=temperature,
         max_retries=max_retries,
-        trace_provider="minimax",
         # Streaming must still report token usage (progressive delivery path).
         stream_usage=True,
         **kwargs,
@@ -189,7 +188,6 @@ def _custom_chat(
         timeout=timeout or s.custom_llm_request_timeout,
         temperature=temperature,
         max_retries=max_retries,
-        trace_provider="fallback",
         stream_usage=True,
         **kwargs,
     )
@@ -236,7 +234,6 @@ def _openrouter_chat(
         timeout=timeout or s.openrouter_request_timeout,
         temperature=temperature,
         max_retries=max_retries,
-        trace_provider="openrouter",
         stream_usage=True,
         # Stable system block as an explicit cache prefix (transport metadata
         # only — the prompt text is unchanged). OpenRouter's docs accept the

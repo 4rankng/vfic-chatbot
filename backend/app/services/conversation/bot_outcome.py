@@ -26,7 +26,6 @@ from app.models.conversation import (
     Message,
     MessageSender,
 )
-from app.schemas.bot_run import parse_decision_trace
 from app.services.conversation._shared import affected_rows, utcnow
 
 
@@ -60,7 +59,6 @@ class BotOutcomeMixin:
         delivery_status: DeliveryStatus | None = None,
         trace_id: str | None = None,
         outcome_metadata: dict | None = None,
-        decision_trace: dict | None = None,
         outbox_channel: str | None = None,
         outbox_payload: dict | None = None,
     ) -> Message:
@@ -104,10 +102,6 @@ class BotOutcomeMixin:
             if sent
             else BotRunOutcome.SUPPRESSED
         )
-        parsed_trace = parse_decision_trace(decision_trace)
-        safe_decision_trace = (
-            parsed_trace.model_dump(mode="json") if parsed_trace is not None else None
-        )
         run = BotRun(
             conversation_id=conv.id,
             version_at_start=version_at_start,
@@ -118,7 +112,6 @@ class BotOutcomeMixin:
             stage_timings=stage_timings,
             trace_id=trace_id or None,
             outcome_metadata=outcome_metadata,
-            decision_trace=safe_decision_trace,
         )
         msg = None
         pending_msg = None

@@ -90,7 +90,6 @@ async def lifespan(app: FastAPI):
         from rq_scheduler import Scheduler
 
         from app.core.redis import get_redis_sync
-        from app.workers.decision_trace_retention_worker import run_decision_trace_retention_tick
         from app.workers.followup_worker import run_proactive_followup_tick
         from app.workers.outbound_dispatch_worker import run_outbound_dispatch_tick
         from app.workers.reconcile_worker import run_reconcile_tick
@@ -129,18 +128,6 @@ async def lifespan(app: FastAPI):
             )
         except Exception:  # noqa: BLE001
             logger.exception("outbound dispatcher scheduler registration failed (non-fatal)")
-        try:
-            register_unique_tick(
-                sched,
-                run_decision_trace_retention_tick,
-                settings.decision_trace_retention_interval_seconds,
-            )
-            logger.info(
-                "decision trace retention tick registered: interval=%ds",
-                settings.decision_trace_retention_interval_seconds,
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("decision trace retention scheduler registration failed (non-fatal)")
         try:
             from app.workers.external_source_sync_worker import (
                 run_external_source_sync_tick,

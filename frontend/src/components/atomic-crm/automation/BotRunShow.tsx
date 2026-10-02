@@ -6,11 +6,10 @@ import { ArrowLeft, Bot } from "lucide-react";
 import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { PageHeading, PageShell } from "../kit";
-import type { BotRunTraceDetail } from "../types";
+import type { BotRunDetail } from "../types";
 import { durationLabel, formatDateTime, outcomeMeta } from "./botRunMeta";
-import { DecisionTraceRenderer } from "./DecisionTracePanel";
 import type { CrmDataProvider } from "../providers/rest/dataProvider";
-import { DECISION_TRACE_QUERY_KEY } from "./decisionTraceQueries";
+import { BOT_RUN_QUERY_KEY } from "./botRunQueries";
 import "./bot-runs.css";
 
 const Fact = ({ label, value }: { label: string; value?: ReactNode }) => (
@@ -22,7 +21,7 @@ const Fact = ({ label, value }: { label: string; value?: ReactNode }) => (
   </div>
 );
 
-export const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
+export const BotRunShowContent = ({ run }: { run: BotRunDetail }) => {
   const meta = outcomeMeta(run.outcome);
   const dur = durationLabel(run);
 
@@ -60,18 +59,6 @@ export const BotRunShowContent = ({ run }: { run: BotRunTraceDetail }) => {
           value={run.ended_at ? formatDateTime(run.ended_at) : null}
         />
       </dl>
-
-      <div className="px-4 py-4">
-        <h3 className="text-section-title font-semibold text-foreground">
-          Dấu vết quyết định
-        </h3>
-        <p className="mt-1 text-helper leading-5 text-muted-foreground">
-          Các bước suy luận và công cụ của lượt này.
-        </p>
-        <div className="mt-3">
-          <DecisionTraceRenderer trace={run.decision_trace} />
-        </div>
-      </div>
     </section>
   );
 };
@@ -87,8 +74,8 @@ const BotRunShowPage = () => {
   const translate = useTranslate();
   const listHref = useHref("/bot_runs");
   const detailQuery = useQuery({
-    queryKey: [...DECISION_TRACE_QUERY_KEY, identityId, "run", runId],
-    queryFn: () => dataProvider.getBotRunTrace(runId),
+    queryKey: [...BOT_RUN_QUERY_KEY, identityId, "run", runId],
+    queryFn: () => dataProvider.getBotRunDetail(runId),
     enabled: Boolean(identityId) && Number.isFinite(runId),
     gcTime: 0,
     staleTime: 0,

@@ -37,7 +37,6 @@ async def _record_silent_terminal(
     base_outcome: str,
     *,
     stage_timings: dict | None = None,
-    trace_sink=None,
     lock_owner=None,
 ) -> TurnOutcome:
     """Record a turn that produced no answer — and send nothing more to the customer.
@@ -75,7 +74,6 @@ async def _record_silent_terminal(
         stage_timings=stage_timings,
         lock_owner=lock_owner,
         trace_id=state.trace_id or None,
-        decision_trace=trace_sink.snapshot_payload() if trace_sink is not None else None,
     )
     return {"outcome": base_outcome, "reply": bubble.text if bubble is not None else ""}
 
@@ -90,7 +88,6 @@ async def _authority_gate(
     lock_owner: str | None = None,
     started=None,
     timings: dict | None = None,
-    trace_sink=None,
     status_task=None,
     reply: str | None = None,
     outcome_metadata: dict | None = None,
@@ -122,16 +119,12 @@ async def _authority_gate(
         return {"outcome": "suppressed", "reason": reason}
     if refresh_conv:
         await deps.db.refresh(conv)
-    if trace_sink is not None:
-        trace_sink.record_decision("ownership_verdict", "suppressed")
     if reply is None:
         return await _record_silent_terminal(
             state, deps, conv, svc, started, reason,
             stage_timings=timings,
-            trace_sink=trace_sink,
             lock_owner=lock_owner,
         )
-    decision_trace = trace_sink.snapshot_payload() if trace_sink is not None else None
     db_t0 = time.monotonic()
     await svc.record_bot_outcome(
         conv,
@@ -144,7 +137,6 @@ async def _authority_gate(
         lock_owner=lock_owner,
         trace_id=state.trace_id or None,
         outcome_metadata=outcome_metadata,
-        decision_trace=decision_trace,
     )
     _stamp_db(timings, "record_bot_outcome", db_t0)
     return {"outcome": reason, "reply": reply}

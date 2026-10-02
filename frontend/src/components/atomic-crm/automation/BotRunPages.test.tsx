@@ -4,7 +4,7 @@ import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/index.css";
 
-import type { BotRun, BotRunTraceDetail } from "../types";
+import type { BotRun, BotRunDetail } from "../types";
 
 const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
@@ -259,31 +259,13 @@ describe("Bot run pages", () => {
     expect(screen.container.textContent).toContain("1-1 / 1");
   });
 
-  it("shows run facts and the decision trace without nested cards", async () => {
-    const detail: BotRunTraceDetail = {
+  it("shows run facts without nested cards", async () => {
+    const detail: BotRunDetail = {
       id: 42,
       conversation_id: "conversation-42",
       started_at: "2026-07-23T10:00:00Z",
       ended_at: "2026-07-23T10:00:02Z",
       outcome: "sent",
-      trace_available: true,
-      decision_trace: {
-        version: 2,
-        truncated: false,
-        events: [
-          {
-            seq: 1,
-            kind: "model_turn",
-            turn: 1,
-            phase: "final",
-            provider: "minimax",
-            model: "MiniMax-M2.7",
-            reasoning_status: "returned",
-            reasoning: "Đã kiểm tra dữ liệu trước khi trả lời.",
-            tool_names: [],
-          },
-        ],
-      },
     };
     const screen = await render(<BotRunShowContent run={detail} />);
 
@@ -297,18 +279,6 @@ describe("Bot run pages", () => {
     await expect.element(screen.getByText("conversation-42")).toBeVisible();
     await expect.element(screen.getByText("2.0 giây")).toBeVisible();
     await expect.element(screen.getByText("Đã gửi")).toBeVisible();
-    await expect
-      .element(screen.getByRole("heading", { name: "Dấu vết quyết định" }))
-      .toBeVisible();
-    await expect
-      .element(screen.getByText("Đã kiểm tra dữ liệu trước khi trả lời."))
-      .not.toBeVisible();
-    await screen
-      .getByLabelText(/^Chi tiết lượt suy luận 1: .*minimax.*MiniMax-M2\.7$/)
-      .click();
-    await expect
-      .element(screen.getByText("Đã kiểm tra dữ liệu trước khi trả lời."))
-      .toBeVisible();
     expect(screen.container.querySelector("[data-slot='card']")).toBeNull();
   });
 

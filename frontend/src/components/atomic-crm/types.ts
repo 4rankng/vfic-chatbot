@@ -198,59 +198,12 @@ export type BotRun = {
   outcome: BotRunOutcome;
 } & Pick<RaRecord, "id">;
 
-export type DecisionTraceDecisionEvent = {
-  seq: number;
-  kind: "decision";
-  code: string;
-  summary_code: string;
-};
-
-export type DecisionTraceToolEvent = {
-  seq: number;
-  kind: "tool";
-  name: string;
-  selected_by: "model" | "policy" | "prefetch";
-};
-
-export type DecisionTraceModelTurnEvent = {
-  seq: number;
-  kind: "model_turn";
-  turn: number;
-  phase: "tool_request" | "final" | "retry" | "direct";
-  provider: "minimax" | "openrouter" | "unknown";
-  model: string;
-  reasoning_status: "returned" | "not_returned" | "truncated";
-  reasoning: string | null;
-  tool_names: string[];
-};
-
-export type DecisionTraceEvent =
-  | DecisionTraceDecisionEvent
-  | DecisionTraceToolEvent
-  | DecisionTraceModelTurnEvent;
-
-export type DecisionTrace = {
-  version: number;
-  events: DecisionTraceEvent[];
-  truncated: boolean;
-};
-
-export type BotRunTraceSummary = {
+export type BotRunDetail = {
   id: number;
   conversation_id: string;
   started_at: string;
   ended_at: string | null;
   outcome: BotRunOutcome;
-  trace_available: boolean;
-};
-
-export type BotRunTraceDetail = BotRunTraceSummary & {
-  decision_trace: DecisionTrace | null;
-};
-
-export type BotRunTraceSummaryList = {
-  data: BotRunTraceSummary[];
-  total: number;
 };
 
 // Knowledge document (per-project RAG doc). Mirrors the backend

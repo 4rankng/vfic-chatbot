@@ -177,33 +177,7 @@ describe("restProvider custom conversation actions", () => {
     );
   });
 
-  it("loads lean conversation bot-run summaries with a fixed page size of 10", async () => {
-    const { fetch, lastUrl } = stubList(
-      [
-        {
-          id: 71,
-          conversation_id: "conversation-1",
-          started_at: "2026-07-18T10:00:00Z",
-          ended_at: null,
-          outcome: "SENT",
-          trace_available: true,
-        },
-      ],
-      1,
-    );
-    globalThis.fetch = fetch;
-
-    const response = await provider.getConversationBotRuns("conversation-1");
-
-    expect(lastUrl()).toContain(
-      "/api/v1/conversations/conversation-1/bot-runs?page=1&per_page=10",
-    );
-    expect(response.data[0]?.outcome).toBe("sent");
-    expect(response.data[0]).not.toHaveProperty("proposed_reply");
-    expect(response.data[0]).not.toHaveProperty("decision_trace");
-  });
-
-  it("loads one sanitized decision-trace detail and normalizes its outcome", async () => {
+  it("loads one bot-run detail and normalizes its outcome", async () => {
     let url = "";
     globalThis.fetch = vi.fn(
       async (input: RequestInfo | URL): Promise<Response> => {
@@ -217,18 +191,16 @@ describe("restProvider custom conversation actions", () => {
             started_at: "2026-07-18T10:00:00Z",
             ended_at: null,
             outcome: "SUPPRESSED",
-            trace_available: true,
-            decision_trace: { version: 1, events: [], truncated: false },
           }),
         } as unknown as Response;
       },
     ) as unknown as typeof globalThis.fetch;
 
-    const response = await provider.getBotRunTrace(71);
+    const response = await provider.getBotRunDetail(71);
 
     expect(url).toContain("/api/v1/bot_runs/71");
     expect(response.outcome).toBe("suppressed");
-    expect(response.decision_trace?.events).toEqual([]);
+    expect(response.conversation_id).toBe("conversation-1");
   });
 });
 

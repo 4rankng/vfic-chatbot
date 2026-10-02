@@ -2,13 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   apiJson: vi.fn(),
-  clearActiveDecisionTraceQueries: vi.fn(),
+  clearActiveBotRunQueries: vi.fn(),
   clearTokens: vi.fn(),
   closeRealtimeSocket: vi.fn(),
 }));
 
 vi.mock("../../root/reset-runtime-state", () => ({
-  clearActiveDecisionTraceQueries: mocks.clearActiveDecisionTraceQueries,
+  clearActiveBotRunQueries: mocks.clearActiveBotRunQueries,
 }));
 
 vi.mock("../realtime/realtime-socket", () => ({
@@ -86,7 +86,7 @@ describe("authProvider server-side logout", () => {
 
   it("clears sensitive trace queries before the server call", async () => {
     const order: string[] = [];
-    mocks.clearActiveDecisionTraceQueries.mockImplementation(() =>
+    mocks.clearActiveBotRunQueries.mockImplementation(() =>
       order.push("clearTraceQueries"),
     );
     mocks.apiJson.mockImplementation(async () => {

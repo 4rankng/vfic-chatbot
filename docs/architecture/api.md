@@ -124,22 +124,19 @@ cannot undo newer phone evidence. Ordinary absent/null extractor values retain
 the existing merge behavior; recruiter profile edits keep the version contract
 above.
 
-## Agent Thinking trace
+## Bot-run audit detail
 
-Administrators can inspect provider-returned reasoning and selected tool names for recent chatbot
-runs. Recruiters receive `403` from both trace routes.
+The audit log keeps one fact sheet per bot run. Administrators read it; recruiters
+receive `403`.
 
 | Method and path | Result |
 |---|---|
-| `GET /api/v1/conversations/{conversation_id}/bot-runs` | Lean recent-run summaries with `trace_available`; no candidate reply |
-| `GET /api/v1/bot_runs/{run_id}` | One run with its versioned `decision_trace` |
+| `GET /api/v1/bot_runs` | Paged run list: outcome, proposed reply, timing |
+| `GET /api/v1/bot_runs/{run_id}` | One run's facts: conversation, start/end, outcome |
 
-A version 2 trace contains only ordered `model_turn` events. Each event pairs the reasoning text
-returned by MiniMax or OpenRouter with tool names selected in that same invocation;
-`reasoning_status=not_returned` means the provider exposed none. Legacy version 1 execution-summary
-events remain parseable but are not presented as Agent Thinking. The contract adds no separate
-prompt, candidate-answer, tool-argument, tool-result, or evidence fields. Returned reasoning is
-free-form and may echo conversation context, so it is admin-only and expires after 30 days.
+Provider-returned reasoning and tool selections are not recorded or exposed: the
+decision trace (and the per-conversation trace summaries that fed it) was removed
+on 2026-10-02, so a run carries no thinking log and nothing to retain or expire.
 
 ## Installation lifecycle and Settings configuration
 
@@ -406,8 +403,7 @@ all methods share `frontend/src/lib/apiClient.ts`.
 
 | Method | Purpose |
 |---|---|
-| `getConversationBotRuns` | List recent bot-run trace summaries for a conversation |
-| `getBotRunTrace` | Read an individual bot-run decision trace |
+| `getBotRunDetail` | Read one bot run's facts (conversation, timing, outcome) |
 | `sendHumanReply` | Recruiter sends a manual reply to a candidate |
 | `retryHumanReply` | Retry a failed recruiter reply |
 | `takeOverConversation` | Recruiter takes over a conversation from the bot |

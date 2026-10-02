@@ -589,8 +589,6 @@ class TestDegradationMessage:
         assert kwargs["sent"] is False
         assert kwargs["reply"] == ""  # no customer text on the audit row either
         assert kwargs["stage_timings"]["throttle"] is True
-        # The request-local decision trace is preserved for the dashboard.
-        assert kwargs["decision_trace"] is not None
 
     @pytest.mark.asyncio
     async def test_worker_throttle_still_records_when_conversation_missing(self):

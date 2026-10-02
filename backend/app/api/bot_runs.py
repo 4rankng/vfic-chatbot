@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth_dependencies import get_current_user, require_admin
 from app.identity.application.http import AuthenticatedUser
 from app.identity.domain.role import Role
-from app.schemas.bot_run import BotRunListResponse, BotRunOut, BotRunOutcome, BotRunTraceDetailOut
+from app.schemas.bot_run import BotRunDetailOut, BotRunListResponse, BotRunOut, BotRunOutcome
 from app.shared.domain.errors import NotFoundError
 from app.shared.infrastructure.db import get_request_db
 from app.services.bot_run_service import BotRunService
@@ -60,13 +60,13 @@ async def list_bot_runs(
     )
 
 
-@router.get("/{run_id}", response_model=BotRunTraceDetailOut)
+@router.get("/{run_id}", response_model=BotRunDetailOut)
 async def get_bot_run_detail(
     run_id: int,
     _admin: AuthenticatedUser = Depends(require_admin),
     db: AsyncSession = Depends(get_request_db),
-) -> BotRunTraceDetailOut:
-    detail = await BotRunService(db).get_trace_detail(run_id)
+) -> BotRunDetailOut:
+    detail = await BotRunService(db).get_run_detail(run_id)
     if detail is None:
         raise NotFoundError("bot run not found")
     return detail

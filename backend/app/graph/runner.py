@@ -49,7 +49,6 @@ import uuid
 
 from app.core.config import get_settings
 from app.graph.authority import _authority_gate, _record_silent_terminal
-from app.graph.decision_trace import DecisionTraceBuilder
 from app.graph.dispatch import (
     _build_outbox_payload,
     _cancel_status_task,
@@ -71,7 +70,6 @@ from app.graph.lanes import (
     _resolve_lane,
     _tingting_reset_allowed,
     _vacancy_evidence_query,
-    _with_optional_trace,
     DIRECT_HISTORY_TOKEN_BUDGET,
     run_manifest_composed_agent,
     tingting_hotline_reply,
@@ -161,7 +159,6 @@ __all__ = [
     "_stamp_outbound_telemetry",
     "_tingting_reset_allowed",
     "_vacancy_evidence_query",
-    "_with_optional_trace",
     "_zalo_for_conversation",
     "delivered_bubble",
     "delivered_bubble_payload",
@@ -385,7 +382,6 @@ async def _run_turn(
                 0, int(round((turn_start_epoch - state.preamble_start_epoch) * 1000))
             )
         t0 = time.monotonic()
-        trace_sink = DecisionTraceBuilder()
 
         # Terminal-recipient short-circuit: a recipient the provider permanently
         # rejects ("user_id is invalid" on the Bot channel, "-201 user_id is not
@@ -398,7 +394,6 @@ async def _run_turn(
             if await deps.recipient_unreachable(
                 _channel_for_conversation(conv), recipient_id
             ):
-                trace_sink.record_decision("degradation_reason", "recipient_unreachable")
                 timings["lane"] = "recipient_unreachable"
                 logger.info(
                     "turn skipped: recipient permanently unreachable conversation=%s",
@@ -415,7 +410,6 @@ async def _run_turn(
                     lock_owner=lock_owner,
                     started=started,
                     timings=timings,
-                    trace_sink=trace_sink,
                     status_task=status_task,
                 )
 
@@ -582,7 +576,6 @@ async def _run_turn(
                     exc_info=True,
                 )
         turn_route = route_from_decisions(state.user_text, decisions)
-        trace_sink.record_decision("route_selected", turn_route.reason)
 
         provider = provider_from_conversation(conv)
 
@@ -636,10 +629,6 @@ async def _run_turn(
         # that finishes first — or any non-agent lane — keeps the pre-existing
         # single-message path exactly as it was.
         stream = _ProgressiveStream() if _progressive_send_enabled(deps, svc) else None
-        if trace_sink is not None:
-            trace_sink.record_decision(
-                "tingting_scope", "allowed" if tingting_reset_allowed else "channel_not_allowed"
-            )
         lane_kwargs = {
             "state": state,
             "deps": deps,
@@ -653,7 +642,6 @@ async def _run_turn(
             "provider": provider,
             "recipient_id": recipient_id,
             "timings": timings,
-            "trace_sink": trace_sink,
             "started": started,
             "lock_owner": lock_owner,
             "status_task": status_task,
@@ -677,7 +665,6 @@ async def _run_turn(
                     stream=stream,
                     lane_task=lane_task,
                     timings=timings,
-                    trace_sink=trace_sink,
                     lock_owner=lock_owner,
                     recipient_id=recipient_id,
                     allowed_text=contact_evidence,
@@ -720,7 +707,6 @@ async def _run_turn(
                 conv=conv,
                 svc=svc,
                 timings=timings,
-                trace_sink=trace_sink,
                 lock_owner=lock_owner,
                 recipient_id=recipient_id,
                 allowed_text=contact_evidence,
@@ -746,7 +732,6 @@ async def _run_turn(
             generated=lane.generated,
             user_text=state.user_text,
             timings=timings,
-            trace_sink=trace_sink,
         )
 
         # Deterministic replies (tool safe_reply, curated templates) carry the
@@ -771,7 +756,6 @@ async def _run_turn(
                 state.conversation_id,
                 state.trace_id or "-",
             )
-            trace_sink.record_decision("degradation_reason", "agent_error")
             return await _authority_gate(
                 state=state,
                 deps=deps,
@@ -781,7 +765,6 @@ async def _run_turn(
                 lock_owner=lock_owner,
                 started=started,
                 timings=timings,
-                trace_sink=trace_sink,
                 status_task=status_task,
                 refresh_conv=True,
             )
@@ -795,7 +778,6 @@ async def _run_turn(
             zalo=zalo,
             candidate=candidate,
             timings=timings,
-            trace_sink=trace_sink,
             started=started,
             lock_owner=lock_owner,
             status_task=status_task,
@@ -824,7 +806,6 @@ async def _run_turn(
             lock_owner=lock_owner,
             started=started,
             timings=timings,
-            trace_sink=trace_sink,
             status_task=status_task,
         )
     finally:

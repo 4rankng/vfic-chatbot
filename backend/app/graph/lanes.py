@@ -28,7 +28,6 @@ from app.graph.answer_cache import (
     is_shareable_reply,
 )
 from app.graph.authority import _authority_gate
-from app.graph.decision_trace import DecisionTraceBuilder
 from app.graph.direct_context import (
     build_direct_system,
 )
@@ -107,27 +106,6 @@ def _optional_policy_kwargs(callable_obj, policy: dict) -> dict:
     if any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters.values()):
         return dict(policy)
     return {name: value for name, value in policy.items() if name in parameters}
-
-
-def _with_optional_trace(callable_obj, kwargs: dict, trace_sink) -> dict:
-    """Add the trace sink when the injected agent supports it.
-
-    The graph protocol keeps trace capture additive. Existing installations may
-    provide an agent implementation that predates the optional keyword, so the
-    runner feature-detects support at the call boundary.
-    """
-    if trace_sink is None:
-        return kwargs
-    try:
-        parameters = signature(callable_obj).parameters
-    except (TypeError, ValueError):
-        parameters = {}
-    supports_keyword = "trace_sink" in parameters or any(
-        parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters.values()
-    )
-    if not supports_keyword:
-        return kwargs
-    return {**kwargs, "trace_sink": trace_sink}
 
 
 async def _tingting_reset_allowed(deps: GraphDeps, conv) -> bool:
@@ -256,7 +234,6 @@ async def run_manifest_composed_agent(
     required_tool: str | None = None,
     required_tool_args: dict | None = None,
     metrics: dict | None = None,
-    trace_sink=None,
 ) -> str | None:
     """Run an active manifest policy without granting legacy tool authority."""
     if policy is None:
@@ -287,7 +264,7 @@ async def run_manifest_composed_agent(
         agent_kwargs["required_tool_args"] = required_tool_args
     return await deps.agent.agent(
         user_text,
-        **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
+        **agent_kwargs,
     )
 
 
@@ -326,7 +303,6 @@ async def _compose_reply_without_tools(
     *,
     system: str,
     metrics: dict | None,
-    trace_sink=None,
 ) -> str:
     """One tool-free agent round the model authors; ``""`` suppresses the turn.
 
@@ -337,20 +313,16 @@ async def _compose_reply_without_tools(
     """
     reply = await deps.agent.agent(
         user_text,
-        **_with_optional_trace(
-            deps.agent.agent,
-            {
-                "system": system,
-                "retrieval": deps.retrieval,
-                "embedder": deps.embedder,
-                "allowed_tools": None,
-                # Empty registry: ``filter_tool_schemas`` then returns no tools,
-                # so this round cannot re-enter a tool loop.
-                "resolved_tool_registry": frozenset(),
-                "metrics": metrics,
-            },
-            trace_sink,
-        ),
+        **{
+            "system": system,
+            "retrieval": deps.retrieval,
+            "embedder": deps.embedder,
+            "allowed_tools": None,
+            # Empty registry: ``filter_tool_schemas`` then returns no tools,
+            # so this round cannot re-enter a tool loop.
+            "resolved_tool_registry": frozenset(),
+            "metrics": metrics,
+        },
     )
     return reply or ""
 
@@ -365,7 +337,6 @@ async def _agent_turn(
     recent_messages: list[Any],
     contact_id: str | None = None,
     timings: dict | None = None,
-    trace_sink=None,
     manifest_policy=None,
     project_context=None,
     decisions: TurnDecisions | None = None,
@@ -390,8 +361,6 @@ async def _agent_turn(
         # is answered with the operator's exact pointer to that OA instead of
         # running a flow this channel cannot serve (the guide and the reset tools
         # are not bound here either).
-        if trace_sink is not None:
-            trace_sink.record_decision("tingting_scope", "channel_not_allowed")
         return TINGTING_RESET_REDIRECT_REPLY
     if tingting_reset_allowed and route.intent != "employee_support":
         # This IS the support OA. It serves the reset flow and no recruitment
@@ -404,15 +373,11 @@ async def _agent_turn(
         # handoff branch below. Only a confident non-support intent (a
         # recruitment/admin question) goes straight to a human.
         if route.intent in _SUPPORT_CLARIFY_INTENTS or route.confidence < ROUTE_CONFIDENCE_FLOOR:
-            if trace_sink is not None:
-                trace_sink.record_decision("tingting_scope", "support_clarify")
             route = employee_support_route(
                 reason="employee_support_clarify",
                 confidence=max(route.confidence, ROUTE_CONFIDENCE_FLOOR),
             )
         else:
-            if trace_sink is not None:
-                trace_sink.record_decision("tingting_scope", "support_only_hotline")
             return tingting_hotline_reply(await _tingting_hotline(deps))
     focused_project = bool(
         project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
@@ -464,7 +429,6 @@ async def _agent_turn(
                     "khẳng định có việc và không bịa dữ liệu."
                 ),
                 metrics=timings,
-                trace_sink=trace_sink,
             )
         composed = await run_manifest_composed_agent(
             user_text,
@@ -483,15 +447,12 @@ async def _agent_turn(
                 None if vacancy_catalog_required else compare_income_required_args
             ),
             metrics=timings,
-            trace_sink=trace_sink,
         )
         if composed is not None:
             return composed
         # The manifest policy deactivated mid-turn (the resolve bailed) — a race,
         # not a normal path. Suppress: there is no agent-composed reply to send
         # and the turn must never fall back to a code-authored line.
-        if trace_sink is not None:
-            trace_sink.record_decision("degradation_reason", "manifest_deactivated_mid_turn")
         return ""
 
     # System prompt = active persona + master index of active products (best-effort;
@@ -640,7 +601,6 @@ async def _agent_turn(
                 "khẳng định có việc và không bịa dữ liệu."
             ),
             metrics=timings,
-            trace_sink=trace_sink,
         )
     focused_rag = (
         project_context is not None
@@ -687,7 +647,6 @@ async def _agent_turn(
                     "không khẳng định có việc và không bịa dữ liệu."
                 ),
                 metrics=timings,
-                trace_sink=trace_sink,
             )
         if authority_tool is not None:
             # Detailed Project answers use only the Project-owned category authority.
@@ -854,7 +813,7 @@ async def _agent_turn(
         agent_kwargs["on_evidence"] = on_evidence
     reply = await deps.agent.agent(
         contextual_user_text,
-        **_with_optional_trace(deps.agent.agent, agent_kwargs, trace_sink),
+        **agent_kwargs,
     )
     # Answer cache (write): only a turn that serves stateless Project
     # information and whose reply was built from tool evidence depends on the
@@ -904,7 +863,6 @@ async def _resolve_lane(
     provider: str,
     recipient_id: str | None,
     timings: dict,
-    trace_sink: DecisionTraceBuilder,
     started,
     lock_owner: str | None,
     status_task,
@@ -916,7 +874,7 @@ async def _resolve_lane(
 ) -> _LaneResolution:
     """Select and run the turn's answer lane: the agent authors every reply.
 
-    ``timings['lane']`` and the decision trace record the winner; ``faq_metadata``
+    ``timings['lane']`` records the winner; ``faq_metadata``
     is reserved for lane provenance metadata. Only the agent lane can fail — a
     crash stands the turn down through ``_authority_gate`` and surfaces as
     ``terminal``.
@@ -962,19 +920,6 @@ async def _resolve_lane(
     # answer is sent. A genuinely hung provider call is reaped by the RQ
     # job_timeout backstop (>> any realistic turn) and the turn is recovered by
     # the reconcile sweep.
-    trace_sink.record_decision(
-        "context_selected",
-        "project_clarification"
-        if mandatory_instruction
-        else "focused_rag"
-        if (
-            project_context is not None
-            and project_context.state == "FOCUSED"
-            and project_context.knowledge_mode == "RAG"
-        )
-        else "agent_graph",
-    )
-    trace_sink.record_decision("lane_selected", "agent")
     timings["lane"] = "agent"
     try:
         agent_kwargs = {
@@ -1013,15 +958,9 @@ async def _resolve_lane(
             state,
             deps,
             state.user_text,
-            **_with_optional_trace(agent_turn, agent_kwargs, trace_sink),
+            **agent_kwargs,
         )
-    except LLMThrottled as exc:
-        # The worker owns the static degradation reply, but the
-        # request-local trace would otherwise be lost at this boundary.
-        # Transfer only the validated snapshot, never the live builder
-        # or any prompt, exception, or tool payload.
-        trace_sink.record_decision("degradation_reason", "llm_throttled")
-        exc.decision_trace = trace_sink.snapshot_payload()
+    except LLMThrottled:
         raise  # let worker handle degradation msg (no LLM call)
     except Exception as exc:  # noqa: BLE001 — agent blew up -> stay silent
         # The bot could not produce an answer. An "internal error" text
@@ -1034,7 +973,6 @@ async def _resolve_lane(
             state.trace_id or "-",
             exc,
         )
-        trace_sink.record_decision("degradation_reason", "agent_error")
         # The agent path may have used deps.db (lead / system-prompt reads).
         # Clear any aborted transaction before the recovery reuses the
         # session for record_bot_outcome. Safe: record_bot_pending
@@ -1055,7 +993,6 @@ async def _resolve_lane(
                 lock_owner=lock_owner,
                 started=started,
                 timings=timings,
-                trace_sink=trace_sink,
                 status_task=status_task,
                 refresh_conv=True,
             ),

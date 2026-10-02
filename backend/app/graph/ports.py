@@ -168,7 +168,6 @@ class ConversationPort(Protocol):
         delivery_status: Any = None,
         trace_id: str | None = None,
         outcome_metadata: dict | None = None,
-        decision_trace: dict | None = None,
         outbox_channel: str | None = None,
         outbox_payload: dict | None = None,
     ) -> Any: ...

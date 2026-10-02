@@ -6,8 +6,6 @@ pinned here so the lane cannot creep back one layer at a time:
 * ``Settings`` no longer models the agent turn cap, and an operator who leaves
   ``AGENT_MAX_SECONDS`` in the environment gets it silently dropped (not a
   startup crash) because pydantic-settings runs with ``extra="ignore"``.
-* A persisted decision trace that names the retired lane no longer renders in
-  the ops audit trail, while every lane the runner can actually emit still does.
 * The performance dashboard's slow-turn payload no longer carries the retired
   stage, and a legacy row that still has the old key on disk now has that time
   counted as unmeasured dark time instead of being silently subtracted.
@@ -42,43 +40,6 @@ def test_removed_tuning_env_vars_are_dropped_without_failing_startup(monkeypatch
     assert not hasattr(settings, "agent_max_seconds")
     assert not hasattr(settings, "faq_fast_lane_enabled")
     assert not hasattr(settings, "faq_abstain_margin")
-
-
-# ── ops audit trail ─────────────────────────────────────────────────────────
-
-
-def _trace(code: str, summary: str) -> dict:
-    return {
-        "version": 1,
-        "events": [{"seq": 1, "kind": "decision", "code": code, "summary_code": summary}],
-    }
-
-
-@pytest.mark.parametrize("code", ["lane_selected", "context_selected"])
-def test_retired_lane_is_not_a_valid_decision_trace_summary(code):
-    """A trace naming the removed lane is unrenderable — the admin view shows no
-    trace rather than advertising a lane the runner can no longer produce."""
-    from app.schemas.bot_run import parse_decision_trace
-
-    assert parse_decision_trace(_trace(code, "faq_bypass")) is None
-
-
-@pytest.mark.parametrize(
-    ("code", "summary"),
-    [
-        ("lane_selected", "agent"),
-        ("context_selected", "agent_graph"),
-        ("context_selected", "focused_rag"),
-        ("context_selected", "project_clarification"),
-    ],
-)
-def test_reachable_lanes_still_render(code, summary):
-    from app.schemas.bot_run import parse_decision_trace
-
-    parsed = parse_decision_trace(_trace(code, summary))
-
-    assert parsed is not None
-    assert parsed.events[0].summary_code == summary
 
 
 # ── performance dashboard ───────────────────────────────────────────────────

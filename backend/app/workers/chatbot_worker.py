@@ -527,7 +527,6 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                     exc,
                 )
                 try:
-                    from app.graph.decision_trace import DecisionTraceBuilder
                     from app.services.conversation import ConversationService
 
                     svc = ConversationService(db)
@@ -535,11 +534,6 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                     if conv is not None:
                         await db.refresh(conv)
                         lock_owner = state.lock_owner or None
-                        trace_sink = DecisionTraceBuilder()
-                        trace_sink.record_decision("degradation_reason", "llm_throttled")
-                        decision_trace = (
-                            getattr(exc, "decision_trace", None) or trace_sink.snapshot_payload()
-                        )
                         throttle_timings = _preamble_timings(
                             state, started_at, lane="agent", throttle=True
                         )
@@ -572,7 +566,6 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                             stage_timings=throttle_timings,
                             lock_owner=lock_owner,
                             trace_id=state.trace_id or None,
-                            decision_trace=decision_trace,
                         )
                 except Exception:  # noqa: BLE001
                     logger.error("failed to record degraded turn outcome", exc_info=True)

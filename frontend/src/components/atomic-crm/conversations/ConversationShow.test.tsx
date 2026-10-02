@@ -103,10 +103,6 @@ vi.mock("./presentation/ChatThread", () => ({
   ),
 }));
 
-vi.mock("../automation/DecisionTracePanel", () => ({
-  DecisionTracePanel: () => null,
-}));
-
 import { ConversationShowContent } from "./presentation/ConversationShow";
 import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
