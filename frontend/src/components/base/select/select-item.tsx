@@ -100,7 +100,7 @@ export const SelectItem = ({
             (state.isFocused ||
               state.isHovered ||
               (state.isSelected && selectionIndicator !== "checkbox")) &&
-              "bg-primary_hover",
+              "bg-accent",
             state.isDisabled && "cursor-not-allowed opacity-50",
             state.isFocusVisible && "ring-2 ring-focus-ring ring-inset",
 
@@ -141,7 +141,7 @@ export const SelectItem = ({
             <AriaText
               slot="label"
               className={cx(
-                "truncate font-medium whitespace-nowrap text-primary",
+                "truncate font-medium whitespace-nowrap text-popover-foreground",
                 sizes[size].text,
               )}
             >

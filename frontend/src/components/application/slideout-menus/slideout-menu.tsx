@@ -24,6 +24,7 @@ interface ModalOverlayProps
 export const ModalOverlay = (props: ModalOverlayProps) => {
   return (
     <AriaModalOverlay
+      isDismissable={props.isDismissable ?? true}
       {...props}
       className={(state) =>
         cx(

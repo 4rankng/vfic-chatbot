@@ -399,10 +399,10 @@
     display: grid;
     min-width: 0;
     gap: 12px;
-    padding: 16px;
-    border: 1px dashed var(--border);
-    border-radius: 10px;
-    background: var(--surface-hover);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
 
   .project-brief-import-heading,
@@ -769,8 +769,8 @@
   }
 
   .project-category-textarea:read-only {
-    border-color: var(--border);
-    background: var(--surface-hover);
+    border-color: transparent;
+    background: transparent;
     color: var(--foreground);
   }
 
