@@ -556,7 +556,12 @@ class KnowledgePipeline:
             return
         from app.services.knowledge.training_guard import ensure_training_owner
 
-        await ensure_training_owner(self.db, doc.id, doc.project_id, uuid.UUID(training["processing_token"]))
+        token = training.get("processing_token")
+        if not token:
+            # Completed training clears its token; there is no live claim to
+            # guard (feature re-extraction on finished sources hits this).
+            return
+        await ensure_training_owner(self.db, doc.id, doc.project_id, uuid.UUID(token))
 
 
 async def sync_project_highlights(db: AsyncSession, project_id: uuid.UUID) -> None:
