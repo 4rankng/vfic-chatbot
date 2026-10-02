@@ -16,7 +16,10 @@ export const Popover = (props: PopoverProps) => {
       {...props}
       className={(state) =>
         cx(
-          "uu-scope w-(--trigger-width) origin-(--trigger-anchor-point) overflow-x-hidden overflow-y-auto rounded-lg bg-popover py-1 text-popover-foreground shadow-lg ring-1 ring-secondary_alt outline-hidden will-change-transform",
+          // Literal app-theme panel colors: webviews have mis-composited the
+          // token/scope layers for this popup (slate-on-slate invisible rows),
+          // and the palette pair below is the light theme's popover surface.
+          "w-(--trigger-width) origin-(--trigger-anchor-point) overflow-x-hidden overflow-y-auto rounded-lg bg-[#fffcf8] py-1 text-[#172033] shadow-lg ring-1 ring-secondary_alt outline-hidden",
 
           state.isEntering &&
             "duration-150 ease-out animate-in fade-in placement-right:slide-in-from-left-0.5 placement-top:slide-in-from-bottom-0.5 placement-bottom:slide-in-from-top-0.5",

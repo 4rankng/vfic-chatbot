@@ -394,6 +394,10 @@ class ProjectRepository:
                     KnowledgeDocument.project_id == project_id,
                     KnowledgeDocument.raw_text.is_not(None),
                     KnowledgeDocument.raw_text != "",
+                    # The source brief — not the per-category write documents,
+                    # which are single-section fragments the extractor would
+                    # read as the whole project.
+                    KnowledgeDocument.source == "upload",
                 )
                 .order_by(KnowledgeDocument.created_at.desc())
                 .limit(1)

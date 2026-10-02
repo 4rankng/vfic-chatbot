@@ -141,7 +141,7 @@ export const SelectItem = ({
             <AriaText
               slot="label"
               className={cx(
-                "truncate font-medium whitespace-nowrap text-popover-foreground",
+                "truncate font-medium whitespace-nowrap",
                 sizes[size].text,
               )}
             >

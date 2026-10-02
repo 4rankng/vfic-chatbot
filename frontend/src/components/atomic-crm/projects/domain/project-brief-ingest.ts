@@ -853,6 +853,11 @@ const STRUCTURAL_HEADING =
 /** The chatbot Q&A bank writes every entry as its own question heading. */
 const QUESTION_TITLE = /(?:^❓)|\?\s*$/;
 
+/** The Q&A bank container: only under it does a `?`-titled section mean a
+ *  FAQ entry. Prose sections ask questions too ("1. Chúng ta làm gì?") and
+ *  must never become FAQ records with their description as the "answer". */
+const QA_BANK_TITLE = /ngan hang cau hoi|cau hoi (thuong gap|nguoi lao dong)/;
+
 const cleanQuestionTitle = (title: string): string =>
   title
     .replace(/^❓\s*/, "")
@@ -981,9 +986,26 @@ export const parseProjectBrief = (text: string): ProjectBrief => {
     }
 
     if (!primary) {
-      // A question-titled section is the Q&A bank's own entry format: the
-      // heading is the question, the body the answer.
-      if (section.title && QUESTION_TITLE.test(section.title.trim())) {
+      // A question-titled section is the Q&A bank's own entry format — but
+      // only inside the bank: a prose section asking "Chúng ta làm gì?" keeps
+      // its description instead of becoming a FAQ record (FE regression,
+      // Rorze brief).
+      let inQaBank = false;
+      let ancestorDepth = section.depth;
+      for (let j = sectionIndex - 1; j >= 0; j -= 1) {
+        if (sections[j].depth < ancestorDepth) {
+          if (QA_BANK_TITLE.test(fold(sections[j].title))) {
+            inQaBank = true;
+            break;
+          }
+          ancestorDepth = sections[j].depth;
+        }
+      }
+      if (
+        inQaBank &&
+        section.title &&
+        QUESTION_TITLE.test(section.title.trim())
+      ) {
         const entry = readQuestionAnswer(section);
         if (entry) {
           const transcript = [

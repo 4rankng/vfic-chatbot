@@ -285,6 +285,30 @@ describe("parseProjectBrief — degenerate input", () => {
     expect(brief.missingCategories).toHaveLength(12);
   });
 
+  it("keeps a prose question heading out of the FAQ bank", () => {
+    // Regression: "1. Chúng ta làm gì?" ended with ?, so the section became a
+    // FAQ record whose "answer" was the project description.
+    const brief = parseProjectBrief(
+      [
+        "# Phiếu thu thập thông tin",
+        "",
+        "## Ngân hàng câu hỏi",
+        "",
+        "### ❓ Công ty tuyển vị trí gì?",
+        "Tuyển công nhân lắp ráp.",
+        "",
+        "## Thông tin chung",
+        "",
+        "### 1. Chúng ta làm gì?",
+        "THÔNG TIN CHUNG: Công ty Cổ phần Nhân lực Quốc tế.",
+      ].join("\n"),
+    );
+    expect(brief.faqEntries.map((entry) => entry.question)).toEqual([
+      "Công ty tuyển vị trí gì?",
+    ]);
+    expect(brief.faqEntries[0].answer).toBe("Tuyển công nhân lắp ráp.");
+  });
+
   it("leaves the name empty — never a fabricated one — when the brief has none", () => {
     const brief = parseProjectBrief("## Ghi chú\n\nMột dòng.");
     expect(brief.name).toBe("");
