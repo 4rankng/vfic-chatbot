@@ -42,18 +42,33 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import UTC, datetime
 from hashlib import sha256
+from typing import TYPE_CHECKING
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.cache import cache_get_json, cache_set_json
 from app.core.config import get_settings
+from app.core.db import async_session
 from app.core.http import get_http_client
+from app.models.geocode import GeocodeCache
+from app.services.geo.providers import google_geocode
 from app.shared.domain.text import normalize_vietnamese_text
+
+if TYPE_CHECKING:
+    from app.services.integration_settings.providers.geo import GeoRuntimeConfig
 
 logger = logging.getLogger(__name__)
 
 # One process-scoped httpx client for the geocoder; the name keys its pool.
 _CLIENT_NAME = "geocoder"
-_CACHE_PREFIX = "geo:geocode:v2:"
+# v3: area lookups are now viewbox-biased toward the project region, so a v2
+# entry under a bare landmark query may hold an out-of-region hit (the 2026-10-02
+# "Núi Đèo" → Thái Nguyên incident cached exactly that). A bump retires them
+# instead of serving wrong origins for their full TTL.
+_CACHE_PREFIX = "geo:geocode:v3:"
 # Nominatim's free-form search rejects the WHOLE query when any comma-separated
 # component is not a place it knows: "Tầng 2, Công ty LG Electronics, KCN Tràng
 # Duệ, An Phong, An Dương, Hải Phòng" finds nothing while "An Dương, Hải Phòng"
@@ -110,6 +125,73 @@ def _cache_key(text: str) -> str:
     return f"{_CACHE_PREFIX}{digest}"
 
 
+async def _db_lookup(query: str) -> tuple[tuple[float, float] | None, bool]:
+    """Consult the durable mapping first — before any provider HTTP call.
+
+    Returns ``(coords, found)``. A coordinate row answers the lookup directly;
+    a NULL-coordinate row is a recorded miss — unless it is older than the
+    negative TTL, in which case it is treated as absent so improving provider
+    coverage is picked up. Any database problem is a cache miss, never an
+    error: the providers below still run.
+    """
+    try:
+        async with async_session() as db:
+            row = (
+                await db.execute(
+                    select(
+                        GeocodeCache.latitude,
+                        GeocodeCache.longitude,
+                        GeocodeCache.updated_at,
+                    ).where(GeocodeCache.query == query)
+                )
+            ).first()
+    except Exception:  # noqa: BLE001 — the mapping is decoration, never a failure
+        logger.warning("geocode db lookup failed", exc_info=True)
+        return None, False
+    if row is None:
+        return None, False
+    lat, lng, updated_at = row
+    if lat is None or lng is None:
+        ttl = get_settings().geocoder_negative_ttl_seconds
+        stale = updated_at is not None and (
+            datetime.now(UTC) - updated_at
+        ).total_seconds() > ttl
+        return (None, False) if stale else (None, True)
+    return (float(lat), float(lng)), True
+
+
+async def _db_store(
+    query: str, coords: tuple[float, float] | None, provider: str | None
+) -> None:
+    """Write through the resolved answer (or the miss) to the durable mapping.
+
+    Never raises: a mapping write failure must not fail the geocode call.
+    """
+    try:
+        async with async_session() as db:
+            await db.execute(
+                pg_insert(GeocodeCache)
+                .values(
+                    query=query,
+                    latitude=coords[0] if coords else None,
+                    longitude=coords[1] if coords else None,
+                    provider=provider,
+                )
+                .on_conflict_do_update(
+                    index_elements=[GeocodeCache.query],
+                    set_={
+                        "latitude": coords[0] if coords else None,
+                        "longitude": coords[1] if coords else None,
+                        "provider": provider,
+                        "updated_at": datetime.now(UTC),
+                    },
+                )
+            )
+            await db.commit()
+    except Exception:  # noqa: BLE001 — the mapping is decoration, never a failure
+        logger.warning("geocode db store failed", exc_info=True)
+
+
 def _query_variants(text: str) -> tuple[str, ...]:
     """The query itself, then its suffixes with leading components dropped.
 
@@ -140,13 +222,31 @@ async def _throttle(min_interval: float) -> None:
         _last_call_at = now
 
 
-async def geocode(query: str) -> tuple[float, float] | None:
+async def geocode(
+    query: str,
+    *,
+    viewbox: str | None = None,
+    providers: "GeoRuntimeConfig | None" = None,
+) -> tuple[float, float] | None:
     """Resolve ``query`` to ``(lat, lng)``; ``None`` when unresolved.
 
     Never raises. A warm cache — positive or negative — performs no HTTP call.
     A query the geocoder cannot resolve is retried with its leading components
     dropped, up to ``_MAX_QUERY_ATTEMPTS`` attempts; a hit from any attempt is
     cached under the query the caller passed.
+
+    ``providers`` (the admin-editable credential bundle) enables the regional
+    hop: Google resolves Vietnamese landmarks OSM lacks, so when a key is
+    configured it is tried first, exactly once, and the Nominatim ladder stays
+    as the keyless fallback. A miss on the regional hop is not cached apart —
+    the negative cache below covers the whole ladder.
+
+    ``viewbox`` ("x1,y1,x2,y2" as lon,lat, left/top/right/bottom) biases the
+    Nominatim ranking toward that box without excluding outside results — the
+    Nominatim-recommended way to steer a bare name ("Núi Đèo") at the region
+    the caller operates in. Deliberately bias-only, never ``bounded=1``: a hard
+    box makes a genuinely-far area ("Hà Nội") resolve to whatever road happens
+    to sit inside the box instead of the city the candidate named.
     """
     text = query.strip()
     if not text:
@@ -165,6 +265,36 @@ async def geocode(query: str) -> tuple[float, float] | None:
     if not settings.geocoder_enabled:
         await cache_set_json(key, {"miss": True}, settings.geocoder_negative_ttl_seconds)
         return None
+    # The durable mapping answers before any provider call; Redis answered only
+    # when it held a fresh copy. A recorded (fresh) miss ends the walk here.
+    db_query = normalize_vietnamese_text(text)
+    db_coords, db_found = await _db_lookup(db_query)
+    if db_found:
+        if db_coords is not None:
+            await cache_set_json(
+                key,
+                {"lat": db_coords[0], "lng": db_coords[1]},
+                settings.geocoder_cache_ttl_seconds,
+            )
+            return db_coords
+        return None
+    # Regional hop first: Google indexes the Vietnamese landmarks ("Núi Đèo",
+    # KCN names) OSM misses. One exact-string attempt, fail-open; on a miss the
+    # Nominatim ladder below runs exactly as without the credential.
+    if providers is not None and providers.google_maps_api_key:
+        hit = await google_geocode(
+            text,
+            api_key=providers.google_maps_api_key,
+            timeout_seconds=settings.geocoder_timeout_seconds,
+        )
+        if hit is not None:
+            await _db_store(db_query, hit, "google")
+            await cache_set_json(
+                key,
+                {"lat": hit[0], "lng": hit[1]},
+                settings.geocoder_cache_ttl_seconds,
+            )
+            return hit
     # Relax the query only after the exact text failed; the first attempt is
     # always the caller's own string, so a precise address stays precise.
     for attempt in _query_variants(text):
@@ -176,16 +306,16 @@ async def geocode(query: str) -> tuple[float, float] | None:
                 timeout=settings.geocoder_timeout_seconds,
                 headers={"User-Agent": settings.geocoder_user_agent},
             )
-            response = await client.get(
-                "/search",
-                params={
-                    "q": attempt,
-                    "format": "jsonv2",
-                    "limit": 1,
-                    "countrycodes": "vn",
-                    "accept-language": "vi",
-                },
-            )
+            params = {
+                "q": attempt,
+                "format": "jsonv2",
+                "limit": 1,
+                "countrycodes": "vn",
+                "accept-language": "vi",
+            }
+            if viewbox:
+                params["viewbox"] = viewbox
+            response = await client.get("/search", params=params)
             if response.status_code != 200:
                 raise ValueError(f"geocoder status {response.status_code}")
             item = response.json()[0]
@@ -198,9 +328,11 @@ async def geocode(query: str) -> tuple[float, float] | None:
         except Exception:  # noqa: BLE001 — geocoding is decoration, never a failure
             logger.warning("geocode attempt failed query=%s", attempt, exc_info=True)
             continue
+        await _db_store(db_query, (lat, lng), "nominatim")
         await cache_set_json(
             key, {"lat": lat, "lng": lng}, settings.geocoder_cache_ttl_seconds
         )
         return lat, lng
+    await _db_store(db_query, None, None)
     await cache_set_json(key, {"miss": True}, settings.geocoder_negative_ttl_seconds)
     return None

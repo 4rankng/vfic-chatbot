@@ -20,6 +20,8 @@ from app.schemas.integrations import (
     FacebookAccountStatusOut,
     FacebookChannelTestOut,
     FacebookCredentialsOut,
+    GeocoderIntegrationSettingsOut,
+    GeocoderIntegrationSettingsUpdate,
     FacebookCredentialsReveal,
     FacebookCredentialsUpdate,
     FacebookIntegrationOut,
@@ -201,6 +203,31 @@ async def verify_zalo_oa_signature(
             else "Chữ ký không khớp — Webhook Secret có thể sai, "
             "hoặc body/timestamp không khớp nguyên văn byte-for-byte."
         ),
+    )
+
+
+@router.get("/geocoder", response_model=GeocoderIntegrationSettingsOut)
+async def get_geocoder_integration_settings(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> GeocoderIntegrationSettingsOut:
+    return GeocoderIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_geocoder_view()
+    )
+
+
+@router.put("/geocoder", response_model=GeocoderIntegrationSettingsOut)
+async def update_geocoder_integration_settings(
+    body: GeocoderIntegrationSettingsUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> GeocoderIntegrationSettingsOut:
+    await IntegrationSettingsService(db).update_geocoder(
+        body.model_dump(exclude_unset=True),
+        actor_id=admin.id,
+    )
+    return GeocoderIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_geocoder_view()
     )
 
 

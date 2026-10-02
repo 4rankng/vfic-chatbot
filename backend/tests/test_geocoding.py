@@ -15,6 +15,7 @@ import pytest
 
 from app.recruitment.domain.recommendation import haversine_km
 from app.services.geo import geocoding
+from app.services.integration_settings.providers.geo import GeoRuntimeConfig
 from tests.helpers.http_fake import FakeHttpClient, register_fake_client
 
 
@@ -53,6 +54,15 @@ def geo_env(monkeypatch):
     monkeypatch.setattr(geocoding, "cache_get_json", _get)
     monkeypatch.setattr(geocoding, "cache_set_json", _set)
     monkeypatch.setattr(geocoding, "_last_call_at", 0.0)
+
+    async def _noop_lookup(_query):
+        return None, False
+
+    async def _noop_store(_query, _coords, _provider):
+        return None
+
+    monkeypatch.setattr(geocoding, "_db_lookup", _noop_lookup)
+    monkeypatch.setattr(geocoding, "_db_store", _noop_store)
     return cache, settings
 
 
@@ -78,7 +88,7 @@ async def test_geocode_parses_lat_lon_and_caches_the_hit(geo_env):
     assert fake.calls[0]["params"]["countrycodes"] == "vn"
     assert fake.calls[0]["params"]["q"] == "KCN Tràng Duệ, An Dương"
     key, value, ttl = cache.writes[-1]
-    assert key.startswith("geo:geocode:v2:")
+    assert key.startswith("geo:geocode:v3:")
     assert value == {"lat": 20.865, "lng": 106.683}
     assert ttl == 2_592_000
 
@@ -266,3 +276,185 @@ async def test_geocode_accepts_place_level_matches(geo_env):
             ),
         )
         assert await geocoding.geocode(f"Địa điểm {kind}") == (20.8, 106.6)
+
+
+@pytest.mark.asyncio
+async def test_geocode_passes_the_viewbox_when_the_area_lookup_biases(geo_env):
+    """The region bias must reach the provider: a bare landmark name otherwise
+    resolves nationwide — the 2026-10-02 incident put "Núi Đèo" in Thái Nguyên,
+    ~120 km from every project it was supposed to rank against."""
+    _cache, _settings = geo_env
+    fake = _register([{"lat": "20.9624", "lon": "106.7149", "addresstype": "peak"}])
+
+    await geocoding.geocode("Núi Đèo", viewbox="106.1500,21.3500,107.2500,20.4500")
+
+    assert fake.calls[0]["params"]["viewbox"] == "106.1500,21.3500,107.2500,20.4500"
+    assert fake.calls[0]["params"]["q"] == "Núi Đèo"
+
+
+@pytest.mark.asyncio
+async def test_geocode_omits_the_viewbox_by_default(geo_env):
+    """Project-address geocoding (ingest) passes no bias: the address carries
+    its own hierarchy and grounding."""
+    _cache, _settings = geo_env
+    fake = _register([{"lat": "20.8", "lon": "106.6"}])
+
+    await geocoding.geocode("An Dương, Hải Phòng")
+
+    assert "viewbox" not in fake.calls[0]["params"]
+
+
+@pytest.mark.asyncio
+async def test_geocode_tries_google_first_when_a_key_is_configured(geo_env):
+    """The regional hop resolves Vietnamese landmarks OSM lacks; a configured
+    key must run BEFORE the Nominatim ladder and short-circuit it."""
+    _cache, _settings = geo_env
+    google = register_fake_client(
+        "geocoder-google",
+        FakeHttpClient(
+            responses=[
+                {
+                    "status": "OK",
+                    "results": [
+                        {"geometry": {"location": {"lat": 20.9, "lng": 106.7}}}
+                    ],
+                }
+            ],
+            status_codes=[200],
+        ),
+    )
+    nominatim = _register([{"lat": "20.8", "lon": "106.6"}])
+
+    result = await geocoding.geocode(
+        "Núi Đèo",
+        providers=GeoRuntimeConfig(google_maps_api_key="k"),
+    )
+
+    assert result == (20.9, 106.7)
+    assert google.calls[0]["params"]["address"] == "Núi Đèo"
+    assert nominatim.calls == []
+
+
+@pytest.mark.asyncio
+async def test_geocode_falls_through_to_nominatim_when_google_misses(geo_env):
+    _cache, _settings = geo_env
+    google = register_fake_client(
+        "geocoder-google",
+        FakeHttpClient(
+            responses=[{"status": "ZERO_RESULTS", "results": []}],
+            status_codes=[200],
+        ),
+    )
+    nominatim = _register([{"lat": "20.8", "lon": "106.6"}])
+
+    result = await geocoding.geocode(
+        "Núi Đèo",
+        providers=GeoRuntimeConfig(google_maps_api_key="k"),
+    )
+
+    assert result == (20.8, 106.6)
+    assert len(google.calls) == 1
+    assert nominatim.calls[0]["params"]["q"] == "Núi Đèo"
+
+
+@pytest.mark.asyncio
+async def test_geocode_area_passes_the_viewbox_and_admin_providers(monkeypatch):
+    """The area lookup threads both quality guards into the client: the
+    project bounding box (bias) and the admin-configured regional credential."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.retrieval import repository as repository_module
+    from app.services.retrieval.repository import RetrievalRepository
+
+    captured: dict = {}
+
+    async def fake_geocode(query, *, viewbox=None, providers=None):
+        captured["viewbox"] = viewbox
+        captured["providers"] = providers
+        return (20.9, 106.7)
+
+    monkeypatch.setattr(repository_module, "geocode", fake_geocode)
+
+    class _FakeSettingsService:
+        def __init__(self, _db):
+            pass
+
+        async def resolve_geocoder(self):
+            return GeoRuntimeConfig(google_maps_api_key="k")
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.IntegrationSettingsService",
+        _FakeSettingsService,
+    )
+
+    repo = RetrievalRepository(MagicMock())
+    repo._catalog = SimpleNamespace(
+        active_area_viewbox=AsyncMock(return_value="106.1,21.3,107.2,20.4")
+    )
+
+    assert await repo.geocode_area("Núi Đèo") == (20.9, 106.7)
+    assert captured["viewbox"] == "106.1,21.3,107.2,20.4"
+    assert captured["providers"].google_maps_api_key == "k"
+
+
+@pytest.mark.asyncio
+async def test_geocode_answers_from_the_durable_mapping_before_any_call(geo_env, monkeypatch):
+    """The DB mapping must answer before any provider HTTP call (owner rule)."""
+    _cache, _settings = geo_env
+
+    async def db_hit(_query):
+        return (20.9, 106.7), True
+
+    monkeypatch.setattr(geocoding, "_db_lookup", db_hit)
+    google = register_fake_client(
+        "geocoder-google",
+        FakeHttpClient(
+            responses=[{"status": "OK", "results": []}], status_codes=[200]
+        ),
+    )
+    nominatim = _register([{"lat": "20.8", "lon": "106.6"}])
+
+    result = await geocoding.geocode(
+        "Núi Đèo", providers=GeoRuntimeConfig(google_maps_api_key="k")
+    )
+
+    assert result == (20.9, 106.7)
+    assert google.calls == []
+    assert nominatim.calls == []
+
+
+@pytest.mark.asyncio
+async def test_geocode_records_provider_hits_and_misses_in_the_mapping(geo_env, monkeypatch):
+    _cache, _settings = geo_env
+    stored: list = []
+
+    async def capture_store(_query, coords, provider):
+        stored.append((coords, provider))
+
+    async def no_mapping_hit(_query):
+        return None, False
+
+    monkeypatch.setattr(geocoding, "_db_lookup", no_mapping_hit)
+    monkeypatch.setattr(geocoding, "_db_store", capture_store)
+    register_fake_client(
+        "geocoder-google",
+        FakeHttpClient(
+            responses=[{"status": "ZERO_RESULTS", "results": []}], status_codes=[200]
+        ),
+    )
+    _register([{"lat": "20.8", "lon": "106.6"}])
+
+    assert await geocoding.geocode(
+        "Núi Đèo", providers=GeoRuntimeConfig(google_maps_api_key="k")
+    ) == (20.8, 106.6)
+    assert stored == [((20.8, 106.6), "nominatim")]
+
+    # A full ladder miss is recorded as a miss row too.
+    register_fake_client(
+        "geocoder",
+        FakeHttpClient(side_effect=RuntimeError("network down")),
+    )
+
+    assert await geocoding.geocode("Chẳng có đâu") is None
+    assert stored[-1] == (None, None)

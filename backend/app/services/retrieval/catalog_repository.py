@@ -29,6 +29,11 @@ from app.services.recommendation import RecommendationRepository
 
 logger = logging.getLogger(__name__)
 
+# Padding around the projects' bounding box for the area-lookup viewbox, in
+# degrees (~38 km at Vietnam's latitude): the box must comfortably contain the
+# landmarks candidates name near the projects, not only the projects themselves.
+_VIEWBOX_MARGIN_DEGREES = 0.35
+
 
 def _card_items(value: object) -> list[str]:
     """Normalize recruiter-authored discovery-card values into clean text items."""
@@ -184,6 +189,43 @@ class CatalogRepository:
                 SimpleNamespace(slug=row.slug, category_key=row.category_key, text=body)
             )
         return rendered
+
+    async def active_area_viewbox(self) -> str | None:
+        """The active projects' bounding box as a Nominatim ``viewbox`` string.
+
+        Candidate area lookups are often bare landmark names ("Núi Đèo") that
+        the provider resolves nationwide — the 2026-10-02 incident resolved one
+        to a same-named feature ~120 km from every project, and the catalog
+        then reported confidently wrong distances. Handing the provider the box
+        the projects actually occupy biases its ranking toward that region
+        without excluding anything, so a genuinely-far candidate area still
+        resolves truthfully. ``None`` when no project has coordinates.
+
+        Bias-only by design: ``bounded=1`` would turn the box into a filter and
+        force far queries to match whatever sits inside it.
+        """
+        row = (
+            await self.db.execute(
+                select(
+                    func.min(Project.latitude),
+                    func.max(Project.latitude),
+                    func.min(Project.longitude),
+                    func.max(Project.longitude),
+                ).where(
+                    Project.is_active.is_(True),
+                    Project.latitude.is_not(None),
+                    Project.longitude.is_not(None),
+                )
+            )
+        ).one()
+        min_lat, max_lat, min_lng, max_lng = row
+        if min_lat is None or min_lng is None:
+            return None
+        margin = _VIEWBOX_MARGIN_DEGREES
+        return (
+            f"{max(min_lng - margin, -180.0):.4f},{min(max_lat + margin, 90.0):.4f},"
+            f"{min(max_lng + margin, 180.0):.4f},{max(min_lat - margin, -90.0):.4f}"
+        )
 
     async def list_active_projects(self) -> list[ProjectFeatures]:
         """Every active KB-backed project as rich fit features — never capped.

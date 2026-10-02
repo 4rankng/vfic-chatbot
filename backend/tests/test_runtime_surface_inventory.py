@@ -44,7 +44,7 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 2,
     "conversations": 18,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
     "dashboard": 2,
-    "integrations": 34,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints
+    "integrations": 36,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints; +2 geocoder credential endpoints (settings page)
     # +2 the TingTing support OA: save-and-check the four credentials (PUT /tingting)
     # and a re-probe endpoint (POST /tingting/oa/check)
     # +2 deployment-wide TingTing app API key (GET / PUT, secrets status-only)
@@ -67,7 +67,9 @@ EXPECTED_ROUTE_COUNTS = {
 }
 # The legacy KB-version lane removal (-7 knowledge routes, -3 queue producers)
 # is the re-review this digest records.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "5be3f3b01b54b85450a04b2bf256a29a94fab30c0a1136b6014bb8d69b6409e7"
+# 0062-era: +2 integrations routes — GET/PUT /api/v1/admin/integrations/geocoder
+# (the admin-editable Google Maps credential behind the distance feature).
+EXPECTED_ROUTE_INVENTORY_SHA256 = "6c8e3bc30b3d9dd110d2b59cfec4ba5720bba67a9e42ce080a45027798636d21"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -156,7 +158,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # `client.get('/search')` against the Nominatim geocoder. The file stays
     # free of dict `.get` reads (indexing only), which is why the row is a
     # single `get` and not a family of them.
-    "provider_boundary": 92,
+    "provider_boundary": 93,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -253,7 +255,10 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # reviewed row, app/services/geo/geocoding.py::geocode's `client.get('/search')`
 # (+1 provider_boundary, annotated at the count above). Digest recomputed from
 # the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "f74ea30c98e08c0208da2d6aebefaf312933b9c49c26ab147fe70f933533f5f3"
+# provider_boundary +1: app/services/geo/providers.py — the Google geocoding
+# adapter's /maps/api/geocode/json call (tried before the Nominatim ladder when
+# an admin has configured a key).
+EXPECTED_BROAD_BOUNDARY_SHA256 = "d82e38c3023bfedd74cf022da3e02f27ba524219be240f10de9e4fbc70a69fae"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

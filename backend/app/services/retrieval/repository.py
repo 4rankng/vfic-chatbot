@@ -133,9 +133,24 @@ class RetrievalRepository:
         Delegates to the cached, throttled, fail-open geocoding client
         (``app.services.geo.geocoding``): it never raises, so a geocoder outage
         degrades the catalog answer to its pre-distance form instead of failing
-        the turn.
+        the turn. Two quality guards ride along:
+
+        * the search is biased toward the box the active projects live in
+          (``CatalogRepository.active_area_viewbox``) — a bare landmark name is
+          otherwise resolved nationwide and can land hundreds of km from every
+          project it is supposed to rank against. Bias, never a hard box — a
+          candidate whose area is genuinely outside the region must still
+          resolve, so the distances stay truthful.
+        * the admin-configured Google credential (settings page / env) enables
+          a regional hop before Nominatim, for the landmarks OSM lacks.
         """
-        return await geocode(query)
+        # Inline import: the integration-settings facade pulls the audit and
+        # model graph; a module-level import risks an import cycle.
+        from app.services.integration_settings import IntegrationSettingsService
+
+        viewbox = await self._catalog.active_area_viewbox()
+        providers = await IntegrationSettingsService(self.db).resolve_geocoder()
+        return await geocode(query, viewbox=viewbox, providers=providers)
 
     async def active_projects_with_card(self) -> list:
         return await self._catalog.active_projects_with_card()

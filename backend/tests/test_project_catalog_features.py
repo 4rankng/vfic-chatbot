@@ -344,3 +344,29 @@ async def test_database_errors_propagate_for_the_tool_to_map():
 
     with pytest.raises(RuntimeError):
         await _features(db)
+
+
+def _one_result(row) -> MagicMock:
+    result = MagicMock()
+    result.one.return_value = row
+    return result
+
+
+@pytest.mark.asyncio
+async def test_active_area_viewbox_pads_the_project_bounding_box():
+    """The bias box must comfortably contain the landmarks candidates name near
+    the projects, not only the projects themselves (margin ≈ 38 km)."""
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_one_result((20.80, 21.00, 106.50, 106.90)))
+
+    box = await CatalogRepository(db, page_project_ids=None).active_area_viewbox()
+
+    assert box == "106.1500,21.3500,107.2500,20.4500"
+
+
+@pytest.mark.asyncio
+async def test_active_area_viewbox_is_none_without_coordinates():
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_one_result((None, None, None, None)))
+
+    assert await CatalogRepository(db, page_project_ids=None).active_area_viewbox() is None
