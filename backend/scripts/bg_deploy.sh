@@ -251,7 +251,7 @@ PY
   # dispatcher that actually pushes bot replies to Zalo — and metrics-watch),
   # so a crash-looping dispatcher reported a green deploy. backend/tests/
   # test_deployment_makefile.py pins the coverage.
-  local _deadline=$(( $(date +%s) + ${POST_FLIP_WAIT_BUDGET:-300} ))
+  local _deadline=$(( $(date +%s) + ${POST_FLIP_WAIT_BUDGET:-600} ))
   while :; do
     require_running_service_count "frontend" &&
       require_running_service_count "worker-chatbot" &&
