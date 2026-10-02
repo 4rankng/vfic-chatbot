@@ -247,8 +247,24 @@ def test_rejects_duplicate_record_id():
     )
 
 
-def test_rejects_missing_frontmatter():
-    _rejects("## jobs\n", "must start with --- front-matter")
+def test_accepts_missing_frontmatter_as_plain_section():
+    """The KB template, exports, and hand-edited pastes carry just the section
+    (``## jobs`` + ``### record:`` blocks); the caller's category key and the
+    section heading anchor it. This is the production import shape — the file
+    that previously died with 'document must start with --- front-matter'."""
+    doc = parse_category_markdown(
+        "jobs",
+        "## jobs\n\n### record: nhan-vien-lap-rap\ntitle: \"Nhân viên lắp ráp\"\n"
+        "aliases: []\nlocation: \"KCN Nhật Bản (Nomura), Hồng An, Hải Phòng\"\n"
+        "summary: \"Thực hiện lắp ráp theo quy trình, quy định, sách hướng dẫn của bộ phận\"\n"
+        "keywords: []\n",
+    )
+    assert [record.id for record in doc.jobs] == ["nhan-vien-lap-rap"]
+
+
+def test_rejects_partial_frontmatter():
+    """Front-matter that started but never closed stays a hard error."""
+    _rejects('---\nschema_version: "1.0"\n## jobs\n', "closing --- delimiter is missing")
 
 
 def test_rejects_wrong_category_key():

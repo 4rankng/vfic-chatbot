@@ -1205,6 +1205,40 @@ describe("content-driven builders — derivation and honesty", () => {
     expect(plan.needsHuman).toEqual([]);
   });
 
+  it("imports frontmatter-less sections as whole category writes", () => {
+    // Production incident: a hand-edited paste of the natural section shape
+    // (no --- front-matter) died with 'document must start with --- front-matter'
+    // server-side after the bundle detector rejected it and the brief parser
+    // produced garbage writes.
+    const section =
+      '## jobs\n\n### record: nhan-vien-lap-rap\ntitle: "Nhân viên lắp ráp"\n' +
+      'aliases: []\nlocation: "KCN Nhật Bản (Nomura), Hồng An, Hải Phòng"\n' +
+      'summary: "Thực hiện lắp ráp theo quy trình, quy định, sách hướng dẫn của bộ phận"\n' +
+      "keywords: []";
+    const plan = planBriefKnowledge(parseProjectBrief(section));
+    expect(plan.writes).toEqual([
+      {
+        key: "jobs",
+        filename: "jobs.md",
+        content:
+          '---\nschema_version: "1.0"\ncategory: jobs\n---\n\n' +
+          section +
+          "\n",
+      },
+    ]);
+  });
+
+  it("splits a frontmatter-less multi-section paste into one write per category", () => {
+    const source =
+      '## jobs\n\n### record: a\ntitle: "Nhân viên lắp ráp"\nsummary: "Lắp ráp"\n' +
+      '\n## contacts\n\n### record: c\nname: "Liên hệ"\nnotes: "Mr. Cường"';
+    const plan = planBriefKnowledge(parseProjectBrief(source));
+    expect(plan.writes.map((write) => write.key)).toEqual(["jobs", "contacts"]);
+    expect(plan.writes[0].content).toContain("category: jobs");
+    expect(plan.writes[1].content).toContain("category: contacts");
+    expect(plan.writes[1].content).toContain('name: "Liên hệ"');
+  });
+
   it("imports project export display headings without dropping record content", () => {
     const documents = PROJECT_KNOWLEDGE_CATEGORIES.map((key) => ({
       key,

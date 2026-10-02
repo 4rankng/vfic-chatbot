@@ -166,9 +166,16 @@ def _table_columns(record_model: type[BaseModel], field_name: str) -> list[str]:
 
 
 def _split_frontmatter(text: str) -> tuple[dict[str, str], str]:
-    """Split the leading ``---`` front-matter and parse its ``key: value`` lines."""
+    """Split the leading ``---`` front-matter and parse its ``key: value`` lines.
+
+    A document with NO front-matter is accepted whole as the body: the KB
+    template, exports, and hand-edited pastes naturally carry just the section
+    (``## <list_field>`` + ``### record:`` blocks). The caller's category key
+    and the section heading anchor such a document. Partial front-matter
+    stays strict.
+    """
     if not text.startswith("---\n"):
-        raise CategoryMarkdownError("document must start with --- front-matter")
+        return {}, text
     end = text.find("\n---", 4)
     if end == -1:
         raise CategoryMarkdownError("front-matter closing --- delimiter is missing")
@@ -355,9 +362,9 @@ def parse_category_markdown(
             f"category markdown exceeds the {MAX_CATEGORY_MARKDOWN_LINES:,} line limit"
         )
     meta, body = _split_frontmatter(text)
-    if meta["schema_version"].strip('"') != "1.0":
+    if meta.get("schema_version", '"1.0"').strip('"') != "1.0":
         raise CategoryMarkdownError('front-matter schema_version must be "1.0"')
-    if meta["category"].strip('"') != category_key.value:
+    if meta.get("category", category_key.value).strip('"') != category_key.value:
         raise CategoryMarkdownError(f'front-matter category must be "{category_key.value}"')
     body = _COMMENT_RE.sub("", body)
     body = strip_legacy_job_reference_source(body)

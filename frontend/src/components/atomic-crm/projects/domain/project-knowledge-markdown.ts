@@ -1537,6 +1537,60 @@ export const rolesFromFaqEntries = (
   return roles;
 };
 
+/** A category's markdown list heading back to its key (static lookup). */
+const CATEGORY_BY_LIST_FIELD: Record<string, ProjectKnowledgeCategory> =
+  Object.fromEntries(
+    Object.entries(CATEGORY_MARKDOWN_SCHEMAS).map(([key, schema]) => [
+      schema.listField,
+      key as ProjectKnowledgeCategory,
+    ]),
+  );
+
+/** Frontmatter-less bundles: sections split on `## <listField>` headings.
+ *
+ * The KB template, exports, and hand-edited pastes naturally carry just the
+ * section (``## jobs`` + ``### record:`` blocks) with no front-matter — the
+ * production import shape. Each section's write gets synthesized front-matter
+ * (what the category parser validates against) while the body stays verbatim.
+ */
+const headingOnlyBundlePlan = (source: string): BriefKnowledgePlan | null => {
+  const headings = [...source.matchAll(/^##\s+(\S+)\s*$/gm)].filter(
+    (match) => CATEGORY_BY_LIST_FIELD[match[1]] !== undefined,
+  );
+  if (!headings.length) return null;
+  const writes = new Map<
+    ProjectKnowledgeCategory,
+    BriefKnowledgePlan["writes"][number]
+  >();
+  for (const [index, heading] of headings.entries()) {
+    const key = CATEGORY_BY_LIST_FIELD[heading[1]];
+    if (writes.has(key))
+      throw new Error(
+        "Tệp có danh mục kiến thức bị lặp. Giữ một phần cho mỗi danh mục.",
+      );
+    const start = heading.index ?? 0;
+    const section = source
+      .slice(start, headings[index + 1]?.index ?? source.length)
+      .trim();
+    if (!section.slice(heading[0].length).trim()) continue;
+    writes.set(key, {
+      key,
+      filename: `${key}.md`,
+      content:
+        `---\nschema_version: "1.0"\ncategory: ${key}\n---\n\n` +
+        section +
+        "\n",
+    });
+  }
+  if (!writes.size) return null;
+  return {
+    writes: PROJECT_KNOWLEDGE_CATEGORIES.flatMap(
+      (key) => writes.get(key) ?? [],
+    ),
+    needsHuman: PROJECT_KNOWLEDGE_CATEGORIES.filter((key) => !writes.has(key)),
+  };
+};
+
 /** Typed category documents already carry every schema field. Keep their
  *  source intact and let the API validate it rather than parsing as prose. */
 const categoryBundlePlan = (rawText: string): BriefKnowledgePlan | null => {
@@ -1602,7 +1656,7 @@ const categoryBundlePlan = (rawText: string): BriefKnowledgePlan | null => {
       content: categorySource.trim() + "\n",
     });
   }
-  if (!hasCategoryDocument) return null;
+  if (!hasCategoryDocument) return headingOnlyBundlePlan(source);
   return {
     writes: PROJECT_KNOWLEDGE_CATEGORIES.flatMap(
       (key) => writes.get(key) ?? [],
