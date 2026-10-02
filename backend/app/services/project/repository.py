@@ -384,7 +384,15 @@ class ProjectRepository:
     async def get_latest_document_with_text(
         self, project_id: uuid.UUID
     ) -> KnowledgeDocument | None:
-        return (
+        """The document feature extraction reads.
+
+        The legacy KB-version lane joins the active version's text file; the
+        training/category lane stores the source brief as a plain upload with
+        ``raw_text`` and no KB-version join, so fall back to the latest such
+        document (OPS note: without this, feature extraction refused every
+        category-lane project with "no source document with text").
+        """
+        legacy = (
             await self.db.scalars(
                 select(KnowledgeDocument)
                 .join(KBTextFile, KBTextFile.document_id == KnowledgeDocument.id)
@@ -393,6 +401,20 @@ class ProjectRepository:
                     KnowledgeDocument.project_id == project_id,
                     KnowledgeDocument.raw_text.is_not(None),
                     Project.id == project_id,
+                )
+                .order_by(KnowledgeDocument.created_at.desc())
+                .limit(1)
+            )
+        ).first()
+        if legacy is not None:
+            return legacy
+        return (
+            await self.db.scalars(
+                select(KnowledgeDocument)
+                .where(
+                    KnowledgeDocument.project_id == project_id,
+                    KnowledgeDocument.raw_text.is_not(None),
+                    KnowledgeDocument.raw_text != "",
                 )
                 .order_by(KnowledgeDocument.created_at.desc())
                 .limit(1)
