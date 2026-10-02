@@ -40,13 +40,7 @@ from app.services.audit_service import record_audit
 from app.services.ingestion.limits import assert_upload_size
 from app.shared.domain.errors import ConflictError, NotFoundError, UpstreamError
 from app.services.knowledge import LLMJson
-from app.services.knowledge.canonical import (
-    CANONICAL_SCHEMA_VERSIONS,
-    SCHEMA_VERSION,
-    checksum_text,
-    parse_canonical_markdown,
-)
-from app.services.knowledge.bus_timetable.repair import repair_canonical_markdown
+from app.services.knowledge.canonical import checksum_text
 from app.services.knowledge.file_extraction import (
     DOCX_MIME_TYPE,
     KB_RELEASE_FORMATS,
@@ -64,11 +58,6 @@ from app.services.storage import persist_original_upload
 from app.project_knowledge.application.jobs import ProjectKnowledgeJobs
 
 Embedder = Callable[[str], Awaitable[list[float]]]
-
-
-def _declares_canonical(text: str) -> bool:
-    """True when the document declares the canonical Markdown schema up front."""
-    return "schema_version:" in text[:1000]
 
 
 class KnowledgeService:
@@ -235,13 +224,6 @@ class KnowledgeService:
             raise ValueError("Uploaded knowledge file is empty.")
         metadata: dict[str, Any] = {}
         source_version: str | None = str(version.version_no)
-        if _declares_canonical(stats.normalized_text):
-            repair = repair_canonical_markdown(stats.normalized_text)
-            canonical = parse_canonical_markdown(repair.text)
-            stats = kb_text_stats(repair.text)
-            metadata, source_version = self._build_canonical_metadata(
-                canonical, stats.normalized_text, raw, repair
-            )
         metadata["kb_version_id"] = str(version.id)
         metadata["content_sha256"] = stats.content_sha256
         metadata["source_file"] = {
@@ -483,17 +465,11 @@ class KnowledgeService:
         extracted_text, source_metadata = await asyncio.to_thread(
             self._extract_upload_text, file_name, content_type, data
         )
-        # Canonical-if-declared, the same contract as ``upload_text_file``: a
-        # freeform document (a project brief, say) ingests as-is, while text that
-        # declares the canonical schema is repaired, validated and carries
-        # canonical metadata. A malformed declared-canonical upload is rejected
-        # (``CanonicalValidationError``) instead of silently downgraded.
-        is_canonical = source_metadata["format"] != "docx" and _declares_canonical(extracted_text)
-        repair = repair_canonical_markdown(extracted_text) if is_canonical else None
-        raw_text = repair.text if repair is not None else extracted_text
-        canonical = parse_canonical_markdown(raw_text) if is_canonical else None
-        if canonical is not None and project_id is None:
-            project_id = await self._resolve_project_from_canonical(canonical)
+        # Uploaded text is always SOURCE — the flexible training/freeform lane
+        # (brief → deterministic plan, category bundle → sections, anything
+        # else → LLM category mapping). The legacy vfic-knowledge-v1 canonical
+        # contract no longer intercepts or rejects uploads.
+        raw_text = extracted_text
         if training_plan is None:
             await self.assert_mutable(project_id, allow_authoritative=True)
         else:
@@ -506,9 +482,8 @@ class KnowledgeService:
             # Serialize source retention against a worker's final category
             # cutover check, so an older source cannot publish over this one.
             await self.db.scalar(select(Project).where(Project.id == project_id).with_for_update())
-        metadata, version = self._build_canonical_metadata(
-            canonical, raw_text, extracted_text, repair
-        )
+        metadata: dict[str, Any] = {}
+        version: str | None = None
         metadata["source_file"] = source_metadata
         if training_plan is not None:
             if actor is None:
@@ -591,51 +566,6 @@ class KnowledgeService:
             "extraction": extraction_method_for_format(file_format),
             "text_checksum": checksum_text(text),
         }
-
-    async def _resolve_project_from_canonical(self, canonical: Any) -> uuid.UUID | None:
-        """Look up a project by slug from the canonical document metadata."""
-        slug = str(canonical.metadata.get("project_slug") or "").strip()
-        if not slug:
-            return None
-        project = (
-            await self.db.scalars(
-                select(Project).where(func.lower(Project.slug) == slug.lower()).limit(1)
-            )
-        ).first()
-        return project.id if project else None
-
-    @staticmethod
-    def _build_canonical_metadata(
-        canonical: Any, raw_text: str, original_text: str, repair: Any
-    ) -> tuple[dict, str | None]:
-        """Assemble the metadata dict and version for a canonical document."""
-        if canonical is None:
-            return {}, None
-        version = str(canonical.metadata.get("doc_version") or "")
-        schema_version = str(canonical.metadata.get("schema_version") or SCHEMA_VERSION)
-        if schema_version not in CANONICAL_SCHEMA_VERSIONS:
-            schema_version = SCHEMA_VERSION
-        canonical_meta: dict = {
-            "document": canonical.metadata,
-            "validation": {
-                "chunk_count": len(canonical.chunks),
-                "bus_route_count": len(canonical.bus_timetable.routes),
-                "bus_stop_count": sum(len(route.stops) for route in canonical.bus_timetable.routes),
-            },
-        }
-        if repair is not None and repair.changed:
-            canonical_meta["repair"] = {
-                "applied": True,
-                "count": len(repair.repairs),
-                "fixes": repair.repairs,
-                "original_checksum": checksum_text(original_text),
-            }
-        metadata = {
-            "schema_version": schema_version,
-            "checksum": checksum_text(raw_text),
-            "canonical": canonical_meta,
-        }
-        return metadata, version
 
     async def process(
         self, embedder: Embedder, doc: KnowledgeDocument, *, llm_json: LLMJson | None = None
