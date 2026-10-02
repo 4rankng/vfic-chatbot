@@ -114,6 +114,7 @@ def build_project_knowledge_template() -> str:
             f"CÂU HỎI ỨNG VIÊN THƯỜNG HỎI — trả lời các câu này trong khối bên dưới:\n"
             f"{questions}\n"
             f"============================================================ -->\n"
+            f"## {definition.label_vi}\n\n"
             f"{load_category_template(definition.key)}"
         )
     return "\n\n".join(parts) + "\n"
