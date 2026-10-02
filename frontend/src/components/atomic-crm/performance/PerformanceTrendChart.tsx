@@ -59,7 +59,10 @@ export const PerformanceTrendChart = ({ trend, window }: ChartProps) => {
         <p className="performance-empty">Chưa có dữ liệu xu hướng.</p>
       ) : (
         <>
-          <table className="sr-only" id="performance-trend-data">
+          <table
+            className="sr-only performance-trend-data"
+            id="performance-trend-data"
+          >
             <caption>Dữ liệu xu hướng độ trễ ứng viên chờ</caption>
             <thead>
               <tr>

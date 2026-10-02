@@ -69,6 +69,17 @@ export interface PerfReliability {
   failed_count: number;
 }
 
+/** Turn-quality and token aggregates over the selected window. */
+export interface PerfQuality {
+  degraded_count: number;
+  retried_429_count: number;
+  /** Percent of turns that hit the system-prompt cache; null when unreported. */
+  prompt_cache_hit_rate: number | null;
+  prompt_tokens_total: number;
+  completion_tokens_total: number;
+  cached_tokens_total: number;
+}
+
 export interface PerfAdapterBreakdown {
   adapter: string;
   turns: number;
@@ -92,4 +103,11 @@ export interface PerfMetrics {
   slow_turns: PerfSlowTurn[];
   trend: PerfTrendBucket[];
   reliability?: PerfReliability;
+  quality?: PerfQuality;
+  external_source_sync?: {
+    auto_sync_count: number;
+    last_synced_at_max: string | null;
+    success_total: number;
+    failure_total: number;
+  };
 }

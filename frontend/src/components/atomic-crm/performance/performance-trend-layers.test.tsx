@@ -98,7 +98,6 @@ const WindowSwitcher = () => {
 const header = () => (
   <header className="performance-header">
     <div>
-      <p className="performance-kicker">Vận hành</p>
       <h1>Hiệu suất chatbot</h1>
       <p>Trải nghiệm ứng viên, năng lực xử lý và độ tin cậy giao gửi.</p>
     </div>
