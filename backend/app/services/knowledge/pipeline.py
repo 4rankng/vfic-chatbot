@@ -37,6 +37,7 @@ from app.services.knowledge.coercion import (
     _coerce_feature,
     _parse_json_lenient,
     _product_feature_prompt,
+    _single_product_feature_prompt,
     normalized_source_text,
     validate_digest,
 )
@@ -359,21 +360,22 @@ class KnowledgePipeline:
         if (doc.metadata_ or {}).get("project_training", {}).get("auto_extract"):
             rows = await self._extract_auto_product_feature_rows(doc, catalog, corpus)
         else:
-            raw = await self._llm_json_with_timeout(
-                _product_feature_prompt(catalog), corpus, purpose="product feature extraction"
-            )
-            payload = _parse_json_lenient(raw)
-            feats = payload.get("features") if isinstance(payload, dict) else None
-            if not isinstance(feats, list):
-                raise ValueError("Product feature extraction returned no feature list")
-            # Preserve the existing single-call explicit-plan and legacy contract.
-            by_key: dict[str, dict] = {}
-            for f in feats:
-                if isinstance(f, dict):
-                    key = str(f.get("feature_key") or f.get("key") or "").strip()
-                    if key:
-                        by_key[key] = f
-            rows = [(c, _coerce_feature(by_key.get(c.feature_key), c, source_text=corpus)) for c in catalog]
+            # One focused call per criterion: the single-call 12-question
+            # extraction marked plainly stated facts missing (a brief giving
+            # commute/contacts/shifts still answered "chưa ghi rõ").
+            rows = []
+            for c in catalog:
+                raw = await self._llm_json_with_timeout(
+                    _single_product_feature_prompt(c),
+                    corpus,
+                    purpose="product feature extraction",
+                )
+                payload = _parse_json_lenient(raw)
+                feats = payload.get("features") if isinstance(payload, dict) else None
+                one = feats[0] if isinstance(feats, list) and feats else (
+                    payload if isinstance(payload, dict) else None
+                )
+                rows.append((c, _coerce_feature(one, c, source_text=corpus)))
         await self._guard_training(doc)
         if (doc.metadata_ or {}).get("project_training") is not None:
             # Keep candidates on the previous published profile until every

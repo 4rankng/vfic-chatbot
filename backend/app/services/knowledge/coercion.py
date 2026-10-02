@@ -12,7 +12,10 @@ import re
 import unicodedata
 from typing import Any
 
-from app.services.knowledge.prompts import PRODUCT_FEATURE_SYSTEM_PROMPT
+from app.services.knowledge.prompts import (
+    PRODUCT_FEATURE_ONE_SYSTEM_PROMPT,
+    PRODUCT_FEATURE_SYSTEM_PROMPT,
+)
 
 CATEGORIES = ("job", "salary", "schedule", "policy", "faq", "contact", "benefits", "other")
 _CONFIDENCE = ("high", "medium", "low")
@@ -99,6 +102,16 @@ def _product_feature_prompt(catalog_rows: Any) -> str:
         lines.append(f"- {c.feature_key}: {c.name_vi}{suffix}")
     return PRODUCT_FEATURE_SYSTEM_PROMPT.replace("{{FEATURES}}", "\n".join(lines)).replace(
         "{{COUNT}}", str(len(catalog_rows))
+    )
+
+
+def _single_product_feature_prompt(catalog_row: Any) -> str:
+    """One-criterion extraction prompt — see PRODUCT_FEATURE_ONE_SYSTEM_PROMPT."""
+    question = (catalog_row.worker_question_vi or catalog_row.name_vi or "").strip()
+    return (
+        PRODUCT_FEATURE_ONE_SYSTEM_PROMPT.replace("{{KEY}}", str(catalog_row.feature_key))
+        .replace("{{NAME}}", (catalog_row.name_vi or "").strip())
+        .replace("{{QUESTION}}", question)
     )
 
 

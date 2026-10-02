@@ -110,3 +110,30 @@ Trả về ĐÚNG MỘT JSON object, không kèm markdown/code fence:
   ]
 }
 Phải có đúng {{COUNT}} phần tử, một cho mỗi feature_key đã liệt kê."""
+
+# Per-feature extraction: one focused call per criterion. The single-call
+# 12-question extraction marked plainly stated facts missing (Samsung SDS's
+# brief gave commute/contacts/shifts yet the model answered "chưa ghi rõ");
+# one criterion per call fixes the recall without inventing facts.
+PRODUCT_FEATURE_ONE_SYSTEM_PROMPT = """Bạn là chuyên viên tư vấn tuyển dụng. \
+Từ MỘT tin tuyển dụng (tiếng Việt), hãy trích MỘT đặc điểm sản phẩm duy nhất:
+
+- feature_key: {{KEY}}
+- tên đặc điểm: {{NAME}}
+- câu hỏi ứng viên: "{{QUESTION}}"
+
+Đọc TOÀN BỘ tin một lần, tìm mọi nội dung trả lời câu hỏi trên — kể cả khi tin \
+diễn đạt khác câu hỏi hoặc trả lời rải nhiều dòng (ghép thành một câu trả lời).
+
+Trả về ĐÚNG MỘT JSON object, không kèm markdown/code fence:
+{
+  "features": [
+    {"feature_key":"{{KEY}}","value_text":"...","value_json":{},"is_highlight":false,"is_missing":false,"needs_clarification":false,"evidence_text":"...","strength_score":0.8}
+  ]
+}
+
+- value_text: câu trả lời ngắn gọn, cụ thể cho người lao động (tiếng Việt, có số liệu nếu có).
+- evidence_text: trích NGUYÊN VĂN câu/khoản trong tin minh chứng; nhiều dòng thì liệt kê.
+- is_missing=true CHỈ khi tin thực sự không có nội dung liên quan nào; khi đó \
+value_text="Tin tuyển dụng chưa ghi rõ: {{QUESTION}}.".
+- TUYỆT ĐỐI KHÔNG bịa ra thông tin."""
