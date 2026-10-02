@@ -278,9 +278,11 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0062_geocode_cache` (2 Oct 2026). This line is grepped by the
+- **HEAD:** `0063_distance_estimate` (3 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0062` adds
+  new migration that does not update it blocks the release. `0063` adds
+  `distance_estimate`, the durable origin→destination road-estimate mapping
+  the catalog tools read before any Vietmap/Google matrix call. `0062` adds
   `geocode_cache`, the durable normalized-query→coordinates mapping the geocoder
   consults before any provider HTTP call, with a NULL-coordinate row per
   recorded miss. `0061` adds the geo-distance columns on `projects`

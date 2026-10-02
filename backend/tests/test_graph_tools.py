@@ -52,6 +52,7 @@ from app.graph.tools.catalog import (
     _CATALOG_EMPTY_REPLY,
     _NO_CRITERIA_REPLY,
     _PRESENTATION_CONTRACT,
+    get_project_distance,
 )
 
 # The tools package splits tool logic into domain modules; each holds its own
@@ -691,6 +692,133 @@ async def test_list_active_projects_surfaced_ids_match_payload_project_ids(no_ca
     payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
     assert extract_surfaced_ids([out]) == {row["id"] for row in payload["projects"]}
     assert extract_surfaced_ids([out]) == {project.project_id for project in projects}
+
+
+# ---------------------------------------------------------------------------
+# distance estimates — provider road numbers outrank straight-line, and the
+# straight-line fallback survives every missing-method / all-None shape
+# ---------------------------------------------------------------------------
+
+
+def _geo_project(
+    index: int, *, lat: float, lng: float, company: str = "AmTRAN"
+) -> ProjectFeatures:
+    """A project with geocoded coordinates — the shape distance needs."""
+    return ProjectFeatures(
+        project_id=f"{index:08x}-2222-4222-8222-222222222222",
+        slug=f"geo-{index}",
+        name=f"Geo {index}",
+        company=company,
+        province="Hải Phòng",
+        latitude=lat,
+        longitude=lng,
+    )
+
+
+def _estimates_factory(results, *, calls: list | None = None):
+    """A ``estimate_distances_km`` port method returning ``results`` (aligned)."""
+
+    async def estimate_distances_km(self, origin, destinations):
+        if calls is not None:
+            calls.append((origin, destinations))
+        return list(results(origin, destinations)) if callable(results) else list(results)
+
+    return estimate_distances_km
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_road_estimate_outranks_straight_line(no_cache_io):
+    """The provider number is the number: it replaces ``distance_km`` and re-orders."""
+    projects = [_geo_project(1, lat=20.90, lng=106.70), _geo_project(2, lat=21.20, lng=107.20)]
+    calls: list = []
+    # Straight-line: project 1 is far nearer. The road estimate flips it — a
+    # bridge-less river crossing can do that — and the reply must follow road.
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(projects),
+        geocode_area=_geo_area(),
+        estimate_distances_km=_estimates_factory(
+            lambda _origin, _dests: [(30.0, 3600.0), (5.0, 600.0)], calls=calls
+        ),
+    )
+
+    out = await list_active_projects(retrieval=repo, location="Hải Phòng")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+
+    assert [(row["slug"], row["distance_km"], row["duration_min"]) for row in payload["projects"]] == [
+        ("geo-2", 5.0, 10),
+        ("geo-1", 30.0, 60),
+    ]
+    assert calls and calls[0][0] == _ORIGIN
+    assert calls[0][1] == [(20.90, 106.70), (21.20, 107.20)]
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_all_none_estimates_keep_straight_line(no_cache_io):
+    """A provider that answers nothing changes nothing — no duration, same km."""
+    projects = [_geo_project(1, lat=20.90, lng=106.70), _geo_project(2, lat=21.20, lng=107.20)]
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(projects),
+        geocode_area=_geo_area(),
+        estimate_distances_km=_estimates_factory(lambda _o, _d: [None, None]),
+    )
+
+    out = await list_active_projects(retrieval=repo, location="Hải Phòng")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+
+    rows = payload["projects"]
+    assert [row["distance_km"] for row in rows] == [rows[0]["distance_km"], rows[1]["distance_km"]]
+    assert all(row["distance_km"] > 0 for row in rows)
+    assert all("duration_min" not in row for row in rows)
+    # Straight-line order stands: project 1 (near) before project 2 (far).
+    assert rows[0]["slug"] == "geo-1"
+
+
+@pytest.mark.asyncio
+async def test_get_project_distance_reports_road_estimate_with_duration(no_cache_io):
+    """The dedicated distance tool quotes the estimate, nearest road first."""
+    plants = [
+        _geo_project(1, lat=20.90, lng=106.70),   # nearer by straight-line
+        _geo_project(2, lat=21.20, lng=107.20),
+    ]
+    calls: list = []
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(plants),
+        geocode_area=_geo_area(),
+        estimate_distances_km=_estimates_factory(
+            lambda _origin, _dests: [(42.0, 3900.0), (8.0, 700.0)], calls=calls
+        ),
+    )
+
+    out = await get_project_distance(retrieval=repo, location="312 Nguyễn Công Hòa", company="AmTRAN")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+
+    assert payload["status"] == "measured"
+    assert [(row["project"], row["distance_km"], row["duration_min"]) for row in payload["projects"]] == [
+        ("Geo 2", 8.0, 12),
+        ("Geo 1", 42.0, 65),
+    ]
+    assert calls[0][1] == [(20.90, 106.70), (21.20, 107.20)]
+
+
+@pytest.mark.asyncio
+async def test_get_project_distance_without_estimate_method_falls_back(no_cache_io):
+    """A port predating estimates (unit fakes) behaves exactly as before."""
+    plants = [
+        _geo_project(1, lat=20.90, lng=106.70),
+        _geo_project(2, lat=21.20, lng=107.20),
+    ]
+    repo = _make_repo(  # no estimate_distances_km at all
+        list_active_projects=lambda self: _const(plants),
+        geocode_area=_geo_area(),
+    )
+
+    out = await get_project_distance(retrieval=repo, location="312 Nguyễn Công Hòa", company="AmTRAN")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+
+    assert payload["status"] == "measured"
+    assert [row["project"] for row in payload["projects"]] == ["Geo 1", "Geo 2"]
+    assert all(row["distance_km"] > 0 for row in payload["projects"])
+    assert all("duration_min" not in row for row in payload["projects"])
 
 
 # ---------------------------------------------------------------------------

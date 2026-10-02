@@ -15,6 +15,7 @@ import json
 import logging
 import re
 from collections import OrderedDict
+from dataclasses import replace
 from typing import Any
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
@@ -123,8 +124,10 @@ _PRESENTATION_CONTRACT = (
     "(7) khi ứng viên yêu cầu TẤT CẢ/toàn bộ danh sách, phải nêu từng dự án trong projects "
     "đúng một lần, không chỉ chọn vài dự án rồi yêu cầu hỏi thêm; giữ ngắn gọn từng khối "
     "để hoàn thành danh sách, chỉ dùng các dự án trong phạm vi tool đã trả về; "
-    "(8) khi ứng viên hỏi dự án gần nhà/chỗ ở, nêu distance_km của từng dự án và xếp gần "
-    "nhất trước; không tự bịa khoảng cách hay địa chỉ."
+    "(8) khi ứng viên hỏi dự án gần nhà/chỗ ở hoặc khoảng cách, nêu distance_km của từng dự án "
+    "dưới dạng \"khoảng X km\" — đó là ước tính theo bản đồ, không phải số đo chính xác; có "
+    "duration_min thì nêu thêm \"khoảng Y phút\"; xếp gần nhất trước; không tự bịa khoảng cách "
+    "hay địa chỉ."
 )
 
 _NO_CRITERIA_REPLY = (
@@ -185,6 +188,52 @@ def _fit_note(fit: ProjectFit, dimension: FitDimension) -> str:
     if name == "location" and fit.distance_km is not None:
         note = f"{note} · cách {fit.distance_km:.1f} km"
     return note
+
+
+async def _road_estimates(
+    retrieval: GraphRetrievalPort,
+    origin: tuple[float, float] | None,
+    pairs: list[tuple[float | None, float | None]],
+) -> list[tuple[float, float | None] | None]:
+    """Provider road estimates aligned to ``pairs`` (None wherever unavailable).
+
+    The straight-line ``distance_km`` stays the fallback: no origin, no point
+    coordinates, a port without the method (unit-test fakes), a wrong-shaped
+    answer or a provider outage all yield all-``None`` and the tools report
+    exactly what they reported before estimates existed. Estimates are
+    decoration — this never raises.
+    """
+    empty: list[tuple[float, float | None] | None] = [None] * len(pairs)
+    if origin is None or not pairs:
+        return empty
+    valid = [
+        (index, (float(lat), float(lng)))
+        for index, (lat, lng) in enumerate(pairs)
+        if lat is not None and lng is not None
+    ]
+    if not valid:
+        return empty
+    try:
+        fetched = await retrieval.estimate_distances_km(
+            origin, [point for _, point in valid]
+        )
+    except Exception:  # noqa: BLE001 — estimates are decoration, never a failure
+        logger.warning("road estimate lookup failed", exc_info=True)
+        return empty
+    if not isinstance(fetched, list) or len(fetched) != len(valid):
+        return empty
+    for (index, _), value in zip(valid, fetched):
+        if (
+            isinstance(value, tuple)
+            and len(value) == 2
+            and isinstance(value[0], (int, float))
+        ):
+            seconds = value[1]
+            empty[index] = (
+                float(value[0]),
+                float(seconds) if isinstance(seconds, (int, float)) else None,
+            )
+    return empty
 
 
 def _project_payload(fit: ProjectFit) -> dict[str, object]:
@@ -324,7 +373,32 @@ async def list_active_projects(
     )
     if lookup.status == "catalog_empty":
         return _project_tool_result("catalog_empty", [], _CATALOG_EMPTY_REPLY, total=0)
-    projects = [_project_payload(fit) for fit in lookup.fits]
+    fits = lookup.fits
+    estimates = await _road_estimates(
+        retrieval,
+        origin,
+        [(fit.project.latitude, fit.project.longitude) for fit in fits],
+    )
+    enriched: list[tuple[ProjectFit, tuple[float, float | None] | None]] = []
+    for fit, estimate in zip(fits, estimates):
+        if estimate is not None:
+            # The provider's road estimate outranks the straight-line number —
+            # it is the figure the reply will quote.
+            fit = replace(fit, distance_km=estimate[0])
+        enriched.append((fit, estimate))
+    if origin is not None:
+        # Re-rank nearest-first on the best available number (road estimate
+        # when present, straight-line otherwise); points without coordinates
+        # sink to the end.
+        enriched.sort(
+            key=lambda item: (item[0].distance_km is None, item[0].distance_km or 0.0)
+        )
+    projects = []
+    for fit, estimate in enriched:
+        payload = _project_payload(fit)
+        if estimate is not None and estimate[1] is not None:
+            payload["duration_min"] = max(1, round(estimate[1] / 60))
+        projects.append(payload)
     safe_reply = _PRESENTATION_CONTRACT if projects else _NO_CRITERIA_REPLY + _PRESENTATION_CONTRACT
     return _project_tool_result("matched", projects, safe_reply, total=lookup.total)
 
@@ -385,19 +459,32 @@ async def get_project_distance(
         return _project_tool_result(
             "unmeasured_project", [], _NO_PROJECT_COORDS_REPLY, total=len(fits)
         )
+    estimates = await _road_estimates(
+        retrieval,
+        origin,
+        [(fit.project.latitude, fit.project.longitude) for fit in measured],
+    )
     # Nearest first: a company name that matches several plants answers with
-    # the closest one and the full set below it.
-    measured.sort(key=lambda fit: fit.distance_km)
-    projects = [
-        {
+    # the closest one and the full set below it. The sort number is the one
+    # the reply quotes — the provider's road estimate when it exists,
+    # straight-line otherwise.
+    rows: list[tuple[ProjectFit, float, tuple[float, float | None] | None]] = []
+    for fit, estimate in zip(measured, estimates):
+        distance_km = estimate[0] if estimate is not None else fit.distance_km
+        rows.append((fit, float(distance_km), estimate))
+    rows.sort(key=lambda row: row[1])
+    projects = []
+    for fit, distance_km, estimate in rows:
+        entry: dict[str, object] = {
             "id": _single_line(fit.project.project_id, limit=80),
             "project": _single_line(fit.project.name),
             "company": _single_line(fit.project.company),
             "address": _single_line(fit.project.address),
-            "distance_km": round(fit.distance_km, 1),
+            "distance_km": round(distance_km, 1),
         }
-        for fit in measured
-    ]
+        if estimate is not None and estimate[1] is not None:
+            entry["duration_min"] = max(1, round(estimate[1] / 60))
+        projects.append(entry)
     return _project_tool_result(
         "measured", projects, _PRESENTATION_CONTRACT, total=len(measured)
     )

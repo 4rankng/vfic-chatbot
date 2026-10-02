@@ -121,3 +121,143 @@ async def google_geocode(
     except Exception:  # noqa: BLE001 — geocoding is decoration, never a failure
         logger.warning("google geocode failed query=%s", query, exc_info=True)
         return None
+
+
+# One process-scoped httpx client for the distance-matrix providers; the name
+# keys its pool (separate from the geocoder's so a slow matrix call never
+# delays an in-flight geocode).
+_DISTANCE_CLIENT = "distance-matrix"
+# Per-call budget: documented latencies are sub-second, and every caller has a
+# straight-line fallback, so a slow provider degrades the number instead of
+# the turn.
+_MATRIX_TIMEOUT_S = 4.0
+
+
+async def vietmap_matrix(
+    origin: tuple[float, float],
+    destinations: list[tuple[float, float]],
+    *,
+    api_key: str,
+    timeout_seconds: float = _MATRIX_TIMEOUT_S,
+) -> list[tuple[float, float | None] | None] | None:
+    """One Matrix v4 call: ``(km, seconds-or-None)`` per destination.
+
+    ``None`` (the whole call failed) versus a list with ``None`` entries (the
+    call succeeded but a cell had no route) is the distinction the caller
+    needs: only the whole-call miss falls through to the next provider.
+
+    Endpoint and payload follow the published spec
+    (``maps.vietmap.vn/api/matrix/v4``): points as ``lat,lng`` pairs, one
+    source (index 0 = the origin), destinations as the remaining indices,
+    ``distances`` in meters, ``durations`` in seconds, ``code == "OK"``.
+    Fail-open: a network error, non-200, non-OK code, or a row whose length
+    disagrees with the request is ``None``.
+    """
+    if not destinations:
+        return []
+    try:
+        client = await get_http_client(
+            _DISTANCE_CLIENT,
+            base_url=_VIETMAP_BASE_URL,
+            timeout=timeout_seconds,
+        )
+        points = [origin, *destinations]
+        params: list[tuple[str, str]] = [
+            ("apikey", api_key),
+            ("vehicle", "car"),
+            ("sources", "0"),
+            (
+                "destinations",
+                ";".join(str(index) for index in range(1, len(points))),
+            ),
+        ]
+        params.extend(("point", f"{lat},{lng}") for lat, lng in points)
+        response = await client.get("/api/matrix/v4", params=params)
+        if response.status_code != 200:
+            return None
+        payload = response.json()
+        if payload.get("code") != "OK":
+            return None
+        distances = payload.get("distances") or []
+        durations = payload.get("durations") or []
+        distance_row = distances[0] if distances else None
+        duration_row = durations[0] if durations else None
+        if distance_row is None or len(distance_row) != len(destinations):
+            return None
+        estimates: list[tuple[float, float | None] | None] = []
+        for index, meters in enumerate(distance_row):
+            if meters is None:
+                estimates.append(None)
+                continue
+            seconds = (
+                duration_row[index]
+                if duration_row is not None and index < len(duration_row)
+                else None
+            )
+            estimates.append(
+                (float(meters) / 1000.0, float(seconds) if seconds is not None else None)
+            )
+        return estimates
+    except Exception:  # noqa: BLE001 — distance is decoration, never a failure
+        logger.warning("vietmap matrix failed", exc_info=True)
+        return None
+
+
+async def google_distance_matrix(
+    origin: tuple[float, float],
+    destinations: list[tuple[float, float]],
+    *,
+    api_key: str,
+    timeout_seconds: float = _MATRIX_TIMEOUT_S,
+) -> list[tuple[float, float | None] | None] | None:
+    """One Distance Matrix call: ``(km, seconds-or-None)`` per destination.
+
+    Same contract as :func:`vietmap_matrix`: ``None`` means the whole call
+    failed; a list may carry ``None`` entries for cells Google resolved as
+    ``ZERO_RESULTS``/``NOT_FOUND``. Fail-open on a network error, non-200,
+    non-``OK`` top-level status, or a row length that disagrees with the
+    request.
+    """
+    if not destinations:
+        return []
+    try:
+        client = await get_http_client(
+            _DISTANCE_CLIENT,
+            base_url="https://maps.googleapis.com",
+            timeout=timeout_seconds,
+        )
+        response = await client.get(
+            "/maps/api/distancematrix/json",
+            params={
+                "origins": f"{origin[0]},{origin[1]}",
+                "destinations": "|".join(f"{lat},{lng}" for lat, lng in destinations),
+                "units": "metric",
+                "key": api_key,
+            },
+        )
+        if response.status_code != 200:
+            return None
+        payload = response.json()
+        if payload.get("status") != "OK":
+            return None
+        rows = payload.get("rows") or []
+        elements = rows[0].get("elements") if rows else None
+        if elements is None or len(elements) != len(destinations):
+            return None
+        estimates: list[tuple[float, float | None] | None] = []
+        for element in elements:
+            distance = (element or {}).get("distance") or {}
+            if element.get("status") != "OK" or "value" not in distance:
+                estimates.append(None)
+                continue
+            duration = (element.get("duration") or {}).get("value")
+            estimates.append(
+                (
+                    float(distance["value"]) / 1000.0,
+                    float(duration) if duration is not None else None,
+                )
+            )
+        return estimates
+    except Exception:  # noqa: BLE001 — distance is decoration, never a failure
+        logger.warning("google distance matrix failed", exc_info=True)
+        return None

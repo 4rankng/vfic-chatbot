@@ -20,6 +20,7 @@ from app.models.knowledge import (
 from app.models.lead import FollowupStatus, Lead, LeadEvent, LeadScore, LeadStage, FollowUpTask
 from app.models.job import Job, JobStatus
 from app.models.geocode import GeocodeCache
+from app.models.distance_estimate import DistanceEstimate
 from app.models.integration import IntegrationSetting
 from app.models.persona import AdapterPersonaAssignment, Persona, PersonaVersion
 from app.models.installation import (

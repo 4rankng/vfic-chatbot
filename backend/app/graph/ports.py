@@ -255,6 +255,18 @@ class GraphRetrievalPort(
     # geocoder is an outbound provider, not a project-knowledge read.
     async def geocode_area(self, query: str) -> tuple[float, float] | None: ...
 
+    # Road-distance estimates behind the catalog tools' ``distance_km``: one
+    # ``(km, seconds-or-None)`` per destination, aligned to the input list,
+    # ``None`` where no estimate is available (caller falls back to its
+    # straight-line number). Vietmap Matrix v4 → Google Distance Matrix, cached
+    # in the ``distance_estimate`` table; same outbound-provider reasoning as
+    # ``geocode_area``, and it never raises.
+    async def estimate_distances_km(
+        self,
+        origin: tuple[float, float],
+        destinations: list[tuple[float, float]],
+    ) -> list[tuple[float, float | None] | None]: ...
+
     # Deployment-wide TingTing password-reset integration (settings-managed).
     # Not project surface: the origin and key come from the integration settings
     # and one workflow serves every tenant, so the tool takes no project scope.

@@ -152,6 +152,27 @@ class RetrievalRepository:
         providers = await IntegrationSettingsService(self.db).resolve_geocoder()
         return await geocode(query, viewbox=viewbox, providers=providers)
 
+    async def estimate_distances_km(
+        self,
+        origin: tuple[float, float],
+        destinations: list[tuple[float, float]],
+    ) -> list[tuple[float, float | None] | None]:
+        """Road estimates via the matrix providers, served from the DB cache.
+
+        Same fail-open contract as :meth:`geocode_area`: the service never
+        raises, so a provider/config failure degrades the numbers to ``None``
+        entries and the tool falls back to straight-line distance instead of
+        failing the turn. Keys follow the same integration settings as the
+        geocoder ladder (admin page / env).
+        """
+        # Inline import: same cycle-avoidance reasoning as geocode_area above.
+        from app.services.integration_settings import IntegrationSettingsService
+
+        from app.services.geo.distance import estimate_distances
+
+        providers = await IntegrationSettingsService(self.db).resolve_geocoder()
+        return await estimate_distances(origin, destinations, providers=providers)
+
     async def active_projects_with_card(self) -> list:
         return await self._catalog.active_projects_with_card()
 

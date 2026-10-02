@@ -158,7 +158,13 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # `client.get('/search')` against the Nominatim geocoder. The file stays
     # free of dict `.get` reads (indexing only), which is why the row is a
     # single `get` and not a family of them.
-    "provider_boundary": 94,
+    # +2: the road-estimate feature adds the two matrix hops in
+    # app/services/geo/providers.py — vietmap_matrix's `client.get('/api/matrix/v4')`
+    # and google_distance_matrix's `client.get('/maps/api/distancematrix/json')`
+    # — one reviewed row each. The service that ladders them
+    # (services/geo/distance.py) holds no HTTP call of its own, so it adds
+    # nothing here.
+    "provider_boundary": 96,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -273,7 +279,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # was recomputed from the post-change scan and the prior digest reconstructs
 # exactly from that single count change (verified by re-hashing the scan with
 # the count reverted to 18), so nothing else moved.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "459527a969bbe0dddae263ce0838b1dade86a7af422264a38ba698347a450944"
+# 2026-10-03: the road-estimate feature added the two matrix hops in
+# app/services/geo/providers.py (vietmap_matrix, google_distance_matrix) — two
+# new provider_boundary rows, no existing row moved: dropping exactly those two
+# rows from the post-change scan reconstructs the prior pin byte-for-byte
+# (verified by re-hashing). Counts annotated at `provider_boundary` above.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "7510a44fdb1132695e2abea42efa1a6bb059c35d59498b235e93c56316b3919a"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",
