@@ -13,10 +13,10 @@ from app.project_knowledge.domain.statuses import KnowledgeBaseMode
 IngestState = Literal["ingesting", "ready", "error"]
 
 
-class FeatureReadiness(BaseModel):
-    """Per-project feature readiness: how many of the active catalog features
-    have enough info for the agent to advise on (vs. need more info supplied).
-    The total is the active-feature count.
+class CategoryReadiness(BaseModel):
+    """Per-project consultation-info readiness: how many of the 12 knowledge
+    categories hold active data (the panel's "danh mục có dữ liệu" count).
+    The total is the category-catalog size.
     """
 
     ready: int
@@ -37,8 +37,8 @@ class ProjectOut(BaseModel):
     discovery_revision: int = 0
     knowledge_base_id: uuid.UUID | None = None
     knowledge_document_count: int = 0
-    feature_readiness: FeatureReadiness = Field(
-        default_factory=lambda: FeatureReadiness(ready=0, total=0)
+    category_readiness: CategoryReadiness = Field(
+        default_factory=lambda: CategoryReadiness(ready=0, total=0)
     )
     ingest_state: IngestState | None = None
     """List-level aggregate of the project's knowledge ingest activity."""

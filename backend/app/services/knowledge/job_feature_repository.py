@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any, Sequence
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,21 +40,6 @@ class JobFeatureValueRepo:
                 )
             )
         ).all())
-
-    async def active_catalog_size(self) -> int:
-        """Count of active catalog features — the readiness denominator.
-
-        Derived rather than hardcoded so reactivating a criterion stays consistent with the
-        extraction prompt and list query without a code edit.
-        """
-        return int(
-            (
-                await self.db.execute(
-                    text("SELECT count(*) FROM worker_feature_catalog WHERE is_active = true")
-                )
-            ).scalar()
-            or 0
-        )
 
     async def ensure_active_rows_for_project(self, project_id: uuid.UUID) -> None:
         """Backfill missing active feature rows for projects extracted before catalog changes."""
@@ -221,35 +206,6 @@ class JobFeatureValueRepo:
                 {"fid": str(feature_id), "pid": str(project_id)},
             )
         ).first() is not None
-
-    async def readiness_by_project(self, project_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
-        """Batched ready-feature count per project.
-
-        Ready = a value row exists, is not missing/unclear, and has non-empty
-        ``value_text``. One batched query (``= ANY(:ids)``); projects with no
-        ready features are simply absent from the dict (caller treats missing
-        as 0). Uses the same text/param style as :meth:`list_for_project`.
-        """
-        if not project_ids:
-            return {}
-        rows = (
-            await self.db.execute(
-                text(
-                    "SELECT jfv.project_id, COUNT(*) AS ready "
-                    "FROM job_feature_values jfv "
-                    "JOIN worker_feature_catalog wfc ON wfc.id = jfv.feature_id "
-                    "WHERE jfv.project_id = ANY(:ids) "
-                    "  AND wfc.is_active = true "
-                    "  AND COALESCE(jfv.is_missing, false) = false "
-                    "  AND COALESCE(jfv.needs_clarification, false) = false "
-                    "  AND jfv.value_text IS NOT NULL "
-                    "  AND btrim(jfv.value_text) <> '' "
-                    "GROUP BY jfv.project_id"
-                ),
-                {"ids": [str(pid) for pid in project_ids]},
-            )
-        ).all()
-        return {r.project_id: int(r.ready) for r in rows}
 
     async def update_fields(self, assignments: list[str], params: dict) -> None:
         """Apply a dynamically-built SET clause (admin feature edit). No-op if no assignments."""

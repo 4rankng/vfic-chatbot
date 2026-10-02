@@ -98,7 +98,7 @@ export const projectKnowledgeModeLabel = (
 export const projectReadinessLabel = (
   project: Pick<
     Project,
-    "feature_readiness" | "knowledge_document_count" | "knowledge_mode"
+    "category_readiness" | "knowledge_document_count" | "knowledge_mode"
   >,
 ): string => {
   if (project.knowledge_mode === "DIRECT_CONTEXT") {
@@ -106,22 +106,22 @@ export const projectReadinessLabel = (
       ? "Đã sẵn sàng"
       : "Chưa có trang";
   }
-  const ready = project.feature_readiness?.ready;
-  const total = project.feature_readiness?.total;
+  const ready = project.category_readiness?.ready;
+  const total = project.category_readiness?.total;
   return typeof ready === "number" && typeof total === "number" && total > 0
     ? `${ready}/${total}`
     : "Chưa đo";
 };
 
-export const aggregateProjectFeatureReadiness = (
-  projects: readonly Pick<Project, "feature_readiness" | "knowledge_mode">[],
+export const aggregateProjectCategoryReadiness = (
+  projects: readonly Pick<Project, "category_readiness" | "knowledge_mode">[],
 ): Readonly<{ ready: number; total: number }> =>
   projects.reduce(
     (summary, project) => {
       if (project.knowledge_mode === "DIRECT_CONTEXT") return summary;
       return {
-        ready: summary.ready + (project.feature_readiness?.ready ?? 0),
-        total: summary.total + (project.feature_readiness?.total ?? 0),
+        ready: summary.ready + (project.category_readiness?.ready ?? 0),
+        total: summary.total + (project.category_readiness?.total ?? 0),
       };
     },
     { ready: 0, total: 0 },

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProductFeature } from "../../types";
 import {
-  aggregateProjectFeatureReadiness,
+  aggregateProjectCategoryReadiness,
   buildProjectCreation,
   isProductFeatureReady,
   mergeUniqueTerms,
@@ -66,25 +66,25 @@ describe("project knowledge policy", () => {
       projectReadinessLabel({
         knowledge_mode: "DIRECT_CONTEXT",
         knowledge_document_count: 1,
-        feature_readiness: { ready: 0, total: 16 },
+        category_readiness: { ready: 0, total: 16 },
       }),
     ).toBe("Đã sẵn sàng");
     expect(
       projectReadinessLabel({
         knowledge_mode: "RAG",
         knowledge_document_count: 0,
-        feature_readiness: { ready: 7, total: 16 },
+        category_readiness: { ready: 7, total: 16 },
       }),
     ).toBe("7/16");
     expect(
-      aggregateProjectFeatureReadiness([
+      aggregateProjectCategoryReadiness([
         {
           knowledge_mode: "DIRECT_CONTEXT",
-          feature_readiness: { ready: 15, total: 16 },
+          category_readiness: { ready: 15, total: 16 },
         },
         {
           knowledge_mode: "RAG",
-          feature_readiness: { ready: 7, total: 16 },
+          category_readiness: { ready: 7, total: 16 },
         },
       ]),
     ).toEqual({ ready: 7, total: 16 });
@@ -95,7 +95,7 @@ describe("project knowledge policy", () => {
       projectReadinessLabel({
         knowledge_mode: "RAG",
         knowledge_document_count: 0,
-        feature_readiness: { ready: 0, total: 0 },
+        category_readiness: { ready: 0, total: 0 },
       }),
     ).toBe("Chưa đo");
   });

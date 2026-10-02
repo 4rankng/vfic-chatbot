@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.knowledge import KnowledgeBaseMode, KnowledgeStatus
+from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.schemas.projects import ProjectCreate, ProjectListResponse, ProjectOut, ProjectUpdate
 from app.services.project import service as project_service
@@ -218,12 +219,13 @@ async def test_knowledge_document_count_includes_direct_context_page() -> None:
 
 
 class _IngestDb:
-    """Fake session answering only the two batched ingest queries, by source table."""
+    """Fake session answering the batched list aggregates, by source table."""
 
     def __init__(
         self,
         revisions: list[tuple[uuid.UUID, str, datetime | None]] | None = None,
         documents: list[tuple[uuid.UUID, str, datetime | None]] | None = None,
+        active_category_counts: dict[uuid.UUID, int] | None = None,
     ) -> None:
         self.revision_rows = [
             SimpleNamespace(project_id=project_id, status=status, freshest_at=freshest_at)
@@ -233,15 +235,18 @@ class _IngestDb:
             SimpleNamespace(project_id=project_id, status=status, freshest_at=freshest_at)
             for project_id, status, freshest_at in (documents or [])
         ]
-        self.calls: list[tuple[str, dict]] = []
+        self.active_category_counts = active_category_counts or {}
+        self.calls: list[tuple[str, dict | None]] = []
 
-    async def execute(self, statement, params):
+    async def execute(self, statement, params=None):
         sql = str(statement)
         self.calls.append((sql, params))
         if "knowledge_category_revisions" in sql:
             return _FakeResult(self.revision_rows)
         if "knowledge_documents" in sql:
             return _FakeResult(self.document_rows)
+        if "knowledge_categories" in sql:
+            return _FakeResult(list(self.active_category_counts.items()))
         raise AssertionError(f"unexpected statement: {sql}")
 
 
@@ -264,11 +269,10 @@ def _project_row(project_id: uuid.UUID) -> SimpleNamespace:
 
 def _stub_projection_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub the readiness/doc-count aggregates so only ingest queries hit the fake db."""
-    feature_repo = SimpleNamespace(
-        readiness_by_project=AsyncMock(return_value={}),
-        active_catalog_size=AsyncMock(return_value=0),
-    )
-    monkeypatch.setattr(project_service, "JobFeatureValueRepo", lambda *_args: feature_repo)
+    async def _no_ready_categories(_db, _project_ids):
+        return {}
+
+    monkeypatch.setattr(project_service, "_active_categories_by_project", _no_ready_categories)
     project_repo = SimpleNamespace(knowledge_document_counts=AsyncMock(return_value={}))
     monkeypatch.setattr(project_service, "ProjectRepository", lambda *_args: project_repo)
 
@@ -363,6 +367,38 @@ async def test_ingest_state_fetch_is_batched_per_source(monkeypatch: pytest.Monk
     assert "GREATEST(kcr.created_at, kcr.activated_at)" in revision_sql  # freshest artifact wins
     assert "GREATEST(kd.created_at, kd.updated_at)" in document_sql
     assert {row.id: row.ingest_state for row in data} == {first: "ingesting", second: "error"}
+
+
+@pytest.mark.asyncio
+async def test_category_readiness_counts_active_categories_not_llm_features(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The card's N/12 is the panel's "danh mục có dữ liệu" count — one measure.
+
+    Readiness reads active knowledge-category revisions (what the recruiter
+    fills and the chatbot serves), never the LLM feature-extraction table the
+    recruiter cannot act on; the count is one batched query per list call.
+    """
+    filled, empty = uuid.uuid4(), uuid.uuid4()
+    db = _IngestDb(active_category_counts={filled: 5})
+    project_repo = SimpleNamespace(knowledge_document_counts=AsyncMock(return_value={}))
+    monkeypatch.setattr(project_service, "ProjectRepository", lambda *_args: project_repo)
+    row, empty_row = _project_row(filled), _project_row(empty)
+    service = ProjectService(db)
+    service.list = AsyncMock(return_value=([row, empty_row], 2))
+
+    data, _total = await service.list_with_readiness()
+
+    count_sql = next(sql for sql, _params in db.calls if "active_revision_id IS NOT NULL" in sql)
+    assert "knowledge_categories.project_id" in count_sql
+    # Batched across the page, not per project: exactly one count query.
+    assert [sql for sql, _params in db.calls if "active_revision_id IS NOT NULL" in sql] == [
+        count_sql
+    ]
+    by_id = {str(p.id): p for p in data}
+    assert by_id[str(filled)].category_readiness.ready == 5
+    assert by_id[str(empty)].category_readiness.ready == 0
+    assert by_id[str(empty)].category_readiness.total == len(KnowledgeCategoryKey)
 
 
 class _FakeScalars:

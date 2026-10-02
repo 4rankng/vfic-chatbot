@@ -257,7 +257,7 @@ export type Project = {
   discovery_revision?: number;
   knowledge_base_id?: string | null;
   knowledge_document_count?: number;
-  feature_readiness?: { ready: number; total: number };
+  category_readiness?: { ready: number; total: number };
   created_at: string;
   updated_at: string;
 } & Pick<RaRecord, "id">;

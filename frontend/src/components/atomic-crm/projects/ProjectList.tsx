@@ -36,7 +36,7 @@ import { useRoleActions } from "../hooks/useRoleActions";
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
 import {
-  aggregateProjectFeatureReadiness,
+  aggregateProjectCategoryReadiness,
   projectActivationConflictVi,
   projectKnowledgeModeLabel,
   projectReadinessLabel,
@@ -122,7 +122,7 @@ const ProjectListContent = () => {
     [projects],
   );
   const readiness = useMemo(
-    () => aggregateProjectFeatureReadiness(projects),
+    () => aggregateProjectCategoryReadiness(projects),
     [projects],
   );
 

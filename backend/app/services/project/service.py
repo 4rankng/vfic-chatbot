@@ -35,9 +35,9 @@ from app.models.knowledge import (
 from app.models.user import User
 from app.schemas.projects import (
     BusTimetableResponse,
+    CategoryReadiness,
     FeatureListResponse,
     FeatureOut,
-    FeatureReadiness,
     FeatureUpdate,
     IngestState,
     ProjectCreate,
@@ -52,7 +52,6 @@ from app.schemas.knowledge_bases import DirectContextFileUpsert
 from app.services.audit_service import record_audit
 from app.shared.domain.errors import ConflictError, NotFoundError
 from app.services.geo.project_address import refresh_from_address
-from app.services.knowledge.job_feature_repository import JobFeatureValueRepo
 from app.schemas.knowledge_categories import KnowledgeCategoryKey
 from app.services.project.faq import ProjectFaqService
 from app.services.project.features import ProjectFeatureService
@@ -102,6 +101,29 @@ _DOCUMENT_INGEST_STATE: dict[str, IngestState] = {
 def _freshness_key(ts: datetime | None) -> tuple[bool, datetime | None]:
     """Order artifacts by freshness; unstamped rows sort oldest but tie together."""
     return (ts is not None, ts)
+
+
+async def _active_categories_by_project(
+    db: AsyncSession, project_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """Batched active-knowledge-category count per project — one query, no N+1.
+
+    This is the card's "Thông tin tư vấn" numerator and the knowledge panel's
+    "danh mục có dữ liệu" count: the categories whose data the chatbot serves.
+    """
+    if not project_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(KnowledgeCategory.project_id, func.count())
+            .where(
+                KnowledgeCategory.project_id.in_(project_ids),
+                KnowledgeCategory.active_revision_id.is_not(None),
+            )
+            .group_by(KnowledgeCategory.project_id)
+        )
+    ).all()
+    return {project_id: int(count) for project_id, count in rows}
 
 
 async def _ingest_states_by_project(
@@ -260,11 +282,12 @@ class ProjectService:
         order: str | None = "desc",
         q: str | None = None,
     ) -> tuple[list[ProjectOut], int]:
-        """List projects with per-project feature readiness and ingest state attached.
+        """List projects with per-project category readiness and ingest state attached.
 
-        Batched aggregates only — no N+1: one ``readiness_by_project`` query plus
-        one ingest-state query per knowledge source. The catalog total is the
-        active-feature count.
+        Batched aggregates only — no N+1: one active-category count query plus
+        one ingest-state query per knowledge source. The readiness total is the
+        12-category catalog size, the same measure the knowledge panel renders
+        as "danh mục có dữ liệu".
         """
         rows, row_total = await self.list(
             is_active,
@@ -274,9 +297,8 @@ class ProjectService:
             order=order,
             q=q,
         )
-        repo = JobFeatureValueRepo(self.db)
-        ready = await repo.readiness_by_project([p.id for p in rows])
-        total = await repo.active_catalog_size()
+        ready = await _active_categories_by_project(self.db, [p.id for p in rows])
+        total = len(KnowledgeCategoryKey)
         doc_counts = await self.repo.knowledge_document_counts([p.id for p in rows])
         ingest = await _ingest_states_by_project(self.db, [p.id for p in rows])
         modes = await self._knowledge_modes([p.knowledge_base_id for p in rows])
@@ -285,7 +307,7 @@ class ProjectService:
             o = ProjectOut.model_validate(p)
             o.knowledge_mode = _mode_of(modes, p.knowledge_base_id)
             o.knowledge_document_count = doc_counts.get(p.id, 0)
-            o.feature_readiness = FeatureReadiness(ready=ready.get(p.id, 0), total=total)
+            o.category_readiness = CategoryReadiness(ready=ready.get(p.id, 0), total=total)
             o.ingest_state = ingest.get(p.id)
             out.append(o)
         return out, row_total
@@ -294,11 +316,10 @@ class ProjectService:
         return await self._require_project(project_id)
 
     async def get_with_readiness(self, project_id: uuid.UUID) -> ProjectOut:
-        """Single-project get with feature readiness and ingest state attached."""
+        """Single-project get with category readiness and ingest state attached."""
         proj = await self._require_project(project_id)
-        repo = JobFeatureValueRepo(self.db)
-        ready = await repo.readiness_by_project([proj.id])
-        total = await repo.active_catalog_size()
+        ready = await _active_categories_by_project(self.db, [proj.id])
+        total = len(KnowledgeCategoryKey)
         doc_counts = await self.repo.knowledge_document_counts([proj.id])
         ingest = await _ingest_states_by_project(self.db, [proj.id])
         o = ProjectOut.model_validate(proj)
@@ -307,7 +328,7 @@ class ProjectService:
             proj.knowledge_base_id,
         )
         o.knowledge_document_count = doc_counts.get(proj.id, 0)
-        o.feature_readiness = FeatureReadiness(ready=ready.get(proj.id, 0), total=total)
+        o.category_readiness = CategoryReadiness(ready=ready.get(proj.id, 0), total=total)
         o.ingest_state = ingest.get(proj.id)
         return o
 
