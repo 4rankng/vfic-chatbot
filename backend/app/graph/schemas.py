@@ -16,6 +16,7 @@ from app.graph.tools import (
     verify_tingting_identity,
     compare_income,
     get_product_features,
+    get_project_distance,
     list_active_projects,
     search_bus_timetable,
     search_knowledge,
@@ -91,7 +92,9 @@ TOOL_SCHEMAS = [
                         "description": (
                             "Khu vực/nơi ở của ứng viên (tỉnh, quận/huyện hoặc địa chỉ). "
                             "Khi ứng viên hỏi dự án gần nhà, truyền khu vực đang ở của ứng "
-                            "viên vào đây; kết quả trả về distance_km cho từng dự án."
+                            "viên vào đây; kết quả trả về distance_km cho từng dự án. "
+                            "Khi ứng viên nêu địa chỉ/nơi ở rồi hỏi về khoảng cách tới một dự án "
+                            "cụ thể, dùng get_project_distance thay vì tool này."
                         ),
                     },
                     "salary_min_vnd": {
@@ -117,6 +120,40 @@ TOOL_SCHEMAS = [
                         ),
                     },
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_project_distance",
+            "description": (
+                "Tính khoảng cách từ địa chỉ/nơi ở của ứng viên tới MỘT dự án cụ thể. "
+                "Dùng khi ứng viên nêu chỗ ở rồi hỏi khoảng cách tới dự án đó, ví dụ "
+                "\"312 Nguyễn Công Hòa tới AmTRAN bao xa\". Trả về distance_km cho từng "
+                "dự án khớp tên. Nếu ứng viên hỏi chung \"dự án nào gần nhà tôi\" thì dùng "
+                "list_active_projects kèm location."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": (
+                            "Địa chỉ hoặc khu vực đang ở của ứng viên, nguyên văn như ứng viên "
+                            "nói (ví dụ \"312 Nguyễn Công Hòa\", \"Đồ Sơn, Hải Phòng\"). Bắt buộc."
+                        ),
+                    },
+                    "company": {
+                        "type": "string",
+                        "description": "Tên công ty/nhà máy/dự án cần đo khoảng cách tới.",
+                    },
+                    "project_slug": {
+                        "type": "string",
+                        "description": "Slug dự án khi cuộc trò chuyện đã xác định đúng một dự án.",
+                    },
+                },
+                "required": ["location"],
             },
         },
     },
@@ -417,6 +454,13 @@ async def _dispatch_tool(
                 salary_min_vnd=args.get("salary_min_vnd"),
                 sort_by=args.get("sort_by"),
                 strict_criteria=args.get("strict_criteria", False),
+            )
+        elif name == "get_project_distance":
+            result = await get_project_distance(
+                retrieval,
+                location=str(args.get("location") or ""),
+                company=args.get("company"),
+                project_slug=args.get("project_slug"),
             )
         elif name == "compare_income":
             result = await compare_income(

@@ -136,6 +136,14 @@ _NO_CRITERIA_REPLY = (
 _CATALOG_EMPTY_REPLY = "Hiện tôi chưa có danh mục dự án đang hoạt động để giới thiệu. Bạn vui lòng thử lại sau nhé."
 _UNAVAILABLE_REPLY = "Hiện tôi chưa thể kiểm tra danh mục dự án. Bạn vui lòng thử lại sau nhé."
 _UNKNOWN_SLUG_REPLY = "Không tìm thấy dự án với slug này."
+_NO_ORIGIN_REPLY = (
+    "Chưa xác định được vị trí của anh/chị nên chưa tính được khoảng cách. "
+    "Anh/chị cho em xin địa chỉ hoặc khu vực đang ở cụ thể hơn (ví dụ số nhà + đường + quận) nhé ạ."
+)
+_NO_PROJECT_REPLY = "Chưa tìm thấy dự án nào khớp với tên anh/chị nêu."
+_NO_PROJECT_COORDS_REPLY = (
+    "Dự án này chưa có địa chỉ đã định vị nên chưa tính được khoảng cách từ chỗ của anh/chị."
+)
 
 
 def _salary_amount(value: int | None) -> str:
@@ -319,6 +327,80 @@ async def list_active_projects(
     projects = [_project_payload(fit) for fit in lookup.fits]
     safe_reply = _PRESENTATION_CONTRACT if projects else _NO_CRITERIA_REPLY + _PRESENTATION_CONTRACT
     return _project_tool_result("matched", projects, safe_reply, total=lookup.total)
+
+
+async def get_project_distance(
+    retrieval: GraphRetrievalPort,
+    *,
+    location: str,
+    company: str | None = None,
+    project_slug: str | None = None,
+) -> str:
+    """Measure the distance from the candidate's stated place to one project.
+
+    The "from my address to that factory" question shape. It is a separate tool
+    from :func:`list_active_projects` because that tool's ``location`` is
+    described as a ranking bias ("dự án gần nhà"), and a model reading a
+    sentence like *"312 Nguyễn Công Hòa tới AmTRAN bao xa"* has no reason to
+    route that address into a "which projects are near me" argument. Here the
+    address is the tool's only required input, so there is nothing to infer.
+
+    Every failure degrades to an honest, actionable reply rather than a guess:
+    an unresolvable origin, an unknown project, and a project without
+    coordinates are three distinct messages, because the recruiter's next
+    action differs for each.
+    """
+    place = (location or "").strip()
+    if not place:
+        return _project_tool_result("missing_location", [], _NO_ORIGIN_REPLY, total=0)
+
+    try:
+        origin = await retrieval.geocode_area(place)
+    except Exception:  # noqa: BLE001 — geocoding must never break the tool
+        logger.warning("get_project_distance: geocode failed", exc_info=True)
+        origin = None
+    if origin is None:
+        return _project_tool_result("unresolved_location", [], _NO_ORIGIN_REPLY, total=0)
+
+    try:
+        rows = await retrieval.list_active_projects()
+    except Exception:
+        logger.warning("get_project_distance: catalog read failed", exc_info=True)
+        return _project_tool_result("unavailable", [], _UNAVAILABLE_REPLY)
+
+    fits = rank_projects(
+        list(rows),
+        company=company,
+        location=place,
+        origin=origin,
+    ).fits
+    if project_slug:
+        slug = project_slug.strip().casefold()
+        fits = [fit for fit in fits if fit.project.slug.casefold() == slug]
+    if not fits:
+        return _project_tool_result("unknown_project", [], _NO_PROJECT_REPLY, total=0)
+
+    measured = [fit for fit in fits if fit.distance_km is not None]
+    if not measured:
+        return _project_tool_result(
+            "unmeasured_project", [], _NO_PROJECT_COORDS_REPLY, total=len(fits)
+        )
+    # Nearest first: a company name that matches several plants answers with
+    # the closest one and the full set below it.
+    measured.sort(key=lambda fit: fit.distance_km)
+    projects = [
+        {
+            "id": _single_line(fit.project.project_id, limit=80),
+            "project": _single_line(fit.project.name),
+            "company": _single_line(fit.project.company),
+            "address": _single_line(fit.project.address),
+            "distance_km": round(fit.distance_km, 1),
+        }
+        for fit in measured
+    ]
+    return _project_tool_result(
+        "measured", projects, _PRESENTATION_CONTRACT, total=len(measured)
+    )
 
 
 async def search_bus_timetable(

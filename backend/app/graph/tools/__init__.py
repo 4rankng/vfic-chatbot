@@ -5,6 +5,8 @@
   * search_user_memory   -> match_memories top-5 filtered by chat_id
   * search_knowledge     -> project-scoped semantic retrieval
   * list_active_projects -> project matching over the active catalog
+  * get_project_distance -> distance from the candidate's stated place to one
+                            project ("từ địa chỉ của em tới dự án X")
   * search_bus_timetable / get_product_features -> per-project structured reads
 
 Each tool takes an injected embedder + retrieval port, so they are testable
@@ -23,6 +25,7 @@ from app.graph.embed_cache import cached_embed
 from app.graph.tools._shared import _cache_digest
 from app.graph.tools.catalog import (
     format_salary_range,
+    get_project_distance,
     get_product_features,
     list_active_projects,
     search_bus_timetable,

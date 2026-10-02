@@ -98,6 +98,13 @@ _LEAD_IDENTIFIER_FIELDS = ("name", "phone", "email")
 # profile-ranked recommendation tools, and the TingTing account flows. A new
 # tool is therefore refused until someone classifies it here.
 #
+# ``get_project_distance`` is deliberately absent and MUST stay absent: its
+# ``distance_km`` is measured from the address the candidate stated, so its
+# reply is candidate-specific by construction. The exact tier keys on a hash of
+# the question, but the semantic tier keys on the question's embedding — a
+# different candidate asking the same question about their own address would
+# otherwise be served this one's kilometres.
+#
 # ``list_active_jobs`` was the vacancy catalog before the 2026-10 rename to
 # ``list_active_projects``; both spellings are accepted while the rename lands.
 _PROJECT_DATA_TOOLS = frozenset(

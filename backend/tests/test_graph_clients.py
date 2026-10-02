@@ -54,6 +54,7 @@ _DISPATCHED = {
     "search_knowledge",
     "load_project_knowledge",
     "list_active_projects",
+    "get_project_distance",
     "search_bus_timetable",
     "get_product_features",
     "verify_tingting_identity",
