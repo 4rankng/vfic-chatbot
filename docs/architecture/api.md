@@ -375,7 +375,10 @@ standard `ConversationListResponse` shape. When `reason` is absent, the existing
 ### Conversation adapter scope
 
 `GET /api/v1/conversations` accepts an optional `channel_provider` query value:
-`zalo_bot` or `zalo_oa`. The scope composes with search, `needs_attention=true`,
+`zalo_bot`, `zalo_oa`, `facebook_messenger` or `tingting_oa`. `tingting_oa` is not a
+provider but the employee-support Zalo OA account, so it narrows `zalo_oa` to the
+`tingting` account key; the plain `zalo_oa` badge excludes that key, keeping the two
+OA badges disjoint. The scope composes with search, `needs_attention=true`,
 and `reason=<REASON_ENUM>`. Attention-reason totals and pagination are calculated
 after provider filtering, so pages never mix adapters.
 

@@ -559,7 +559,7 @@ def test_attention_reason_deep_links_share_human_unanswered_contract():
         "REPLY_OVERDUE",
         "WAITING_REPLY",
     ):
-        assert human_unanswered in repo._attention_reason_source(reason, str(UID))
+        assert human_unanswered in repo._attention_reason_source(reason, str(UID), None)
 
 
 # --- metrics: 24h bot-run window + merged core counts -----------------------

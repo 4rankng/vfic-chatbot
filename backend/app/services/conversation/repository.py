@@ -181,7 +181,10 @@ class ConversationRepository(ReconcileQueriesMixin):
         """Identity predicate for one channel filter value.
 
         ``tingting_oa`` is not a provider: it is the employee-support OA account
-        (provider ``zalo_oa``), so the badge narrows on the account key.
+        (provider ``zalo_oa``), so the badge narrows on the account key. The two
+        Zalo OA badges are disjoint — the plain ``zalo_oa`` badge is the
+        recruitment OA and must not return support threads, or clicking it would
+        mix TingTing chats into the recruitment inbox.
         """
         from app.channels import types as ct
         from app.channels.types import TINGTING_OA_ACCOUNT_KEY
@@ -190,6 +193,16 @@ class ConversationRepository(ReconcileQueriesMixin):
             return and_(
                 ContactChannelIdentity.provider == ct.PROVIDER_ZALO_OA,
                 ContactChannelIdentity.account_key == TINGTING_OA_ACCOUNT_KEY,
+            )
+        if channel_provider == "zalo_oa":
+            # A NULL account key predates the multi-OA split and is the
+            # recruitment OA, so it stays in scope; only the support key is out.
+            return and_(
+                ContactChannelIdentity.provider == ct.PROVIDER_ZALO_OA,
+                or_(
+                    ContactChannelIdentity.account_key.is_(None),
+                    ContactChannelIdentity.account_key != TINGTING_OA_ACCOUNT_KEY,
+                ),
             )
         return ContactChannelIdentity.provider == channel_provider
 

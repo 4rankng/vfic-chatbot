@@ -218,10 +218,61 @@ async def test_attention_reason_query_returns_total_for_empty_late_page() -> Non
     params = db.execute.await_args.args[1]
     assert ids == []
     assert total == 613
-    assert "ci.provider = CAST(:channel_provider AS text)" in sql
+    # The plain OA badge narrows to the recruitment OA (provider zalo_oa minus
+    # the TingTing support account key) instead of comparing a provider literal.
+    assert "ci.provider = 'zalo_oa'" in sql
+    assert "ci.account_key IS NULL" in sql
+    assert "ci.account_key <> 'tingting'" in sql
     assert "count(*)::int AS total FROM filtered" in sql
     assert "LEFT JOIN page_rows ON true" in sql
     assert params["offset"] == 2475
+
+
+@pytest.mark.asyncio
+async def test_attention_reason_query_binds_generic_provider_branch() -> None:
+    from app.services.dashboard.repository import DashboardRepository
+
+    result = SimpleNamespace(mappings=lambda: [{"conversation_id": None, "total": 0}])
+    db = SimpleNamespace(execute=AsyncMock(return_value=result))
+
+    await DashboardRepository(db).attention_reason_page(
+        None,
+        reason="PRIORITY_NO_ACTION",
+        channel_provider="facebook_messenger",
+        page=1,
+        per_page=25,
+    )
+
+    sql = db.execute.await_args.args[0].text
+    assert "ci.provider = CAST(:channel_provider AS text)" in sql
+    assert "ci2.provider = CAST(:channel_provider AS text)" in sql
+
+
+def test_channel_filters_keep_the_two_zalo_oa_badges_disjoint() -> None:
+    from app.services.conversation.repository import ConversationRepository
+    from app.services.dashboard.repository import DashboardRepository
+
+    def _orm_sql(provider: str) -> str:
+        return str(
+            ConversationRepository._channel_filter_condition(provider).compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+
+    plain = _orm_sql("zalo_oa")
+    support = _orm_sql("tingting_oa")
+    assert "contact_channel_identities.provider = 'zalo_oa'" in plain
+    assert "contact_channel_identities.account_key IS NULL" in plain
+    assert "contact_channel_identities.account_key != 'tingting'" in plain
+    assert "contact_channel_identities.account_key = 'tingting'" in support
+
+    plain_sql = DashboardRepository._provider_scope("ci.", "zalo_oa")
+    support_sql = DashboardRepository._provider_scope("ci2.", "tingting_oa")
+    assert "ci.provider = 'zalo_oa'" in plain_sql
+    assert "ci.account_key IS NULL" in plain_sql
+    assert "ci.account_key <> 'tingting'" in plain_sql
+    assert "ci2.provider = 'zalo_oa'" in support_sql
+    assert "ci2.account_key = 'tingting'" in support_sql
 
 
 @pytest.mark.asyncio

@@ -678,7 +678,7 @@ class DashboardRepository:
         independent: a conversation matching a higher-precedence dashboard
         reason remains eligible when a caller explicitly filters a lower one.
         """
-        reason_sql = self._attention_reason_source(reason, recruiter_id)
+        reason_sql = self._attention_reason_source(reason, recruiter_id, channel_provider)
         params: dict[str, object] = {
             "channel_provider": channel_provider,
             "limit": per_page,
@@ -715,7 +715,39 @@ class DashboardRepository:
         ids = [uuid.UUID(str(row["conversation_id"])) for row in rows if row["conversation_id"]]
         return ids, total
 
-    def _attention_reason_source(self, reason: str, recruiter_id: str | None) -> str:
+    @staticmethod
+    def _provider_scope(alias: str, channel_provider: str | None) -> str:
+        """SQL identity predicate for one channel filter value.
+
+        Mirrors ``ConversationRepository._channel_filter_condition`` so the
+        reason-scoped inbox page and the plain list agree: ``tingting_oa`` is the
+        employee-support Zalo OA account, not a provider, and the plain
+        ``zalo_oa`` badge excludes it so the two badges stay disjoint. Account
+        keys are code-owned constants (no user input), so they are inlined like
+        ``viewer_scope`` does; the generic branch binds ``:channel_provider``.
+        """
+        from app.channels import types as ct
+        from app.channels.types import TINGTING_OA_ACCOUNT_KEY
+
+        if channel_provider == "tingting_oa":
+            return (
+                f"{alias}provider = '{ct.PROVIDER_ZALO_OA}' "
+                f"AND {alias}account_key = '{TINGTING_OA_ACCOUNT_KEY}'"
+            )
+        if channel_provider == "zalo_oa":
+            return (
+                f"{alias}provider = '{ct.PROVIDER_ZALO_OA}' "
+                f"AND ({alias}account_key IS NULL "
+                f"OR {alias}account_key <> '{TINGTING_OA_ACCOUNT_KEY}')"
+            )
+        return (
+            "(CAST(:channel_provider AS text) IS NULL "
+            f"OR {alias}provider = CAST(:channel_provider AS text))"
+        )
+
+    def _attention_reason_source(
+        self, reason: str, recruiter_id: str | None, channel_provider: str | None
+    ) -> str:
         """SQL source for one canonical dashboard reason.
 
         Every branch projects ``conversation_id`` and ``urgency_at``. Lead-only
@@ -732,14 +764,8 @@ class DashboardRepository:
             if recruiter_id is not None
             else "(TRUE)"
         )
-        provider_scope = (
-            "(CAST(:channel_provider AS text) IS NULL "
-            "OR ci.provider = CAST(:channel_provider AS text))"
-        )
-        related_provider_scope = (
-            "(CAST(:channel_provider AS text) IS NULL "
-            "OR ci2.provider = CAST(:channel_provider AS text))"
-        )
+        provider_scope = self._provider_scope("ci.", channel_provider)
+        related_provider_scope = self._provider_scope("ci2.", channel_provider)
         conversation_from = (
             "FROM conversations c "
             "JOIN contact_channel_identities ci ON ci.id = c.channel_identity_id "

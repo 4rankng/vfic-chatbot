@@ -1157,7 +1157,8 @@ reset (ADR-0012) is a second channel account, `zalo_oa / tingting`.
   proactive follow-ups skip the account. Admins read the threads via the
   `tingting_oa` badge on `/#/conversations`
   (`ChannelAdapterSelector` + `conversation-list-filters.ts`, one extra per-badge
-  attention count).
+  attention count); the plain `zalo_oa` badge excludes the `tingting` account key,
+  so the two OA badges are disjoint in both the list and the reason-scoped page.
 
 ---
 

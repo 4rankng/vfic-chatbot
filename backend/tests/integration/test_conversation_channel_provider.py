@@ -399,3 +399,89 @@ async def test_lead_reason_suppression_is_scoped_to_selected_provider(
     )
     assert priority_total == 0
     assert stalled_total == 0
+
+
+async def test_plain_oa_badge_excludes_the_support_oa_account(
+    integration_session,
+) -> None:
+    """The Viet Phap (zalo_oa) badge must never return TingTing support threads."""
+    from app.composition.reporting import run_conversation_attention_query
+
+    admin = User(
+        email="provider-admin@test.local",
+        password_hash="not-used",
+        role=Role.admin,
+    )
+    integration_session.add(admin)
+    await integration_session.flush()
+
+    now = datetime.now(timezone.utc)
+    common = {
+        "mode": ConversationMode.HUMAN,
+        "zalo_channel": "oa",
+        "last_inbound_at": now - timedelta(hours=2),
+        "last_outbound_at": now - timedelta(hours=3),
+        "unread_count": 1,
+    }
+    recruitment_oa = await make_conversation(
+        integration_session,
+        provider="zalo_oa",
+        account_key="default:zalo_oa",
+        external_id="badge-recruitment-oa",
+        zalo_chat_id="oa:badge-recruitment-oa",
+        **common,
+    )
+    support_oa = await make_conversation(
+        integration_session,
+        provider="zalo_oa",
+        account_key="tingting",
+        external_id="badge-support-oa",
+        zalo_chat_id="oa:tingting:badge-support-oa",
+        **common,
+    )
+
+    repo = ConversationService(integration_session).repo
+
+    plain_rows, plain_total = await repo.list(
+        viewer=admin, channel_provider="zalo_oa", per_page=10
+    )
+    assert [row.id for row in plain_rows] == [recruitment_oa.id]
+    assert plain_total == 1
+
+    support_rows, support_total = await repo.list(
+        viewer=admin, channel_provider="tingting_oa", per_page=10
+    )
+    assert [row.id for row in support_rows] == [support_oa.id]
+    assert support_total == 1
+
+    assert (
+        await repo.needs_attention_count(viewer=admin, channel_provider="zalo_oa") == 1
+    )
+    assert (
+        await repo.needs_attention_count(viewer=admin, channel_provider="tingting_oa")
+        == 1
+    )
+
+    # The reason-scoped inbox page runs the dashboard SQL; it must keep the same
+    # two badges disjoint rather than comparing "tingting_oa" as a provider.
+    plain_reason, plain_reason_total = await run_conversation_attention_query(
+        integration_session,
+        viewer=admin,
+        reason="UNREAD",
+        channel_provider="zalo_oa",
+        page=1,
+        per_page=10,
+    )
+    assert [row.id for row in plain_reason] == [recruitment_oa.id]
+    assert plain_reason_total == 1
+
+    support_reason, support_reason_total = await run_conversation_attention_query(
+        integration_session,
+        viewer=admin,
+        reason="UNREAD",
+        channel_provider="tingting_oa",
+        page=1,
+        per_page=10,
+    )
+    assert [row.id for row in support_reason] == [support_oa.id]
+    assert support_reason_total == 1
