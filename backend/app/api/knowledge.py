@@ -11,6 +11,7 @@ via ``GET /documents/{id}`` (``stage`` / ``digest_meta`` / ``error``).
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any
 from urllib.parse import quote
@@ -61,6 +62,8 @@ from app.shared.domain.errors import (
 )
 from app.shared.infrastructure.rate_limits import enforce_rag_test_rate_limit
 from app.composition.project_knowledge_jobs import build_project_knowledge_jobs
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 _project_knowledge_jobs = build_project_knowledge_jobs()
@@ -407,8 +410,20 @@ async def upload_file(
             actor=_admin,
         )
     except CanonicalValidationError as exc:
+        logger.warning(
+            "knowledge upload rejected project=%s file=%s errors=%s",
+            project_id,
+            file.filename,
+            exc.errors,
+        )
         raise ValidationError({"errors": exc.errors}) from exc
     except KnowledgeFileExtractionError as exc:
+        logger.warning(
+            "knowledge upload extraction failed project=%s file=%s cause=%s",
+            project_id,
+            file.filename,
+            exc,
+        )
         raise ValidationError({"errors": [str(exc)]}) from exc
     await record_audit_safe(db, "upload_knowledge", _admin.id, str(doc.id))
     await _queue_document(doc, db, reuse_completed=True)

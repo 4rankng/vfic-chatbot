@@ -177,9 +177,24 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       body: form,
     });
     if (!response.ok) {
+      // Surface the server's own rejection (plan mismatch, category contract
+      // errors) instead of a generic string — the precise Vietnamese reason is
+      // the only thing that makes the failure fixable from the UI.
+      let detail = "";
+      try {
+        const body = await response.json();
+        detail =
+          typeof body?.detail === "string"
+            ? body.detail
+            : JSON.stringify(body?.detail ?? body?.errors ?? body ?? "");
+      } catch {
+        detail = "";
+      }
       throw new ApiError(
         response.status,
-        "Không lưu được tệp vào tài liệu dự án.",
+        detail && detail !== "{}"
+          ? `Không lưu được tệp vào tài liệu dự án: ${detail}`
+          : "Không lưu được tệp vào tài liệu dự án.",
       );
     }
     return response.json();
