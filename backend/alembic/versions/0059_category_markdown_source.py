@@ -340,12 +340,18 @@ def _legacy_category_matches(key, legacy_text):
 
     A downgrade restores the column name but leaves markdown in place, so a
     re-upgrade meets already-converted rows: front-matter text is accepted as
-   -is (their payload still passes the round-trip check below).
+    -is (their payload still passes the round-trip check below). Only the real
+    markdown front-matter signature (``---`` + ``schema_version`` in the
+    block) short-circuits; a bare YAML document-start marker is legacy source
+    and must pass the drift check (OPS-32).
     """
     import json
 
-    if legacy_text.lstrip().startswith("---"):
-        return
+    stripped = legacy_text.lstrip()
+    if stripped.startswith("---"):
+        front_matter = stripped[3:].split("\n---", 1)[0]
+        if "schema_version" in front_matter:
+            return
     try:
         document = json.loads(legacy_text)
     except ValueError:

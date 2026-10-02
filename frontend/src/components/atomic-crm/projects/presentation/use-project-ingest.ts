@@ -250,9 +250,8 @@ export const useProjectIngest = (): ProjectIngest => {
       if (writes.length === 0 && !sourceFile) {
         setState({
           phase: "failed",
-          failed: "jobs",
-          message:
-            "Tệp chưa có nội dung kiến thức có thể nạp. Bổ sung thông tin tuyển dụng rồi tải lại tệp.",
+          failed: null,
+          message: "Không có nội dung kiến thức để nạp.",
           activated: [],
         });
         return { ok: false };

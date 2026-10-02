@@ -137,7 +137,7 @@ describe("ExternalSourceList", () => {
       .element(screen.getByText("Chưa liên kết Google Sheet cho dự án này."))
       .toBeVisible();
     await expect
-      .element(screen.getByRole("heading", { name: "Google Sheet" }))
+      .element(screen.getByRole("heading", { name: "Chưa liên kết" }))
       .toBeVisible();
   });
 

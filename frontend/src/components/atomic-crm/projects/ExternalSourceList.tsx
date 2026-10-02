@@ -311,7 +311,7 @@ export const ExternalSourceList = ({
       <EmptyState
         icon={<Link2 className="size-6" aria-hidden="true" />}
         variant="inline"
-        title={isSinglePage ? "Nguồn đồng bộ" : "Google Sheet"}
+        title={isSinglePage ? "Nguồn đồng bộ" : "Chưa liên kết"}
         description={
           isSinglePage
             ? "Chưa có nguồn đồng bộ Google Sheet cho trang kiến thức này."

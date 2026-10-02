@@ -5,8 +5,8 @@ severity: low
 area: backend
 labels: [backend, migrations, data-integrity, tech-debt]
 effort: S
-status: todo
-column: TODO
+status: dev-completed
+column: DEV_COMPLETED
 opened: 2026-10-02
 ---
 

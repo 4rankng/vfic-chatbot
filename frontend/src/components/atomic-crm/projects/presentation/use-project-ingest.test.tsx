@@ -101,6 +101,24 @@ describe("useProjectIngest durable source upload", () => {
     expect(mocks.upload).toHaveBeenCalledTimes(1);
   });
 
+  it("names no category when the ingest has no input at all", async () => {
+    // FE-33: the empty-input guard hardcoded failed: "jobs", which rendered
+    // as "Chưa xác nhận hoàn tất «Vị trí tuyển dụng»" for a failure that
+    // never involved a category.
+    const hook = await renderHook(() => useProjectIngest());
+    let outcome!: Promise<IngestResult>;
+    await hook.act(async () => {
+      outcome = hook.result.current.ingest("project-1", [], undefined);
+    });
+    expect(await outcome).toEqual({ ok: false });
+    expect(hook.result.current.state).toEqual({
+      phase: "failed",
+      failed: null,
+      message: "Không có nội dung kiến thức để nạp.",
+      activated: [],
+    });
+  });
+
   it("does not claim completion when a worker receipt omits a planned category", async () => {
     mocks.document.mockResolvedValue(training("COMPLETED", ["jobs"]));
     const hook = await renderHook(() => useProjectIngest());
