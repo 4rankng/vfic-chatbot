@@ -80,9 +80,12 @@ def make_minimax_llm_json(
 ):
     """(system, user) -> json_text callable for the LLM training pipeline.
 
-    OpenAI-compatible MiniMax client with JSON-object response mode. Falls back to the
-    agent model when MINIMAX_DIGEST_MODEL is unset. Imported lazily by the ingest worker
-    only, so the app/tests never need langchain-openai at import time.
+    The KB lane (document digestion + any-txt category mapping) runs on
+    OpenRouter's digest model — ``google/gemini-3.5-flash``: strict
+    ``response_format`` JSON and 1M context make it the structured-extraction
+    pick — falling back to whatever provider is enabled when OpenRouter is
+    off. Imported lazily by the ingest worker only, so the app/tests never
+    need langchain-openai at import time.
     """
     from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -90,6 +93,7 @@ def make_minimax_llm_json(
         "digest",
         temperature=0.1,
         json_mode=True,
+        default_provider="openrouter",
         minimax_api_key=minimax_api_key,
         openrouter_api_key=openrouter_api_key,
     )
