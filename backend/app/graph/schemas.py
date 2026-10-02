@@ -19,6 +19,7 @@ from app.graph.tools import (
     list_active_projects,
     search_bus_timetable,
     search_knowledge,
+    load_project_knowledge,
     search_user_memory,
 )
 
@@ -393,6 +394,13 @@ async def _dispatch_tool(
                 embedder,
                 args.get("query", ""),
                 args.get("project_slug"),
+                metrics=metrics,
+            )
+        elif name == "load_project_knowledge":
+            result = await load_project_knowledge(
+                retrieval,
+                args.get("project_slug"),
+                args.get("category") or "all",
                 metrics=metrics,
             )
         elif name == "list_active_projects":

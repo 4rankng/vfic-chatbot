@@ -76,23 +76,42 @@ def test_template_download_returns_markdown_attachment_for_authenticated_user(
 def test_full_template_contains_every_category_in_canonical_order() -> None:
     template = build_project_knowledge_template()
 
-    offsets = [
-        template.find(f"category: {definition.key.value}")
-        for definition in CATEGORY_DEFINITIONS
+    # The reference brief order (samsung-sds.md): what recruiters already know.
+    reference_order = [
+        "Vị trí tuyển dụng",
+        "Lương & thu nhập",
+        "Yêu cầu ứng viên",
+        "Ca làm việc",
+        "Phúc lợi",
+        "Chỗ ở",
+        "Bữa ăn",
+        "Đưa đón & lịch xe",
+        "Bảo hiểm",
+        "Ứng tuyển & nhận việc",
+        "Liên hệ",
+        "Câu hỏi thường gặp",
     ]
+    offsets = [template.find(f"## {label}") for label in reference_order]
     assert all(offset != -1 for offset in offsets)
     assert offsets == sorted(offsets)
 
 
-def test_full_template_carries_leading_questions_per_category() -> None:
+def test_full_template_is_a_fill_in_brief_with_guiding_questions() -> None:
     template = build_project_knowledge_template()
 
-    for definition in CATEGORY_DEFINITIONS:
-        for question in definition.leading_questions:
-            assert question in template
-    # The fill-and-upload workflow header teaches the contract.
-    assert "ĐỊNH DẠNG CHÍNH XÁC MÀ HỆ THỐNG ĐỌC ĐƯỢC" in template
-    assert "KHÔNG bắt buộc" in template
-    assert "### record: vi-cong-nhan" in template
+    # Overview block + the brief's own bullet keys.
+    assert "## Thông tin tổng quan" in template
+    assert "**Vị trí tuyển dụng chính:**" in template
+    assert "**Điểm nổi bật:**" in template
+    # Guiding questions from the project information collection form
+    # (BIEU_MAU_THU_THAP_THONG_TIN_DU_AN) ride every section as comments.
+    assert template.count("CÂU HỎI NGƯỜI LAO ĐỘNG THƯỜNG HỎI") >= 10
+    assert "Tuyển đến bao nhiêu tuổi?" in template
+    assert "Lương cơ bản bao nhiêu tiền?" in template
+    assert "Có xe đưa đón không?" in template
+    assert "Cơm công ty có mất tiền không?" in template
+    # The template is the BRIEF shape, never the record shape.
+    assert "### record:" not in template
+    assert not template.lstrip().startswith("---")
     # The filename rides the HTTP Content-Disposition header, not the content.
     assert "mau-kb-du-an.md" not in template
