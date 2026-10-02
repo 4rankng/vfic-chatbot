@@ -1068,9 +1068,22 @@ be shared by another Project.
   `sort_by` still wins; `origin=None` — a geocoder miss — reproduces the
   previous output exactly, and a project without coordinates carries no
   distance and sorts last). Distance is additive evidence, never a filter.
-  Geocoder: Nominatim-compatible `GET /search`, default the public instance
-  (`GEOCODER_BASE_URL`; free, no key, 1 req/s + a descriptive User-Agent, both
-  enforced client-side with a 30-day positive / 6-hour negative Redis cache).
+  Geocoder: three hops, each entered only when the previous one misses —
+  **Vietmap** (`GET /api/search/v4` → `ref_id` → `GET /api/place/v4`; the
+  Vietnam-native provider that resolves the local landmarks OSM lacks), then
+  **Google** for international coverage, then the keyless
+  Nominatim-compatible `GET /search` on the public instance
+  (`GEOCODER_BASE_URL`; 1 req/s + a descriptive User-Agent, both enforced
+  client-side). The keyed hops are optional and admin-editable (`/admin/
+  integrations/geocoder`; `VIETMAP_API_KEY` / `GOOGLE_MAPS_API_KEY` seed the
+  default, a stored value wins), and an unconfigured hop is never called. Vietmap
+  receives only the caller's exact text — it answers a partial query with a
+  confident *wrong* match rather than nothing, so the leading-component relaxation
+  ladder stays confined to the Nominatim hop, and the project bounding box reaches
+  it as a ranking `focus` point. Two cache layers sit in front of all three: Redis
+  (30-day positive / 6-hour negative) over a durable `geocode_cache` mapping that
+  records the resolved coordinates *and* which provider won, with a NULL-coordinate
+  row per recorded miss so improved coverage is picked up without a backfill.
   Every call is fail-open: a geocoder or model outage degrades to today's
   token-overlap answer and never fails an ingest, a PATCH, or a turn.
   `scripts/backfill_project_coordinates.py` resolves existing projects

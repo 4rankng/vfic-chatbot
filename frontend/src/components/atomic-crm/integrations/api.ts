@@ -144,11 +144,13 @@ export type TingtingSettingsUpdate = {
 };
 
 export type GeocoderSettings = {
+  vietmap_api_key: SecretStatus;
   google_maps_api_key: SecretStatus;
 };
 
-/** PUT body. Omit `google_maps_api_key` to keep the stored key. */
+/** PUT body. Omit a key to keep the stored value. */
 export type GeocoderSettingsUpdate = {
+  vietmap_api_key?: string;
   google_maps_api_key?: string;
 };
 

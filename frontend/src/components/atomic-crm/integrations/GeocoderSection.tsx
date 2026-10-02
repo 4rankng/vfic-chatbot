@@ -15,22 +15,25 @@ import {
 import { SecretField } from "./SecretField";
 import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
 
-/** The one API key this panel owns. */
-const GEOCODER_FIELD_COUNT = 1;
+/** The two API keys this panel owns. */
+const GEOCODER_FIELD_COUNT = 2;
 
 /** One query key for the endpoint, so a save can write back its own response. */
 const geocoderSettingsKey = ["geocoder-settings"] as const;
 
 /**
- * The Geocoder view: the Google Maps key the distance feature uses before the
- * free Nominatim fallback. Google resolves the Vietnamese landmarks OSM lacks
- * (the 2026-10-02 incident: Nominatim put "Núi Đèo" ~120 km from Hải Phòng).
- * Stored credentials never enter form state: a blank field means "keep stored".
+ * The Geocoder view: the keyed geocoder credentials the distance feature tries
+ * before the free Nominatim fallback. Vietmap is the primary hop and Google the
+ * second (the 2026-10-02 incident: Nominatim put "Núi Đèo" ~120 km from Hải
+ * Phòng, so the free provider cannot be trusted to resolve Vietnamese landmarks
+ * on its own). Stored credentials never enter form state: a blank field means
+ * "keep stored".
  */
 export const GeocoderSection = () => {
   const notify = useNotify();
   const queryClient = useQueryClient();
-  const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [vietmapDraft, setVietmapDraft] = useState("");
+  const [googleDraft, setGoogleDraft] = useState("");
 
   const settingsQuery = useQuery<GeocoderSettings>({
     queryKey: geocoderSettingsKey,
@@ -52,22 +55,31 @@ export const GeocoderSection = () => {
   >({
     mutationFn: (body) => zaloIntegrationGateway.saveGeocoderSettings(body),
     onSuccess: (data) => {
-      setApiKeyDraft("");
+      setVietmapDraft("");
+      setGoogleDraft("");
       queryClient.setQueryData(geocoderSettingsKey, data);
-      notify("Đã lưu khoá Google Maps.", { type: "success" });
+      notify("Đã lưu khoá geocoder.", { type: "success" });
     },
     onError: () => {
-      notify("Không thể lưu khoá Google Maps.", { type: "error" });
+      notify("Không thể lưu khoá geocoder.", { type: "error" });
     },
   });
 
-  const trimmedApiKey = apiKeyDraft.trim();
-  const dirty = Boolean(trimmedApiKey);
-  const configured = settings?.google_maps_api_key?.configured ?? false;
+  const trimmedVietmap = vietmapDraft.trim();
+  const trimmedGoogle = googleDraft.trim();
+  // A blank field means "keep stored", so only non-blank drafts are sent.
+  const payload: GeocoderSettingsUpdate = {
+    ...(trimmedVietmap ? { vietmap_api_key: trimmedVietmap } : {}),
+    ...(trimmedGoogle ? { google_maps_api_key: trimmedGoogle } : {}),
+  };
+  const dirty = Boolean(trimmedVietmap || trimmedGoogle);
+  const configuredCount =
+    (settings?.vietmap_api_key?.configured ? 1 : 0) +
+    (settings?.google_maps_api_key?.configured ? 1 : 0);
 
   const submit = () => {
     if (!settings || isError || saveSettings.isPending || !dirty) return;
-    saveSettings.mutate({ google_maps_api_key: trimmedApiKey });
+    saveSettings.mutate(payload);
   };
 
   return (
@@ -92,15 +104,17 @@ export const GeocoderSection = () => {
         disabled={!settings || isError || saveSettings.isPending}
         aria-busy={saveSettings.isPending}
       >
-        <legend className="sr-only">Khoá geocoder Google Maps</legend>
+        <legend className="sr-only">
+          Khoá geocoder Vietmap và Google Maps
+        </legend>
         <SettingsGroup
           className="settings-tingting-card"
-          title="Google Maps Geocoder"
+          title="Geocoder Vietmap & Google Maps"
           icon={<MapPin className="size-4" aria-hidden="true" />}
-          description="Khoá dùng để tính khoảng cách từ nơi ứng viên nêu đến từng dự án. Khi có khoá, Google chạy trước Nominatim (miễn phí); không có khoá, chỉ Nominatim chạy."
+          description="Khoá dùng để tính khoảng cách từ nơi ứng viên nêu đến từng dự án. Thứ tự thử: Vietmap → Google Maps → Nominatim (miễn phí). Không có khoá nào thì chỉ Nominatim chạy."
           meta={
             <SettingsGroupStatus
-              configured={configured ? 1 : 0}
+              configured={configuredCount}
               total={GEOCODER_FIELD_COUNT}
               state={statusState}
             />
@@ -108,16 +122,29 @@ export const GeocoderSection = () => {
           defaultOpen
         >
           <SecretField
+            id="geocoder_vietmap_api_key"
+            label="Vietmap API key"
+            placeholder="Nhập API key"
+            configured={settings?.vietmap_api_key?.configured ?? false}
+            statusState={statusState}
+            preview={settings?.vietmap_api_key?.preview ?? null}
+            value={vietmapDraft}
+            onChange={setVietmapDraft}
+            notify={notify}
+            hint="Khoá chính, dùng cho địa chỉ và địa danh Việt Nam. Để trống để giữ khoá đã lưu."
+          />
+
+          <SecretField
             id="geocoder_google_maps_api_key"
             label="Google Maps API key"
             placeholder="Nhập API key"
-            configured={configured}
+            configured={settings?.google_maps_api_key?.configured ?? false}
             statusState={statusState}
             preview={settings?.google_maps_api_key?.preview ?? null}
-            value={apiKeyDraft}
-            onChange={setApiKeyDraft}
+            value={googleDraft}
+            onChange={setGoogleDraft}
             notify={notify}
-            hint="Để trống để giữ khoá đã lưu. Khoá được mã hoá trước khi lưu."
+            hint="Dùng khi Vietmap không có kết quả, cho địa chỉ ngoài Việt Nam. Để trống để giữ khoá đã lưu."
           />
 
           <div className={`settings-llm-footer${dirty ? " is-dirty" : ""}`}>

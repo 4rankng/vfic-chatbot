@@ -245,11 +245,13 @@ class Settings(BaseSettings):
     geocoder_cache_ttl_seconds: int = 2592000  # 30 days (positive hit)
     geocoder_negative_ttl_seconds: int = 21600  # 6 hours (unresolvable query)
     geocoder_min_interval_seconds: float = 1.0  # provider policy floor
-    # Regional geocoder, tried before Nominatim when configured. Google
-    # resolves Vietnamese landmarks ("Núi Đèo", KCN names) that OSM lacks.
-    # Admin-editable via the settings page — the env value only seeds the
-    # default. (Map4D was evaluated for this slot but its API was unreachable
-    # from the prod host, so it was removed.)
+    # Keyed geocoder hops, tried in order before Nominatim when configured.
+    # Vietmap is primary: a Vietnam-native provider that resolves the local
+    # landmarks and ward-level entries OSM lacks. Google follows it for
+    # international coverage. Both admin-editable via the settings page — the
+    # env value only seeds the default. (Map4D was evaluated for this slot but
+    # its API was unreachable from the prod host, so it was removed.)
+    vietmap_api_key: str = ""
     google_maps_api_key: str = ""
 
     # Retrieval scaling. ``rag_ann_enabled`` uses pgvector halfvec HNSW for

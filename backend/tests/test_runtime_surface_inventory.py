@@ -158,7 +158,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # `client.get('/search')` against the Nominatim geocoder. The file stays
     # free of dict `.get` reads (indexing only), which is why the row is a
     # single `get` and not a family of them.
-    "provider_boundary": 93,
+    "provider_boundary": 94,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -258,7 +258,14 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # provider_boundary +1: app/services/geo/providers.py — the Google geocoding
 # adapter's /maps/api/geocode/json call (tried before the Nominatim ladder when
 # an admin has configured a key).
-EXPECTED_BROAD_BOUNDARY_SHA256 = "d82e38c3023bfedd74cf022da3e02f27ba524219be240f10de9e4fbc70a69fae"
+# provider_boundary +1: the same file — the Vietmap geocoding adapter, now the
+# primary hop ahead of Google. Its two calls are /api/search/v4 (returns a
+# ref_id, no coordinates) and /api/place/v4 (resolves that ref_id to lat/lng);
+# one reviewed row, since the scan keys on file+scope+call and the pair share
+# the vietmap_geocode scope. No other boundary moved: the Nominatim ladder, the
+# 1 req/s throttle, the durable geocode_cache mapping and the admin credential
+# routes are all unchanged. Digest recomputed from the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "b65e57424f7f379e442490d392471fed62c202874fc1b4a493319b4911b307d7"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

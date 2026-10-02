@@ -1,10 +1,12 @@
-"""Geocoder provider group: the Google Maps credential the distance feature
-uses before the free Nominatim fallback.
+"""Geocoder provider group: the keyed geocoder credentials the distance feature
+tries before the free Nominatim fallback.
 
-Google resolves Vietnamese landmarks the OSM data misses (the 2026-10-02
-incident: Nominatim put "Núi Đèo" ~120 km from Hải Phòng). It is optional:
-without a key the geocoder behaves exactly as before (Nominatim only). The
-env value seeds the default; the settings page overrides it per installation.
+Vietmap is the primary hop and Google the second. Vietmap is Vietnam-native and
+resolves the local landmarks OSM data misses (the 2026-10-02 incident: Nominatim
+put "Núi Đèo" ~120 km from Hải Phòng); Google covers international addresses it
+does not carry. Both are optional: with neither key the geocoder behaves exactly
+as before (Nominatim only). The env value seeds the default for each; the
+settings page overrides them per installation.
 
 Map4D was evaluated first (a Vietnamese provider with local landmark data) but
 its API proved unreachable from the prod host (connection timeout, 02 Oct), so
@@ -18,25 +20,30 @@ from dataclasses import dataclass
 from app.services.audit_service import record_audit
 from app.services.integration_settings._shared import _secret_status
 
+VIETMAP_API_KEY = "vietmap_api_key"
 GOOGLE_MAPS_API_KEY = "google_maps_api_key"
 
-GEO_SETTING_KEYS = (GOOGLE_MAPS_API_KEY,)
-GEO_SECRET_KEYS = (GOOGLE_MAPS_API_KEY,)
+GEO_SETTING_KEYS = (VIETMAP_API_KEY, GOOGLE_MAPS_API_KEY)
+GEO_SECRET_KEYS = (VIETMAP_API_KEY, GOOGLE_MAPS_API_KEY)
 
 
 @dataclass(frozen=True)
 class GeoRuntimeConfig:
-    """Resolved geocoder credential: the stored value wins over the env default."""
+    """Resolved geocoder credentials: the stored value wins over the env default."""
 
+    vietmap_api_key: str = ""
     google_maps_api_key: str = ""
 
 
 class GeoSettingsMixin:
-    """Resolve / admin-view / persist the geocoder credential."""
+    """Resolve / admin-view / persist the geocoder credentials."""
 
     async def resolve_geocoder(self) -> GeoRuntimeConfig:
         stored = await self._stored_values(GEO_SETTING_KEYS)
         return GeoRuntimeConfig(
+            vietmap_api_key=(
+                stored.get(VIETMAP_API_KEY) or self.settings.vietmap_api_key
+            ),
             google_maps_api_key=(
                 stored.get(GOOGLE_MAPS_API_KEY) or self.settings.google_maps_api_key
             ),
@@ -45,6 +52,7 @@ class GeoSettingsMixin:
     async def admin_geocoder_view(self) -> dict:
         cfg = await self.resolve_geocoder()
         return {
+            "vietmap_api_key": _secret_status(cfg.vietmap_api_key),
             "google_maps_api_key": _secret_status(cfg.google_maps_api_key),
         }
 

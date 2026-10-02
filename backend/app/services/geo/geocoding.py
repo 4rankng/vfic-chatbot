@@ -54,7 +54,7 @@ from app.core.config import get_settings
 from app.core.db import async_session
 from app.core.http import get_http_client
 from app.models.geocode import GeocodeCache
-from app.services.geo.providers import google_geocode
+from app.services.geo.providers import google_geocode, vietmap_geocode
 from app.shared.domain.text import normalize_vietnamese_text
 
 if TYPE_CHECKING:
@@ -64,11 +64,11 @@ logger = logging.getLogger(__name__)
 
 # One process-scoped httpx client for the geocoder; the name keys its pool.
 _CLIENT_NAME = "geocoder"
-# v3: area lookups are now viewbox-biased toward the project region, so a v2
-# entry under a bare landmark query may hold an out-of-region hit (the 2026-10-02
-# "Núi Đèo" → Thái Nguyên incident cached exactly that). A bump retires them
-# instead of serving wrong origins for their full TTL.
-_CACHE_PREFIX = "geo:geocode:v3:"
+# v4: Vietmap became the primary hop (v3 was Google-first). A v3 entry holds a
+# coordinate resolved under a different chain — the same address can legitimately
+# resolve differently once the leading provider changes — so the bump retires
+# them instead of serving the old order's answer for its full 30-day TTL.
+_CACHE_PREFIX = "geo:geocode:v4:"
 # Nominatim's free-form search rejects the WHOLE query when any comma-separated
 # component is not a place it knows: "Tầng 2, Công ty LG Electronics, KCN Tràng
 # Duệ, An Phong, An Dương, Hải Phòng" finds nothing while "An Dương, Hải Phòng"
@@ -123,6 +123,30 @@ def _get_throttle_lock() -> asyncio.Lock:
 def _cache_key(text: str) -> str:
     digest = sha256(normalize_vietnamese_text(text).encode("utf-8")).hexdigest()[:32]
     return f"{_CACHE_PREFIX}{digest}"
+
+
+def _viewbox_focus(viewbox: str | None) -> tuple[float, float] | None:
+    """Convert a Nominatim ``viewbox`` into Vietmap's ``focus`` centre point.
+
+    ``viewbox`` is ``"x1,y1,x2,y2"`` as lon,lat (left/top/right/bottom);
+    Vietmap takes a single ``lat,lng`` point. The centre steers ranking the same
+    way the box steers Nominatim's, so the same region signal serves both hops
+    and ``active_area_viewbox`` stays the single source of truth. ``None`` when
+    there is no box, an unparseable one, or a degenerate point — Vietmap then
+    ranks nationally, exactly as Nominatim does with no viewbox.
+    """
+    if not viewbox:
+        return None
+    parts = viewbox.split(",")
+    if len(parts) != 4:
+        return None
+    try:
+        x1, y1, x2, y2 = (float(part) for part in parts)
+    except ValueError:
+        return None
+    lat = (y1 + y2) / 2
+    lng = (x1 + x2) / 2
+    return lat, lng
 
 
 async def _db_lookup(query: str) -> tuple[tuple[float, float] | None, bool]:
@@ -235,11 +259,17 @@ async def geocode(
     dropped, up to ``_MAX_QUERY_ATTEMPTS`` attempts; a hit from any attempt is
     cached under the query the caller passed.
 
-    ``providers`` (the admin-editable credential bundle) enables the regional
-    hop: Google resolves Vietnamese landmarks OSM lacks, so when a key is
-    configured it is tried first, exactly once, and the Nominatim ladder stays
-    as the keyless fallback. A miss on the regional hop is not cached apart —
-    the negative cache below covers the whole ladder.
+    ``providers`` (the admin-editable credential bundle) enables the keyed
+    hops, tried in order and only when the previous one misses: **Vietmap**
+    first — the Vietnam-native provider that indexes the local landmarks OSM
+    lacks ("Núi Đèo", KCN names), so a correct answer lands on the first hop
+    rather than after a free provider confidently returns the wrong one — then
+    **Google** for international coverage, then the keyless **Nominatim**
+    ladder. Vietmap deliberately receives only ``text``: it answers a partial
+    query with a confident wrong match rather than nothing, so the relaxation
+    ladder below stays confined to the Nominatim hop. Each keyed hop runs
+    exactly once and is fail-open; a miss on them is not cached apart — the
+    negative cache below covers the whole chain.
 
     ``viewbox`` ("x1,y1,x2,y2" as lon,lat, left/top/right/bottom) biases the
     Nominatim ranking toward that box without excluding outside results — the
@@ -278,9 +308,28 @@ async def geocode(
             )
             return db_coords
         return None
-    # Regional hop first: Google indexes the Vietnamese landmarks ("Núi Đèo",
-    # KCN names) OSM misses. One exact-string attempt, fail-open; on a miss the
-    # Nominatim ladder below runs exactly as without the credential.
+    # Primary hop: Vietmap is Vietnam-native and indexes the local landmarks
+    # ("Núi Đèo", KCN names, ward-level entries) that OSM misses, so a correct
+    # answer lands here rather than after a free provider confidently returns
+    # the wrong one. Exactly once, on the caller's exact text, fail-open.
+    if providers is not None and providers.vietmap_api_key:
+        hit = await vietmap_geocode(
+            text,
+            api_key=providers.vietmap_api_key,
+            focus=_viewbox_focus(viewbox),
+            timeout_seconds=settings.geocoder_timeout_seconds,
+        )
+        if hit is not None:
+            await _db_store(db_query, hit, "vietmap")
+            await cache_set_json(
+                key,
+                {"lat": hit[0], "lng": hit[1]},
+                settings.geocoder_cache_ttl_seconds,
+            )
+            return hit
+    # Second hop: Google covers the international addresses Vietmap does not.
+    # One exact-string attempt, fail-open; on a miss the Nominatim ladder below
+    # runs exactly as without any credential.
     if providers is not None and providers.google_maps_api_key:
         hit = await google_geocode(
             text,

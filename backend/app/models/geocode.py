@@ -32,8 +32,9 @@ class GeocodeCache(Base):
     query: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
-    # Which provider resolved the coordinates ("google", "nominatim"); NULL on
-    # a miss row.
+    # Which provider resolved the coordinates: "vietmap" (primary hop),
+    # "google" (secondary hop) or "nominatim" (keyless fallback). NULL on a
+    # miss row. Free text — the geocoder chain is free to gain a hop.
     provider: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

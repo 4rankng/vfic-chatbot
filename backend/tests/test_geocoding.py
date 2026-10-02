@@ -88,7 +88,7 @@ async def test_geocode_parses_lat_lon_and_caches_the_hit(geo_env):
     assert fake.calls[0]["params"]["countrycodes"] == "vn"
     assert fake.calls[0]["params"]["q"] == "KCN Tràng Duệ, An Dương"
     key, value, ttl = cache.writes[-1]
-    assert key.startswith("geo:geocode:v3:")
+    assert key.startswith("geo:geocode:v4:")
     assert value == {"lat": 20.865, "lng": 106.683}
     assert ttl == 2_592_000
 
@@ -458,3 +458,220 @@ async def test_geocode_records_provider_hits_and_misses_in_the_mapping(geo_env, 
 
     assert await geocoding.geocode("Chẳng có đâu") is None
     assert stored[-1] == (None, None)
+
+
+# --- Vietmap: the primary hop -------------------------------------------------
+
+
+def _register_vietmap(
+    *,
+    search_payload: Any = None,
+    place_payload: Any = None,
+    status_codes: list[int] | None = None,
+    side_effect: BaseException | None = None,
+):
+    """Register the fake ``geocoder-vietmap`` client.
+
+    Vietmap needs two calls (search yields a ``ref_id``, place resolves it), so
+    a resolving client needs two canned responses in order.
+    """
+    responses = []
+    if search_payload is not None:
+        responses.append(search_payload)
+    if place_payload is not None:
+        responses.append(place_payload)
+    return register_fake_client(
+        "geocoder-vietmap",
+        FakeHttpClient(responses=responses, status_codes=status_codes, side_effect=side_effect),
+    )
+
+
+def _google_miss():
+    return register_fake_client(
+        "geocoder-google",
+        FakeHttpClient(responses=[{"status": "ZERO_RESULTS", "results": []}], status_codes=[200]),
+    )
+
+
+@pytest.mark.asyncio
+async def test_vietmap_resolves_through_search_then_place(geo_env):
+    """Text→coordinates is two calls; the ref_id passes through verbatim."""
+    _cache, _settings = geo_env
+    vietmap = _register_vietmap(
+        search_payload=[{"ref_id": "geocode:RAkPci", "display": "Núi Đèo"}],
+        place_payload={"lat": 20.9624, "lng": 106.7149},
+    )
+    nominatim = _register([{"lat": "0", "lon": "0"}])
+
+    result = await geocoding.geocode(
+        "Núi Đèo", providers=GeoRuntimeConfig(vietmap_api_key="vk")
+    )
+
+    assert result == (20.9624, 106.7149)
+    assert vietmap.calls[0]["url"] == "/api/search/v4"
+    assert vietmap.calls[0]["params"]["text"] == "Núi Đèo"
+    assert vietmap.calls[0]["params"]["display_type"] == "5"
+    assert vietmap.calls[1]["url"] == "/api/place/v4"
+    assert vietmap.calls[1]["params"]["refid"] == "geocode:RAkPci"
+    assert nominatim.calls == []
+
+
+@pytest.mark.asyncio
+async def test_vietmap_first_returns_before_google(geo_env):
+    """Vietmap is the primary hop: with both keys configured, Google must not
+    be called at all."""
+    _cache, _settings = geo_env
+    vietmap = _register_vietmap(
+        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 10.8, "lng": 106.7}
+    )
+    google = _google_miss()
+
+    result = await geocoding.geocode(
+        "An Dương, Hải Phòng",
+        providers=GeoRuntimeConfig(vietmap_api_key="vk", google_maps_api_key="gk"),
+    )
+
+    assert result == (10.8, 106.7)
+    assert vietmap.calls
+    assert google.calls == []
+
+
+@pytest.mark.asyncio
+async def test_vietmap_converts_the_viewbox_into_a_focus_centre(geo_env):
+    """Vietmap has no viewbox, only a single ranking point: the project box is
+    handed over as its centre so the same region signal serves both hops."""
+    _cache, _settings = geo_env
+    vietmap = _register_vietmap(
+        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 10.8, "lng": 106.7}
+    )
+
+    await geocoding.geocode(
+        "Núi Đèo",
+        viewbox="106.1500,21.3500,107.2500,20.4500",
+        providers=GeoRuntimeConfig(vietmap_api_key="vk"),
+    )
+
+    lat, lng = vietmap.calls[0]["params"]["focus"].split(",")
+    assert float(lat) == pytest.approx(20.9)
+    assert float(lng) == pytest.approx(106.7)
+
+
+@pytest.mark.asyncio
+async def test_vietmap_omits_focus_when_there_is_no_viewbox(geo_env):
+    _cache, _settings = geo_env
+    vietmap = _register_vietmap(
+        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 10.8, "lng": 106.7}
+    )
+
+    await geocoding.geocode("An Dương, Hải Phòng", providers=GeoRuntimeConfig(vietmap_api_key="vk"))
+
+    assert "focus" not in vietmap.calls[0]["params"]
+
+
+@pytest.mark.asyncio
+async def test_vietmap_receives_only_the_exact_text(geo_env):
+    """The relaxation ladder must never reach Vietmap: it answers a partial
+    query with a confident WRONG match ("tran phu" → Phường Trần Phú, Hà
+    Tĩnh) rather than nothing."""
+    _cache, _settings = geo_env
+    query = "Tầng 2, Công ty LG, KCN Tràng Duệ, An Phong, An Dương, Hải Phòng"
+    vietmap = register_fake_client("geocoder-vietmap", FakeHttpClient(responses=[[]]))
+    # Every Nominatim attempt fails, so the ladder walks every relaxed variant.
+    nominatim = _register(side_effect=RuntimeError("nominatim down"))
+
+    await geocoding.geocode(query, providers=GeoRuntimeConfig(vietmap_api_key="vk"))
+
+    assert len(vietmap.calls) == 1
+    assert vietmap.calls[0]["params"]["text"] == query
+    # The ladder still relaxes for Nominatim — the rescue is not lost, it is
+    # simply confined to the provider that needs it.
+    relaxed = [call["params"]["q"] for call in nominatim.calls]
+    assert len(relaxed) == geocoding._MAX_QUERY_ATTEMPTS
+    assert relaxed[0] == query
+    assert len(set(relaxed)) == len(relaxed)
+
+
+@pytest.mark.asyncio
+async def test_vietmap_error_falls_through_to_google_then_nominatim(geo_env):
+    """Every hop is fail-open and the chain never raises."""
+    _cache, _settings = geo_env
+    register_fake_client(
+        "geocoder-vietmap", FakeHttpClient(side_effect=RuntimeError("vietmap down"))
+    )
+    google = _google_miss()
+    nominatim = _register([{"lat": "20.8", "lon": "106.6"}])
+
+    result = await geocoding.geocode(
+        "Núi Đèo",
+        providers=GeoRuntimeConfig(vietmap_api_key="vk", google_maps_api_key="gk"),
+    )
+
+    assert result == (20.8, 106.6)
+    assert len(google.calls) == 1
+    assert nominatim.calls[0]["params"]["q"] == "Núi Đèo"
+
+
+@pytest.mark.asyncio
+async def test_vietmap_skipped_when_no_key_is_configured(geo_env):
+    """An unset key must cost no request and no quota."""
+    _cache, _settings = geo_env
+    vietmap = _register_vietmap(
+        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 1.0, "lng": 2.0}
+    )
+    nominatim = _register([{"lat": "20.8", "lon": "106.6"}])
+
+    result = await geocoding.geocode("Núi Đèo", providers=GeoRuntimeConfig())
+
+    assert result == (20.8, 106.6)
+    assert vietmap.calls == []
+    # The chain degrades to the keyless fallback exactly as before the change.
+    assert nominatim.calls[0]["params"]["q"] == "Núi Đèo"
+
+
+@pytest.mark.asyncio
+async def test_vietmap_hit_is_recorded_under_its_provider(geo_env, monkeypatch):
+    """The durable mapping must remember WHICH hop won, so the reordering can
+    be measured later."""
+    _cache, _settings = geo_env
+    stored: list = []
+
+    async def capture_store(_query, coords, provider):
+        stored.append((coords, provider))
+
+    monkeypatch.setattr(geocoding, "_db_store", capture_store)
+    _register_vietmap(
+        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 10.8, "lng": 106.7}
+    )
+
+    await geocoding.geocode("An Dương, Hải Phòng", providers=GeoRuntimeConfig(vietmap_api_key="vk"))
+
+    assert stored == [((10.8, 106.7), "vietmap")]
+
+
+@pytest.mark.asyncio
+async def test_vietmap_warm_cache_skips_http(geo_env):
+    _cache, _settings = geo_env
+    vietmap = _register_vietmap(
+        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 10.8, "lng": 106.7}
+    )
+
+    first = await geocoding.geocode("An Dương, Hải Phòng", providers=GeoRuntimeConfig(vietmap_api_key="vk"))
+    calls_after_first = len(vietmap.calls)
+    second = await geocoding.geocode("An Dương, Hải Phòng", providers=GeoRuntimeConfig(vietmap_api_key="vk"))
+
+    assert first == second == (10.8, 106.7)
+    assert calls_after_first == 2
+    assert len(vietmap.calls) == calls_after_first
+
+
+def test_cache_prefix_retired_the_previous_chain_entries():
+    """The v3→v4 bump is what lets the reordering take effect instead of serving
+    30-day-old Google-first coordinates."""
+    assert geocoding._CACHE_PREFIX == "geo:geocode:v4:"
+
+
+def test_viewbox_focus_ignores_absent_or_malformed_boxes():
+    assert geocoding._viewbox_focus(None) is None
+    assert geocoding._viewbox_focus("") is None
+    assert geocoding._viewbox_focus("106.15,21.35") is None
+    assert geocoding._viewbox_focus("a,b,c,d") is None

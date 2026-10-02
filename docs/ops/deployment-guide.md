@@ -278,10 +278,12 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0061_project_coordinates` (2 Oct 2026). This line is
-  grepped by the `release-check` docs-drift gate against the live
-  `alembic heads` value, so a new migration that does not update it blocks the
-  release. `0061` adds the geo-distance columns on `projects`
+- **HEAD:** `0062_geocode_cache` (2 Oct 2026). This line is grepped by the
+  `release-check` docs-drift gate against the live `alembic heads` value, so a
+  new migration that does not update it blocks the release. `0062` adds
+  `geocode_cache`, the durable normalized-query→coordinates mapping the geocoder
+  consults before any provider HTTP call, with a NULL-coordinate row per
+  recorded miss. `0061` adds the geo-distance columns on `projects`
   (`extracted_address`, `latitude`, `longitude`) that let the catalog tool
   report `distance_km` for "dự án nào gần nhà"; all three are nullable with no
   backfill, so old and new code run against either schema. Preceding `0060`
@@ -432,11 +434,14 @@ Sourced from `backend/.env.example` (committed template) and
 | `GEOCODER_BASE_URL` | Default the public Nominatim instance. Repoint at a self-hosted Nominatim (or any Nominatim-compatible endpoint) for better Vietnamese coverage; no code change. |
 | `GEOCODER_USER_AGENT` | Descriptive UA required by the provider's usage policy. |
 | `GEOCODER_TIMEOUT_SECONDS` | 3s per attempt; a timeout is a miss. |
-| `GEOCODER_CACHE_TTL_SECONDS` / `GEOCODER_NEGATIVE_TTL_SECONDS` | 30 days for a hit / 6 hours for a miss (Redis, key version `geo:geocode:v2:`). |
-| `GEOCODER_MIN_INTERVAL_SECONDS` | 1.0 — the provider policy floor, enforced process-wide. |
+| `GEOCODER_CACHE_TTL_SECONDS` / `GEOCODER_NEGATIVE_TTL_SECONDS` | 30 days for a hit / 6 hours for a miss (Redis, key version `geo:geocode:v4:`), in front of the durable `geocode_cache` mapping. |
+| `GEOCODER_MIN_INTERVAL_SECONDS` | 1.0 — the provider policy floor, enforced process-wide. Applies to the Nominatim hop only; the keyed hops are unthrottled. |
+| `VIETMAP_API_KEY` | **Primary hop.** Blank disables it and the chain starts at Google. Seed only — a value saved in the admin settings page wins. |
+| `GOOGLE_MAPS_API_KEY` | **Second hop.** Blank disables it. Same seed-only precedence. |
 
-All seven have code defaults, so a deployment whose `/opt/vfic/.env` predates
-this feature needs no env change.
+The two keyed hops are the only geocoder env vars without a usable default:
+everything else has a code default, so a deployment whose `/opt/vfic/.env`
+predates this feature needs no env change and silently runs Nominatim-only.
 
 ### Scaling knobs (in `config.py`, env-tunable)
 | Name | Default | Purpose |

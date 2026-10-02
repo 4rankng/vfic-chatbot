@@ -127,12 +127,14 @@ class ProviderTestStatus(BaseModel):
 
 
 class GeocoderIntegrationSettingsOut(BaseModel):
+    vietmap_api_key: SecretStatus
     google_maps_api_key: SecretStatus
 
 
 class GeocoderIntegrationSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    vietmap_api_key: str | None = Field(default=None, min_length=1, max_length=512)
     google_maps_api_key: str | None = Field(default=None, min_length=1, max_length=512)
 
 

@@ -34,7 +34,10 @@ from app.services.integration_settings import (
     ZALO_OA_REFRESH_TOKEN,
     ZALO_OA_SECRET_KEY,
 )
-from app.services.integration_settings.providers.geo import GOOGLE_MAPS_API_KEY
+from app.services.integration_settings.providers.geo import (
+    GOOGLE_MAPS_API_KEY,
+    VIETMAP_API_KEY,
+)
 from app.services.integration_settings.providers.llm import (
     EMBEDDING_GEMINI_API_KEY,
     EMBEDDING_PROVIDER,
@@ -84,7 +87,8 @@ class _Settings:
     meta_webhook_verify_token = ""
     meta_graph_api_version = "v25.0"
     meta_graph_api_base = "https://graph.facebook.com"
-    # Geocoder regional provider (env default — DB overrides).
+    # Geocoder keyed providers (env default — DB overrides).
+    vietmap_api_key = ""
     google_maps_api_key = ""
 
 
@@ -1292,42 +1296,59 @@ async def test_reveal_facebook_oauth_rejects_a_missing_password_hash(monkeypatch
 @pytest.mark.asyncio
 async def test_geocoder_resolves_env_default_and_stored_override():
     class _GeoSettings(_Settings):
+        vietmap_api_key = "vietmap-env-key"
         google_maps_api_key = "env-key"
 
     env_service = IntegrationSettingsService(_ReadDb([]), settings=_GeoSettings())
-    assert (await env_service.resolve_geocoder()).google_maps_api_key == "env-key"
+    resolved = await env_service.resolve_geocoder()
+    assert resolved.vietmap_api_key == "vietmap-env-key"
+    assert resolved.google_maps_api_key == "env-key"
 
     seed = IntegrationSettingsService(_ReadDb([]), settings=_GeoSettings())
     service = IntegrationSettingsService(
-        _ReadDb([_Row(GOOGLE_MAPS_API_KEY, seed.cipher.encrypt("stored-key"))]),
+        _ReadDb(
+            [
+                _Row(GOOGLE_MAPS_API_KEY, seed.cipher.encrypt("stored-key")),
+                _Row(VIETMAP_API_KEY, seed.cipher.encrypt("vietmap-stored-key")),
+            ]
+        ),
         settings=_GeoSettings(),
     )
-    assert (await service.resolve_geocoder()).google_maps_api_key == "stored-key"
+    stored = await service.resolve_geocoder()
+    assert stored.google_maps_api_key == "stored-key"
+    assert stored.vietmap_api_key == "vietmap-stored-key"
 
 
 @pytest.mark.asyncio
 async def test_geocoder_admin_view_is_status_only():
     seed = IntegrationSettingsService(_ReadDb([]), settings=_Settings())
     service = IntegrationSettingsService(
-        _ReadDb([_Row(GOOGLE_MAPS_API_KEY, seed.cipher.encrypt("stored-key"))]),
+        _ReadDb(
+            [
+                _Row(GOOGLE_MAPS_API_KEY, seed.cipher.encrypt("stored-key")),
+                _Row(VIETMAP_API_KEY, seed.cipher.encrypt("vietmap-stored-key")),
+            ]
+        ),
         settings=_Settings(),
     )
 
     view = await service.admin_geocoder_view()
 
-    status = view["google_maps_api_key"]
-    assert status["configured"] is True
-    assert "stored" not in (status["preview"] or "")
-    assert "key" not in (status["preview"] or "")
+    for key in ("google_maps_api_key", "vietmap_api_key"):
+        status = view[key]
+        assert status["configured"] is True
+        assert "stored" not in (status["preview"] or "")
+        assert "key" not in (status["preview"] or "")
 
     empty = await IntegrationSettingsService(
         _ReadDb([]), settings=_Settings()
     ).admin_geocoder_view()
     assert empty["google_maps_api_key"] == {"configured": False, "preview": None}
+    assert empty["vietmap_api_key"] == {"configured": False, "preview": None}
 
 
 @pytest.mark.asyncio
-async def test_update_geocoder_stores_secret_and_audits(monkeypatch):
+async def test_update_geocoder_stores_both_secrets_and_audits(monkeypatch):
     async def fake_record_audit(*_args, **_kwargs):
         return None
 
@@ -1340,11 +1361,16 @@ async def test_update_geocoder_stores_secret_and_audits(monkeypatch):
     service = IntegrationSettingsService(db, settings=_Settings())
 
     changed = await service.update_geocoder(
-        {"google_maps_api_key": "gk-new"}, actor_id=uuid.uuid4()
+        {"google_maps_api_key": "gk-new", "vietmap_api_key": "vk-new"},
+        actor_id=uuid.uuid4(),
     )
 
-    assert changed == [GOOGLE_MAPS_API_KEY]
-    row = db.rows[GOOGLE_MAPS_API_KEY]
-    assert row.is_secret is True
-    assert seed.cipher.decrypt(row.encrypted_value) == "gk-new"
+    assert sorted(changed) == sorted([GOOGLE_MAPS_API_KEY, VIETMAP_API_KEY])
+    for key, expected in (
+        (GOOGLE_MAPS_API_KEY, "gk-new"),
+        (VIETMAP_API_KEY, "vk-new"),
+    ):
+        row = db.rows[key]
+        assert row.is_secret is True
+        assert seed.cipher.decrypt(row.encrypted_value) == expected
     assert db.committed is True

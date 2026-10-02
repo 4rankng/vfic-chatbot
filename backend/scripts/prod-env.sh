@@ -86,6 +86,15 @@ EMBEDDING_DIM=3072
 # Verify the 1stop.app sending domain in Resend before using.
 RESEND_API_KEY=
 
+# ---- Geocoder keys (Vietmap → Google → free Nominatim fallback) ----
+# VIETMAP_API_KEY: primary hop, maps.vietmap.vn console. Vietnam-native, resolves
+#   the local landmarks OSM lacks.
+# GOOGLE_MAPS_API_KEY: second hop, for international addresses.
+# Both are optional and admin-editable at /admin/integrations/geocoder; this env
+# value only seeds the default. Blank disables that hop.
+VIETMAP_API_KEY=
+GOOGLE_MAPS_API_KEY=
+
 # ---- Runtime ----
 WEB_CONCURRENCY=2
 EOF
