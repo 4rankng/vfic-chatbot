@@ -191,7 +191,7 @@ class CatalogRepository:
         return rendered
 
     async def active_area_viewbox(self) -> str | None:
-        """The active projects' bounding box as a Nominatim ``viewbox`` string.
+        """The active projects' bounding box as an ``x1,y1,x2,y2`` viewbox string.
 
         Candidate area lookups are often bare landmark names ("Núi Đèo") that
         the provider resolves nationwide — the 2026-10-02 incident resolved one

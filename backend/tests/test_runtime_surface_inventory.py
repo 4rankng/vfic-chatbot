@@ -171,7 +171,13 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # (services/geo/verification.py) and the resolver
     # (services/geo/factory_point.py) import no HTTP client, so neither is a
     # provider-transport file and neither adds a row.
-    "provider_boundary": 98,
+    # -1/+1: the keyless provider was then removed (2026-10-03). `nominatim_reverse`
+    # goes with it, and so does `geocoding.geocode`'s `client.get('/search')` —
+    # geocoding.py no longer imports an HTTP client at all, so that row leaves the
+    # inventory and the file stops being provider transport. `google_reverse` stays
+    # as the only reverse source. Net row count back to 96, with a different row
+    # set: the digest moved, the count did not.
+    "provider_boundary": 96,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -297,7 +303,15 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # rows from the post-change scan reconstructs the prior pin byte-for-byte
 # (verified by re-hashing); services/geo/verification.py and factory_point.py
 # are not provider-transport files, so they contribute nothing.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "ad9928d08c7611d4206dd5751147fa229d289f7df0561860bf8778b02cf29e4a"
+# 2026-10-03 (later): the keyless provider was removed. `nominatim_reverse` and
+# `geocoding.geocode`'s `client.get('/search')` both leave the inventory (-2
+# rows, and geocoding.py stops being a provider-transport file), so the row count
+# returns to 96 while the row set does not: the digest was recomputed from the
+# post-change scan. Two invocation counts inside surviving rows moved with it,
+# neither adding a row — google_geocode's `get` 5→6 (the coarse-`types` read that
+# replaced the ladder's precision gate) and decisions.decide_turn's `get` 20→21
+# (unrelated prompt work on the employee_support intent, landed concurrently).
+EXPECTED_BROAD_BOUNDARY_SHA256 = "4bf9caddbee1596078dd8fbf3a6520ec8f95384063c3221c5166639ed49d6669"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

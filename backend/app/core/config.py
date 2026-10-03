@@ -231,26 +231,25 @@ class Settings(BaseSettings):
     embedding_dim: int = EMBEDDING_DIM
 
     # Geocoding for "dự án nào gần nhà" (project work addresses + the
-    # candidate's stated area). The default provider is the public Nominatim
-    # instance: free, no key, but its usage policy caps at 1 request/second and
-    # requires a descriptive User-Agent — the client enforces both, and the
-    # 30-day positive cache keeps repeated areas off the network. If volume
-    # outgrows the policy, repoint ``geocoder_base_url`` at a self-hosted
-    # Nominatim; no code change. Fail-open everywhere: a geocoder outage must
-    # never fail an ingest or a chat turn.
+    # candidate's stated area). The providers are the KEYED hops below, in
+    # ``KEYED_GEO_HOPS`` order: Google first, Vietmap second. There is no keyless
+    # provider — Nominatim was removed on 2026-10-03 (it answered a factory
+    # address with the city centroid behind the wrong "1.5 km" distance, and its
+    # 1 req/s policy turned a free fallback into a latency floor), so a
+    # deployment with neither key resolves nothing and the catalog omits
+    # ``distance_km``. Fail-open everywhere: a geocoder outage must never fail an
+    # ingest or a chat turn.
     geocoder_enabled: bool = True
-    geocoder_base_url: str = "https://nominatim.openstreetmap.org"
-    geocoder_user_agent: str = "tingting-crm/1.0 (+https://bot.tingting.vip)"
     geocoder_timeout_seconds: float = 3.0
     geocoder_cache_ttl_seconds: int = 2592000  # 30 days (positive hit)
     geocoder_negative_ttl_seconds: int = 21600  # 6 hours (unresolvable query)
-    geocoder_min_interval_seconds: float = 1.0  # provider policy floor
-    # Keyed geocoder hops, tried in order before Nominatim when configured.
-    # Vietmap is primary: a Vietnam-native provider that resolves the local
-    # landmarks and ward-level entries OSM lacks. Google follows it for
-    # international coverage. Both admin-editable via the settings page — the
-    # env value only seeds the default. (Map4D was evaluated for this slot but
-    # its API was unreachable from the prod host, so it was removed.)
+    # Keyed geocoder hops, tried in the measured order. Google is primary: on
+    # the Hải Phòng plants this bot serves its median positional error against
+    # OSM ground truth was 0.92 km against Vietmap's 2.74 km. Vietmap stays as
+    # the fallback for when Google is over quota; it is also the only hop that
+    # takes the region bias. Both admin-editable via the settings page — the env
+    # value only seeds the default. (Map4D was evaluated for this slot but its
+    # API was unreachable from the prod host, so it was removed.)
     vietmap_api_key: str = ""
     google_maps_api_key: str = ""
 

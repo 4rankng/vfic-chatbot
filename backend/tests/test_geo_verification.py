@@ -31,25 +31,10 @@ ADDRESS_AMTRAN = "Công ty AmTRAN, KCN Vsip, Thủy Nguyên, Hải Phòng"
 ADDRESS_RORZE = "KCN Nhật Bản (Nomura), Hồng An, Hải Phòng"
 ADDRESS_SAMSUNG = "Công ty Cổ phần liên hợp kho bãi UWG, KCN Đình Vũ, Hải Phòng"
 
-# Nominatim reverse for the CORRECT 4P point: the park itself is named.
-NOMINATIM_REVERSE_4P_GOOD = {
-    "address": {
-        "industrial": "Khu công nghiệp Tràng Duệ",
-        "suburb": "Phường An Phong",
-        "city": "Thành phố Hải Phòng",
-    }
-}
-# Nominatim reverse for the VIETMAP point that is 6.81 km away: a different ward
-# entirely, and the only place name in common with the address is the city.
-NOMINATIM_REVERSE_4P_BAD = {
-    "address": {
-        "road": "Quốc lộ 5",
-        "suburb": "Phường Hồng An",
-        "city": "Thành phố Hải Phòng",
-    }
-}
-# Google reverse for the same correct point — the post-merger ward name, which is
-# where OSM is silent. The union of the two sources is what makes the check hold.
+# Google reverse for the correct 4P point: the post-merger ward name, which is
+# where OSM is silent, plus the composite formatted address the adapter splits
+# per place. It is the ONLY reverse source now, so the containment check depends
+# on it alone.
 GOOGLE_REVERSE_4P_GOOD = {
     "status": "OK",
     "results": [
@@ -253,13 +238,13 @@ async def test_cached_names_separates_a_row_from_a_missing_one(monkeypatch):
 
 
 def test_coord_key_is_versioned():
-    """The stored answer is the union of whatever reverse sources were
-    configured under the parsing rules of the day, so the key carries the
-    version — the same retirement trick ``geocoding._DB_KEY_VERSION`` uses, and
-    for the same reason: a row written before the sources or the parsing changed
-    no longer means the same thing. No data migration; the column is opaque
-    text."""
-    assert verification.coord_key((20.85884, 106.57227)) == "v6:20.85884,106.57227"
+    """The stored answer is what the reverse sources reported under the parsing
+    rules of the day, so the key carries the version — the same retirement trick
+    ``geocoding._DB_KEY_VERSION`` uses, and for the same reason: a row written
+    before the sources or the parsing changed no longer means the same thing.
+    Both changed on 2026-10-03 (Nominatim dropped, Google's composite split), so
+    the prefix moved v6→v7. No data migration; the column is opaque text."""
+    assert verification.coord_key((20.85884, 106.57227)) == "v7:20.85884,106.57227"
 
 
 async def _never():  # pragma: no cover - only reached on an unexpected call
@@ -283,16 +268,12 @@ async def test_check_point_accepts_on_either_reverse_source(monkeypatch):
     """Nominatim names the park, Google names the post-merger ward. Either alone
     can be silent about the thing the address used, so the union is what holds."""
 
-    async def nominatim_only(*_args, **_kwargs):
-        return frozenset({"khu cong nghiep trang due", "phuong an phong"})
-
-    async def never_called(*_args, **_kwargs):  # pragma: no cover
-        raise AssertionError("only the stubbed source should be consulted")
+    async def google_only(*_args, **_kwargs):
+        return frozenset({"vh5cgwj an phong hai phong viet nam", "an phong"})
 
     monkeypatch.setattr(verification, "_cached_names", _no_cache)
     monkeypatch.setattr(verification, "_store_names", _no_store)
-    monkeypatch.setattr(verification, "nominatim_reverse", nominatim_only)
-    monkeypatch.setattr(verification, "google_reverse", never_called)
+    monkeypatch.setattr(verification, "google_reverse", google_only)
 
     check = await verification.check_point(
         (20.858837, 106.572268),
@@ -301,7 +282,7 @@ async def test_check_point_accepts_on_either_reverse_source(monkeypatch):
     )
 
     assert check is not None
-    assert check.matched == "trang due"
+    assert check.matched == "an phong"
 
 
 @pytest.mark.asyncio
@@ -314,7 +295,6 @@ async def test_check_point_rejects_the_6_81_km_error(monkeypatch):
 
     monkeypatch.setattr(verification, "_cached_names", _no_cache)
     monkeypatch.setattr(verification, "_store_names", _no_store)
-    monkeypatch.setattr(verification, "nominatim_reverse", wrong_place)
     monkeypatch.setattr(verification, "google_reverse", wrong_place)
 
     check = await verification.check_point(
@@ -332,8 +312,10 @@ async def test_check_point_decides_nothing_when_every_source_fails(monkeypatch):
     """Distinct from a rejection: an unlooked-up point is retried, not denied."""
     monkeypatch.setattr(verification, "_cached_names", _no_cache)
     monkeypatch.setattr(verification, "_store_names", _no_store)
-    monkeypatch.setattr(verification, "nominatim_reverse", lambda *a, **k: _never())
-    monkeypatch.setattr(verification, "google_reverse", lambda *a, **k: _never())
+    async def google_unavailable(*_a, **_k):
+        return None  # could not look up — retryable, not a rejection
+
+    monkeypatch.setattr(verification, "google_reverse", google_unavailable)
 
     assert (
         await verification.check_point(
@@ -419,9 +401,6 @@ async def test_resolve_returns_none_when_a_verified_candidate_cannot_be_found(mo
     async def one_candidate(query, **_kwargs):
         return (20.923086, 106.559131)  # the 6.81 km-off point, whatever the text
 
-    for name in ("google_geocode", "vietmap_geocode"):
-        monkeypatch.setattr(factory_point_module, name, one_candidate, raising=False)
-    monkeypatch.setattr(factory_point_module, "geocode", one_candidate)
     monkeypatch.setattr(factory_point_module, "check_point", _reject_all)
     monkeypatch.setattr(factory_point_module, "KEYED_GEO_HOPS", _fake_hops())
 
@@ -447,7 +426,6 @@ def _fake_hops():
 async def test_resolve_returns_the_first_verified_candidate_in_hop_order(monkeypatch):
     _stub_gaetteer_empty(monkeypatch)
     monkeypatch.setattr(factory_point_module, "KEYED_GEO_HOPS", _fake_hops())
-    monkeypatch.setattr(factory_point_module, "geocode", lambda *a, **k: _never())
     monkeypatch.setattr(factory_point_module, "check_point", _accept_all)
 
     result = await factory_point_module.resolve_factory_point(
@@ -477,15 +455,10 @@ async def test_resolve_prefers_the_gazetteer_over_a_verified_provider(monkeypatc
             point=(20.8619428, 106.5619529), name="KCN Tràng Duệ", source="osm"
         )
 
-    async def must_not_run(*_a, **_k):  # pragma: no cover
-        raise AssertionError("a gazetteer hit must short-circuit every provider")
-
     monkeypatch.setattr(factory_point_module, "gazetteer_lookup", hit)
-    monkeypatch.setattr(factory_point_module, "KEYED_GEO_HOPS", _fake_hops())
-    monkeypatch.setattr(factory_point_module, "geocode", must_not_run)
+    monkeypatch.setattr(factory_point_module, "KEYED_GEO_HOPS", _must_not_run_hops())
     google = register_fake_client("geocoder-google", FakeHttpClient(responses=[]))
     vietmap = register_fake_client("geocoder-vietmap", FakeHttpClient(responses=[]))
-    nominatim = register_fake_client("geocoder", FakeHttpClient(responses=[]))
 
     result = await factory_point_module.resolve_factory_point(
         ADDRESS_4P, providers=GeoRuntimeConfig(google_maps_api_key="k")
@@ -495,7 +468,7 @@ async def test_resolve_prefers_the_gazetteer_over_a_verified_provider(monkeypatc
     assert result.point == (20.8619428, 106.5619529)
     assert result.provider == "gazetteer:osm"
     assert result.matched_anchor == "KCN Tràng Duệ"
-    assert google.calls == [] and vietmap.calls == [] and nominatim.calls == []
+    assert google.calls == [] and vietmap.calls == []
 
 
 @pytest.mark.asyncio
@@ -517,23 +490,18 @@ def test_google_reverse_payload_shape_is_understood():
     assert payload["results"][0]["address_components"][0]["long_name"] == "An Phong"
 
 
-def test_nominatim_reverse_payload_shape_is_understood():
-    assert NOMINATIM_REVERSE_4P_GOOD["address"]["industrial"] == "Khu công nghiệp Tràng Duệ"
-    assert NOMINATIM_REVERSE_4P_BAD["address"]["suburb"] == "Phường Hồng An"
-
-
-def test_fake_http_client_is_wired_for_all_three_provider_names():
-    for name in ("geocoder", "geocoder-google", "geocoder-vietmap"):
+def test_fake_http_client_is_wired_for_both_provider_names():
+    for name in ("geocoder-google", "geocoder-vietmap"):
         register_fake_client(name, FakeHttpClient(responses=[[]]))
 
 
 # --- End-to-end through the real provider adapters ---------------------------
 #
 # The cases above stub the provider coroutines. These do not: they drive the
-# real `google_geocode` / `vietmap_geocode` / `nominatim_reverse` adapters over
-# the fake HTTP harness, with payloads captured live from Hải Phòng, so the hop
-# order, the reverse union and the containment rule are all exercised through the
-# code that actually runs in production.
+# real `google_geocode` / `vietmap_geocode` / `google_reverse` adapters over the
+# fake HTTP harness, with payloads captured live from Hải Phòng, so the hop
+# order, the reverse lookup and the containment rule are all exercised through
+# the code that actually runs in production.
 
 PROVIDERS = GeoRuntimeConfig(vietmap_api_key="vk", google_maps_api_key="gk")
 
@@ -560,12 +528,9 @@ class _E2ESettings:
     """The Settings subset the geocoding client reads."""
 
     geocoder_enabled = True
-    geocoder_base_url = "https://nominatim.example"
-    geocoder_user_agent = "tingting-crm-test/1.0"
     geocoder_timeout_seconds = 3.0
     geocoder_cache_ttl_seconds = 2_592_000
     geocoder_negative_ttl_seconds = 21_600
-    geocoder_min_interval_seconds = 0.0
 
 
 async def _none_pair(_query):
@@ -600,34 +565,21 @@ def no_reverse_db(monkeypatch):
     monkeypatch.setattr(geocoding, "get_settings", lambda: _E2ESettings())
 
 
-def _ladder(queued: list):
-    """A Nominatim search payload source: consume the queue, then keep the last.
-
-    The ladder's attempt count is not fixed (``geocode`` walks up to
-    ``_MAX_QUERY_ATTEMPTS`` relaxations), so the fake must not run out and fall
-    back to a wrong-shaped default — it repeats its final payload instead.
-    """
-    return lambda: queued.pop(0) if len(queued) > 1 else queued[0]
-
-
 def _register_all(
     *,
     google_geo=None,
     vietmap_lat_lng=(1.0, 2.0),
-    nominatim_search=None,
-    nominatim_reverse_payloads=None,
     google_reverse_payload=None,
 ):
-    """Wire all three providers, routing each fake on the REQUEST it receives.
+    """Wire both providers, routing each fake on the REQUEST it receives.
 
-    Every client serves more than one endpoint: Google's forward and reverse
-    both hit ``/maps/api/geocode/json`` (``address`` vs ``latlng``), Vietmap's
-    two-step lookup hits ``/api/search/v4`` then ``/api/place/v4``, and the
-    shared ``geocoder`` client serves the Nominatim ladder (``/search``) and the
-    reverse verification (``/reverse``). A positional queue therefore
-    desynchronises the moment the number of ladder attempts changes, and hands a
-    forward payload to a reverse call — which fails as "no names", i.e. as a
-    product bug that is not one. Routing on the request removes the coupling.
+    Both clients serve more than one endpoint: Google's forward and reverse both
+    hit ``/maps/api/geocode/json`` (``address`` vs ``latlng``), and Vietmap's
+    two-step lookup hits ``/api/search/v4`` then ``/api/place/v4``. A positional
+    queue therefore desynchronises as soon as the number of calls changes, and
+    hands a forward payload to a reverse call — which fails as "no names", i.e.
+    as a product bug that is not one. Routing on the request removes the
+    coupling.
     """
     forward_google = (
         google_geo
@@ -658,18 +610,6 @@ def _register_all(
             )
         ),
     )
-    ladder = _ladder(list(nominatim_search) if nominatim_search else [[]])
-    reverse_payload = (
-        nominatim_reverse_payloads[0] if nominatim_reverse_payloads else {}
-    )
-    register_fake_client(
-        "geocoder",
-        FakeHttpClient(
-            side_effect=lambda request: (
-                reverse_payload if request["url"] == "/reverse" else ladder()
-            )
-        ),
-    )
 
 
 @pytest.mark.asyncio
@@ -680,7 +620,6 @@ async def test_end_to_end_google_point_is_verified_and_kept(monkeypatch, no_reve
     _register_all(
         google_geo=_google_geocode_payload(20.858837, 106.572268),
         google_reverse_payload=GOOGLE_REVERSE_4P_GOOD,
-        nominatim_reverse_payloads=[NOMINATIM_REVERSE_4P_GOOD],
     )
 
     point = await factory_point_module.resolve_factory_point(ADDRESS_4P, providers=PROVIDERS)
@@ -707,7 +646,6 @@ async def test_end_to_end_the_vietmap_error_is_rejected(monkeypatch, no_reverse_
     _register_all(
         google_geo={"status": "OVER_QUERY_LIMIT", "results": []},
         vietmap_lat_lng=(20.923086, 106.559131),
-        nominatim_reverse_payloads=[NOMINATIM_REVERSE_4P_BAD],
         google_reverse_payload=GOOGLE_REVERSE_4P_BAD,
     )
     checked: list[tuple[tuple[float, float], str | None]] = []
@@ -734,7 +672,7 @@ async def test_end_to_end_vietmap_is_used_when_google_cannot_answer(monkeypatch,
     _register_all(
         google_geo={"status": "OVER_QUERY_LIMIT", "results": []},
         vietmap_lat_lng=(20.8619428, 106.5619529),
-        nominatim_reverse_payloads=[NOMINATIM_REVERSE_4P_GOOD],
+        google_reverse_payload=GOOGLE_REVERSE_4P_GOOD,
     )
 
     point = await factory_point_module.resolve_factory_point(ADDRESS_4P, providers=PROVIDERS)
@@ -756,32 +694,12 @@ async def test_end_to_end_gazetteer_short_circuits_without_any_http(monkeypatch)
     monkeypatch.setattr(factory_point_module, "gazetteer_lookup", hit)
     google = register_fake_client("geocoder-google", FakeHttpClient(responses=[]))
     vietmap = register_fake_client("geocoder-vietmap", FakeHttpClient(responses=[]))
-    nominatim = register_fake_client("geocoder", FakeHttpClient(responses=[]))
 
     point = await factory_point_module.resolve_factory_point(ADDRESS_4P, providers=PROVIDERS)
 
     assert point is not None
     assert point.provider == "gazetteer:osm"
-    assert google.calls == [] and vietmap.calls == [] and nominatim.calls == []
-
-
-@pytest.mark.asyncio
-async def test_end_to_end_the_city_centroid_can_never_be_returned(monkeypatch, no_reverse_db):
-    """Nominatim alone answering with the Hải Phòng centroid — the exact value
-    that produced "1.5 km" — must not survive resolution."""
-    _stub_gaetteer_empty(monkeypatch)
-    _register_all(
-        google_geo={"status": "ZERO_RESULTS", "results": []},
-        vietmap_lat_lng=(1.0, 2.0),
-        nominatim_search=[{"lat": "20.8830967", "lon": "106.6790381", "addresstype": "city"}],
-        nominatim_reverse_payloads=[
-            {"address": {"city": "Thành phố Hải Phòng"}}
-        ],
-    )
-
-    point = await factory_point_module.resolve_factory_point(ADDRESS_4P, providers=PROVIDERS)
-
-    assert point is None
+    assert google.calls == [] and vietmap.calls == []
 
 
 @pytest.mark.asyncio
@@ -792,11 +710,11 @@ async def test_end_to_end_the_city_centroid_is_rejected_by_the_google_source(
 
     Google's forward geocode answers the 4P address with the city centroid
     (20.8830967, 106.6790381) and its reverse reports the composite "Phường An
-    Biên, Quận Lê Chân, Hải Phòng, Việt Nam"; Nominatim reports only "Thành phố
-    Hải Phòng". None of those is a place the address names, so the point that
-    produced "1.5 km" must never come back. With the composite stored whole, the
-    anchor "an phong" matched inside it — the ward name "An Phong" pulled out of
-    "Hải Phòng" plus the "an" of "An Biên" — and this returned a coordinate.
+    Biên, Quận Lê Chân, Hải Phòng, Việt Nam". Nothing there is a place the
+    address names, so the point that produced "1.5 km" must never come back. With
+    the composite stored whole, the anchor "an phong" matched inside it — the
+    ward name "An Phong" pulled out of "Hải Phòng" plus the "an" of "An Biên" —
+    and this returned a coordinate.
     """
     _stub_gaetteer_empty(monkeypatch)
     _register_all(
@@ -813,9 +731,17 @@ async def test_end_to_end_the_city_centroid_is_rejected_by_the_google_source(
                 }
             ],
         },
-        nominatim_reverse_payloads=[{"address": {"city": "Thành phố Hải Phòng"}}],
     )
 
     point = await factory_point_module.resolve_factory_point(ADDRESS_4P, providers=PROVIDERS)
 
     assert point is None
+
+
+def _must_not_run_hops():
+    """A hop list that fails the test if it is ever consulted."""
+
+    async def must_not_run(*_a, **_k):  # pragma: no cover
+        raise AssertionError("a gazetteer hit must short-circuit every provider")
+
+    return (GeocodeHop("google", "google_maps_api_key", must_not_run),)

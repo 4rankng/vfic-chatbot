@@ -1,12 +1,13 @@
 """Geocoder provider group: the keyed geocoder credentials the distance feature
-tries before the free Nominatim fallback.
+tries, in order.
 
-Vietmap is the primary hop and Google the second. Vietmap is Vietnam-native and
-resolves the local landmarks OSM data misses (the 2026-10-02 incident: Nominatim
-put "Núi Đèo" ~120 km from Hải Phòng); Google covers international addresses it
-does not carry. Both are optional: with neither key the geocoder behaves exactly
-as before (Nominatim only). The env value seeds the default for each; the
-settings page overrides them per installation.
+Google is the first hop and the only reverse-verification source; Vietmap is the
+second and the only provider that takes a region bias. There is no keyless
+provider — Nominatim was removed on 2026-10-03 because its relaxation ladder
+answered a factory address with the city centroid, and its 1 req/s policy turned
+a free fallback into a latency floor. Both hops are optional: with neither key
+the catalog reports no distance rather than a guessed one. The env value seeds
+the default for each; the settings page overrides them per installation.
 
 Map4D was evaluated first (a Vietnamese provider with local landmark data) but
 its API proved unreachable from the prod host (connection timeout, 02 Oct), so

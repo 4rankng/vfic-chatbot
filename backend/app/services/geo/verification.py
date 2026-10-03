@@ -2,13 +2,14 @@
 
 The 2026-10-03 incident, in one line: every geocoder available here will answer
 a Vietnamese factory address with a confident coordinate, and none of them is
-reliable enough on its own. Nominatim does not index most industrial parks, so
-its relaxation ladder walked "Tầng 2, Công ty LG Electronics (LGE), KCN Tràng
-Duệ, An Phong, An Dương, Hải Phòng" all the way down to "TP. Hải Phòng" and
-answered with the city centroid — 10 km from the park, and inside the candidate's
-own ward. Vietmap does index parks, but a leading company name defeats it: the
-exact 4P address resolved 6.8 km north-east of KCN Tràng Duệ, while the same
-address with that prefix dropped resolved 1.1 km away.
+reliable enough on its own. Vietmap indexes parks, but a leading company name
+defeats it: the exact 4P address resolved 6.8 km north-east of KCN Tràng Duệ,
+while the same address with that prefix dropped resolved 1.1 km away. The
+keyless provider that used to sit behind it did worse — its relaxation ladder
+walked "Tầng 2, Công ty LG Electronics (LGE), KCN Tràng Duệ, An Phong, An
+Dương, Hải Phòng" all the way down to "TP. Hải Phòng" and answered with the city
+centroid, 10 km from the park and inside the candidate's own ward — which is why
+it was removed on 2026-10-03 rather than gated.
 
 So a coordinate is accepted here only when it can be CHECKED against the address
 that produced it. Two pieces do that work:
@@ -35,7 +36,6 @@ number is quoted back to a candidate deciding whether to take a job.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -46,7 +46,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.db import async_session
 from app.models.geocode_place_check import GeocodePlaceCheck
-from app.services.geo.providers import google_reverse, nominatim_reverse
+from app.services.geo.providers import google_reverse
 from app.shared.domain.text import normalize_vietnamese_text
 
 if TYPE_CHECKING:
@@ -59,14 +59,13 @@ logger = logging.getLogger(__name__)
 _COORD_FORMAT = "{:.5f}"
 
 # The rules version of the STORED answer, mirroring `geocoding._DB_KEY_VERSION`.
-# `geocode_place_check` holds the union of whatever reverse sources were
-# configured when the point was first looked up, so the row is only meaningful
-# against the source set and parsing rules that produced it — Google's
-# `formatted_address` is now split per place instead of stored whole, which
-# changes what a stored name means. Bumping the prefix retires the old rows with
-# no migration: the column is opaque text. Keep in step with `_CACHE_PREFIX`'s
-# intent in `geocoding` (its Redis prefix is versioned for the same reason).
-_RULES_VERSION = "v6"
+# `geocode_place_check` holds what the reverse sources reported for a point, so
+# the row is only meaningful against the source set and parsing rules that
+# produced it. Both changed on 2026-10-03: Nominatim was dropped (Google is now
+# the only source) and Google's `formatted_address` is split per place instead
+# of stored whole, which changes what a stored name means. Bumping the prefix
+# retires the old rows with no migration: the column is opaque text.
+_RULES_VERSION = "v7"
 
 # Components that name an organisation or a building, not a place. Anything
 # containing one of these is dropped from the front of the address, and is
@@ -281,27 +280,23 @@ class PlaceCheck:
 async def _lookup_names(
     point: tuple[float, float], providers: "GeoRuntimeConfig | None"
 ) -> frozenset[str] | None:
-    """Union of every reverse source's answer; ``None`` if none of them answered.
+    """The place names a keyed reverse service reports; ``None`` if none answered.
 
-    Nominatim contributes the industrial-park polygons a Vietnamese factory
-    address is written against, Google contributes the current post-merger ward
-    names, and neither is complete on its own. A source that fails contributes
-    nothing; if ALL of them fail the point is unverified rather than rejected,
-    so the next pass retries it.
+    Google only. Nominatim was dropped deliberately, for three reasons that all
+    pointed the same way: it is the source of the 2026-10-03 incident (its
+    relaxation ladder answered a KCN address with the Hải Phòng city centroid),
+    its public instance rate-limits hard enough that verification returns
+    nothing mid-run, and its OSM park polygons are already covered — every
+    seeded gazetteer row and Google's own ``address_components`` name the same
+    places. A verification step that can be throttled into silence is not a
+    safety net.
+
+    ``None`` means unverified rather than rejected, so the next pass retries.
     """
     google_key = getattr(providers, "google_maps_api_key", "") if providers else ""
-    tasks = [nominatim_reverse(*point)]
-    if google_key:
-        tasks.append(google_reverse(*point, api_key=google_key))
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    union: set[str] = set()
-    answered = False
-    for result in results:
-        if isinstance(result, BaseException) or result is None:
-            continue
-        answered = True
-        union |= result
-    return frozenset(union) if answered else None
+    if not google_key:
+        return None
+    return await google_reverse(*point, api_key=google_key)
 
 
 async def check_point(

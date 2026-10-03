@@ -25,6 +25,7 @@ from app.models.company import Company, Project
 from app.models.job import Job, JobStatus
 from app.models.knowledge import KnowledgeDocument, KnowledgeStatus
 from app.models.user import Role, User
+from app.services.geo.factory_point import FactoryPoint
 from app.services.knowledge import KnowledgePipeline, KnowledgeService
 from app.services.knowledge.prompts import DIGEST_SYSTEM_PROMPT, INDEX_SYSTEM_PROMPT
 from app.services.project.repository import ProjectRepository
@@ -816,11 +817,16 @@ async def test_build_project_index_extracts_and_geocodes_the_work_address(
 
     queried: list[str] = []
 
-    async def _geocode(query, *, precision=None, **_kwargs):
-        queried.append(query)
-        return (20.86, 106.68)
+    async def _resolve(address_text, *, providers):
+        queried.append(address_text)
+        return FactoryPoint(
+            point=(20.86, 106.68),
+            provider="google",
+            text=address_text,
+            matched_anchor="trang due",
+        )
 
-    monkeypatch.setattr("app.services.geo.project_address.geocode", _geocode)
+    monkeypatch.setattr("app.services.geo.project_address.resolve_factory_point", _resolve)
 
     await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).build_project_index(
         project_id, raw_text=brief
@@ -861,10 +867,10 @@ async def test_build_project_index_leaves_coordinates_null_without_a_work_addres
             return json.dumps({"address": None})
         return json.dumps({"summary": "Nhà máy LG Display", "location": "Hải Phòng"})
 
-    async def _geocode(_query, **_kwargs):  # pragma: no cover - must not be reached
+    async def _resolve(_address, *, providers):  # pragma: no cover - not reached
         raise AssertionError("a project without an address must not be geocoded")
 
-    monkeypatch.setattr("app.services.geo.project_address.geocode", _geocode)
+    monkeypatch.setattr("app.services.geo.project_address.resolve_factory_point", _resolve)
 
     await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).build_project_index(
         project_id, raw_text="LG Display tuyển operator tại Hải Phòng.\n"

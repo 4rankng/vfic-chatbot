@@ -1,12 +1,22 @@
 """Keyed geocoding adapters for the distance feature.
 
-Vietmap is the primary hop: a Vietnam-native provider that indexes local
-landmark names, industrial parks and per-ward data OSM simply does not carry.
-Google is the second hop for the international coverage Vietmap lacks, and
-Nominatim stays the terminal, keyless, always-available fallback.
+Two providers, both keyed: **Google** is the first hop and **Vietmap** the
+second. The order is measured, not assumed — a 12-case study against OSM ground
+truth for the Hải Phòng plants this bot serves (2026-10-03) put Google's median
+positional error at 0.92 km and Vietmap's at 2.74 km; within 2 km it was 8/11
+against 2/11. Vietmap is kept because a chain that drops its fallback has no
+answer left when the first hop is over quota.
 
-Both keyed adapters are optional (used only when a key is configured) and
-fail-open: an outage degrades to the next hop instead of failing the turn.
+There is deliberately NO keyless provider. Nominatim was removed on 2026-10-03:
+it produced the 10 km city centroid behind the wrong "1.5 km" distance (its
+relaxation ladder walked a factory address down to "TP. Hải Phòng"), it is
+throttled to 1 request/second by policy, and it is outranked by both keyed hops
+on every plant measured. A deployment with neither key therefore resolves
+nothing and the catalog tool says nothing about distance — silence instead of a
+confident wrong number.
+
+Both adapters are optional (used only when a key is configured) and fail-open:
+an outage degrades to the next hop instead of failing the turn.
 
 Map4D was evaluated first (a Vietnamese provider with local landmark data)
 but its API proved unreachable from the prod host (connection timeout,
@@ -19,7 +29,6 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from app.core.config import get_settings
 from app.core.http import get_http_client
 from app.shared.domain.text import normalize_vietnamese_text
 
@@ -27,15 +36,34 @@ logger = logging.getLogger(__name__)
 
 _GOOGLE_CLIENT = "geocoder-google"
 _VIETMAP_CLIENT = "geocoder-vietmap"
-# The Nominatim client name is the SAME string ``geocoding._CLIENT_NAME`` uses, so
-# the forward ladder and the reverse verification share one connection pool and
-# one throttle rather than opening a second set of sockets to the same host.
-_NOMINATIM_CLIENT = "geocoder"
 _VIETMAP_BASE_URL = "https://maps.vietmap.vn"
 # Vietmap's own recommendation for the 2025 ward-merger migration: the new
 # 2-level admin format at the top level, the legacy 3-level text in ``data_old``.
 # One call yields both, so Migrate-Address is never needed.
 _VIETMAP_DISPLAY_TYPE = 5
+
+# Google `types` that describe an answer to a COARSER question than the one
+# asked: a populated place or an administrative boundary instead of the street
+# address. Measured 2026-10-03: "999 Đường Không Tồn Tại XYZ, Hải Phòng" answers
+# the Hải Phòng centroid with ``["locality", "political"]``, and "An Biên, Hải
+# Phòng" answers the same centroid, while a real factory address answers
+# ``["establishment", "point_of_interest"]`` and a real street address
+# ``["premise", "street_address"]``. ``partial_match`` is NOT the signal: Google
+# sets it on the correct factory answers too (KCN Nhật Bản, the 4P/LGE address),
+# so gating on it would reject exactly the answers this bot needs.
+_COARSE_PLACE_TYPES = frozenset(
+    {
+        "country",
+        "locality",
+        "colloquial_area",
+        "postal_code",
+        "administrative_area_level_1",
+        "administrative_area_level_2",
+        "administrative_area_level_3",
+        "administrative_area_level_4",
+        "administrative_area_level_5",
+    }
+)
 
 
 async def vietmap_geocode(
@@ -103,11 +131,22 @@ async def google_geocode(
     *,
     api_key: str,
     timeout_seconds: float = 3.0,
+    require_point: bool = False,
 ) -> tuple[float, float] | None:
     """Return ``(lat, lng)`` for the first result of Google's Geocoding API.
 
+    ``require_point`` refuses an answer whose ``types`` name a populated place or
+    an administrative boundary (``_COARSE_PLACE_TYPES``) — the caller will QUOTE
+    a road distance from this coordinate, and the middle of a city is not a
+    street address. Measured 2026-10-03: without the gate, a bogus street in Hải
+    Phòng answers the city centroid and the distance is measured from downtown,
+    which is the candidate-side twin of the incident that produced "1.5 km".
+    Refusing it here lets the next hop try; the caller's own miss is a better
+    answer than a coordinate nobody asked about.
+
     Fail-open: a network error, non-200, a non-``OK`` status (REQUEST_DENIED,
-    OVER_QUERY_LIMIT, ZERO_RESULTS), or a malformed payload is a miss.
+    OVER_QUERY_LIMIT, ZERO_RESULTS), a malformed payload, or a refused coarse
+    match is a miss.
     """
     try:
         client = await get_http_client(
@@ -124,7 +163,17 @@ async def google_geocode(
         if payload.get("status") != "OK":
             return None
         results = payload.get("results") or []
-        location = (results[0].get("geometry") or {}).get("location") or {}
+        if not results:
+            return None
+        first = results[0]
+        if require_point:
+            types = first.get("types") or []
+            if any(kind in _COARSE_PLACE_TYPES for kind in types):
+                logger.debug(
+                    "google geocode coarse match refused query=%s types=%s", query, types
+                )
+                return None
+        location = (first.get("geometry") or {}).get("location") or {}
         return float(location["lat"]), float(location["lng"])
     except Exception:  # noqa: BLE001 — geocoding is decoration, never a failure
         logger.warning("google geocode failed query=%s", query, exc_info=True)
@@ -208,69 +257,6 @@ async def vietmap_matrix(
         return estimates
     except Exception:  # noqa: BLE001 — distance is decoration, never a failure
         logger.warning("vietmap matrix failed", exc_info=True)
-        return None
-
-
-async def nominatim_reverse(
-    lat: float,
-    lng: float,
-    *,
-    timeout_seconds: float = _MATRIX_TIMEOUT_S,
-) -> frozenset[str] | None:
-    """The normalized place names a coordinate belongs to; ``None`` on failure.
-
-    The verification hop. A forward geocode says "this text is at these
-    coordinates"; this says "these coordinates are in a place called X", which
-    is the only way to catch a provider that answers a Vietnamese factory
-    address with a confident point in the wrong ward — the 2026-10-03 incident
-    where "…, KCN Tràng Duệ, An Phong, An Dương" came back as a point in Phường
-    Hồng An, 7 km from the park.
-
-    Returns the diacritic-stripped, lowercased union of the ``address`` values
-    (``industrial``, ``suburb``, ``quarter``, ``road``, ``city``, …) and the
-    ``name``/``name:vi`` named details, so the caller can substring-match an
-    address's own ward or park name against it. ``zoom`` is left at the
-    provider default so the response carries the full administrative chain.
-
-    ``None`` means "could not look up" and is deliberately distinct from an
-    empty frozenset, which means "that point is nowhere in particular" — the
-    caller treats the first as retryable and the second as a real negative.
-    """
-    try:
-        settings = get_settings()
-        client = await get_http_client(
-            _NOMINATIM_CLIENT,
-            base_url=settings.geocoder_base_url,
-            timeout=timeout_seconds,
-            headers={"User-Agent": settings.geocoder_user_agent},
-        )
-        response = await client.get(
-            "/reverse",
-            params={
-                "lat": str(lat),
-                "lon": str(lng),
-                "format": "jsonv2",
-                "addressdetails": 1,
-                "namedetails": 1,
-                "accept-language": "vi",
-            },
-        )
-        if response.status_code != 200:
-            return None
-        payload = response.json()
-        if not isinstance(payload, dict) or payload.get("error"):
-            return None
-        names: set[str] = set()
-        for field in (payload.get("address") or {}).values():
-            if isinstance(field, str) and field.strip():
-                names.add(_normalize_place(field))
-        for key in ("name", "name:vi"):
-            value = (payload.get("namedetails") or {}).get(key)
-            if isinstance(value, str) and value.strip():
-                names.add(_normalize_place(value))
-        return frozenset(name for name in names if name)
-    except Exception:  # noqa: BLE001 — verification is decoration, never a failure
-        logger.warning("nominatim reverse failed", exc_info=True)
         return None
 
 
@@ -363,13 +349,18 @@ class GeocodeHop:
     ``key_field`` names the :class:`GeoRuntimeConfig` attribute holding its
     credential, so the chain can be walked generically instead of each call site
     hard-coding its own order. ``accepts_focus`` records which providers can
-    take the region-bias point — Vietmap can, Google cannot.
+    take the region-bias point — Vietmap can, Google cannot. ``rejects_coarse``
+    records which providers can refuse an answer that resolved a coarser
+    question than the one asked: Google's response carries ``types``, so it can;
+    Vietmap's ``place`` payload exposes no equivalent flag, so a "point" caller
+    must not assume the guard covers it.
     """
 
     name: str
     key_field: str
     fetch: Callable[..., Awaitable[tuple[float, float] | None]]
     accepts_focus: bool = False
+    rejects_coarse: bool = False
 
 
 # The order is measured, not assumed. A 12-case study against OSM ground truth
@@ -386,7 +377,7 @@ class GeocodeHop:
 # ``geocoding`` is versioned and must be bumped alongside, or a 30-day entry
 # resolved by the old order keeps being served.
 KEYED_GEO_HOPS: tuple[GeocodeHop, ...] = (
-    GeocodeHop("google", "google_maps_api_key", google_geocode),
+    GeocodeHop("google", "google_maps_api_key", google_geocode, rejects_coarse=True),
     GeocodeHop("vietmap", "vietmap_api_key", vietmap_geocode, accepts_focus=True),
 )
 

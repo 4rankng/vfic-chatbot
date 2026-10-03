@@ -11,18 +11,18 @@ gap for the geo-distance feature:
 2. the value is GROUNDED against that same brief — an address the document does
    not actually contain is dropped, never stored (an LLM that "completes" a
    plausible district would otherwise produce a confident wrong distance),
-3. the grounded address is geocoded at ``precision="point"`` — with the
-   admin-configured credentials the candidate-side lookup already uses — and
-   stored with its coordinates.
+3. the grounded address is resolved by ``resolve_factory_point`` — the
+   admin-configured keyed providers (Google, then Vietmap) plus the verified
+   gazetteer — and stored only if the point survives containment.
 
 Grounding alone is not enough, and the 2026-10-03 incident is why. A brief whose
 address is prefixed with the wrong company (the "4P Electronics" project carried
 "công ty LG Electronics" in its address) defeats grounding: the string really is
 in the brief, so it is stored. What turned a wrong address into a wrong DISTANCE
-was the geocoder's relaxation ladder collapsing "…, KCN Tràng Duệ, An Dương,
-Hải Phòng" to "TP. Hải Phòng" and storing the city centroid as the factory gate.
-``precision="point"`` refuses that, so an unplaceable project keeps NULL
-coordinates and the catalog tool says nothing about distance instead of lying.
+was a geocoder collapsing "…, KCN Tràng Duệ, An Dương, Hải Phòng" to the Hải
+Phòng city centroid and storing that as the factory gate. Containment refuses
+it, so an unplaceable project keeps NULL coordinates and the catalog tool says
+nothing about distance instead of lying.
 
 Two entry points, split by who authored the address:
 
@@ -103,12 +103,12 @@ async def _geocode_and_store(db: AsyncSession, project: Project, address: str) -
     ``resolve_factory_point`` is load-bearing, not a preference. This
     coordinate is quoted to a candidate as a road distance to a factory gate,
     so it must be VERIFIED against the address that produced it — not merely
-    returned by a geocoder. The 2026-10-03 incident is why: Nominatim answered
-    a KCN Tràng Duệ address with the Hải Phòng city centroid and Vietmap put
-    4P 6.8 km away, both confident, both wrong. A factory that cannot be placed
-    under the verification rules keeps NULL coordinates and the catalog tool
-    says nothing about distance. Silence is the correct failure: a wrong number
-    here decides whether someone shows up for a shift.
+    returned by a geocoder. The 2026-10-03 incident is why: the keyless provider
+    answered a KCN Tràng Duệ address with the Hải Phòng city centroid and
+    Vietmap put 4P 6.8 km away, both confident, both wrong. A factory that cannot
+    be placed under the verification rules keeps NULL coordinates and the catalog
+    tool says nothing about distance. Silence is the correct failure: a wrong
+    number here decides whether someone shows up for a shift.
 
     No ``viewbox``: a project address carries its own hierarchy, so it gets no
     region bias — unlike a candidate's bare area name.
@@ -159,10 +159,10 @@ async def refresh_from_kb(
 
     No-op when the project already has BOTH an address and coordinates (unless
     ``force`` re-geocodes the stored address). An address without coordinates is
-    re-geocoded on every pass: a transient miss — or the ``precision="point"``
-    gate refusing a centroid — must not freeze the project permanently, since
-    nothing else would ever fill the gap. Never raises; does not commit — the
-    caller owns the transaction.
+    re-geocoded on every pass: a transient miss — or containment rejecting a
+    centroid — must not freeze the project permanently, since nothing else would
+    ever fill the gap. Never raises; does not commit — the caller owns the
+    transaction.
     """
     try:
         # Deferred: ``app.services.project`` re-exports ProjectService, which

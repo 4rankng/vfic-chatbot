@@ -144,8 +144,9 @@ class RetrievalRepository:
           project it is supposed to rank against. Bias, never a hard box — a
           candidate whose area is genuinely outside the region must still
           resolve, so the distances stay truthful.
-        * the admin-configured Google credential (settings page / env) enables
-          a regional hop before Nominatim, for the landmarks OSM lacks.
+        * the keyed providers (Google, then Vietmap) resolve the query; there is
+          no keyless fallback, so an unconfigured installation reports no
+          coordinates rather than a guessed one.
 
         ``precision`` is the same guard the factory side uses, and it matters for
         the same reason. A caller that will QUOTE a distance ("how far is X from

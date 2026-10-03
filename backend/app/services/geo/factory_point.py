@@ -41,7 +41,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from app.services.geo.gazetteer import lookup as gazetteer_lookup
-from app.services.geo.geocoding import geocode
 from app.services.geo.providers import KEYED_GEO_HOPS
 from app.services.geo.verification import check_point, coord_key, geographic_tail
 
@@ -127,16 +126,12 @@ async def resolve_factory_point(
                 continue
             if hit is not None:
                 remember(hit, hop.name, candidate_text)
-        # The keyless ladder, at point precision so it cannot answer with a ward
-        # or city centroid. ``providers=None`` keeps it from re-running the keyed
-        # hops the loop above already covered.
-        try:
-            hit = await geocode(candidate_text, providers=None, precision="point")
-        except Exception:  # noqa: BLE001 — decoration, never a failure
-            logger.warning("factory nominatim lookup failed", exc_info=True)
-            continue
-        if hit is not None:
-            remember(hit, "nominatim", candidate_text)
+
+    # The keyless Nominatim ladder is deliberately NOT a candidate here. It is
+    # the source of the 2026-10-03 incident — its relaxation ladder answered a
+    # KCN address with the Hải Phòng city centroid — and on this path its hits
+    # would only be spent on a reverse lookup to learn they are a centroid.
+    # Candidates come from Google and Vietmap or not at all.
 
     if not candidates:
         logger.info("factory point unresolved address=%s", text)
