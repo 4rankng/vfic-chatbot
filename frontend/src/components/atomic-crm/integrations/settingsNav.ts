@@ -2,6 +2,7 @@ import {
   Bot,
   Brain,
   KeyRound,
+  Mail,
   MapPin,
   MessageCircle,
   MessagesSquare,
@@ -10,8 +11,8 @@ import {
 } from "lucide-react";
 
 /**
- * Settings navigation: the seven entries of the console rail and the header copy
- * each one shows. Kept free of JSX so the rail, the mobile drawer and the
+ * Settings navigation: the eight entries of the console rail and the header
+ * copy each one shows. Kept free of JSX so the rail, the mobile drawer and the
  * header all read one source.
  */
 
@@ -21,6 +22,7 @@ export type SettingsItemId =
   | "settings-llm-providers"
   | "settings-jev"
   | "settings-tingting"
+  | "settings-email-digest"
   | "settings-geocoder"
   | "settings-users";
 
@@ -61,6 +63,12 @@ export const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     label: "TingTing",
     description: "Đặt lại mật khẩu",
     Icon: KeyRound,
+  },
+  {
+    itemId: "settings-email-digest",
+    label: "Email ứng viên",
+    description: "Gửi ứng viên mới qua email",
+    Icon: Mail,
   },
   {
     itemId: "settings-geocoder",
@@ -106,6 +114,12 @@ export const SETTINGS_VIEW_COPY: Record<
     title: "TingTing · Đặt lại mật khẩu",
     description:
       "API key dùng để tra cứu nhân sự và gửi OTP đặt lại mật khẩu qua TingTing.",
+  },
+  "settings-email-digest": {
+    kicker: "Tích hợp",
+    title: "Danh sách ứng viên mới",
+    description:
+      "Gửi định kỳ email danh sách ứng viên mới (Zalo chatbot, Messenger, OA khác — không gồm TingTing OA) với số điện thoại, dự án quan tâm và tóm tắt hội thoại.",
   },
   "settings-geocoder": {
     kicker: "Tích hợp",

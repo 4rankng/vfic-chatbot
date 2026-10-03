@@ -13,6 +13,7 @@ import {
   MessengerSettingsSection,
   UsersSettingsSection,
 } from "./EmbeddedSettingsSections";
+import { EmailDigestSection } from "./EmailDigestSection";
 import { GeocoderSection } from "./GeocoderSection";
 import { JevSection } from "./JevSection";
 import { LlmProvidersSection } from "./LlmProvidersSection";
@@ -96,6 +97,8 @@ export const SettingsConsolePage = () => {
         );
       case "settings-tingting":
         return <TingtingSection />;
+      case "settings-email-digest":
+        return <EmailDigestSection />;
       case "settings-geocoder":
         return <GeocoderSection />;
       case "settings-users":

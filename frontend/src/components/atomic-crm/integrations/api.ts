@@ -148,6 +148,37 @@ export type GeocoderSettings = {
   google_maps_api_key: SecretStatus;
 };
 
+/** Cadence of the candidate email digest (admin-editable schedule). */
+export type EmailDigestFrequency = "daily" | "weekly";
+
+export type EmailDigestSettings = {
+  resend_api_key: SecretStatus;
+  recipients: string[];
+  frequency: EmailDigestFrequency;
+  /** ICT "HH:MM" (minutes on :00/:30). Default 09:00 = 9am Vietnam. */
+  send_time: string;
+  /** False while the recipient list is empty — the whole feature is off. */
+  enabled: boolean;
+  last_sent_at: string | null;
+};
+
+/** PUT body. Omit `resend_api_key` to keep the stored value. */
+export type EmailDigestSettingsUpdate = {
+  resend_api_key?: string;
+  recipients?: string[];
+  frequency?: EmailDigestFrequency;
+  send_time?: string;
+};
+
+/** Result of POST /email-digest/test (synthetic candidate, real Resend call). */
+export type EmailDigestTestResult = {
+  ok: boolean;
+  configured: boolean;
+  missing: string[];
+  error: string | null;
+  provider_id: string | null;
+};
+
 /** PUT body. Omit a key to keep the stored value. */
 export type GeocoderSettingsUpdate = {
   vietmap_api_key?: string;
@@ -386,6 +417,25 @@ export const zaloIntegrationGateway = {
       method: "PUT",
       body,
     }),
+
+  loadEmailDigestSettings: async (): Promise<EmailDigestSettings> =>
+    apiJson<EmailDigestSettings>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/email-digest`,
+    ),
+
+  saveEmailDigestSettings: async (
+    body: EmailDigestSettingsUpdate,
+  ): Promise<EmailDigestSettings> =>
+    apiJson<EmailDigestSettings>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/email-digest`,
+      { method: "PUT", body },
+    ),
+
+  testEmailDigest: async (): Promise<EmailDigestTestResult> =>
+    apiJson<EmailDigestTestResult>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/email-digest/test`,
+      { method: "POST" },
+    ),
 
   /** Re-probe the stored OA credentials without changing them. */
   checkTingtingOa: async (): Promise<TingtingSettings> =>

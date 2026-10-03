@@ -583,6 +583,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/EmailDigestSection.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/installation/runtime-manifest.ts",
           "type": "registry:component"
         },
@@ -636,10 +640,6 @@
         },
         {
           "path": "src/components/atomic-crm/dashboard/Dashboard.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/dashboard/CandidateDataDialog.tsx",
           "type": "registry:component"
         },
         {
