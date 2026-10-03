@@ -191,7 +191,16 @@ _INTENT_ROUTES: dict[
         "recommendation_terms",
     ),
     "profile_update": ("profile", (), "profile_terms"),
-    "timetable": ("structured_lookup", ("search_bus_timetable",), "timetable_terms"),
+    # "từ A tới B" reads to the classifier as a journey, so distance/route
+    # questions ("từ 312 Nguyễn Công Hòa tới AmTRAN bao xa") land here and
+    # never reach the recommend lane. The measured distance is the right
+    # instrument for that shape, so it rides along with the timetable tool
+    # instead of the model being offered neither and narrating a lookup.
+    "timetable": (
+        "structured_lookup",
+        ("search_bus_timetable", "get_project_distance"),
+        "timetable_terms",
+    ),
     "contact": ("knowledge_lookup", ("search_knowledge", "load_project_knowledge"), "contact_terms"),
     "faq_detail": (
         "knowledge_lookup",

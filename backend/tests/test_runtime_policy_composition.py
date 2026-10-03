@@ -486,3 +486,32 @@ def test_project_distance_survives_schema_filtering_for_the_recommend_lane():
         )
     }
     assert "get_project_distance" in visible
+
+
+def test_project_distance_is_reachable_from_the_timetable_lane():
+    """The classifier reads "từ A **tới** B" as a journey.
+
+    Production evidence: the live turn "tu 312 Nguyen Cong Hoa Hai An Hai
+    Phong toi Amtran xa ko" was routed ``intent=timetable`` with
+    ``tool_calls=0`` — the model was offered only ``search_bus_timetable`` and
+    narrated "em sẽ tra cứu" instead. A distance question that never reaches
+    the recommend lane still has to be able to measure the distance.
+    """
+    from app.graph.router import _INTENT_ROUTES
+    from app.graph.schemas import filter_tool_schemas
+
+    _strategy, lane_tools, _reason = _INTENT_ROUTES["timetable"]
+    assert "get_project_distance" in lane_tools
+
+    active, persona = _active(capabilities=["conversation", "knowledge", "job_advisory"])
+    policy = build_resolved_runtime_policy(active, persona_body=persona)
+    assert policy is not None
+
+    visible = {
+        schema["function"]["name"]
+        for schema in filter_tool_schemas(
+            lane_tools, resolved_registry=policy.tool_registry.names
+        )
+    }
+    assert "get_project_distance" in visible
+    assert "search_bus_timetable" in visible
