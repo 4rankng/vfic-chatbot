@@ -70,22 +70,33 @@ def strip_think_reasoning(raw: str) -> str:
 
 # ── Tool-call markup written as content ─────────────────────────────────────
 # A provider may serialize an invocation into the message content instead of the
-# structured ``tool_calls`` field. The syntax seen in production is the
-# Anthropic-style block below (with an optional namespace prefix, which is why
-# every tag pattern tolerates ``antml:``-style names).
-_INVOKE_OPEN_RE = re.compile(r"<\s*(?:\w+:)?invoke\b", re.IGNORECASE)
+# structured ``tool_calls`` field. Two syntaxes are in production:
+#
+# * the Anthropic-style block (an optional namespace prefix, which is why every
+#   tag pattern tolerates ``antml:``-style names), and
+# * the DSML block, which closes the namespace with U+FF5C FULLWIDTH VERTICAL
+#   LINE rather than ``>``: ``<｜DSML｜ invoke name="x">``.
+#
+# Matching only the ASCII form was not a cosmetic gap. On 2026-10-03 a DSML call
+# was neither dispatched nor stripped, so the raw protocol — tags, tool name and
+# arguments — was delivered verbatim to a candidate in chat.
+#
+# ``DSML`` closes the optional namespace in both the ASCII and the fullwidth-bar
+# spelling, so it belongs where ``antml:`` does: inside the prefix group.
+_DSML_NS = r"(?:｜\s*DSML\s*｜\s*|\w+:)?"
+_INVOKE_OPEN_RE = re.compile(rf"<\s*{_DSML_NS}invoke\b", re.IGNORECASE)
 _INVOKE_BLOCK_RE = re.compile(
-    r"<\s*(?:\w+:)?invoke\b[^>]*>(?P<body>.*?)<\s*/\s*(?:\w+:)?invoke\s*>",
+    rf"<\s*{_DSML_NS}invoke\b[^>]*>(?P<body>.*?)<\s*/\s*{_DSML_NS}invoke\s*>",
     re.IGNORECASE | re.DOTALL,
 )
 _PARAMETER_RE = re.compile(
-    r"<\s*(?:\w+:)?parameter\b[^>]*?name\s*=\s*[\"'](?P<name>[^\"']+)[\"'][^>]*>"
-    r"(?P<value>.*?)<\s*/\s*(?:\w+:)?parameter\s*>",
+    rf"<\s*{_DSML_NS}parameter\b[^>]*?name\s*=\s*[\"'](?P<name>[^\"']+)[\"'][^>]*>"
+    rf"(?P<value>.*?)<\s*/\s*{_DSML_NS}parameter\s*>",
     re.IGNORECASE | re.DOTALL,
 )
 _ATTR_NAME_RE = re.compile(r"\bname\s*=\s*[\"'](?P<name>[^\"']+)[\"']", re.IGNORECASE)
 _MARKUP_TAG_RE = re.compile(
-    r"<\s*/?\s*(?:\w+:)?(?:invoke|parameter|function_calls|tool_call|tool_calls)\b[^>]*>",
+    rf"<\s*/?\s*{_DSML_NS}(?:invoke|parameter|function_calls|tool_call|tool_calls|calls)\b[^>]*>",
     re.IGNORECASE,
 )
 
@@ -142,6 +153,45 @@ def strip_tool_call_markup(raw: str) -> str:
 def strip_provider_artifacts(raw: str) -> str:
     """The converged boundary: provider thinking and tool-call markup removed."""
     return strip_tool_call_markup(strip_think_reasoning(raw))
+
+
+# The last-resort detector, and deliberately independent of the parsers above.
+#
+# ``extract_text_tool_calls`` and ``strip_tool_call_markup`` are two separate
+# best-effort regexes over formats we have seen. When a provider invents a NEW
+# serialization, BOTH miss it and the raw protocol is treated as a perfectly
+# good assistant answer — which is how ``<｜DSML｜ invoke name="...">`` reached a
+# candidate on 2026-10-03. A parser that misses is recoverable (the call simply
+# does not run); a stripper that misses is not (the candidate reads our
+# internals). So the boundary also *detects* protocol residue and the caller
+# falls back to a safe reply instead of sending it.
+#
+# Matched on the shape, not on a known tag list: an opening delimiter followed
+# by a protocol-ish name, or any of the namespace/attribute tells.
+_PROTOCOL_RESIDUE_RE = re.compile(
+    # Any angle-bracket tag, in either delimiter family. The operator persona
+    # forbids markdown and Zalo renders plain text, so a candidate's reply has
+    # no legitimate reason to contain "<tag>"; anchoring on the delimiter (not
+    # on a list of known tag names) is what makes this catch a format we have
+    # never seen. `1-3` leading slashes also covers a closed "</think>"-style
+    # tail. A false positive fails safe — the round is retried, not delivered.
+    r"<\s*/{0,3}\s*[\w:｜|]"
+    # The explicit tells, kept because they are unambiguous on their own.
+    r"|｜\s*DSML\s*｜"
+    r"|\bname\s*=\s*[\"'][A-Za-z_][\w.]*[\"']\s*>",
+    re.IGNORECASE,
+)
+
+
+def contains_tool_protocol(text: str) -> bool:
+    """Whether ``text`` still carries tool-call protocol the stripper missed.
+
+    A caller that sees ``True`` must NOT deliver the text. It should fall back
+    to a grounded or safe reply. Written to be format-agnostic on purpose: the
+    2026-10-03 leak happened because the detectors only knew formats already in
+    the wild.
+    """
+    return bool(_PROTOCOL_RESIDUE_RE.search(text or ""))
 
 
 # Zalo renders plain text: markdown decorations the model wraps around its

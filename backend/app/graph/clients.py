@@ -71,7 +71,11 @@ from app.graph.providers import _custom_chat as _custom_chat
 from app.graph.providers import _minimax_chat as _minimax_chat
 from app.graph.providers import _openrouter_chat as _openrouter_chat
 from app.graph.providers import _resolve_reasoning_mode as _resolve_reasoning_mode
-from app.graph.think_strip import extract_text_tool_calls, strip_provider_artifacts
+from app.graph.think_strip import (
+    contains_tool_protocol,
+    extract_text_tool_calls,
+    strip_provider_artifacts,
+)
 from app.graph.schemas import _dispatch_tool
 from app.graph.usage import record_token_usage as _record_token_usage
 
@@ -870,6 +874,19 @@ class MiniMaxAgent:
                         )
                     continue
                 visible_round = strip_provider_artifacts(raw_content)
+                # Protocol residue that survived the strip is NOT a reply. The
+                # parsers are format-specific and a new provider serialization
+                # would otherwise reach the candidate verbatim (2026-10-03: a
+                # DSML <invoke> block was delivered into chat). Refuse to send
+                # it and spend the round again instead.
+                if contains_tool_protocol(visible_round):
+                    logger.warning(
+                        "tool-call protocol survived the strip; refusing to send: %r",
+                        visible_round[:200],
+                    )
+                    if metrics is not None:
+                        metrics["answer_completion_failure"] = "tool_protocol_residue"
+                    return ""
                 if (
                     not visible_round.strip()
                     and turn.empty_retry_available

@@ -11,6 +11,7 @@ candidate, so every user-visible reply passes through
 import pytest
 
 from app.graph.think_strip import (
+    contains_tool_protocol,
     extract_text_tool_calls,
     strip_markdown_decorations,
     strip_provider_artifacts,
@@ -187,3 +188,69 @@ def test_next_sendable_offset_skips_terminators_inside_parentheses():
     # after the ')' that closes it.
     assert raw[:offset].endswith("ạ?)\n")
     assert raw[offset:].startswith("\n- Anh/chị muốn làm công việc gì ạ?")
+
+
+# ---------------------------------------------------------------------------
+# DSML tool-call serialization (production leak, 2026-10-03)
+# ---------------------------------------------------------------------------
+
+# Verbatim shape a candidate received: the provider wrote the call as message
+# content using U+FF5C FULLWIDTH VERTICAL LINE to close the namespace.
+_DSML_LEAK = (
+    "<｜DSML｜ calls>\n"
+    '<｜DSML｜ invoke name="get_project_distance">\n'
+    '<｜DSML｜ parameter name="location" string="true">'
+    "312 Nguyen Cong Hoa, Hai An, Hai Phong</｜DSML｜ parameter>\n"
+    '<｜DSML｜ parameter name="company" string="true">amtran</｜DSML｜ parameter>\n'
+    "</｜DSML｜ invoke>\n"
+    "</｜DSML｜ calls>"
+)
+
+
+def test_dsml_tool_call_is_parsed_so_the_result_reaches_the_model():
+    calls = extract_text_tool_calls(_DSML_LEAK)
+
+    assert len(calls) == 1
+    assert calls[0]["name"] == "get_project_distance"
+    assert calls[0]["args"] == {
+        "location": "312 Nguyen Cong Hoa, Hai An, Hai Phong",
+        "company": "amtran",
+    }
+
+
+def test_dsml_tool_call_never_survives_into_a_reply():
+    assert "<" not in strip_provider_artifacts(_DSML_LEAK)
+    assert "get_project_distance" not in strip_provider_artifacts(_DSML_LEAK)
+
+
+def test_anthropic_style_calls_still_parse_after_the_dsml_fix():
+    calls = extract_text_tool_calls(
+        '<function_calls><invoke name="search_knowledge">'
+        '<parameter name="query">luong</parameter>'
+        "</invoke></function_calls>"
+    )
+
+    assert calls == [{"name": "search_knowledge", "args": {"query": "luong"}, "id": "text-call-1"}]
+
+
+def test_contains_tool_protocol_catches_a_format_no_parser_knows():
+    """The stripper is format-specific; the guard must not be.
+
+    Detection is what stops the next unknown serialization from being sent to a
+    candidate, so it is anchored on the delimiter rather than a known tag list.
+    """
+    assert contains_tool_protocol(_DSML_LEAK)
+    assert contains_tool_protocol("<|spiral|>warp drive=1> tra cứu")
+    assert contains_tool_protocol("<answer>chào bạn</answer>")
+    assert contains_tool_protocol('<x name="get_project_distance"/>')
+
+
+def test_contains_tool_protocol_leaves_ordinary_vietnamese_alone():
+    """A false positive must stay cheap: the round is retried, not delivered."""
+    for clean in (
+        "Dạ, anh/chị cách nhà máy khoảng 12,9 km ạ.",
+        "Lương 5-7 triệu/tháng tại Hải Phòng ạ.",
+        "Anh gửi email ban@example.com giúp em nhé.",
+        "Tổng 3 + 4 = 7",
+    ):
+        assert not contains_tool_protocol(clean), clean
