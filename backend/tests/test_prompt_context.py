@@ -10,12 +10,15 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from app.graph.direct_context import build_direct_user_text
+from app.graph.proactive import _build_proactive_user_text
 from app.graph.prompt_context import (
     _HISTORY_ELISION_MARKER,
     _HISTORY_TRUNCATION_SUFFIX,
     _MAX_HISTORY_CHARS,
     build_agent_user_text,
 )
+from tests.test_text_tool_calls import _DSML_LEAK
 
 
 def _message(body: str, *, sender: str = "WORKER"):
@@ -81,3 +84,46 @@ def test_suppressed_messages_are_excluded_before_budgeting():
     assert "tin đã chặn" in out
     assert "phản hồi" not in out
     assert "tin cuối" in out
+
+
+def test_a_replayed_bot_body_can_no_longer_carry_markup_into_the_prompt():
+    """A leak delivered once is persisted verbatim; replaying it teaches the
+    dialect. Every history renderer strips it — and only from BOT bodies."""
+    leaked = "Dạ em kiểm tra ngay ạ.\n" + _DSML_LEAK
+    bot = _message(leaked, sender="BOT")
+    bot_only = _message(_DSML_LEAK, sender="BOT")
+    bot_history = [bot, bot_only]
+
+    out = build_agent_user_text(
+        chat_id="c1",
+        current_user_text="câu hỏi hiện tại",
+        recent_messages=bot_history,
+    )
+
+    assert "Dạ em kiểm tra ngay ạ." in out
+    assert "invoke" not in out and "DSML" not in out
+    # The markup-only BOT body contributes no line at all.
+    assert out.count("- Bot:") == 1
+
+    # Candidate-authored text is never altered, even when it quotes the markup.
+    worker = _message("em hỏi chút\n" + _DSML_LEAK, sender="WORKER")
+    worker_out = build_agent_user_text(
+        chat_id="c1",
+        current_user_text="câu hỏi hiện tại",
+        recent_messages=[worker],
+    )
+
+    assert worker.body in worker_out
+
+    # The other two history renderers hold the same line as the agent lane.
+    for rendered in (
+        build_direct_user_text(
+            current_user_text="câu hỏi hiện tại",
+            recent_messages=bot_history,
+            history_token_budget=12_000,
+        ),
+        _build_proactive_user_text(chat_id="c1", recent_messages=bot_history),
+    ):
+        assert "Dạ em kiểm tra ngay ạ." in rendered
+        assert "invoke" not in rendered and "DSML" not in rendered
+        assert rendered.count("- Bot:") == 1

@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.shared.domain.text import normalize_vietnamese_text
-from app.graph.message_values import delivery_is, sender_is, speaker_label
+from app.graph.message_values import delivery_is, sender_is
+from app.graph.prompt_context import history_line
 
 
 @dataclass(frozen=True)
@@ -166,7 +167,11 @@ def build_direct_user_text(
     used = 0
     lines: list[str] = []
     for message in reversed(history):
-        line = f"- {speaker_label(message)}: {message.body.strip()}"
+        # A markup-only BOT body renders to nothing and must not consume the
+        # budget (see ``history_line``).
+        line = history_line(message)
+        if line is None:
+            continue
         cost = (len(line) + 1) // 2
         if used + cost > history_token_budget:
             break

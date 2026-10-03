@@ -20,8 +20,9 @@ from typing import Any, Awaitable, Callable, TypedDict, cast
 
 from app.graph.message_values import delivery_is, sender_is
 from app.graph.ports import SendOutcome
-from app.graph.think_strip import strip_provider_artifacts
-from app.graph.types import GraphDeps, TurnOutcome, _now, _speaker
+from app.graph.prompt_context import history_line
+from app.graph.think_strip import contains_tool_protocol, strip_provider_artifacts
+from app.graph.types import GraphDeps, TurnOutcome, _now
 from app.recruitment.application.ports import ProactiveStatePort
 
 logger = logging.getLogger(__name__)
@@ -115,9 +116,11 @@ def _build_proactive_user_text(
 ) -> str:
     """Build the contextual user text for the proactive LLM decision."""
     history_lines = [
-        f"- {_speaker(m)}: {m.body.strip()}"
+        line
         for m in recent_messages
-        if (m.body or "").strip() and not delivery_is(m, "SUPPRESSED")
+        if (m.body or "").strip()
+        and not delivery_is(m, "SUPPRESSED")
+        and (line := history_line(m)) is not None
     ]
     if not history_lines:
         history_lines = ["- (chưa có tin nhắn trước đó)"]
@@ -400,7 +403,7 @@ async def run_proactive_turn(conv, deps: GraphDeps) -> TurnOutcome:
         #     channel-sized bubbles by the sender instead)
         candidate = strip_provider_artifacts(message)
 
-        if not candidate.strip():
+        if not candidate.strip() or contains_tool_protocol(candidate):
             logger.info("proactive message empty after cleaning: conversation=%s", conv.zalo_chat_id)
             await svc.state.record_proactive_outcome(
                 conv,

@@ -38,7 +38,11 @@ from app.graph.telemetry import (
     _stamp_end_to_end,
     _stamp_outbound_telemetry,
 )
-from app.graph.think_strip import strip_markdown_decorations, strip_provider_artifacts
+from app.graph.think_strip import (
+    contains_tool_protocol,
+    strip_markdown_decorations,
+    strip_provider_artifacts,
+)
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
 from app.recruitment.domain.provider import (
     provider_from_conversation,
@@ -86,7 +90,7 @@ def _finalize_user_visible_reply(
     user_text: str,
     timings: dict,
 ) -> str:
-    """Converged reply boundary: strip provider thinking, ship the answer as-is.
+    """Converged reply boundary: strip provider artefacts, or refuse the reply.
 
     ``deps``/``generated``/``user_text`` stay in the signature so the
     progressive-send bubble and the full-answer call site keep one boundary shape.
@@ -96,14 +100,26 @@ def _finalize_user_visible_reply(
     literal asterisks/ticks, so decorations are stripped deterministically
     (the persona forbids markdown; this is the backstop). Curated replies keep
     their authored formatting untouched.
+
+    The same boundary owns protocol residue: stripping markdown is lossless, but
+    a provider that serialized a tool call into its content may write a format
+    the parsers do not know. Generated text that still carries tool-call protocol
+    after the strip is not an answer, so this returns "" and every caller takes
+    its existing empty-candidate path. Only generated text is guarded — curated
+    and tool-authored replies are DB content that may legitimately hold angle
+    brackets.
     """
     stripped = strip_provider_artifacts(raw)
-    if generated:
-        # Presentation cleanup must be lossless. Channel adapters split long
-        # text to their provider limits; clipping here would discard projects
-        # before both the durable receipt and the transport ever see them.
-        return strip_markdown_decorations(stripped)
-    return stripped
+    if not generated:
+        return stripped
+    cleaned = strip_markdown_decorations(stripped)
+    # A parser that misses is recoverable; a stripper that misses is not. If
+    # protocol markup survived the strip it is not a reply: return nothing so
+    # every caller takes its existing empty-candidate path — runner suppresses
+    # the turn, the progressive bubble defers to the whole-reply path.
+    if contains_tool_protocol(cleaned):
+        return ""
+    return cleaned
 
 
 def _build_outbox_payload(

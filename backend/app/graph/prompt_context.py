@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.graph.message_values import delivery_is, sender_is
+from app.graph.think_strip import strip_provider_artifacts
 from app.graph.types import _speaker
 
 # The direct-context lane caps its injected history at 12_000 tokens; this agent
@@ -19,6 +20,23 @@ _HISTORY_ELISION_MARKER = (
 _HISTORY_TRUNCATION_SUFFIX = " …[rút gọn]"
 
 
+def history_line(message) -> str | None:
+    """One rendered history line, or None when the body carries nothing.
+
+    A leak that reached a candidate is persisted verbatim as the BOT message
+    body, and every later turn replays history into the prompt — so the model
+    sees its own protocol markup as prior assistant text and continues the
+    dialect (2026-10-03). Candidate-authored text is never altered: only BOT
+    bodies can hold provider residue.
+    """
+    body = (message.body or "").strip()
+    if sender_is(message, "BOT"):
+        body = strip_provider_artifacts(body).strip()
+        if not body:
+            return None
+    return f"- {_speaker(message)}: {body}"
+
+
 def _bounded_history_lines(history: list[Any]) -> list[str]:
     """Render recent messages within ``_MAX_HISTORY_CHARS``, newest kept.
 
@@ -28,7 +46,7 @@ def _bounded_history_lines(history: list[Any]) -> list[str]:
     never contains the current candidate message (the caller appends it
     separately), so truncation here can never cut the current user message.
     """
-    lines = [f"- {_speaker(m)}: {m.body.strip()}" for m in history]
+    lines = [line for m in history if (line := history_line(m)) is not None]
     total = sum(len(line) + 1 for line in lines)
     elided = 0
     while len(lines) > 1 and total > _MAX_HISTORY_CHARS:

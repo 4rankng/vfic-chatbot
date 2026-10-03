@@ -33,6 +33,7 @@ from app.core.config import get_settings
 from app.graph.answer_repair import (
     _CUT_ANSWER_CONTINUE_INSTRUCTION,
     _MAX_ANSWER_CONTINUATIONS,
+    _PROTOCOL_RESIDUE_RETRY_INSTRUCTION,
     _answer_was_cut,
     _join_answer_parts,
     _record_answer_continuation,
@@ -167,6 +168,7 @@ class _AgentTurn:
         "authority_tool_dispatched",
         "iterations_remaining",
         "empty_retry_available",
+        "protocol_retry_available",
         "retrying_empty_generation",
         "answer_parts",
         "answer_continuations",
@@ -223,6 +225,11 @@ class _AgentTurn:
         self.effective_query = effective_query
         self.iterations_remaining = max_iters
         self.empty_retry_available = retry_empty_generation
+        # One round may be re-spent when a provider serializes a tool call into
+        # the content in a dialect no parser knows: the residue is not a reply,
+        # but it is also not the model's fault, so it gets one rewrite before the
+        # turn is suppressed (2026-10-03).
+        self.protocol_retry_available = True
         # Captured for post-generation grounding cross-check.
         self.tool_results: list[str] = []
         # Everything the model was shown before it wrote the reply: the system
@@ -731,7 +738,12 @@ class MiniMaxAgent:
         text), or ``_CONTINUE_TURN`` when the round budget ran out first — the
         caller then decides what an unanswered turn ships.
         """
-        from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+        from langchain_core.messages import (
+            AIMessage,
+            HumanMessage,
+            SystemMessage,
+            ToolMessage,
+        )
 
         active_llm = turn.active_llm
         metrics = turn.metrics
@@ -846,6 +858,24 @@ class MiniMaxAgent:
                     # now that it has the data. The markup never reaches a reply:
                     # this path consumes it, and the boundary strips whatever
                     # remains.
+                    # The provider emitted no structured tool_calls, so the
+                    # message above is plain text an OpenAI-compatible endpoint
+                    # will not accept a ToolMessage in reply to ("tool message
+                    # must follow an assistant with tool_calls"). Replace it with
+                    # the canonical form: the prose it wrote (markup stripped)
+                    # plus the calls it meant to make.
+                    messages[-1] = AIMessage(
+                        content=strip_provider_artifacts(raw_content),
+                        tool_calls=[
+                            {
+                                "name": str(call["name"]),
+                                "args": call["args"],
+                                "id": str(call["id"]),
+                                "type": "tool_call",
+                            }
+                            for call in text_calls
+                        ],
+                    )
                     logger.warning(
                         "provider emitted %d tool call(s) as text: %s",
                         len(text_calls),
@@ -884,6 +914,18 @@ class MiniMaxAgent:
                         "tool-call protocol survived the strip; refusing to send: %r",
                         visible_round[:200],
                     )
+                    if turn.protocol_retry_available:
+                        turn.protocol_retry_available = False
+                        turn.iterations_remaining += 1
+                        messages.pop()  # drop the residue-only round from history
+                        messages.append(
+                            SystemMessage(content=_PROTOCOL_RESIDUE_RETRY_INSTRUCTION)
+                        )
+                        if metrics is not None:
+                            metrics["tool_protocol_retries"] = (
+                                metrics.get("tool_protocol_retries", 0) + 1
+                            )
+                        continue
                     if metrics is not None:
                         metrics["answer_completion_failure"] = "tool_protocol_residue"
                     return ""
@@ -1217,6 +1259,7 @@ class MiniMaxAgent:
         turn.continuing_answer = True
         turn.retrying_empty_generation = False
         turn.empty_retry_available = False
+        turn.protocol_retry_available = False
         rewritten = await self._run_generation_round(turn)
         if isinstance(rewritten, _ContinueTurn) or not rewritten:
             if turn.metrics is not None:

@@ -31,6 +31,12 @@ _CUT_ANSWER_CONTINUE_INSTRUCTION = (
     "Hãy viết tiếp NGAY tại đúng chỗ đang dở, không lặp lại phần đã viết, không mở "
     "đầu lại và không lặp lời chào; hoàn thành trọn vẹn câu trả lời cho người lao động."
 )
+_PROTOCOL_RESIDUE_RETRY_INSTRUCTION = (
+    "Câu trả lời vừa rồi chứa phần định dạng lệnh gọi công cụ nên chưa thể gửi cho người "
+    "lao động. Hãy viết lại câu trả lời bằng lời văn tiếng Việt bình thường, dùng kết quả "
+    "công cụ đã có trong cuộc trò chuyện; tuyệt đối không viết thẻ, tên công cụ hay tham số "
+    "dạng markup."
+)
 # A repeated seam (the model re-emitting the tail it was handed) is dropped, but
 # only when the overlap is long enough and word-aligned on both sides, so
 # legitimate repetition inside an answer is never deleted.
