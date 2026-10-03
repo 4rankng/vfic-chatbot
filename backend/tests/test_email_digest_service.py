@@ -165,7 +165,7 @@ async def test_run_digest_sends_and_advances_state(monkeypatch):
         assert "Tóm tắt hội thoại" in kwargs["html"]
         return "pid-1"
 
-    async def fake_summary(candidate):
+    async def fake_summary(candidate, extractor=None):
         return "Tóm tắt mẫu."
 
     monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
@@ -299,3 +299,24 @@ async def test_test_send_never_advances_send_state(monkeypatch):
     # the same lead window.
     assert db.rows == {}
     assert db.commit_count == 0
+
+
+async def test_run_digest_without_summarizer_falls_back_verbatim(monkeypatch):
+    """No injected extractor → summary stays None; the renderer uses the
+    candidate's own last messages, and the email still goes out."""
+
+    async def fake_collect(db, *, window_start, window_end):
+        return [_candidate(candidate_messages=("Hỏi lương", "Hỏi ca làm"))]
+
+    async def fake_send(**kwargs):
+        assert "Hỏi ca làm" in kwargs["html"]  # verbatim fallback present
+        return "pid-2"
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
+    monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)
+
+    db = _StateDb()
+    now = datetime(2026, 10, 5, 2, 5, tzinfo=timezone.utc)
+    result = await run_digest(db, settings_service=_SettingsSvc(_config()), now=now)
+    assert result.status == STATUS_SENT
+    assert db.commit_count == 1

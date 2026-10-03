@@ -10,6 +10,7 @@ send-state row so the next window starts where this one ended.
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -87,16 +88,21 @@ def is_due(config: EmailDigestRuntimeConfig, *, now: datetime) -> bool:
     return _period_key(last_ict, config.frequency) != _period_key(ict_now, config.frequency)
 
 
-async def _candidate_summary(candidate: DigestCandidate) -> str | None:
-    """LLM summary of what the candidate said; None on any failure."""
-    if not candidate.candidate_messages:
+async def _candidate_summary(
+    candidate: DigestCandidate,
+    extractor: Callable[[str, str], Awaitable[str]] | None,
+) -> str | None:
+    """LLM summary of what the candidate said; None on any failure.
+
+    The extractor callable is INJECTED by the caller (the worker builds it
+    from the graph factories): a service must not import the graph layer, and
+    without a summarizer the renderer falls back to the candidate's verbatim
+    messages — the email still goes out.
+    """
+    if extractor is None or not candidate.candidate_messages:
         return None
     transcript = "\n".join(f"- {line[:300]}" for line in candidate.candidate_messages)
     try:
-        # Imported per call: graph factories pull in the LLM stack.
-        from app.graph.factories import build_minimax_extractor
-
-        extractor = build_minimax_extractor()
         text = await extractor(
             SUMMARY_SYSTEM_PROMPT,
             f"Hội thoại với chatbot (lời của ứng viên):\n{transcript}",
@@ -114,6 +120,7 @@ async def run_digest(
     *,
     now: datetime | None = None,
     settings_service: IntegrationSettingsService | None = None,
+    summarizer: Callable[[str, str], Awaitable[str]] | None = None,
 ) -> DigestRunResult:
     """One digest pass. Sends at most once per configured period."""
     moment = now or datetime.now(timezone.utc)
@@ -136,7 +143,7 @@ async def run_digest(
         return DigestRunResult(status=STATUS_EMPTY)
 
     for candidate in candidates:
-        candidate.summary = await _candidate_summary(candidate)
+        candidate.summary = await _candidate_summary(candidate, summarizer)
 
     ict_now = moment.astimezone(ICT)
     html = render_digest_html(candidates)
