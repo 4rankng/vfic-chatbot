@@ -194,4 +194,91 @@ describe("fetchDashboardCandidates", () => {
     ]);
     expect(apiJsonMock).toHaveBeenCalledTimes(1);
   });
+
+  it("resolves a contact-keyed candidate's conversation by contact id", async () => {
+    apiJsonMock.mockImplementation((url?: string) =>
+      Promise.resolve(
+        url?.startsWith("/api/v1/leads")
+          ? {
+              data: [
+                {
+                  ...candidateApiRow(4, "2026-07-18T03:00:00Z"),
+                  zalo_id: null,
+                  contact_id: "contact-4",
+                },
+              ],
+              total: 1,
+            }
+          : {
+              data: [
+                {
+                  id: "messenger-conversation",
+                  zalo_chat_id: null,
+                  contact_id: "contact-4",
+                  contact: null,
+                },
+              ],
+              total: 1,
+            },
+      ),
+    );
+
+    await expect(fetchDashboardCandidates()).resolves.toEqual([
+      expect.objectContaining({
+        id: 4,
+        name: "Ứng viên 4",
+        conversation_id: "messenger-conversation",
+      }),
+    ]);
+    expect(apiJsonMock).toHaveBeenCalledWith(
+      "/api/v1/conversations/by-contact-ids?ids=contact-4",
+    );
+  });
+
+  it("keeps the exact Zalo thread when the contact has other conversations too", async () => {
+    apiJsonMock.mockImplementation((url?: string) =>
+      Promise.resolve(
+        url?.startsWith("/api/v1/leads")
+          ? {
+              data: [
+                {
+                  ...candidateApiRow(5, "2026-07-18T03:00:00Z"),
+                  contact_id: "contact-5",
+                },
+              ],
+              total: 1,
+            }
+          : url?.includes("by-contact-ids")
+            ? {
+                data: [
+                  {
+                    id: "other-channel-conversation",
+                    zalo_chat_id: null,
+                    contact_id: "contact-5",
+                    contact: null,
+                  },
+                ],
+                total: 1,
+              }
+            : {
+                data: [
+                  {
+                    id: "zalo-conversation",
+                    zalo_chat_id: "oa:user-5",
+                    contact_id: "contact-5",
+                    contact: null,
+                  },
+                ],
+                total: 1,
+              },
+      ),
+    );
+
+    await expect(fetchDashboardCandidates()).resolves.toEqual([
+      expect.objectContaining({
+        id: 5,
+        conversation_id: "zalo-conversation",
+      }),
+    ]);
+  });
 });

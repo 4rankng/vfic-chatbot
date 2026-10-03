@@ -1,33 +1,21 @@
 import {
   CheckCircle2,
   MessageCircle,
-  PanelRight,
   Phone,
   UserRoundPlus,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  useDataProvider,
-  useNotify,
-  useTranslate,
-  type TranslateFunction,
-} from "ra-core";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Button as AriaButton } from "react-aria-components";
-import { useNavigate } from "react-router";
+import { useTranslate, type TranslateFunction } from "ra-core";
+import { useMemo } from "react";
+import { useNavigate, type NavigateFunction } from "react-router";
 import { VList, WindowVirtualizer } from "virtua";
 
 import { AlertFloating } from "@/components/application/alerts/alerts";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { Badge } from "@/components/base/badges/badges";
-import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-import { useRoleActions } from "../hooks/useRoleActions";
 import { EmptyState } from "../kit";
-import type { CandidateProfileUpdate } from "../leads/domain/candidateProfile";
-import type { CrmDataProvider } from "../providers/types";
-import type { Lead } from "../types";
 import {
   ATTENTION_QUERY_KEY,
   REASON_LABELS,
@@ -38,11 +26,11 @@ import {
 } from "./attentionDashboard";
 import {
   CANDIDATES_QUERY_KEY,
+  type CandidateDayGroup,
   type DashboardCandidate,
   fetchDashboardCandidates,
   groupCandidatesByDay,
 } from "./candidateDashboard";
-import { CandidateDataDialog } from "./CandidateDataDialog";
 import {
   deriveCacheDiscriminators,
   filterHumanInterventions,
@@ -77,13 +65,6 @@ const formatClock = (value: string | null | undefined): string => {
   }).format(date);
 };
 
-type Navigate = ReturnType<typeof useNavigate>;
-type SaveCandidateProfile = (
-  lead: Lead,
-  changes: Partial<CandidateProfileUpdate>,
-  version: number,
-) => Promise<void>;
-
 /**
  * One primary action per row (no nested interactive controls — spec Risks).
  * `OPEN_CONVERSATION` navigates to the conversation; `CALL` only displays the
@@ -91,7 +72,7 @@ type SaveCandidateProfile = (
  */
 const rowOnClick = (
   row: AttentionItem,
-  navigate: Navigate,
+  navigate: NavigateFunction,
 ): (() => void) | null => {
   if (row.action === "OPEN_CONVERSATION" && row.conversation_id) {
     return () => navigate(`/conversations?id=${row.conversation_id}`);
@@ -103,9 +84,6 @@ export const RecruitingCommandCenter = ({
   variant = "desktop",
 }: RecruitingCommandCenterProps) => {
   const navigate = useNavigate();
-  const dataProvider = useDataProvider<CrmDataProvider>();
-  const notify = useNotify();
-  const { canEdit } = useRoleActions();
   const translate = useTranslate();
   // TanStack caching contract (Red-team Medium 14 — exact):
   //   - skeleton iff isPending && !data (first load only)
@@ -132,34 +110,8 @@ export const RecruitingCommandCenter = ({
     gcTime: 5 * 60_000,
   });
   // The result object changes on every fetch-state flip; the refetch binding
-  // does not, so the save callback can stay referentially stable.
+  // does not, so the retry handlers stay referentially stable.
   const { refetch: refetchCandidates } = candidatesQuery;
-  const saveCandidateProfile: SaveCandidateProfile = useCallback(
-    async (lead, changes, version) => {
-      try {
-        await dataProvider.update<Lead>("leads", {
-          id: lead.id,
-          data: { ...changes, version },
-          previousData: lead,
-        });
-        notify(translate("dashboard.save_candidate_success"), {
-          type: "success",
-        });
-        await refetchCandidates().catch(() => undefined);
-      } catch (error) {
-        // No refetch here: the write failed, so the cached list is still the
-        // authoritative snapshot — refetching only doubles list traffic.
-        notify(
-          error instanceof Error
-            ? error.message
-            : translate("dashboard.save_candidate_failed"),
-          { type: "error" },
-        );
-        throw error;
-      }
-    },
-    [dataProvider, notify, refetchCandidates, translate],
-  );
 
   const shellClass =
     variant === "mobile"
@@ -269,8 +221,6 @@ export const RecruitingCommandCenter = ({
           }}
           navigate={navigate}
           onRetry={refetchCandidates}
-          canEdit={canEdit}
-          onSave={saveCandidateProfile}
         />
       </section>
     </div>
@@ -308,7 +258,7 @@ type PanelState = {
 type AttentionPanelProps = {
   rows: AttentionItem[];
   state: PanelState;
-  navigate: Navigate;
+  navigate: NavigateFunction;
   onRetry: () => void;
 };
 
@@ -376,16 +326,12 @@ const CandidatePanel = ({
   state,
   navigate,
   onRetry,
-  canEdit,
-  onSave,
 }: {
-  groups: ReturnType<typeof groupCandidatesByDay>;
+  groups: CandidateDayGroup[];
   count: number;
   state: PanelState;
-  navigate: Navigate;
+  navigate: NavigateFunction;
   onRetry: () => void;
-  canEdit: boolean;
-  onSave: SaveCandidateProfile;
 }) => {
   const isEmpty =
     !state.showSkeleton && !state.showInitialError && !state.hasRows;
@@ -435,8 +381,6 @@ const CandidatePanel = ({
               groups={groups}
               count={count}
               navigate={navigate}
-              canEdit={canEdit}
-              onSave={onSave}
             />
           )}
         </div>
@@ -449,14 +393,10 @@ const CandidateGroupedList = ({
   groups,
   count,
   navigate,
-  canEdit,
-  onSave,
 }: {
-  groups: ReturnType<typeof groupCandidatesByDay>;
+  groups: CandidateDayGroup[];
   count: number;
-  navigate: Navigate;
-  canEdit: boolean;
-  onSave: SaveCandidateProfile;
+  navigate: NavigateFunction;
 }) => {
   const isMobile = useIsMobile();
   const desktopHeight = Math.min(640, count * 58 + groups.length * 30);
@@ -481,12 +421,10 @@ const CandidateGroupedList = ({
                 key={`candidate-${candidate.id}`}
                 candidate={candidate}
                 navigate={navigate}
-                canEdit={canEdit}
-                onSave={onSave}
               />
             )),
           ]),
-    [count, groups, navigate, canEdit, onSave],
+    [count, groups, navigate],
   );
 
   // The dashboard usually contains only a handful of recent candidates. A
@@ -504,8 +442,6 @@ const CandidateGroupedList = ({
                 key={`candidate-${candidate.id}`}
                 candidate={candidate}
                 navigate={navigate}
-                canEdit={canEdit}
-                onSave={onSave}
               />
             ))}
           </div>
@@ -556,7 +492,7 @@ const AttentionRow = ({
   navigate,
 }: {
   row: AttentionItem;
-  navigate: Navigate;
+  navigate: NavigateFunction;
 }) => {
   const translate = useTranslate();
   const name = candidateName(row, translate);
@@ -629,19 +565,18 @@ const AttentionRow = ({
   );
 };
 
+/**
+ * One primary action per row (no nested interactive controls — spec Risks):
+ * tapping the row opens the linked conversation directly. Candidate data stays
+ * reachable from the conversation header, so the row needs no secondary menu.
+ */
 const CandidateRow = ({
   candidate,
   navigate,
-  canEdit,
-  onSave,
 }: {
   candidate: DashboardCandidate;
-  navigate: Navigate;
-  canEdit: boolean;
-  onSave: SaveCandidateProfile;
+  navigate: NavigateFunction;
 }) => {
-  const [isCandidateDataOpen, setIsCandidateDataOpen] = useState(false);
-  const actionTriggerRef = useRef<HTMLButtonElement>(null);
   const translate = useTranslate();
   const name =
     normalizeText(candidate.name) || translate("leads.fallback_new_candidate");
@@ -674,63 +609,15 @@ const CandidateRow = ({
 
   if (conversationId) {
     return (
-      <>
-        <Dropdown.Root>
-          <AriaButton
-            ref={actionTriggerRef}
-            type="button"
-            data-allow-tall
-            className="dashboard-candidate-row"
-            aria-label={`Chọn thao tác cho ${name}, số điện thoại ${phone}`}
-          >
-            {content}
-          </AriaButton>
-          <Dropdown.Popover
-            placement="bottom end"
-            className="dashboard-candidate-action-menu uu-scope"
-          >
-            <Dropdown.Menu
-              onAction={(key) => {
-                if (key === "conversation") {
-                  navigate(`/conversations?id=${conversationId}`);
-                }
-                if (key === "candidate-data") {
-                  setIsCandidateDataOpen(true);
-                }
-              }}
-            >
-              <Dropdown.Item
-                id="conversation"
-                textValue="Xem hội thoại"
-                icon={MessageCircle}
-                label="Xem hội thoại"
-                selectionIndicator="none"
-                className="dashboard-candidate-action-item"
-              />
-              <Dropdown.Item
-                id="candidate-data"
-                textValue="Dữ liệu ứng viên"
-                icon={PanelRight}
-                label="Dữ liệu ứng viên"
-                selectionIndicator="none"
-                className="dashboard-candidate-action-item"
-              />
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown.Root>
-        <CandidateDataDialog
-          lead={candidate.lead}
-          displayName={name}
-          displayAvatarUrl={candidate.avatar_url}
-          open={isCandidateDataOpen}
-          onOpenChange={setIsCandidateDataOpen}
-          returnFocusRef={actionTriggerRef}
-          canEdit={canEdit}
-          onSave={(changes, version) =>
-            onSave(candidate.lead, changes, version)
-          }
-        />
-      </>
+      <button
+        type="button"
+        data-allow-tall
+        className="dashboard-candidate-row"
+        aria-label={`Mở hội thoại với ${name}, số điện thoại ${phone}`}
+        onClick={() => navigate(`/conversations?id=${conversationId}`)}
+      >
+        {content}
+      </button>
     );
   }
 

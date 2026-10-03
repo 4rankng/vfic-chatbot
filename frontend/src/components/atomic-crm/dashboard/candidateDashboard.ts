@@ -3,6 +3,7 @@ import { buildRecruitmentContextIdentity } from "../leads/domain/recruitmentPres
 import {
   getDashboardCandidates,
   getDashboardConversations,
+  getDashboardConversationsByContactIds,
 } from "../reporting/reportingService";
 
 export interface DashboardCandidate {
@@ -139,22 +140,56 @@ export const fetchDashboardCandidates = async (): Promise<
         .filter((value): value is string => Boolean(value)),
     ),
   );
-  const conversationResponse =
-    zaloIds.length > 0
-      ? await getDashboardConversations<ConversationListEnvelope>(zaloIds)
-      : { data: [], total: 0 };
+  // Contact-keyed candidates (Alembic 0047: Messenger rows carry a NULL
+  // zalo_id) are invisible to a chat-id lookup, so their conversations are
+  // resolved by contact id as well — the dashboard twin of
+  // loadRecruitmentConversationRows' dual-key lookup.
+  const contactIds = Array.from(
+    new Set(
+      candidates
+        .map((candidate) => candidate.contact_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const [zaloConversationResponse, contactConversationResponse] =
+    await Promise.all([
+      zaloIds.length > 0
+        ? getDashboardConversations<ConversationListEnvelope>(zaloIds)
+        : { data: [], total: 0 },
+      contactIds.length > 0
+        ? getDashboardConversationsByContactIds<ConversationListEnvelope>(
+            contactIds,
+          )
+        : { data: [], total: 0 },
+    ]);
   const conversationsByZaloId = new Map<string, Conversation[]>();
-  for (const conversation of conversationResponse.data) {
+  for (const conversation of zaloConversationResponse.data) {
     if (!conversation.zalo_chat_id) continue;
     const rows = conversationsByZaloId.get(conversation.zalo_chat_id) ?? [];
     rows.push(conversation);
     conversationsByZaloId.set(conversation.zalo_chat_id, rows);
   }
+  const conversationsByContactId = new Map<string, Conversation[]>();
+  for (const conversation of contactConversationResponse.data) {
+    if (!conversation.contact_id) continue;
+    const rows = conversationsByContactId.get(conversation.contact_id) ?? [];
+    rows.push(conversation);
+    conversationsByContactId.set(conversation.contact_id, rows);
+  }
 
   return candidates.map((candidate) => {
-    const conversations = candidate.zalo_id
-      ? (conversationsByZaloId.get(candidate.zalo_id) ?? [])
-      : [];
+    // The Zalo chat id is the exact thread key (leads_zalo_id_fkey), so it wins;
+    // the contact match only reaches contact-keyed candidates whose chat id is
+    // NULL. Both lists arrive newest-activity-first, so [0] is the latest
+    // thread as before.
+    const conversations =
+      (candidate.zalo_id
+        ? conversationsByZaloId.get(candidate.zalo_id)
+        : undefined) ??
+      (candidate.contact_id
+        ? conversationsByContactId.get(candidate.contact_id)
+        : undefined) ??
+      [];
     const conversation = conversations[0];
     const profileConversation = conversations.find(
       (row) =>

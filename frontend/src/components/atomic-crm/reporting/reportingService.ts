@@ -5,6 +5,7 @@ export const {
   getAttentionDashboard,
   getDashboardCandidates,
   getDashboardConversations,
+  getDashboardConversationsByContactIds,
   getDashboardMetrics,
   getPerformanceMetrics,
 } = createReportingReads(reportingApi);

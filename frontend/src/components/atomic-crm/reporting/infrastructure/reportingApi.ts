@@ -9,6 +9,10 @@ export const reportingApi: ReportingReadPort = {
     apiJson<T>(
       `/api/v1/conversations/by-zalo-ids?ids=${encodeURIComponent(zaloIds.join(","))}`,
     ),
+  getDashboardConversationsByContactIds: <T>(contactIds: string[]) =>
+    apiJson<T>(
+      `/api/v1/conversations/by-contact-ids?ids=${encodeURIComponent(contactIds.join(","))}`,
+    ),
   getDashboardMetrics: <T>() => apiJson<T>("/api/v1/dashboard/metrics"),
   getPerformanceMetrics: <T>(window: string) =>
     apiJson<T>(

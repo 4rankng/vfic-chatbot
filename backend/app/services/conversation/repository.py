@@ -294,6 +294,30 @@ class ConversationRepository(ReconcileQueriesMixin):
         ).all()
         return list(rows)
 
+    async def list_by_contact_ids(
+        self,
+        *,
+        viewer: User,
+        contact_ids: list[uuid.UUID],
+    ) -> list[Conversation]:
+        """Conversations of the given contacts, newest activity first.
+
+        Contact-keyed counterparts of :meth:`list_by_zalo_ids`: Messenger and
+        other contact-keyed rows carry a NULL ``zalo_chat_id`` (Alembic 0047),
+        so a chat-id lookup can never reach them.
+        """
+        if not contact_ids:
+            return []
+        query = viewer_conversation_filter(select(Conversation), viewer).where(
+            Conversation.contact_id.in_(contact_ids)
+        )
+        rows = (
+            await self.db.scalars(
+                query.order_by(Conversation.updated_at.desc(), Conversation.id.asc())
+            )
+        ).all()
+        return list(rows)
+
     async def needs_attention_count(
         self, *, viewer: User, channel_provider: str | None = None
     ) -> int:

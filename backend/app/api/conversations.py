@@ -139,6 +139,29 @@ async def list_conversations_by_zalo_ids(
     )
 
 
+@router.get("/by-contact-ids", response_model=ConversationListResponse)
+async def list_conversations_by_contact_ids(
+    ids: str = Query(..., description="Comma-separated contact UUIDs (max 200)"),
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
+) -> ConversationListResponse:
+    raw_ids = list(dict.fromkeys(value for value in ids.split(",") if value))
+    if not raw_ids or len(raw_ids) > 200:
+        raise ValidationError("ids must contain between 1 and 200 contact ids")
+    try:
+        contact_ids = [uuid.UUID(value) for value in raw_ids]
+    except ValueError as exc:
+        raise ValidationError("ids must be contact UUIDs") from exc
+    rows = await ConversationService(db).repo.list_by_contact_ids(
+        viewer=user,
+        contact_ids=contact_ids,
+    )
+    return ConversationListResponse(
+        data=[ConversationOut.model_validate(row) for row in rows],
+        total=len(rows),
+    )
+
+
 @router.get("/last-messages/batch")
 async def last_messages_batch(
     ids: str = Query(..., description="Comma-separated conversation UUIDs (max 200)"),

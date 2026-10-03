@@ -198,6 +198,67 @@ async def test_batch_zalo_lookup_is_viewer_scoped_and_newest_first() -> None:
 
 
 @pytest.mark.asyncio
+async def test_batch_contact_lookup_deduplicates_exact_requested_ids(transport) -> None:
+    http_transport, _db = transport
+    first, second = uuid.uuid4(), uuid.uuid4()
+    with patch("app.api.conversations.ConversationService") as service_class:
+        repo = service_class.return_value.repo
+        repo.list_by_contact_ids = AsyncMock(return_value=[])
+        async with httpx.AsyncClient(
+            transport=http_transport,
+            base_url="http://test",
+        ) as client:
+            response = await client.get(
+                "/api/v1/conversations/by-contact-ids",
+                params={"ids": f"{first},{first},{second}"},
+            )
+
+    assert response.status_code == 200
+    assert response.json() == {"data": [], "total": 0}
+    assert repo.list_by_contact_ids.await_args.kwargs == {
+        "viewer": ANY,
+        "contact_ids": [first, second],
+    }
+
+
+@pytest.mark.asyncio
+async def test_batch_contact_lookup_rejects_invalid_ids(transport) -> None:
+    http_transport, _db = transport
+    async with httpx.AsyncClient(
+        transport=http_transport,
+        base_url="http://test",
+    ) as client:
+        too_many = await client.get(
+            "/api/v1/conversations/by-contact-ids",
+            params={"ids": ",".join(str(uuid.uuid4()) for _ in range(201))},
+        )
+        not_a_uuid = await client.get(
+            "/api/v1/conversations/by-contact-ids",
+            params={"ids": "not-a-uuid"},
+        )
+
+    assert too_many.status_code == 422
+    assert not_a_uuid.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_batch_contact_lookup_is_viewer_scoped_and_newest_first() -> None:
+    from app.services.conversation.repository import ConversationRepository
+
+    db = SimpleNamespace(scalars=AsyncMock(return_value=_ScalarRows()))
+    viewer = SimpleNamespace(id=uuid.uuid4(), role=Role.admin)
+
+    await ConversationRepository(db).list_by_contact_ids(
+        viewer=viewer,
+        contact_ids=[uuid.uuid4(), uuid.uuid4()],
+    )
+
+    sql = str(db.scalars.await_args.args[0])
+    assert "conversations.contact_id IN" in sql
+    assert "conversations.updated_at DESC" in sql
+
+
+@pytest.mark.asyncio
 async def test_attention_reason_query_returns_total_for_empty_late_page() -> None:
     from app.services.dashboard.repository import DashboardRepository
 

@@ -276,61 +276,13 @@ describe("RecruitingCommandCenter candidate rows", () => {
     expect(screen.container.textContent).not.toContain("Ưu tiên phản hồi");
     expect(screen.container.textContent).not.toContain("Luồng ứng viên");
 
-    const candidateActionTrigger = screen.getByRole("button", {
-      name: /Chọn thao tác cho Phạm Hùng/,
+    const rowButton = screen.getByRole("button", {
+      name: /Mở hội thoại với Phạm Hùng/,
     });
-    await candidateActionTrigger.click();
-    await expect
-      .element(screen.getByRole("menuitem", { name: "Xem hội thoại" }))
-      .toBeVisible();
-    await screen.getByRole("menuitem", { name: "Dữ liệu ứng viên" }).click();
-    await expect
-      .element(screen.getByRole("dialog", { name: "Thông tin ứng viên" }))
-      .toBeVisible();
-    await expect.element(screen.getByText("Liên hệ ứng viên")).toBeVisible();
-    await expect.element(screen.getByText("Dữ liệu đã thu thập")).toBeVisible();
-    await expect.element(screen.getByText("Công nhân sản xuất")).toBeVisible();
-    await expect.element(screen.getByText("2 năm")).toBeVisible();
+    await rowButton.click();
     await expect
       .element(screen.getByTestId("dashboard-location"))
-      .toHaveTextContent("/");
-
-    await screen.getByRole("button", { name: "Chỉnh sửa" }).click();
-    const nameInput = screen.getByLabelText("Họ tên");
-    await expect.element(nameInput).toHaveValue("");
-    await nameInput.fill("Bùi Hải Anh");
-    await screen.getByRole("button", { name: "Lưu thay đổi" }).click();
-    expect(mockDataProviderUpdate).toHaveBeenCalledWith("leads", {
-      id: 42,
-      data: {
-        name: "Bùi Hải Anh",
-        version: 3,
-      },
-      previousData: expect.objectContaining({
-        id: 42,
-        name: "",
-        phone: "0900000042",
-        version: 3,
-      }),
-    });
-    expect(mockNotify).toHaveBeenCalledWith("Đã cập nhật hồ sơ ứng viên", {
-      type: "success",
-    });
-    await expect
-      .element(screen.getByRole("dialog", { name: "Thông tin ứng viên" }))
-      .toBeVisible();
-    await expect
-      .element(screen.getByTestId("dashboard-location"))
-      .toHaveTextContent("/");
-
-    await screen.getByRole("button", { name: "Đóng" }).click();
-    await expect
-      .element(screen.getByRole("dialog", { name: "Thông tin ứng viên" }))
-      .not.toBeInTheDocument();
-    await expect.element(candidateActionTrigger).toHaveFocus();
-    await expect
-      .element(screen.getByTestId("dashboard-location"))
-      .toHaveTextContent("/");
+      .toHaveTextContent("/conversations?id=conversation-42");
   });
 
   it("does not report an active queue while initial requests are failing", async () => {
@@ -436,7 +388,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
     await expect.element(screen.getByText("Ứng viên tĩnh")).toBeVisible();
     expect(
       screen.container.querySelector(
-        'button[aria-label^="Chọn thao tác cho Ứng viên tĩnh"]',
+        'button[aria-label^="Mở hội thoại với Ứng viên tĩnh"]',
       ),
     ).toBeNull();
     expect(screen.container.textContent).not.toContain("Không được hiển thị");
@@ -493,7 +445,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
     );
 
     const firstRow = screen.getByRole("button", {
-      name: /Chọn thao tác cho Ứng viên 21/,
+      name: /Mở hội thoại với Ứng viên 21/,
     });
     await expect.element(firstRow).toBeVisible();
     // Virtualizing must not drop the day grouping: the header is its own list
@@ -504,7 +456,6 @@ describe("RecruitingCommandCenter candidate rows", () => {
       )
       .toBeVisible();
     await firstRow.click();
-    await screen.getByRole("menuitem", { name: "Xem hội thoại" }).click();
     await expect
       .element(screen.getByTestId("dashboard-location"))
       .toHaveTextContent("/conversations?id=conversation-21");

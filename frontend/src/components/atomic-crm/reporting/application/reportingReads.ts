@@ -5,6 +5,8 @@ export const createReportingReads = (port: ReportingReadPort) => ({
   getDashboardCandidates: <T>() => port.getDashboardCandidates<T>(),
   getDashboardConversations: <T>(zaloIds: string[]) =>
     port.getDashboardConversations<T>(zaloIds),
+  getDashboardConversationsByContactIds: <T>(contactIds: string[]) =>
+    port.getDashboardConversationsByContactIds<T>(contactIds),
   getDashboardMetrics: <T>() => port.getDashboardMetrics<T>(),
   getPerformanceMetrics: <T>(window: string) =>
     port.getPerformanceMetrics<T>(window),

@@ -77,8 +77,6 @@ export const vietnameseCrmMessages = {
     candidates_count_failed: "Không tải được số ứng viên mới",
     candidates_count: "%{count} ứng viên mới",
     candidates_load_failed: "Không tải được ứng viên.",
-    save_candidate_success: "Đã cập nhật hồ sơ ứng viên",
-    save_candidate_failed: "Không thể cập nhật hồ sơ ứng viên",
   },
   performance: {
     error_title: "Không tải được số liệu hiệu suất",
