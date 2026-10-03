@@ -27,6 +27,7 @@ _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
         {
             "compare_income",
             "list_active_projects",
+            "get_project_distance",
             "search_bus_timetable",
             "get_product_features",
         }

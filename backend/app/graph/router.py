@@ -160,7 +160,7 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
         return TurnRoute(
             "recommend",
             "structured_lookup",
-            tools=("list_active_projects",),
+            tools=("list_active_projects", "get_project_distance"),
             reason="vacancy_listing",
             confidence=decisions.intent_confidence,
         )
@@ -182,7 +182,12 @@ _INTENT_ROUTES: dict[
 ] = {
     "recommend": (
         "recommendation",
-        ("list_active_projects", "get_product_features", "load_project_knowledge"),
+        (
+            "list_active_projects",
+            "get_project_distance",
+            "get_product_features",
+            "load_project_knowledge",
+        ),
         "recommendation_terms",
     ),
     "profile_update": ("profile", (), "profile_terms"),

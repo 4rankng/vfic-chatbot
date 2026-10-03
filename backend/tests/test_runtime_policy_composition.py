@@ -64,6 +64,29 @@ def test_job_advisory_capability_owns_active_project_listing_tool():
     assert policy.tool_registry.allows("compare_income")
 
 
+def test_job_advisory_capability_owns_the_project_distance_tool():
+    """Registration is not reachability.
+
+    ``get_project_distance`` is in ``TOOLS_REGISTRY``/``TOOL_SCHEMAS``, but a
+    tool the active manifest does not grant never reaches
+    ``filter_tool_schemas``, so the model is never offered it and can only
+    narrate the lookup it cannot perform ("em sẽ tra cứu"). This pins the
+    capability grant, which is the gate that actually bites in production.
+    """
+    active, persona = _active(capabilities=["conversation", "knowledge", "job_advisory"])
+
+    policy = build_resolved_runtime_policy(active, persona_body=persona)
+
+    assert policy is not None
+    assert policy.tool_registry.allows("get_project_distance")
+
+    # And the granted name must correspond to a real dispatchable tool, or the
+    # grant is dead weight.
+    from app.graph.tools import TOOLS_REGISTRY
+
+    assert "get_project_distance" in TOOLS_REGISTRY
+
+
 async def test_manifest_composed_agent_makes_zero_llm_calls_without_active_policy():
     class _Agent:
         def __init__(self) -> None:
@@ -433,3 +456,33 @@ async def _value(value):
 
 async def _must_not_run(*_args, **_kwargs):
     raise AssertionError("candidate intake must not use lead context when disabled")
+
+
+def test_project_distance_survives_schema_filtering_for_the_recommend_lane():
+    """End-to-end reachability: capability grant AND routed tool set.
+
+    ``filter_tool_schemas`` intersects the granted registry with the lane's
+    routed tools, so a tool missing from EITHER side is invisible to the model
+    even though it is registered. This is the exact production failure: the bot
+    answered "em sẽ tra cứu" and never called anything.
+    """
+    from app.graph.router import _INTENT_ROUTES
+    from app.graph.schemas import filter_tool_schemas
+
+    _strategy, lane_tools, _reason = _INTENT_ROUTES["recommend"]
+    assert "get_project_distance" in lane_tools, (
+        "the recommend lane does not route the distance tool, so the model is "
+        "never shown it however willing it is to call it"
+    )
+
+    active, persona = _active(capabilities=["conversation", "knowledge", "job_advisory"])
+    policy = build_resolved_runtime_policy(active, persona_body=persona)
+    assert policy is not None
+
+    visible = {
+        schema["function"]["name"]
+        for schema in filter_tool_schemas(
+            lane_tools, resolved_registry=policy.tool_registry.names
+        )
+    }
+    assert "get_project_distance" in visible
