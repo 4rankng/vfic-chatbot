@@ -549,6 +549,9 @@ class EmailDigestSettingsUpdate(BaseModel):
     recipients: list[str] | None = None
     frequency: str | None = None
     send_time: str | None = None
+    # Admin on/off switch for the scheduled send. The synthetic test send
+    # ignores it (explicit operator action), the scheduled run does not.
+    enabled: bool | None = None
 
 
 class EmailDigestTestOut(BaseModel):

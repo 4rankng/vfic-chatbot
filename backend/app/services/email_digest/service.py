@@ -127,7 +127,10 @@ async def run_digest(
     service = settings_service or IntegrationSettingsService(db)
     config = await service.resolve_email_digest()
 
-    if not config.recipients:
+    if not config.recipients or not config.enabled:
+        # No recipients, or the admin's on/off switch is off: no-op without
+        # touching state. The synthetic test send ignores this gate on purpose
+        # (an explicit operator action validates the pipeline either way).
         return DigestRunResult(status=STATUS_DISABLED)
     if not config.resend_api_key:
         logger.warning("email digest has recipients but no Resend API key")

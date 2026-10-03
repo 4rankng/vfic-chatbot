@@ -68,6 +68,7 @@ export const EmailDigestSection = () => {
   const [frequencyDraft, setFrequencyDraft] =
     useState<EmailDigestFrequency | null>(null);
   const [sendTimeDraft, setSendTimeDraft] = useState<string | null>(null);
+  const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
 
   const settingsQuery = useQuery<EmailDigestSettings>({
     queryKey: emailDigestSettingsKey,
@@ -93,11 +94,12 @@ export const EmailDigestSection = () => {
       setRecipientsDraft(null);
       setFrequencyDraft(null);
       setSendTimeDraft(null);
+      setEnabledDraft(null);
       queryClient.setQueryData(emailDigestSettingsKey, data);
       notify(
         data.enabled
           ? "Đã lưu cấu hình email ứng viên mới."
-          : "Đã lưu. Danh sách người nhận trống nên email đang tắt.",
+          : "Đã lưu. Email đang tắt.",
         { type: data.enabled ? "success" : "info" },
       );
     },
@@ -131,6 +133,7 @@ export const EmailDigestSection = () => {
   const frequency: EmailDigestFrequency =
     frequencyDraft ?? settings?.frequency ?? "daily";
   const sendTime = sendTimeDraft ?? settings?.send_time ?? "09:00";
+  const enabled = enabledDraft ?? settings?.enabled ?? false;
   const trimmedApiKey = apiKeyDraft.trim();
 
   const parsedRecipients = recipientsValue
@@ -144,7 +147,8 @@ export const EmailDigestSection = () => {
     Boolean(trimmedApiKey) ||
     recipientsChanged ||
     frequencyDraft !== null ||
-    sendTimeDraft !== null;
+    sendTimeDraft !== null ||
+    enabledDraft !== null;
 
   const configuredFields = [
     settings?.resend_api_key?.configured,
@@ -158,6 +162,7 @@ export const EmailDigestSection = () => {
       recipients: parsedRecipients,
       frequency,
       send_time: sendTime,
+      ...(enabledDraft !== null ? { enabled: enabledDraft } : {}),
     });
   };
 
@@ -274,15 +279,50 @@ export const EmailDigestSection = () => {
             </Select>
           </div>
 
+          <div className="settings-tingting-subhead">
+            <h3>Cron</h3>
+            <p>Bật/tắt lịch gửi tự động (không ảnh hưởng nút Gửi email thử).</p>
+          </div>
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="group"
+            aria-label="Bật tắt cron"
+          >
+            <Button
+              type="button"
+              size="sm"
+              color={enabled ? "primary" : "secondary"}
+              className="uu-scope tt-btn-touch"
+              aria-pressed={enabled}
+              onClick={() => setEnabledDraft(true)}
+            >
+              Bật cron
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              color={enabled ? "secondary" : "primary"}
+              className="uu-scope tt-btn-touch"
+              aria-pressed={!enabled}
+              onClick={() => setEnabledDraft(false)}
+            >
+              Tắt cron
+            </Button>
+          </div>
+
           <div className="settings-tingting-link">
             <span className="settings-tingting-link-copy" role="status">
-              {settings?.enabled
+              {enabled
                 ? `Email đang bật. Lần gửi gần nhất: ${
-                    settings.last_sent_at
+                    settings?.last_sent_at
                       ? new Date(settings.last_sent_at).toLocaleString("vi-VN")
                       : "chưa gửi lần nào"
                   }.`
-                : "Email đang tắt — thêm ít nhất một người nhận để bật."}
+                : enabledDraft === false
+                  ? "Email sẽ tắt sau khi bấm Lưu cấu hình."
+                  : storedRecipients.length === 0
+                    ? "Email đang tắt — thêm ít nhất một người nhận (hoặc bấm Bật cron sau khi có người nhận)."
+                    : "Email đang tắt — bấm Bật cron rồi Lưu cấu hình để bật lại."}
             </span>
             <Button
               type="button"

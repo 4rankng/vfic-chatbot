@@ -168,6 +168,8 @@ export type EmailDigestSettingsUpdate = {
   recipients?: string[];
   frequency?: EmailDigestFrequency;
   send_time?: string;
+  /** Admin on/off switch for the scheduled send; the test send ignores it. */
+  enabled?: boolean;
 };
 
 /** Result of POST /email-digest/test (synthetic candidate, real Resend call). */

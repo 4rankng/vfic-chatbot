@@ -24,6 +24,9 @@ EMAIL_DIGEST_RESEND_API_KEY = "email_digest_resend_api_key"
 EMAIL_DIGEST_RECIPIENTS = "email_digest_recipients"
 EMAIL_DIGEST_FREQUENCY = "email_digest_frequency"
 EMAIL_DIGEST_SEND_TIME = "email_digest_send_time"
+# Admin on/off switch for the scheduled send ("1"/"0"; unset = on). The
+# effective gate is this AND a non-empty recipient list.
+EMAIL_DIGEST_ENABLED = "email_digest_enabled"
 # Worker-owned send state. NOT admin-writable: the API never accepts it.
 EMAIL_DIGEST_LAST_SENT_AT = "email_digest_last_sent_at"
 
@@ -32,10 +35,21 @@ EMAIL_DIGEST_SETTING_KEYS = (
     EMAIL_DIGEST_RECIPIENTS,
     EMAIL_DIGEST_FREQUENCY,
     EMAIL_DIGEST_SEND_TIME,
+    EMAIL_DIGEST_ENABLED,
     EMAIL_DIGEST_LAST_SENT_AT,
 )
 
-ADMIN_WRITABLE_KEYS = frozenset(EMAIL_DIGEST_SETTING_KEYS) - {EMAIL_DIGEST_LAST_SENT_AT}
+# The admin API speaks EmailDigestSettingsUpdate schema names; the KV table
+# keeps the namespaced keys. One explicit map joins the two — and doubles as
+# the request whitelist (the worker-owned state key is absent, so a PUT can
+# never write it).
+API_FIELD_TO_SETTING_KEY = {
+    "resend_api_key": EMAIL_DIGEST_RESEND_API_KEY,
+    "recipients": EMAIL_DIGEST_RECIPIENTS,
+    "frequency": EMAIL_DIGEST_FREQUENCY,
+    "send_time": EMAIL_DIGEST_SEND_TIME,
+    "enabled": EMAIL_DIGEST_ENABLED,
+}
 
 FREQUENCY_DAILY = "daily"
 FREQUENCY_WEEKLY = "weekly"
@@ -80,6 +94,7 @@ class EmailDigestRuntimeConfig:
     recipients: tuple[str, ...] = ()
     frequency: str = DEFAULT_FREQUENCY
     send_time: str = DEFAULT_SEND_TIME
+    enabled: bool = True
     last_sent_at: datetime | None = None
 
 
@@ -124,6 +139,7 @@ class EmailDigestSettingsMixin:
         """Stored-first resolution with the env Resend key as fallback."""
         stored = await self._stored_values(EMAIL_DIGEST_SETTING_KEYS)
         recipients = parse_recipients(stored.get(EMAIL_DIGEST_RECIPIENTS))
+        raw_enabled = (stored.get(EMAIL_DIGEST_ENABLED) or "").strip()
         return EmailDigestRuntimeConfig(
             resend_api_key=(
                 stored.get(EMAIL_DIGEST_RESEND_API_KEY) or self.settings.resend_api_key or ""
@@ -131,6 +147,9 @@ class EmailDigestSettingsMixin:
             recipients=tuple(recipients),
             frequency=stored.get(EMAIL_DIGEST_FREQUENCY) or DEFAULT_FREQUENCY,
             send_time=_parse_send_time(stored.get(EMAIL_DIGEST_SEND_TIME)),
+            # Unset row = on (the owner's default is the daily send running);
+            # an explicit "0" is the admin's off switch.
+            enabled=raw_enabled not in {"0", "false", "no"},
             last_sent_at=_parse_last_sent(stored.get(EMAIL_DIGEST_LAST_SENT_AT)),
         )
 
@@ -141,9 +160,10 @@ class EmailDigestSettingsMixin:
             "recipients": list(cfg.recipients),
             "frequency": cfg.frequency,
             "send_time": cfg.send_time,
-            # An empty recipient list keeps the whole feature off — there is
-            # nowhere to send to, so the worker no-ops without touching state.
-            "enabled": bool(cfg.recipients),
+            # Effective state: the admin toggle AND somewhere to send to. A
+            # toggle-on with an empty list still can't deliver, so the view
+            # reports off and the status line explains why.
+            "enabled": cfg.enabled and bool(cfg.recipients),
             "last_sent_at": cfg.last_sent_at.isoformat() if cfg.last_sent_at else None,
         }
 
@@ -152,27 +172,30 @@ class EmailDigestSettingsMixin:
     ) -> dict:
         """Validate + persist the admin-editable digest fields; returns the view.
 
-        Keys outside the admin-writable set are rejected (the worker owns the
-        send-state row), an unknown frequency is a validation error, and the
-        key is encrypted by ``_write_setting`` like every other secret.
+        ``values`` uses the API field names (``resend_api_key``, ``recipients``,
+        ``frequency``, ``send_time``, ``enabled``) — the names the settings
+        page sends. They map onto the namespaced KV keys via
+        ``API_FIELD_TO_SETTING_KEY``; anything outside the map (including the
+        worker-owned ``last_sent_at`` state row) is rejected.
         """
-        unknown = set(values) - ADMIN_WRITABLE_KEYS
+        unknown = set(values) - set(API_FIELD_TO_SETTING_KEY)
         if unknown:
             raise ValidationError(f"Trường không hợp lệ: {', '.join(sorted(unknown))}")
 
         changed: list[str] = []
-        api_key = values.get(EMAIL_DIGEST_RESEND_API_KEY)
-        if api_key is not None and str(api_key).strip():
+
+        raw_api_key = values.get("resend_api_key")
+        if raw_api_key is not None and str(raw_api_key).strip():
             await self._write_setting(
                 EMAIL_DIGEST_RESEND_API_KEY,
-                str(api_key),
+                str(raw_api_key),
                 actor_id=actor_id,
                 is_secret=True,
             )
             changed.append(EMAIL_DIGEST_RESEND_API_KEY)
 
-        if EMAIL_DIGEST_RECIPIENTS in values:
-            recipients = parse_recipients(values.get(EMAIL_DIGEST_RECIPIENTS))
+        if "recipients" in values:
+            recipients = parse_recipients(values.get("recipients"))
             await self._write_setting(
                 EMAIL_DIGEST_RECIPIENTS,
                 ",".join(recipients),
@@ -181,8 +204,8 @@ class EmailDigestSettingsMixin:
             )
             changed.append(EMAIL_DIGEST_RECIPIENTS)
 
-        if EMAIL_DIGEST_FREQUENCY in values:
-            frequency = str(values.get(EMAIL_DIGEST_FREQUENCY) or "").strip()
+        if "frequency" in values:
+            frequency = str(values.get("frequency") or "").strip()
             if frequency not in FREQUENCIES:
                 raise ValidationError(
                     f"Tần suất phải là một trong: {', '.join(FREQUENCIES)}"
@@ -192,9 +215,9 @@ class EmailDigestSettingsMixin:
             )
             changed.append(EMAIL_DIGEST_FREQUENCY)
 
-        if EMAIL_DIGEST_SEND_TIME in values:
-            send_time = _parse_send_time(values.get(EMAIL_DIGEST_SEND_TIME))
-            if send_time == DEFAULT_SEND_TIME and values.get(EMAIL_DIGEST_SEND_TIME) != send_time:
+        if "send_time" in values:
+            send_time = _parse_send_time(values.get("send_time"))
+            if send_time == DEFAULT_SEND_TIME and values.get("send_time") != send_time:
                 # The parser silently fell back on a malformed value; surface
                 # that to the operator instead of saving the default.
                 raise ValidationError("Giờ gửi phải có dạng HH:MM với phút 00 hoặc 30")
@@ -205,6 +228,16 @@ class EmailDigestSettingsMixin:
                 is_secret=False,
             )
             changed.append(EMAIL_DIGEST_SEND_TIME)
+
+        if "enabled" in values:
+            enabled = bool(values.get("enabled"))
+            await self._write_setting(
+                EMAIL_DIGEST_ENABLED,
+                "1" if enabled else "0",
+                actor_id=actor_id,
+                is_secret=False,
+            )
+            changed.append(EMAIL_DIGEST_ENABLED)
 
         if changed:
             await record_audit(

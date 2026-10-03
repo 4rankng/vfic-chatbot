@@ -42,7 +42,9 @@ EXPECTED_ROUTE_COUNTS = {
     # fail this gate and force an explicit authority-classification review.
     "auth": 7,  # +1 server-side logout (SEC-03)
     "bot_runs": 2,
-    "conversations": 18,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
+    "conversations": 19,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
+    # +1 GET /by-contact-ids — batch contact→conversations lookup (max 200),
+    # viewer-scoped, behind the dashboard candidate-card consolidation.
     "dashboard": 2,
     "integrations": 39,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints; +2 geocoder credential endpoints (settings page)
     # +2 the TingTing support OA: save-and-check the four credentials (PUT /tingting)
@@ -70,7 +72,7 @@ EXPECTED_ROUTE_COUNTS = {
 # is the re-review this digest records.
 # 0062-era: +2 integrations routes — GET/PUT /api/v1/admin/integrations/geocoder
 # (the admin-editable Google Maps credential behind the distance feature).
-EXPECTED_ROUTE_INVENTORY_SHA256 = "6c8e3bc30b3d9dd110d2b59cfec4ba5720bba67a9e42ce080a45027798636d21"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "95bc8893f1d2b11e5bb8d0b413d512e4d0d5ef87dc3f2e5d009b2f056080a832"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

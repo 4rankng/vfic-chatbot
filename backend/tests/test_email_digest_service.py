@@ -320,3 +320,23 @@ async def test_run_digest_without_summarizer_falls_back_verbatim(monkeypatch):
     result = await run_digest(db, settings_service=_SettingsSvc(_config()), now=now)
     assert result.status == STATUS_SENT
     assert db.commit_count == 1
+
+
+async def test_run_digest_skips_when_toggle_off(monkeypatch):
+    """The admin's on/off switch stops the scheduled run even when fully
+    configured; the test send stays available (explicit operator action)."""
+
+    async def fail_collect(db, *, window_start, window_end):
+        raise AssertionError("must not collect while the toggle is off")
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fail_collect)
+
+    async def fail_send(**kwargs):
+        raise AssertionError("must not send while the toggle is off")
+
+    monkeypatch.setattr(digest_module, "send_email_via_resend", fail_send)
+    now = datetime(2026, 10, 5, 2, 5, tzinfo=timezone.utc)
+    result = await run_digest(
+        _StateDb(), settings_service=_SettingsSvc(_config(enabled=False)), now=now
+    )
+    assert result.status == STATUS_DISABLED

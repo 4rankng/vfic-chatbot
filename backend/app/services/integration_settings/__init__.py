@@ -54,6 +54,7 @@ from app.services.integration_settings.providers.llm import (
 from app.services.integration_settings.providers.email_digest import (
     DEFAULT_FREQUENCY,
     DEFAULT_SEND_TIME,
+    EMAIL_DIGEST_ENABLED,
     EMAIL_DIGEST_FREQUENCY,
     EMAIL_DIGEST_LAST_SENT_AT,
     EMAIL_DIGEST_RECIPIENTS,
@@ -126,6 +127,7 @@ __all__ = [
     "ZALO_SETTING_KEYS",
     "DEFAULT_FREQUENCY",
     "DEFAULT_SEND_TIME",
+    "EMAIL_DIGEST_ENABLED",
     "EMAIL_DIGEST_FREQUENCY",
     "EMAIL_DIGEST_LAST_SENT_AT",
     "EMAIL_DIGEST_RECIPIENTS",

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.services.integration_settings import (
+    EMAIL_DIGEST_ENABLED,
     EMAIL_DIGEST_FREQUENCY,
     EMAIL_DIGEST_LAST_SENT_AT,
     EMAIL_DIGEST_RECIPIENTS,
@@ -141,9 +142,9 @@ async def test_update_roundtrip_commits_and_audits():
     db = _MutableDb()
     view = await _service(db).update_email_digest(
         {
-            EMAIL_DIGEST_RECIPIENTS: ["hr@vp.vn", "boss@vp.vn"],
-            EMAIL_DIGEST_FREQUENCY: "weekly",
-            EMAIL_DIGEST_SEND_TIME: "09:30",
+            "recipients": ["hr@vp.vn", "boss@vp.vn"],
+            "frequency": "weekly",
+            "send_time": "09:30",
         },
         actor_id="admin-1",
     )
@@ -159,7 +160,7 @@ async def test_update_roundtrip_commits_and_audits():
 async def test_update_stores_key_encrypted():
     db = _MutableDb()
     view = await _service(db).update_email_digest(
-        {EMAIL_DIGEST_RESEND_API_KEY: "fresh-key"},
+        {"resend_api_key": "fresh-key"},
         actor_id="admin-1",
     )
     assert view["resend_api_key"]["configured"] is True
@@ -170,15 +171,15 @@ async def test_update_stores_key_encrypted():
 async def test_update_rejects_invalid_values():
     db = _MutableDb()
     with pytest.raises(ValidationError):
-        await _service(db).update_email_digest({EMAIL_DIGEST_RECIPIENTS: "bad@"}, actor_id="a")
+        await _service(db).update_email_digest({"recipients": "bad@"}, actor_id="a")
     with pytest.raises(ValidationError):
-        await _service(db).update_email_digest({EMAIL_DIGEST_FREQUENCY: "hourly"}, actor_id="a")
+        await _service(db).update_email_digest({"frequency": "hourly"}, actor_id="a")
     with pytest.raises(ValidationError):
         await _service(db).update_email_digest(
-            {EMAIL_DIGEST_SEND_TIME: "9:15"}, actor_id="a"
+            {"send_time": "9:15"}, actor_id="a"
         )
     with pytest.raises(ValidationError):
-        await _service(db).update_email_digest({EMAIL_DIGEST_LAST_SENT_AT: "x"}, actor_id="a")
+        await _service(db).update_email_digest({"last_sent_at": "x"}, actor_id="a")
     with pytest.raises(ValidationError):
         await _service(db).update_email_digest({"unknown_field": "x"}, actor_id="a")
     assert db.commit_count == 0
@@ -194,3 +195,48 @@ async def test_out_model_accepts_admin_view():
     assert out.send_time == "09:00"
     assert out.resend_api_key.configured is True
     assert out.enabled is False
+
+
+async def test_update_accepts_the_settings_page_payload():
+    """Regression: the console PUT speaks API field names, not KV key names.
+
+    The first prod PUT 422'd on every field because the update path validated
+    against the namespaced KV keys ("email_digest_*") instead of the schema
+    names the frontend sends.
+    """
+    db = _MutableDb()
+    view = await _service(db).update_email_digest(
+        {
+            "resend_api_key": "re_live_key",
+            "recipients": ["hr@vp.vn"],
+            "frequency": "daily",
+            "send_time": "09:00",
+            "enabled": True,
+        },
+        actor_id="admin-1",
+    )
+    assert view["resend_api_key"]["configured"] is True
+    assert view["recipients"] == ["hr@vp.vn"]
+    assert view["frequency"] == "daily"
+    assert view["send_time"] == "09:00"
+    assert view["enabled"] is True
+    row = db.rows[EMAIL_DIGEST_RESEND_API_KEY]
+    assert "re_live_key" not in row.encrypted_value
+    assert db.commit_count == 1
+
+
+async def test_enabled_toggle_roundtrip():
+    db = _MutableDb()
+    off = await _service(db).update_email_digest({"enabled": False}, actor_id="a")
+    assert off["enabled"] is False  # recipients also empty, but the toggle itself stored
+    assert db.rows[EMAIL_DIGEST_ENABLED].encrypted_value == "0"
+    on = await _service(db).update_email_digest({"enabled": True}, actor_id="a")
+    assert on["enabled"] is False  # toggle on, but no recipients yet
+    assert db.rows[EMAIL_DIGEST_ENABLED].encrypted_value == "1"
+
+
+async def test_resolve_respects_stored_toggle():
+    db = _MutableDb([_Row(EMAIL_DIGEST_ENABLED, "0"), _Row(EMAIL_DIGEST_RECIPIENTS, "hr@vp.vn")])
+    config = await _service(db).resolve_email_digest()
+    assert config.enabled is False
+    assert config.recipients == ("hr@vp.vn",)

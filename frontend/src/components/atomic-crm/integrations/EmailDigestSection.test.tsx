@@ -120,6 +120,35 @@ describe("EmailDigestSection", () => {
       .toEqual([["Đã gửi email thử (dữ liệu mẫu).", { type: "success" }]]);
   });
 
+  it("saves the cron toggle through the schedule save", async () => {
+    mocks.loadEmailDigestSettings.mockResolvedValue(STORED_SETTINGS);
+    mocks.saveEmailDigestSettings.mockResolvedValue({
+      ...STORED_SETTINGS,
+      enabled: false,
+    });
+    const screen = await renderSection();
+
+    await expect.element(screen.getByText("Email đang bật.")).toBeVisible();
+    await screen.getByRole("button", { name: "Tắt cron" }).click();
+    await screen.getByRole("button", { name: "Lưu cấu hình" }).click();
+
+    await expect
+      .poll(() => mocks.saveEmailDigestSettings.mock.calls)
+      .toEqual([
+        [
+          {
+            recipients: ["hr@vp.vn"],
+            frequency: "daily",
+            send_time: "09:00",
+            enabled: false,
+          },
+        ],
+      ]);
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toEqual([["Đã lưu. Email đang tắt.", { type: "info" }]]);
+  });
+
   it("surfaces missing configuration from the test send", async () => {
     mocks.loadEmailDigestSettings.mockResolvedValue({
       ...STORED_SETTINGS,
