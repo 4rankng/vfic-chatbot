@@ -144,6 +144,10 @@ _NO_ORIGIN_REPLY = (
     "Anh/chị cho em xin địa chỉ hoặc khu vực đang ở cụ thể hơn (ví dụ số nhà + đường + quận) nhé ạ."
 )
 _NO_PROJECT_REPLY = "Chưa tìm thấy dự án nào khớp với tên anh/chị nêu."
+_COMPANY_UNMATCHED_REPLY = (
+    "Tên dự án anh/chị nêu không khớp với danh mục, nên em liệt kê các dự án đang tuyển gần "
+    "chỗ anh/chị nhất kèm khoảng cách. Anh/chị đối chiếu rồi chọn đúng dự án giúp em nhé ạ."
+)
 _NO_PROJECT_COORDS_REPLY = (
     "Dự án này chưa có địa chỉ đã định vị nên chưa tính được khoảng cách từ chỗ của anh/chị."
 )
@@ -437,13 +441,14 @@ async def get_project_distance(
         return _project_tool_result("unresolved_location", [], _NO_ORIGIN_REPLY, total=0)
 
     try:
-        rows = await retrieval.list_active_projects()
+        catalog = await retrieval.list_active_projects()
     except Exception:
         logger.warning("get_project_distance: catalog read failed", exc_info=True)
         return _project_tool_result("unavailable", [], _UNAVAILABLE_REPLY)
 
+    requested = bool((company or "").strip() or (project_slug or "").strip())
     fits = rank_projects(
-        list(rows),
+        list(catalog),
         company=company,
         location=place,
         origin=origin,
@@ -451,6 +456,14 @@ async def get_project_distance(
     if project_slug:
         slug = project_slug.strip().casefold()
         fits = [fit for fit in fits if fit.project.slug.casefold() == slug]
+    # A spoken name is rarely the catalog's own name: "AmTRAN bao xa" matches
+    # nothing, because the project row is just "AMTRAN" and "bao xa" is
+    # colloquial. Dead-ending there loses an answer the data already supports,
+    # so an unmatched name falls back to the full nearest-first ranking under a
+    # distinct status — the agent can still see the plant the candidate meant.
+    named_but_unmatched = requested and not fits
+    if named_but_unmatched:
+        fits = rank_projects(list(catalog), location=place, origin=origin).fits
     if not fits:
         return _project_tool_result("unknown_project", [], _NO_PROJECT_REPLY, total=0)
 
@@ -467,14 +480,16 @@ async def get_project_distance(
     # Nearest first: a company name that matches several plants answers with
     # the closest one and the full set below it. The sort number is the one
     # the reply quotes — the provider's road estimate when it exists,
-    # straight-line otherwise.
-    rows: list[tuple[ProjectFit, float, tuple[float, float | None] | None]] = []
+    # straight-line otherwise. ``measured`` already dropped the None distances,
+    # so the fallback below is a type narrowing, not a silent zero.
+    ranked: list[tuple[ProjectFit, float, tuple[float, float | None] | None]] = []
     for fit, estimate in zip(measured, estimates):
-        distance_km = estimate[0] if estimate is not None else fit.distance_km
-        rows.append((fit, float(distance_km), estimate))
-    rows.sort(key=lambda row: row[1])
+        straight_line = fit.distance_km if fit.distance_km is not None else 0.0
+        distance_km = estimate[0] if estimate is not None else straight_line
+        ranked.append((fit, float(distance_km), estimate))
+    ranked.sort(key=lambda row: row[1])
     projects = []
-    for fit, distance_km, estimate in rows:
+    for fit, distance_km, estimate in ranked:
         entry: dict[str, object] = {
             "id": _single_line(fit.project.project_id, limit=80),
             "project": _single_line(fit.project.name),
@@ -485,6 +500,13 @@ async def get_project_distance(
         if estimate is not None and estimate[1] is not None:
             entry["duration_min"] = max(1, round(estimate[1] / 60))
         projects.append(entry)
+    if named_but_unmatched:
+        return _project_tool_result(
+            "company_unmatched",
+            projects,
+            _COMPANY_UNMATCHED_REPLY + _PRESENTATION_CONTRACT,
+            total=len(measured),
+        )
     return _project_tool_result(
         "measured", projects, _PRESENTATION_CONTRACT, total=len(measured)
     )

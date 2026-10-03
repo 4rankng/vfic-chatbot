@@ -174,6 +174,7 @@ __all__ = [
     "KBIngestionFileRun",
     "StructuredFact",
     "GeocodeCache",
+    "DistanceEstimate",
     "TemplateVersionStatus",
     "IngestionRunStatus",
 ]

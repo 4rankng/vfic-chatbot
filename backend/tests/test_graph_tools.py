@@ -169,6 +169,7 @@ def test_tools_registry_exposes_expected_tools():
         "search_knowledge",
         "load_project_knowledge",
         "list_active_projects",
+        "get_project_distance",
         "search_bus_timetable",
         "get_product_features",
         "verify_tingting_identity",
@@ -819,6 +820,49 @@ async def test_get_project_distance_without_estimate_method_falls_back(no_cache_
     assert [row["project"] for row in payload["projects"]] == ["Geo 1", "Geo 2"]
     assert all(row["distance_km"] > 0 for row in payload["projects"])
     assert all("duration_min" not in row for row in payload["projects"])
+
+
+@pytest.mark.asyncio
+async def test_get_project_distance_unmatched_name_still_answers_nearest_first(no_cache_io):
+    """"AmTRAN bao xa" matches no catalog row (the row is just "AMTRAN", and
+    "bao xa" is colloquial). Dead-ending there would throw away an answer the
+    data already supports, so the tool falls back to the full nearest-first
+    ranking under a status that says the name did not match."""
+    plants = [
+        _geo_project(1, lat=20.90, lng=106.70),
+        _geo_project(2, lat=21.20, lng=107.20),
+    ]
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(plants),
+        geocode_area=_geo_area(),
+    )
+
+    out = await get_project_distance(
+        retrieval=repo, location="312 Nguyễn Công Hòa", company="AmTRAN bao xa"
+    )
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+
+    assert payload["status"] == "company_unmatched"
+    assert [row["project"] for row in payload["projects"]] == ["Geo 1", "Geo 2"]
+    assert "không khớp với danh mục" in payload["safe_reply"]
+
+
+@pytest.mark.asyncio
+async def test_get_project_distance_unresolvable_location_asks_for_a_better_address(
+    no_cache_io,
+):
+    """An unresolvable origin is an honest miss, never a guessed distance."""
+    repo = _make_repo(
+        list_active_projects=lambda self: _const([_geo_project(1, lat=20.90, lng=106.70)]),
+        geocode_area=lambda self, q: _none(),
+    )
+
+    out = await get_project_distance(retrieval=repo, location="qqq zzz")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+
+    assert payload["status"] == "unresolved_location"
+    assert payload["projects"] == []
+    assert "địa chỉ" in payload["safe_reply"]
 
 
 # ---------------------------------------------------------------------------
