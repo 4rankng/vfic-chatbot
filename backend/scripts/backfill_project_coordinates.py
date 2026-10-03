@@ -29,6 +29,7 @@ from sqlalchemy import select
 
 from app.composition.project_knowledge import build_knowledge_provider_factory
 from app.core.db import async_session, engine
+from app.core.logging import silence_credential_bearing_transport_loggers
 from app.models.company import Project
 from app.services.geo.project_address import refresh_from_kb
 from app.services.integration_settings import IntegrationSettingsService
@@ -116,6 +117,12 @@ async def run(*, force: bool, re_extract: bool) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    # ``basicConfig`` raises the root level to INFO and does NOT apply the guard
+    # every other entrypoint gets from ``setup_logging`` — so httpx's own INFO
+    # records printed the full geocoder request URL, API key and all, into this
+    # script's output (observed 2026-10-03 during the production backfill).
+    # Applied here because this script is the one that talks to the keyed hops.
+    silence_credential_bearing_transport_loggers()
     args = _parse_args(argv)
     return asyncio.run(run(force=args.force, re_extract=args.re_extract))
 
