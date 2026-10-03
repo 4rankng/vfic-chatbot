@@ -1,6 +1,9 @@
 """Outbound email helpers."""
 
+import base64
 import logging
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 
 from app.core.config import get_settings
@@ -16,6 +19,15 @@ class EmailDeliveryError(RuntimeError):
     """Raised when the email provider rejects a send request."""
 
 
+@dataclass(frozen=True)
+class EmailAttachment:
+    """One binary email attachment (Resend takes base64-encoded content)."""
+
+    filename: str
+    content_type: str
+    content: bytes
+
+
 async def send_email_via_resend(
     *,
     api_key: str,
@@ -23,6 +35,7 @@ async def send_email_via_resend(
     to: list[str],
     subject: str,
     html: str,
+    attachments: Sequence[EmailAttachment] = (),
 ) -> str | None:
     """Generic Resend send shared by the digest email (password reset keeps its
     own inline payload). Returns the provider message id, or None when Resend
@@ -32,12 +45,21 @@ async def send_email_via_resend(
     if not api_key:
         raise EmailDeliveryError("RESEND_API_KEY is not configured")
 
-    payload = {
+    payload: dict[str, object] = {
         "from": from_email,
         "to": to,
         "subject": subject,
         "html": html,
     }
+    if attachments:
+        payload["attachments"] = [
+            {
+                "filename": attachment.filename,
+                "content_type": attachment.content_type,
+                "content": base64.b64encode(attachment.content).decode("ascii"),
+            }
+            for attachment in attachments
+        ]
     # Reuse the process-scoped Resend client (Tech-Lead Directive §4). The key
     # travels per-request in the Authorization header so an admin-rotated Resend
     # key takes effect on the next send without rebuilding the client.

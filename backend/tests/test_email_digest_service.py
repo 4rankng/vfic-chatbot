@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from app.services.email_digest import service as digest_module
 from app.services.email_digest.repository import DigestCandidate
+from app.services.email_digest.spreadsheet import XLSX_CONTENT_TYPE
 from app.services.email_digest.service import (
     STATUS_DISABLED,
     STATUS_EMPTY,
@@ -163,6 +164,10 @@ async def test_run_digest_sends_and_advances_state(monkeypatch):
     async def fake_send(**kwargs):
         assert "Danh sách ứng viên mới" in kwargs["subject"]
         assert "Tóm tắt hội thoại" in kwargs["html"]
+        (attachment,) = kwargs["attachments"]
+        assert attachment.filename == "danh_sach_ung_vien_05-10-2026.xlsx"
+        assert attachment.content_type == XLSX_CONTENT_TYPE
+        assert attachment.content[:2] == b"PK"  # a real zip archive
         return "pid-1"
 
     async def fake_summary(candidate, extractor=None):
@@ -197,6 +202,10 @@ async def test_test_send_sends_synthetic_sample(monkeypatch):
     async def fake_send(**kwargs):
         assert kwargs["to"] == ["a@x.vn"]
         assert "KIỂM TRA" in kwargs["subject"]
+        (attachment,) = kwargs["attachments"]
+        assert attachment.filename.startswith("danh_sach_ung_vien_mau_")
+        assert attachment.filename.endswith(".xlsx")
+        assert attachment.content[:2] == b"PK"
         return "test-pid"
 
     monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)

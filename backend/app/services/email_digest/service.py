@@ -31,6 +31,7 @@ from app.services.integration_settings.providers.email_digest import (
     EmailDigestRuntimeConfig,
 )
 from app.services.integration_settings.service import IntegrationSettingsService
+from app.services.email_digest.spreadsheet import build_lead_workbook
 from app.services.email_service import EmailDeliveryError, send_email_via_resend
 
 logger = logging.getLogger(__name__)
@@ -151,12 +152,14 @@ async def run_digest(
     ict_now = moment.astimezone(ICT)
     html = render_digest_html(candidates)
     subject = digest_subject(len(candidates), ict_date=ict_now.strftime("%d/%m/%Y"))
+    workbook = build_lead_workbook(candidates, ict_date=ict_now.strftime("%d-%m-%Y"))
     provider_id = await send_email_via_resend(
         api_key=config.resend_api_key,
         from_email=DIGEST_FROM_EMAIL,
         to=list(config.recipients),
         subject=subject,
         html=html,
+        attachments=(workbook,),
     )
 
     await _mark_sent(db, moment)
@@ -240,6 +243,11 @@ async def send_test_digest(
             to=list(config.recipients),
             subject=digest_subject(1, ict_date=ict_now.strftime("%d/%m/%Y"), test=True),
             html=render_digest_html([_SYNTHETIC_CANDIDATE], test=True),
+            attachments=(
+                build_lead_workbook(
+                    [_SYNTHETIC_CANDIDATE], ict_date=ict_now.strftime("%d-%m-%Y"), test=True
+                ),
+            ),
         )
     except EmailDeliveryError as exc:
         return TestDigestResult(ok=False, configured=True, missing=[], error=str(exc))
