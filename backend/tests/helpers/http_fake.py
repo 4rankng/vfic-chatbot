@@ -25,7 +25,7 @@ Usage::
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from app.core import http as _http_module
 from app.core.http import register_test_client
@@ -35,8 +35,17 @@ class FakeHttpClient:
     """A minimal stand-in for ``httpx.AsyncClient`` for unit tests.
 
     Construct with a list of response payloads (each returned by ``.json()``
-    on the fake response) or a single ``side_effect`` exception to raise. Calls
-    are recorded in ``self.calls`` for assertions.
+    on the fake response), a single ``side_effect`` exception to raise, or a
+    ``side_effect`` CALLABLE that routes on the request and returns a payload (or
+    a ready :class:`_FakeResponse`). Calls are recorded in ``self.calls`` for
+    assertions.
+
+    Prefer the callable form whenever one client serves more than one endpoint —
+    e.g. a provider whose forward and reverse calls hit the same host. A
+    positional queue there hands the payloads out in call order, so the moment
+    the number of calls changes the reverse lookup receives a forward body (and
+    fails as "no names") while the test still passes or fails for reasons that
+    have nothing to do with the code under test.
 
     Mirrors only the surface area the migrated call sites use: ``.post()`` and
     ``.get()`` returning an object with ``.json()`` / ``.status_code`` /
@@ -48,7 +57,7 @@ class FakeHttpClient:
         *,
         responses: list[Any] | None = None,
         status_codes: list[int] | None = None,
-        side_effect: BaseException | None = None,
+        side_effect: BaseException | Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         self._responses = list(responses) if responses else []
         self._status_codes = list(status_codes) if status_codes else []
@@ -56,8 +65,6 @@ class FakeHttpClient:
         self.calls: list[dict[str, Any]] = []
 
     def _next_response(self) -> Any:
-        if self._side_effect is not None:
-            raise self._side_effect
         if not self._responses:
             return {"ok": True}
         return self._responses.pop(0)
@@ -66,6 +73,17 @@ class FakeHttpClient:
         if not self._status_codes:
             return 200
         return self._status_codes.pop(0)
+
+    def _respond(self, request: dict[str, Any]) -> _FakeResponse:
+        """The response for ``request``: routed by a callable, else queued."""
+        if self._side_effect is None:
+            return _FakeResponse(self._next_response(), self._next_status())
+        if callable(self._side_effect):
+            result = self._side_effect(request)
+            if isinstance(result, _FakeResponse):
+                return result
+            return _FakeResponse(result, 200)
+        raise self._side_effect
 
     async def post(
         self,
@@ -77,10 +95,16 @@ class FakeHttpClient:
         params: Any = None,
         **kw: Any,
     ) -> _FakeResponse:
-        self.calls.append(
-            {"method": "POST", "url": url, "json": json, "data": data, "headers": headers}
-        )
-        return _FakeResponse(self._next_response(), self._next_status())
+        request = {
+            "method": "POST",
+            "url": url,
+            "json": json,
+            "data": data,
+            "headers": headers,
+            "params": params,
+        }
+        self.calls.append(request)
+        return self._respond(request)
 
     async def get(
         self,
@@ -90,8 +114,9 @@ class FakeHttpClient:
         headers: Any = None,
         **kw: Any,
     ) -> _FakeResponse:
-        self.calls.append({"method": "GET", "url": url, "params": params, "headers": headers})
-        return _FakeResponse(self._next_response(), self._next_status())
+        request = {"method": "GET", "url": url, "params": params, "headers": headers}
+        self.calls.append(request)
+        return self._respond(request)
 
 
 class _FakeResponse:

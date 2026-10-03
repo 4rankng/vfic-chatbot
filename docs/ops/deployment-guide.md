@@ -278,20 +278,29 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0063_distance_estimate` (3 Oct 2026). This line is grepped by the
+- **HEAD:** `0065_geo_gazetteer` (3 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0063` adds
-  `distance_estimate`, the durable origin→destination road-estimate mapping
-  the catalog tools read before any Vietmap/Google matrix call. `0062` adds
-  `geocode_cache`, the durable normalized-query→coordinates mapping the geocoder
-  consults before any provider HTTP call, with a NULL-coordinate row per
-  recorded miss. `0061` adds the geo-distance columns on `projects`
-  (`extracted_address`, `latitude`, `longitude`) that let the catalog tool
-  report `distance_km` for "dự án nào gần nhà"; all three are nullable with no
-  backfill, so old and new code run against either schema. Preceding `0060`
-  dropped the retired per-run decision-trace column; `0059` renamed category
-  revision source to `source_markdown`; `0058` adds the deployment-wide
-  `tingting_hotline` integration setting and seeds the approved hotline value so
+  new migration that does not update it blocks the release. `0065` adds
+  `geo_gazetteer`, the human-verified places that short-circuit the whole
+  geocoding chain — consulted before any provider call, so a site a recruiter
+  has already confirmed costs no API request and cannot drift; seed it with
+  `python -m scripts.seed_geo_gazetteer` (idempotent; `--force` re-points a row).
+  `0064` adds `geocode_place_check`, the durable per-coordinate cache of
+  reverse-geocoded place names, one name per line, that the containment check
+  reads so verification costs one HTTP call per distinct point ever rather than
+  per address. `0063` adds `distance_estimate`, the durable
+  origin→destination road-estimate mapping the catalog tools read before any
+  Vietmap/Google matrix call. `0062` adds `geocode_cache`, the durable
+  normalized-query→coordinates mapping the geocoder consults before any
+  provider HTTP call, with a NULL-coordinate row per recorded miss; its keys
+  carry a `v6:` version prefix, so a coordinate admitted by the previous
+  provider order is retired rather than served. `0061` adds the geo-distance
+  columns on `projects` (`extracted_address`, `latitude`, `longitude`) that let
+  the catalog tool report `distance_km` for "dự án nào gần nhà"; all three are
+  nullable with no backfill, so old and new code run against either schema.
+  Preceding `0060` dropped the retired per-run decision-trace column; `0059`
+  renamed category revision source to `source_markdown`; `0058` adds the
+  deployment-wide `tingting_hotline` integration setting and seeds the approved hotline value so
   TingTing OA escalations end with a real contact line; the value stays editable
   from the integrations settings. `0057` drops the unused
   `match_memories(vector, integer, jsonb)` overload so the memories retrieval
@@ -436,10 +445,10 @@ Sourced from `backend/.env.example` (committed template) and
 | `GEOCODER_BASE_URL` | Default the public Nominatim instance. Repoint at a self-hosted Nominatim (or any Nominatim-compatible endpoint) for better Vietnamese coverage; no code change. |
 | `GEOCODER_USER_AGENT` | Descriptive UA required by the provider's usage policy. |
 | `GEOCODER_TIMEOUT_SECONDS` | 3s per attempt; a timeout is a miss. |
-| `GEOCODER_CACHE_TTL_SECONDS` / `GEOCODER_NEGATIVE_TTL_SECONDS` | 30 days for a hit / 6 hours for a miss (Redis, key version `geo:geocode:v4:`), in front of the durable `geocode_cache` mapping. |
+| `GEOCODER_CACHE_TTL_SECONDS` / `GEOCODER_NEGATIVE_TTL_SECONDS` | 30 days for a hit / 6 hours for a miss (Redis, key version `geo:geocode:v6:`), in front of the durable `geocode_cache` mapping. The durable keys carry the same version: `geocode_cache.query` rows are written as `v6:<normalized query>` and `geocode_place_check.coord_key` as `v6:<lat>,<lng>`, so a coordinate admitted by an older provider order or reverse-parsing rule is retired rather than served. |
 | `GEOCODER_MIN_INTERVAL_SECONDS` | 1.0 — the provider policy floor, enforced process-wide. Applies to the Nominatim hop only; the keyed hops are unthrottled. |
-| `VIETMAP_API_KEY` | **Primary hop.** Blank disables it and the chain starts at Google. Seed only — a value saved in the admin settings page wins. |
-| `GOOGLE_MAPS_API_KEY` | **Second hop.** Blank disables it. Same seed-only precedence. |
+| `VIETMAP_API_KEY` | **Second hop.** Blank disables it, and the chain then runs Google only. Seed only — a value saved in the admin settings page wins. |
+| `GOOGLE_MAPS_API_KEY` | **Primary hop** (the measured order: 0.92 km median error vs Vietmap's 2.74 km on the Hải Phòng plants — see `providers.KEYED_GEO_HOPS`). Blank disables it, and the chain starts at Vietmap. Same seed-only precedence. |
 
 The two keyed hops are the only geocoder env vars without a usable default:
 everything else has a code default, so a deployment whose `/opt/vfic/.env`

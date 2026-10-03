@@ -433,7 +433,12 @@ async def get_project_distance(
         return _project_tool_result("missing_location", [], _NO_ORIGIN_REPLY, total=0)
 
     try:
-        origin = await retrieval.geocode_area(place)
+        # "point": this origin is about to have a road distance quoted from it. A
+        # relaxed hit that resolved to a ward or the city centroid would measure
+        # from the wrong place and still look like a real number — the
+        # candidate-side twin of the 2026-10-03 incident. Better to answer "chưa
+        # xác định được vị trí" and let the candidate give a fuller address.
+        origin = await retrieval.geocode_area(place, precision="point")
     except Exception:  # noqa: BLE001 — geocoding must never break the tool
         logger.warning("get_project_distance: geocode failed", exc_info=True)
         origin = None

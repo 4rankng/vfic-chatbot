@@ -88,7 +88,7 @@ async def test_geocode_parses_lat_lon_and_caches_the_hit(geo_env):
     assert fake.calls[0]["params"]["countrycodes"] == "vn"
     assert fake.calls[0]["params"]["q"] == "KCN Tràng Duệ, An Dương"
     key, value, ttl = cache.writes[-1]
-    assert key.startswith("geo:geocode:v4:")
+    assert key.startswith("geo:geocode:v6:")
     assert value == {"lat": 20.865, "lng": 106.683}
     assert ttl == 2_592_000
 
@@ -369,9 +369,10 @@ async def test_geocode_area_passes_the_viewbox_and_admin_providers(monkeypatch):
 
     captured: dict = {}
 
-    async def fake_geocode(query, *, viewbox=None, providers=None):
+    async def fake_geocode(query, *, viewbox=None, providers=None, precision=None):
         captured["viewbox"] = viewbox
         captured["providers"] = providers
+        captured["precision"] = precision
         return (20.9, 106.7)
 
     monkeypatch.setattr(repository_module, "geocode", fake_geocode)
@@ -517,14 +518,30 @@ async def test_vietmap_resolves_through_search_then_place(geo_env):
 
 
 @pytest.mark.asyncio
-async def test_vietmap_first_returns_before_google(geo_env):
-    """Vietmap is the primary hop: with both keys configured, Google must not
-    be called at all."""
+async def test_google_first_returns_before_vietmap(geo_env):
+    """Google is the primary hop and Vietmap the fallback — the order came out of
+    the 12-case study against OSM ground truth (median positional error 0.92 km
+    against 2.74 km; the decisive case, a work address carrying a company name,
+    was 6.81 km off on Vietmap and 1.13 km on Google). With both keys configured
+    Google must therefore answer and Vietmap must not be called at all."""
     _cache, _settings = geo_env
-    vietmap = _register_vietmap(
-        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 10.8, "lng": 106.7}
+    google = register_fake_client(
+        "geocoder-google",
+        FakeHttpClient(
+            responses=[
+                {
+                    "status": "OK",
+                    "results": [
+                        {"geometry": {"location": {"lat": 10.8, "lng": 106.7}}}
+                    ],
+                }
+            ],
+            status_codes=[200],
+        ),
     )
-    google = _google_miss()
+    vietmap = _register_vietmap(
+        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 1.0, "lng": 2.0}
+    )
 
     result = await geocoding.geocode(
         "An Dương, Hải Phòng",
@@ -532,8 +549,28 @@ async def test_vietmap_first_returns_before_google(geo_env):
     )
 
     assert result == (10.8, 106.7)
+    assert google.calls
+    assert vietmap.calls == []
+
+
+@pytest.mark.asyncio
+async def test_vietmap_answers_when_google_misses(geo_env):
+    """The fallback is the reason Vietmap is still in the chain: a chain whose
+    only hop is over quota or down has no answer left."""
+    _cache, _settings = geo_env
+    google = _google_miss()
+    vietmap = _register_vietmap(
+        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 10.8, "lng": 106.7}
+    )
+
+    result = await geocoding.geocode(
+        "An Dương, Hải Phòng",
+        providers=GeoRuntimeConfig(vietmap_api_key="vk", google_maps_api_key="gk"),
+    )
+
+    assert result == (10.8, 106.7)
+    assert google.calls
     assert vietmap.calls
-    assert google.calls == []
 
 
 @pytest.mark.asyncio
@@ -665,9 +702,141 @@ async def test_vietmap_warm_cache_skips_http(geo_env):
 
 
 def test_cache_prefix_retired_the_previous_chain_entries():
-    """The v3→v4 bump is what lets the reordering take effect instead of serving
-    30-day-old Google-first coordinates."""
-    assert geocoding._CACHE_PREFIX == "geo:geocode:v4:"
+    """Every semantic change to the chain retires what it produced.
+
+    v3→v4 was the Vietmap reorder, v4→v5 the ``precision="point"`` gate, and
+    v5→v6 the measured reorder that put Google ahead of Vietmap. A coordinate is
+    only as good as the chain that produced it, so an entry from the old order
+    must not be served for another 30 days.
+    """
+    assert geocoding._CACHE_PREFIX == "geo:geocode:v6:"
+
+
+def test_the_durable_mapping_is_versioned_too():
+    """The Redis prefix bump alone is not enough: ``geocode_cache`` is keyed by
+    raw query text with no version, so a coordinate admitted by the old chain
+    would survive every prefix bump and keep answering. The durable key carries
+    the same version."""
+    assert geocoding._DB_KEY_VERSION == "v6:"
+
+
+@pytest.mark.asyncio
+async def test_geocode_point_precision_refuses_a_city_centroid_fallback(geo_env):
+    """The 2026-10-03 incident, end to end.
+
+    A real project address matched nothing until the ladder had dropped every
+    leading component and asked for the bare city, which Nominatim answered with
+    the Hải Phòng centroid. Stored as a factory gate, that put KCN Tràng Duệ
+    (13.6 km by road) "1.5 km" from a candidate in Phường An Biên. A ``point``
+    lookup must report the miss instead of the centroid.
+    """
+    cache, _settings = geo_env
+    address = "Tầng 2, Công ty LG Electronics (LGE), KCN Tràng Duệ, An Phong, An Dương, Hải Phòng"
+    # Every relaxed attempt lands on an area label; the last one is the city.
+    city = {"lat": "20.8830967", "lon": "106.6790381", "addresstype": "city"}
+    fake = register_fake_client(
+        "geocoder",
+        FakeHttpClient(
+            responses=[[], [city], [city], [city], [city]],
+            status_codes=[200] * 5,
+        ),
+    )
+
+    assert await geocoding.geocode(address, precision="point") is None
+
+    # The ladder walked every variant it is allowed and refused them all; the
+    # last one it reached is the coarsest suffix the cap permits.
+    assert [call["params"]["q"] for call in fake.calls][-1] == "An Dương, Hải Phòng"
+    assert len(fake.calls) == geocoding._MAX_QUERY_ATTEMPTS
+    # The miss is recorded, so a repeat is free and the lie is never cached.
+    assert cache.writes[-1][1] == {"miss": True}
+    assert cache.writes[-1][2] == 21_600
+
+
+@pytest.mark.asyncio
+async def test_geocode_area_precision_keeps_the_ward_fallback(geo_env):
+    """The gate is scoped, not global: a candidate's own area only has to RANK
+    projects, so a ward hit stays acceptable there."""
+    _cache, _settings = geo_env
+    city = {"lat": "20.8830967", "lon": "106.6790381", "addresstype": "city"}
+    register_fake_client(
+        "geocoder",
+        FakeHttpClient(responses=[[], [city]], status_codes=[200, 200]),
+    )
+
+    assert await geocoding.geocode(
+        "KCN Tràng Duệ, Huyện An Dương (xã An Phong), TP. Hải Phòng", precision="area"
+    ) == (20.8830967, 106.6790381)
+
+
+@pytest.mark.asyncio
+async def test_geocode_point_precision_still_accepts_a_relaxed_industrial(geo_env):
+    """Coarseness is the discriminator, not "relaxed". OSM tags KCN Đình Vũ
+    ``industrial``, so a relaxed attempt that reaches a real facility must pass —
+    otherwise the gate would silently delete every precise answer it guards."""
+    _cache, _settings = geo_env
+    industrial = {"lat": "20.8267968", "lon": "106.7744652", "addresstype": "industrial"}
+    register_fake_client(
+        "geocoder",
+        FakeHttpClient(responses=[[], [industrial]], status_codes=[200, 200]),
+    )
+
+    assert await geocoding.geocode(
+        "Công ty Cổ phần liên hợp kho bãi UWG, KCN Đình Vũ, TP. Hải Phòng",
+        precision="point",
+    ) == (20.8267968, 106.7744652)
+
+
+@pytest.mark.asyncio
+async def test_geocode_point_precision_keeps_the_exact_text_city_hit(geo_env):
+    """Nothing was dropped, so the answer still describes the query. A candidate
+    who genuinely says "Hải Phòng" must resolve, precision or not."""
+    _cache, _settings = geo_env
+    _register([{"lat": "20.883", "lon": "106.679", "addresstype": "city"}])
+
+    assert await geocoding.geocode("Hải Phòng", precision="point") == (20.883, 106.679)
+
+
+@pytest.mark.asyncio
+async def test_geocode_ward_centroid_is_refused_by_precision_but_kept_by_area(geo_env):
+    """The refusal is about the RESULT's type, not about Nominatim: the same
+    ``suburb`` payload is a miss for a factory and a usable answer for an area."""
+    # A distinct query per precision: the same string twice would let the first
+    # iteration's cached miss answer the second.
+    for precision, expected in (("point", None), ("area", (20.9, 106.7))):
+        ward = {"lat": "20.9", "lon": "106.7", "addresstype": "suburb"}
+        # The exact text misses, so the ward hit arrives RELAXED — the case the
+        # gate is about. One canned response per variant the walk can reach.
+        register_fake_client(
+            "geocoder",
+            FakeHttpClient(responses=[[], [ward], [ward]], status_codes=[200] * 3),
+        )
+        assert (
+            await geocoding.geocode(
+                f"KCN Tràng Duệ, An Dương, Hải Phòng ({precision})", precision=precision
+            )
+            == expected
+        )
+
+
+@pytest.mark.asyncio
+async def test_geocode_point_precision_still_honours_a_keyed_provider_hit(geo_env):
+    """The gate lives on the Nominatim ladder only. Vietmap is Vietnam-native and
+    indexes KCN names, so its answer must pass untouched — that hop is how a
+    project address gets placed at all now."""
+    _cache, _settings = geo_env
+    vietmap = _register_vietmap(
+        search_payload=[{"ref_id": "geocode:x"}], place_payload={"lat": 20.8555, "lng": 106.5638}
+    )
+
+    result = await geocoding.geocode(
+        "Công ty 4P Electronics, KCN Tràng Duệ, An Phong, An Dương, Hải Phòng",
+        providers=GeoRuntimeConfig(vietmap_api_key="vk"),
+        precision="point",
+    )
+
+    assert result == (20.8555, 106.5638)
+    assert vietmap.calls
 
 
 def test_viewbox_focus_ignores_absent_or_malformed_boxes():

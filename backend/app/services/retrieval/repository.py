@@ -20,6 +20,7 @@ calls did.
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -127,7 +128,9 @@ class RetrievalRepository:
     async def list_active_projects(self) -> list:
         return await self._catalog.list_active_projects()
 
-    async def geocode_area(self, query: str) -> tuple[float, float] | None:
+    async def geocode_area(
+        self, query: str, *, precision: Literal["area", "point"] = "area"
+    ) -> tuple[float, float] | None:
         """Resolve a candidate's stated area to ``(lat, lng)`` for distance evidence.
 
         Delegates to the cached, throttled, fail-open geocoding client
@@ -143,6 +146,15 @@ class RetrievalRepository:
           resolve, so the distances stay truthful.
         * the admin-configured Google credential (settings page / env) enables
           a regional hop before Nominatim, for the landmarks OSM lacks.
+
+        ``precision`` is the same guard the factory side uses, and it matters for
+        the same reason. A caller that will QUOTE a distance ("how far is X from
+        my house") must pass ``"point"``: otherwise an unresolvable street
+        address falls to the city centroid and the distance is measured from the
+        middle of town — the candidate-side twin of the 2026-10-03 incident,
+        where the factory coordinate was wrong. A caller that only RANKERS
+        projects keeps the default: a ward is enough to sort, and refusing to
+        rank would lose a good answer over a rounding error.
         """
         # Inline import: the integration-settings facade pulls the audit and
         # model graph; a module-level import risks an import cycle.
@@ -150,7 +162,9 @@ class RetrievalRepository:
 
         viewbox = await self._catalog.active_area_viewbox()
         providers = await IntegrationSettingsService(self.db).resolve_geocoder()
-        return await geocode(query, viewbox=viewbox, providers=providers)
+        return await geocode(
+            query, viewbox=viewbox, providers=providers, precision=precision
+        )
 
     async def estimate_distances_km(
         self,

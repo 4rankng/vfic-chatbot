@@ -11,7 +11,18 @@ gap for the geo-distance feature:
 2. the value is GROUNDED against that same brief — an address the document does
    not actually contain is dropped, never stored (an LLM that "completes" a
    plausible district would otherwise produce a confident wrong distance),
-3. the grounded address is geocoded and stored with its coordinates.
+3. the grounded address is geocoded at ``precision="point"`` — with the
+   admin-configured credentials the candidate-side lookup already uses — and
+   stored with its coordinates.
+
+Grounding alone is not enough, and the 2026-10-03 incident is why. A brief whose
+address is prefixed with the wrong company (the "4P Electronics" project carried
+"công ty LG Electronics" in its address) defeats grounding: the string really is
+in the brief, so it is stored. What turned a wrong address into a wrong DISTANCE
+was the geocoder's relaxation ladder collapsing "…, KCN Tràng Duệ, An Dương,
+Hải Phòng" to "TP. Hải Phòng" and storing the city centroid as the factory gate.
+``precision="point"`` refuses that, so an unplaceable project keeps NULL
+coordinates and the catalog tool says nothing about distance instead of lying.
 
 Two entry points, split by who authored the address:
 
@@ -34,14 +45,18 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Project
-from app.services.geo.geocoding import geocode
+from app.services.geo.factory_point import resolve_factory_point
 from app.services.knowledge.coercion import _parse_json_lenient
 from app.services.knowledge.prompts import ADDRESS_EXTRACTION_SYSTEM_PROMPT
 from app.shared.domain.text import normalize_vietnamese_text
+
+if TYPE_CHECKING:
+    from app.services.integration_settings.providers.geo import GeoRuntimeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -83,13 +98,54 @@ async def extract_project_address(llm_json, raw_text: str) -> str | None:
 
 
 async def _geocode_and_store(db: AsyncSession, project: Project, address: str) -> None:
-    """Store ``address`` plus its coordinates; leave the row untouched on a miss."""
-    coords = await geocode(address)
-    if coords is None:
-        logger.warning("project geocode failed project_id=%s", project.id)
+    """Store ``address`` plus its coordinates; leave the row untouched on a miss.
+
+    ``resolve_factory_point`` is load-bearing, not a preference. This
+    coordinate is quoted to a candidate as a road distance to a factory gate,
+    so it must be VERIFIED against the address that produced it — not merely
+    returned by a geocoder. The 2026-10-03 incident is why: Nominatim answered
+    a KCN Tràng Duệ address with the Hải Phòng city centroid and Vietmap put
+    4P 6.8 km away, both confident, both wrong. A factory that cannot be placed
+    under the verification rules keeps NULL coordinates and the catalog tool
+    says nothing about distance. Silence is the correct failure: a wrong number
+    here decides whether someone shows up for a shift.
+
+    No ``viewbox``: a project address carries its own hierarchy, so it gets no
+    region bias — unlike a candidate's bare area name.
+    """
+    # Admin-configured credentials, resolved exactly as the candidate-side lookup
+    # does in ``app.services.retrieval.repository.geocode_area``. The hop order
+    # itself is measured (see ``providers.KEYED_GEO_HOPS``).
+    providers = await _resolve_providers(db)
+    resolved = await resolve_factory_point(address, providers=providers)
+    if resolved is None:
+        logger.warning("project geocode unresolved project_id=%s", project.id)
         return
     project.extracted_address = address
-    project.latitude, project.longitude = coords
+    project.latitude, project.longitude = resolved.point
+    logger.info(
+        "project geocode resolved project_id=%s provider=%s anchor=%s",
+        project.id,
+        resolved.provider,
+        resolved.matched_anchor,
+    )
+
+
+async def _resolve_providers(db: AsyncSession) -> "GeoRuntimeConfig | None":
+    """The stored geocoder credentials; ``None`` when they cannot be read.
+
+    Fail-open to the keyless chain, which is exactly the pre-existing behaviour
+    for a project ingest.
+    """
+    try:
+        # Deferred: ``app.services.integration_settings`` re-exports services that
+        # import this module — a module-level import here is a cycle.
+        from app.services.integration_settings import IntegrationSettingsService
+
+        return await IntegrationSettingsService(db).resolve_geocoder()
+    except Exception:  # noqa: BLE001 — credentials are decoration, never a failure
+        logger.warning("project geocoder credentials unavailable", exc_info=True)
+        return None
 
 
 async def refresh_from_kb(
@@ -101,9 +157,12 @@ async def refresh_from_kb(
 ) -> None:
     """Resolve + geocode a project's work address from its latest upload brief.
 
-    No-op when the project is already resolved (unless ``force`` re-geocodes the
-    stored address). Never raises; does not commit — the caller owns the
-    transaction.
+    No-op when the project already has BOTH an address and coordinates (unless
+    ``force`` re-geocodes the stored address). An address without coordinates is
+    re-geocoded on every pass: a transient miss — or the ``precision="point"``
+    gate refusing a centroid — must not freeze the project permanently, since
+    nothing else would ever fill the gap. Never raises; does not commit — the
+    caller owns the transaction.
     """
     try:
         # Deferred: ``app.services.project`` re-exports ProjectService, which
@@ -115,7 +174,7 @@ async def refresh_from_kb(
             return
         address = (project.extracted_address or "").strip()
         if address:
-            if force:
+            if force or project.latitude is None or project.longitude is None:
                 await _geocode_and_store(db, project, address)
             return
         doc = await ProjectRepository(db).get_latest_document_with_text(project_id)

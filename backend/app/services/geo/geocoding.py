@@ -27,10 +27,19 @@ work address ("Tầng 2, Công ty LG Electronics, KCN Tràng Duệ, An Phong, An
 Dương, Hải Phòng") unresolvable while its own suffix ("An Dương, Hải Phòng")
 resolves. ``geocode`` therefore retries its suffixes with leading components
 dropped, capped at ``_MAX_QUERY_ATTEMPTS``; the exact text is always tried
-first, and every attempt stays inside the address's own hierarchy. A hit from a
-relaxed attempt is a coarser (ward/district/city) point, so ``distance_km``
-downstream is an approximate straight-line figure at the ~10 km scale — enough
-to rank projects near a candidate, not a routing distance.
+first, and every attempt stays inside the address's own hierarchy.
+
+Precision: relaxing answers with a coarser point, which is a different
+question depending on WHO is being placed. A candidate's own area only has to
+rank projects ("rough enough to sort"), so ``precision="area"`` — the default —
+keeps a ward or district hit. A project's work address is quoted back to
+candidates as a road distance to a factory gate, so it runs
+``precision="point"``: a hit that needed components dropped must then land on a
+genuine point feature, and a populated-place or boundary centroid
+(``_COARSE_PLACE_TYPES``) is refused. Dropping detail and still answering with
+an area label means the provider resolved something nobody asked about, and a
+miss is strictly better: the caller reports "chưa xác định được" instead of a
+confident wrong distance.
 
 Fail-open by contract: an outage, timeout, non-200, or malformed payload
 returns ``None`` and logs — never raises. Callers (project ingest, the catalog
@@ -44,7 +53,7 @@ import logging
 import time
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -54,7 +63,7 @@ from app.core.config import get_settings
 from app.core.db import async_session
 from app.core.http import get_http_client
 from app.models.geocode import GeocodeCache
-from app.services.geo.providers import google_geocode, vietmap_geocode
+from app.services.geo.providers import KEYED_GEO_HOPS
 from app.shared.domain.text import normalize_vietnamese_text
 
 if TYPE_CHECKING:
@@ -64,11 +73,18 @@ logger = logging.getLogger(__name__)
 
 # One process-scoped httpx client for the geocoder; the name keys its pool.
 _CLIENT_NAME = "geocoder"
-# v4: Vietmap became the primary hop (v3 was Google-first). A v3 entry holds a
-# coordinate resolved under a different chain — the same address can legitimately
-# resolve differently once the leading provider changes — so the bump retires
-# them instead of serving the old order's answer for its full 30-day TTL.
-_CACHE_PREFIX = "geo:geocode:v4:"
+# v6: the keyed hops were reordered by measurement — Google ahead of Vietmap
+# (see ``KEYED_GEO_HOPS`` for the study). A coordinate is only as good as the
+# chain that produced it, so a v5 entry — resolved Vietmap-first — no longer
+# means the same thing as one resolved under the measured order. v5 was the
+# ``precision="point"`` gate, itself a bump over v4 (the Vietmap reorder).
+_CACHE_PREFIX = "geo:geocode:v6:"
+# The DURABLE mapping (``geocode_cache``) is keyed by query text alone, so the
+# Redis prefix bump above does not retire it — a coordinate admitted by the old
+# chain would keep answering for as long as the row exists. The durable key
+# therefore carries the same version, which retires the old rows' meaning with
+# no data migration: the key is opaque text. Keep in step with _CACHE_PREFIX.
+_DB_KEY_VERSION = "v6:"
 # Nominatim's free-form search rejects the WHOLE query when any comma-separated
 # component is not a place it knows: "Tầng 2, Công ty LG Electronics, KCN Tràng
 # Duệ, An Phong, An Dương, Hải Phòng" finds nothing while "An Dương, Hải Phòng"
@@ -103,6 +119,41 @@ _BLOCKED_ADDRESS_TYPES = frozenset(
         "service",
         "steps",
         "track",
+    }
+)
+
+# ``addresstype`` values that are a POPULATED PLACE or an ADMINISTRATIVE
+# BOUNDARY — a label whose coordinate is the centroid of an area, not a place
+# anyone can stand at. The 2026-10-03 incident: "Tầng 2, Công ty LG Electronics
+# (LGE), KCN Tràng Duệ, An Phong, An Dương, Hải Phòng" matched nothing until
+# the ladder had dropped every leading component and asked for "TP. Hải Phòng",
+# which Nominatim answers with the city centroid (20.8831, 106.6790). That
+# centroid was stored as the factory gate, so a candidate in Phường An Biên was
+# told KCN Tràng Duệ — 13.6 km away by road — was "1.5 km" away. A relaxed hit
+# on one of these is a miss wearing a coordinate; ``precision="point"`` refuses
+# it. The ladder still admits genuine point features (OSM tags KCN Đình Vũ
+# ``industrial``), which is how a precise answer survives.
+_COARSE_PLACE_TYPES = frozenset(
+    {
+        "administrative",
+        "borough",
+        "city",
+        "city_district",
+        "commune",
+        "county",
+        "district",
+        "hamlet",
+        "island",
+        "municipality",
+        "neighbourhood",
+        "province",
+        "quarter",
+        "region",
+        "state",
+        "suburb",
+        "town",
+        "village",
+        "ward",
     }
 )
 
@@ -251,6 +302,7 @@ async def geocode(
     *,
     viewbox: str | None = None,
     providers: "GeoRuntimeConfig | None" = None,
+    precision: Literal["area", "point"] = "area",
 ) -> tuple[float, float] | None:
     """Resolve ``query`` to ``(lat, lng)``; ``None`` when unresolved.
 
@@ -277,6 +329,14 @@ async def geocode(
     the caller operates in. Deliberately bias-only, never ``bounded=1``: a hard
     box makes a genuinely-far area ("Hà Nội") resolve to whatever road happens
     to sit inside the box instead of the city the candidate named.
+
+    ``precision`` decides what a relaxed hit is allowed to be. ``"area"``
+    (default) keeps a ward/district hit — enough to RANK projects near a
+    candidate. ``"point"`` refuses a relaxed hit that landed on a populated
+    place or administrative centroid, so a factory address can never resolve to
+    the middle of a city (see ``_COARSE_PLACE_TYPES`` for the incident this
+    closes). The exact-text attempt and both keyed providers are unaffected
+    either way: a precise answer is a precise answer.
     """
     text = query.strip()
     if not text:
@@ -297,7 +357,7 @@ async def geocode(
         return None
     # The durable mapping answers before any provider call; Redis answered only
     # when it held a fresh copy. A recorded (fresh) miss ends the walk here.
-    db_query = normalize_vietnamese_text(text)
+    db_query = f"{_DB_KEY_VERSION}{normalize_vietnamese_text(text)}"
     db_coords, db_found = await _db_lookup(db_query)
     if db_found:
         if db_coords is not None:
@@ -308,45 +368,38 @@ async def geocode(
             )
             return db_coords
         return None
-    # Primary hop: Vietmap is Vietnam-native and indexes the local landmarks
-    # ("Núi Đèo", KCN names, ward-level entries) that OSM misses, so a correct
-    # answer lands here rather than after a free provider confidently returns
-    # the wrong one. Exactly once, on the caller's exact text, fail-open.
-    if providers is not None and providers.vietmap_api_key:
-        hit = await vietmap_geocode(
-            text,
-            api_key=providers.vietmap_api_key,
-            focus=_viewbox_focus(viewbox),
-            timeout_seconds=settings.geocoder_timeout_seconds,
-        )
-        if hit is not None:
-            await _db_store(db_query, hit, "vietmap")
-            await cache_set_json(
-                key,
-                {"lat": hit[0], "lng": hit[1]},
-                settings.geocoder_cache_ttl_seconds,
+    # Keyed hops, in the measured order (see ``KEYED_GEO_HOPS``). Each runs at
+    # most once, on the caller's exact text only, fail-open; the Nominatim
+    # ladder below then runs exactly as it would without any credential. The
+    # ladder is deliberately NOT offered to these providers: a keyed provider
+    # answers a partial query with a confident wrong match rather than nothing
+    # ("tran phu" resolves to Phường Trần Phú, Hà Tĩnh), so relaxing for them
+    # would trade a miss for a wrong answer.
+    focus = _viewbox_focus(viewbox)
+    for hop in KEYED_GEO_HOPS:
+        api_key = getattr(providers, hop.key_field, "") if providers is not None else ""
+        if not api_key:
+            continue
+        try:
+            hit = await hop.fetch(
+                text,
+                api_key=api_key,
+                timeout_seconds=settings.geocoder_timeout_seconds,
+                **({"focus": focus} if hop.accepts_focus and focus is not None else {}),
             )
-            return hit
-    # Second hop: Google covers the international addresses Vietmap does not.
-    # One exact-string attempt, fail-open; on a miss the Nominatim ladder below
-    # runs exactly as without any credential.
-    if providers is not None and providers.google_maps_api_key:
-        hit = await google_geocode(
-            text,
-            api_key=providers.google_maps_api_key,
-            timeout_seconds=settings.geocoder_timeout_seconds,
+        except Exception:  # noqa: BLE001 — a hop must never break the chain
+            logger.warning("geocode hop failed provider=%s", hop.name, exc_info=True)
+            continue
+        if hit is None:
+            continue
+        await _db_store(db_query, hit, hop.name)
+        await cache_set_json(
+            key, {"lat": hit[0], "lng": hit[1]}, settings.geocoder_cache_ttl_seconds
         )
-        if hit is not None:
-            await _db_store(db_query, hit, "google")
-            await cache_set_json(
-                key,
-                {"lat": hit[0], "lng": hit[1]},
-                settings.geocoder_cache_ttl_seconds,
-            )
-            return hit
+        return hit
     # Relax the query only after the exact text failed; the first attempt is
     # always the caller's own string, so a precise address stays precise.
-    for attempt in _query_variants(text):
+    for position, attempt in enumerate(_query_variants(text)):
         try:
             await _throttle(settings.geocoder_min_interval_seconds)
             client = await get_http_client(
@@ -367,10 +420,28 @@ async def geocode(
             response = await client.get("/search", params=params)
             if response.status_code != 200:
                 raise ValueError(f"geocoder status {response.status_code}")
-            item = response.json()[0]
+            matches = response.json()
+            if not matches:
+                # An empty result is the NORMAL answer for an address Nominatim
+                # does not index — a full Vietnamese factory address, most of the
+                # time. It is a step in the walk, not a failure, so it must not
+                # log a warning with a traceback; that turned every relaxed
+                # attempt into a WARNING and drowned the real failures.
+                logger.debug("geocode no match query=%s", attempt)
+                continue
+            item = matches[0]
             kind = item["addresstype"] if "addresstype" in item else ""
             if isinstance(kind, str) and kind in _BLOCKED_ADDRESS_TYPES:
                 logger.debug("geocode street-level match rejected query=%s type=%s", attempt, kind)
+                continue
+            # A relaxed hit on an area label resolves a coarser question than
+            # the one asked. "point" callers (a factory gate, quoted to a
+            # candidate as a road distance) must not store that: it is a miss
+            # wearing a coordinate, and the miss is what keeps the reply honest.
+            if position and precision == "point" and kind in _COARSE_PLACE_TYPES:
+                logger.debug(
+                    "geocode coarse relaxed match rejected query=%s type=%s", attempt, kind
+                )
                 continue
             lat = float(item["lat"])
             lng = float(item["lon"])

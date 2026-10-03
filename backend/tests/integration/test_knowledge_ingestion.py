@@ -816,7 +816,7 @@ async def test_build_project_index_extracts_and_geocodes_the_work_address(
 
     queried: list[str] = []
 
-    async def _geocode(query):
+    async def _geocode(query, *, precision=None, **_kwargs):
         queried.append(query)
         return (20.86, 106.68)
 
@@ -861,7 +861,7 @@ async def test_build_project_index_leaves_coordinates_null_without_a_work_addres
             return json.dumps({"address": None})
         return json.dumps({"summary": "Nhà máy LG Display", "location": "Hải Phòng"})
 
-    async def _geocode(_query):  # pragma: no cover - must not be reached
+    async def _geocode(_query, **_kwargs):  # pragma: no cover - must not be reached
         raise AssertionError("a project without an address must not be geocoded")
 
     monkeypatch.setattr("app.services.geo.project_address.geocode", _geocode)

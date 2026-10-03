@@ -164,7 +164,14 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # — one reviewed row each. The service that ladders them
     # (services/geo/distance.py) holds no HTTP call of its own, so it adds
     # nothing here.
-    "provider_boundary": 96,
+    # +2: the coordinate-verification feature adds the two reverse hops in
+    # app/services/geo/providers.py — nominatim_reverse's `client.get('/reverse')`
+    # and google_reverse's `client.get('/maps/api/geocode/json')` — one reviewed
+    # row each. The containment check itself
+    # (services/geo/verification.py) and the resolver
+    # (services/geo/factory_point.py) import no HTTP client, so neither is a
+    # provider-transport file and neither adds a row.
+    "provider_boundary": 98,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -284,7 +291,13 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # new provider_boundary rows, no existing row moved: dropping exactly those two
 # rows from the post-change scan reconstructs the prior pin byte-for-byte
 # (verified by re-hashing). Counts annotated at `provider_boundary` above.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "7510a44fdb1132695e2abea42efa1a6bb059c35d59498b235e93c56316b3919a"
+# 2026-10-03: the coordinate-verification feature added the two reverse hops in
+# app/services/geo/providers.py (nominatim_reverse, google_reverse) — the same
+# +2 shape, annotated at `provider_boundary` above. Dropping exactly those two
+# rows from the post-change scan reconstructs the prior pin byte-for-byte
+# (verified by re-hashing); services/geo/verification.py and factory_point.py
+# are not provider-transport files, so they contribute nothing.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "ad9928d08c7611d4206dd5751147fa229d289f7df0561860bf8778b02cf29e4a"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

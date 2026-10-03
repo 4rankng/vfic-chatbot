@@ -124,12 +124,19 @@ def _make_repo(**methods):
 _ORIGIN = (20.86, 106.68)
 
 
-def _geo_area(origin=_ORIGIN, *, calls: list[str] | None = None):
-    """A ``geocode_area`` port method returning ``origin`` and recording queries."""
+def _geo_area(origin=_ORIGIN, *, calls: list[str] | None = None, precisions: list | None = None):
+    """A ``geocode_area`` port method returning ``origin`` and recording queries.
 
-    async def geocode_area(self, query):
+    Records the ``precision`` the tool asked for: a caller that quotes a distance
+    must demand ``"point"`` so the origin cannot fall back to a ward or city
+    centroid, while a caller that only ranks may keep the loose default.
+    """
+
+    async def geocode_area(self, query, *, precision="area"):
         if calls is not None:
             calls.append(query)
+        if precisions is not None:
+            precisions.append(precision)
         return origin
 
     return geocode_area

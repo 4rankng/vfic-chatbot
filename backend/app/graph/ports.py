@@ -253,7 +253,9 @@ class GraphRetrievalPort(
     # modules consume inward contracts only — the catalog tool must not import
     # the geocoding service (tests/test_graph_import_guard.py), and the
     # geocoder is an outbound provider, not a project-knowledge read.
-    async def geocode_area(self, query: str) -> tuple[float, float] | None: ...
+    async def geocode_area(
+        self, query: str, *, precision: Literal["area", "point"] = "area"
+    ) -> tuple[float, float] | None: ...
 
     # Road-distance estimates behind the catalog tools' ``distance_km``: one
     # ``(km, seconds-or-None)`` per destination, aligned to the input list,
