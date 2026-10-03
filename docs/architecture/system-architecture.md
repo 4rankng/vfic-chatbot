@@ -1068,19 +1068,26 @@ be shared by another Project.
   `sort_by` still wins; `origin=None` — a geocoder miss — reproduces the
   previous output exactly, and a project without coordinates carries no
   distance and sorts last). Distance is additive evidence, never a filter.
-  Geocoder: three hops, each entered only when the previous one misses —
-  **Vietmap** (`GET /api/search/v4` → `ref_id` → `GET /api/place/v4`; the
-  Vietnam-native provider that resolves the local landmarks OSM lacks), then
-  **Google** for international coverage, then the keyless
-  Nominatim-compatible `GET /search` on the public instance
-  (`GEOCODER_BASE_URL`; 1 req/s + a descriptive User-Agent, both enforced
-  client-side). The keyed hops are optional and admin-editable (`/admin/
-  integrations/geocoder`; `VIETMAP_API_KEY` / `GOOGLE_MAPS_API_KEY` seed the
-  default, a stored value wins), and an unconfigured hop is never called. Vietmap
-  receives only the caller's exact text — it answers a partial query with a
-  confident *wrong* match rather than nothing, so the leading-component relaxation
-  ladder stays confined to the Nominatim hop, and the project bounding box reaches
-  it as a ranking `focus` point. Two cache layers sit in front of all three: Redis
+  Geocoder: two hops, each entered only when the previous one misses —
+  **Google** (`GET /maps/api/geocode/json`; measurably the best on the plants
+  this bot serves: 0.92 km median error against OSM ground truth vs Vietmap's
+  2.74 km), then **Vietmap** (`GET /api/search/v4` → `ref_id` → `GET
+  /api/place/v4`; the Vietnam-native provider that resolves the local landmarks
+  OSM lacks). There is deliberately **no keyless provider**: Nominatim was
+  removed on 2026-10-03 because its relaxation ladder answered a KCN Tràng Duệ
+  address with the Hải Phòng city centroid — the wrong "1.5 km" distance — and
+  its 1 req/s policy turned a free fallback into a latency floor. Both hops are
+  optional and admin-editable (`/admin/integrations/geocoder`;
+  `GOOGLE_MAPS_API_KEY` / `VIETMAP_API_KEY` seed the default, a stored value
+  wins), and an unconfigured hop is never called, so an installation with
+  neither key reports no distance at all. Each hop receives only the caller's
+  exact text — a keyed provider answers a partial query with a confident
+  *wrong* match rather than nothing, so nothing is ever relaxed — and the
+  project bounding box reaches Vietmap as a ranking `focus` point. A factory
+  coordinate is stored only when it survives containment: a human-verified
+  `geo_gazetteer` row, or a provider point whose Google reverse lookup reports a
+  place the address itself names (`geo_gazetteer`, `geocode_place_check`).
+  Two cache layers sit in front of both hops: Redis
   (30-day positive / 6-hour negative) over a durable `geocode_cache` mapping that
   records the resolved coordinates *and* which provider won, with a NULL-coordinate
   row per recorded miss so improved coverage is picked up without a backfill.

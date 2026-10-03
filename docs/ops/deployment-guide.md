@@ -442,17 +442,21 @@ Sourced from `backend/.env.example` (committed template) and
 | Name | Purpose |
 |---|---|
 | `GEOCODER_ENABLED` | Default `true`. Off → every lookup is a cached miss and the catalog returns no `distance_km`. |
-| `GEOCODER_BASE_URL` | Default the public Nominatim instance. Repoint at a self-hosted Nominatim (or any Nominatim-compatible endpoint) for better Vietnamese coverage; no code change. |
-| `GEOCODER_USER_AGENT` | Descriptive UA required by the provider's usage policy. |
-| `GEOCODER_TIMEOUT_SECONDS` | 3s per attempt; a timeout is a miss. |
-| `GEOCODER_CACHE_TTL_SECONDS` / `GEOCODER_NEGATIVE_TTL_SECONDS` | 30 days for a hit / 6 hours for a miss (Redis, key version `geo:geocode:v6:`), in front of the durable `geocode_cache` mapping. The durable keys carry the same version: `geocode_cache.query` rows are written as `v6:<normalized query>` and `geocode_place_check.coord_key` as `v6:<lat>,<lng>`, so a coordinate admitted by an older provider order or reverse-parsing rule is retired rather than served. |
-| `GEOCODER_MIN_INTERVAL_SECONDS` | 1.0 — the provider policy floor, enforced process-wide. Applies to the Nominatim hop only; the keyed hops are unthrottled. |
-| `VIETMAP_API_KEY` | **Second hop.** Blank disables it, and the chain then runs Google only. Seed only — a value saved in the admin settings page wins. |
-| `GOOGLE_MAPS_API_KEY` | **Primary hop** (the measured order: 0.92 km median error vs Vietmap's 2.74 km on the Hải Phòng plants — see `providers.KEYED_GEO_HOPS`). Blank disables it, and the chain starts at Vietmap. Same seed-only precedence. |
+| `GEOCODER_TIMEOUT_SECONDS` | 3s per hop; a timeout is a miss. |
+| `GEOCODER_CACHE_TTL_SECONDS` / `GEOCODER_NEGATIVE_TTL_SECONDS` | 30 days for a hit / 6 hours for a miss (Redis, key version `geo:geocode:v7:`), in front of the durable `geocode_cache` mapping. The durable keys carry the same version: `geocode_cache.query` rows are written as `v7:<normalized query>` and `geocode_place_check.coord_key` as `v7:<lat>,<lng>`, so a coordinate admitted by an older chain or reverse-parsing rule is retired rather than served. |
+| `GOOGLE_MAPS_API_KEY` | **Primary hop, and the only reverse-verification source.** Measured order: 0.92 km median positional error against OSM ground truth for the Hải Phòng plants, versus Vietmap's 2.74 km (see `providers.KEYED_GEO_HOPS`). Seed only — a value saved in the admin settings page wins. |
+| `VIETMAP_API_KEY` | **Second hop, and the only provider that takes a region bias.** Blank disables it, and the chain then runs Google only. Seed only — a value saved in the admin settings page wins. |
 
-The two keyed hops are the only geocoder env vars without a usable default:
-everything else has a code default, so a deployment whose `/opt/vfic/.env`
-predates this feature needs no env change and silently runs Nominatim-only.
+**There is no keyless provider.** Google and Vietmap are the whole forward chain
+and Google reverse is the whole containment check, so a deployment with **no**
+key configured reports no `distance_km` at all rather than a guessed one — which
+is why both keys are seeded in `/opt/vfic/.env`. Nominatim was removed from the
+product on 2026-10-03: it is the source of the incident that motivated all of
+this — its relaxation ladder answered a KCN Tràng Duệ address with the Hải Phòng
+city centroid, 10 km from the park — and its public instance rate-limits hard
+enough to turn a safety check into silence. The `GEOCODER_BASE_URL`,
+`GEOCODER_USER_AGENT` and `GEOCODER_MIN_INTERVAL_SECONDS` settings went with it;
+a value left in a stale `.env` is simply ignored.
 
 ### Scaling knobs (in `config.py`, env-tunable)
 | Name | Default | Purpose |
