@@ -141,7 +141,7 @@ async def test_route_vacancy_listing_refines_recommend() -> None:
     )
     route = route_from_decisions("công ty còn tuyển không", decisions)
     assert route.strategy == "structured_lookup"
-    assert route.tools == ("list_active_projects",)
+    assert route.tools == ("list_active_projects", "get_project_distance")
     assert route.reason == "vacancy_listing"
 
 

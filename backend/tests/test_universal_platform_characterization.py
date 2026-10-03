@@ -127,7 +127,9 @@ def test_current_recruitment_router_is_a_migration_oracle_not_a_universal_router
     )
 
     assert route.strategy == "structured_lookup"
-    assert route.tools == ("search_bus_timetable",)
+    # The distance tool rides the timetable lane too: "từ A tới B" reads to the
+    # classifier as a journey, so a distance question lands here (2026-10-03).
+    assert route.tools == ("search_bus_timetable", "get_project_distance")
 
 
 def test_explicit_recruitment_fixture_reproduces_current_route_and_tool_selection():
