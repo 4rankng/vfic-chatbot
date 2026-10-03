@@ -118,6 +118,13 @@ class TurnDecisions:
     # True when Jev judged the provider display label (``profile_name``) a
     # plausible real human name. The runner persists it into a blank lead name.
     profile_name_is_name: bool = False
+    # True when Jev positively reads a stated account/login problem (forgotten
+    # or expired password, missing OTP, cannot log in) in this turn's message.
+    # The employee-support/password flow — the reset tools and the TingTing
+    # redirect — may only open on this flag; a bare "hệ thống" mention or any
+    # other message Jev labelled employee_support without a login problem is
+    # demoted by the router (operator bug 2026-10-03: unprompted password talk).
+    login_problem: bool = False
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0

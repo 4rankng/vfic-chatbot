@@ -45,8 +45,10 @@ JEV_RETRY_BACKOFF_S = 0.25
 _BOT_CONTEXT = (
     "Tro ly tuyen dung tren Zalo cho cac du an cong nghiep/nha may. "
     "Ung vien hoi ve viec lam, luong, ca lam, ky tuc xa, xe dua don, ho so ung tuyen. "
-    "Nhan vien dang lam cua du an hoi ve tai khoan/he thong cua chinh du an (quen mat khau, "
-    "khong nhan duoc OTP, khong dang nhap duoc) la trong pham vi ho tro. "
+    "Nhan vien dang lam hoi ve TAI KHOAN cua chinh du an (quen mat khau, qua han mat khau, "
+    "khong nhan duoc OTP, khong dang nhap duoc) la trong pham vi ho tro; nhac chung chung "
+    "ve 'he thong' ma khong neu van de dang nhap (vi du 'xem lai he thong', 'he thong nha "
+    "minh') khong phai ho tro tai khoan. "
     "Thue, phap luat, bao hiem hay quy trinh tinh/tien thue la ngoai pham vi — "
     "khong tra loi noi dung."
 )
@@ -71,9 +73,10 @@ _INTENT_CRITERIA = {
     "contact": "Hỏi số điện thoại, admin, hotline, cách thức liên hệ",
     "faq_detail": "Hỏi chi tiết về việc đang tuyển: lương theo công việc, ca làm, ký túc xá, "
     "yêu cầu, nội dung công việc; không gồm hỏi về thuế hay pháp luật",
-    "employee_support": "Nhân viên đang làm cần hỗ trợ tài khoản hoặc hệ thống của dự án: quên/quá "
-    "hạn mật khẩu, đặt lại hoặc đổi mật khẩu, không nhận được mã OTP, tài khoản không đăng nhập "
-    "được",
+    "employee_support": "Nhân viên đang làm nêu VẤN ĐỀ ĐĂNG NHẬP cụ thể của tài khoản/dự án: "
+    "quên/quá hạn mật khẩu, đặt lại hoặc đổi mật khẩu, không nhận được mã OTP, tài khoản "
+    "không đăng nhập được. Chỉ nhắc chung chung đến 'hệ thống' mà không nêu vấn đề đăng nhập "
+    "(ví dụ 'xem lại hệ thống', 'hệ thống nhà mình', hỏi về việc khác) KHÔNG thuộc nhóm này",
     "out_of_scope": "Ngoài phạm vi tuyển dụng và hỗ trợ nhân viên của công ty, và không thuộc "
     "nhóm hỗ trợ tài khoản/hệ thống ở trên — ví dụ hỏi về thuế, pháp luật, bảo hiểm, "
     "quy trình tính lương hay việc riêng không liên quan",
@@ -215,8 +218,24 @@ def build_turn_questions(
             "type": "noul",
             "instructions": (
                 "Tin nhắn cuối của trợ lý trong `bot_last_message` có đang dở một quy trình hỗ "
-                "trợ tài khoản/hệ thống (đặt lại mật khẩu TingTing, hỏi họ tên/CCCD, xin mã "
+                "trợ tài khoản/hệ thống (đặt lại mật khẩu TingTing, hỏi họ tên/CCCD, hỏi mã "
                 "OTP) mà chưa hoàn tất không?"
+            ),
+            "criteria": _NOUL_CRITERIA,
+        },
+        # The password-flow gate, judged independently of the intent choice so
+        # the reset tools and the TingTing redirect cannot open on a vague
+        # mention (operator bug 2026-10-03: "xem lại hệ thống nhà mình" was
+        # routed into the password flow). Conservative: anything short of a
+        # stated login problem answers False.
+        "login_problem": {
+            "type": "noul",
+            "instructions": (
+                "Tin nhắn `message` (kèm ngữ cảnh `recent`) có nêu ĐÚNG VẤN ĐỀ "
+                "tài khoản/đăng nhập cụ thể không: quên/quá hạn/đổi mật khẩu, "
+                "không nhận được mã OTP, không đăng nhập được? Chỉ nhắc chung "
+                "chung tới 'hệ thống' hoặc một câu hỏi khác mà không nêu rõ "
+                "vấn đề như trên thì không phải — trả về sai."
             ),
             "criteria": _NOUL_CRITERIA,
         },
@@ -347,10 +366,13 @@ class JevDecisionClient:
         if job_seeking not in _JOB_SEEKING_CRITERIA:
             job_seeking = "unknown"
 
+        login_problem = self._noul(answers.get("login_problem"))
+
         return TurnDecisions(
             intent=intent,
             intent_confidence=self._confidence(answers.get("intent")),
             job_seeking=job_seeking,
+            login_problem=login_problem,
             vacancy_listing=self._noul(answers.get("vacancy_listing")),
             pleasantry=self._noul(answers.get("pleasantry")),
             gender=gender,

@@ -2357,7 +2357,7 @@ async def test_support_oa_turn_injects_the_guide_and_only_the_reset_tools(monkey
         chat_id="oa:user-1",
         recent_messages=[],
         timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92),
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92, login_problem=True),
         project_context=ProjectTurnContext(state="EXPLORE"),
         tingting_reset_allowed=True,
     )
@@ -2416,7 +2416,7 @@ async def test_agent_turn_omits_the_tingting_guide_when_unconfigured(monkeypatch
         chat_id="oa:user-1",
         recent_messages=[],
         timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92),
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92, login_problem=True),
         tingting_reset_allowed=True,
     )
 
@@ -2466,7 +2466,7 @@ async def test_off_channel_support_turn_gets_the_pointer_to_the_support_oa(monke
         chat_id="z1",
         recent_messages=[],
         timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92),
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.92, login_problem=True),
         project_context=ProjectTurnContext(state="EXPLORE"),
         tingting_reset_allowed=False,
     )
@@ -3162,7 +3162,7 @@ async def test_focused_support_turn_drops_the_project_knowledge_tool(monkeypatch
         chat_id="oa:user-1",
         recent_messages=[],
         timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.95),
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.95, login_problem=True),
         project_context=ProjectTurnContext(
             state="FOCUSED",
             project_id="p1",
@@ -4633,7 +4633,7 @@ async def test_the_verification_exhaustion_reply_delivers_without_escalating(mon
         chat_id="oa:user-1",
         recent_messages=[],
         timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.95),
+        decisions=TurnDecisions(intent="employee_support", intent_confidence=0.95, login_problem=True),
         tingting_reset_allowed=True,
     )
 

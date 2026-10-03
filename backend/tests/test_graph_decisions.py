@@ -76,6 +76,7 @@ async def test_questions_match_contract() -> None:
         "pleasantry",
         "recent_vacancy",
         "recent_account_support",
+        "login_problem",
         "contact_info",
         "gender",
         "gender_stated",
@@ -87,6 +88,7 @@ async def test_questions_match_contract() -> None:
         "pleasantry",
         "recent_vacancy",
         "recent_account_support",
+        "login_problem",
         "contact_info",
     }
     # The profile-name question is opt-in: only a non-blank profile_name asks it.
@@ -99,6 +101,7 @@ async def test_questions_match_contract() -> None:
         "pleasantry",
         "recent_vacancy",
         "recent_account_support",
+        "login_problem",
         "contact_info",
         "gender",
         "gender_stated",
@@ -156,7 +159,9 @@ async def test_route_employee_support_binds_the_tingting_reset_tools() -> None:
     """A payroll password reset must reach the TingTing API tool, not a refusal."""
     route = route_from_decisions(
         "em quên mật khẩu payroll, không nhận được OTP",
-        TurnDecisions(intent="employee_support", intent_confidence=0.93),
+        TurnDecisions(
+            intent="employee_support", intent_confidence=0.93, login_problem=True
+        ),
     )
     assert route.strategy == "knowledge_lookup"
     assert route.tools == (
@@ -173,6 +178,35 @@ async def test_route_employee_support_binds_the_tingting_reset_tools() -> None:
     assert "XÁC MINH DANH TÍNH" in hint
     # The refusal script must not survive into an in-scope support turn.
     assert "Từ chối" not in hint
+
+
+async def test_employee_support_without_login_problem_is_demoted_to_agent() -> None:
+    """Operator bug (2026-10-03): no stated login problem, no password flow.
+
+    "xem lại hệ thống nhà mình..." carried the employee_support label alone
+    and reached the TingTing password redirect. Jev's own login_problem
+    judgment now gates the flow: without it the turn falls to the neutral
+    agent route — no reset tools, no redirect.
+    """
+    route = route_from_decisions(
+        "xem lại hệ thống nhà mình 312 Nguyễn Công Hòa thì đi làm đâu gần",
+        TurnDecisions(intent="employee_support", intent_confidence=0.9),
+    )
+    assert route.intent == "general"
+    assert route.strategy == "agent"
+    assert "verify_tingting_identity" not in route.tools
+
+
+async def test_mid_flow_continuation_survives_the_login_problem_gate() -> None:
+    """A short reply mid-reset keeps the flow even without a fresh judgment."""
+    decisions = TurnDecisions(
+        intent="small_talk",
+        recent_account_support=True,
+        login_problem=False,  # the answer lives in the previous turn's message
+    )
+    route = route_from_decisions("Sao rồi", decisions)
+    assert route.intent == "employee_support"
+    assert "verify_tingting_identity" in route.tools
 
 
 async def test_route_keeps_an_unfinished_support_flow_on_its_tools() -> None:
@@ -205,6 +239,32 @@ async def test_out_of_scope_hint_checks_the_tingting_guide_before_refusing() -> 
     assert "API TINGTING" in hint
     assert "verify_tingting_identity" in hint
     assert "TRƯỚC KHI TỪ CHỐI" in hint
+
+
+async def test_out_of_scope_hint_never_volunteers_password_talk() -> None:
+    """Operator bug (2026-10-03): a tax question drew unprompted password talk.
+
+    The guide check may only fire when the message itself names a login
+    problem; otherwise the hint must forbid raising mật khẩu/OTP at all.
+    """
+    route = route_from_decisions("tiền thuế tncn phải trả bao nhiêu", TurnDecisions(intent="out_of_scope"))
+    hint = routing_instruction(route)
+    assert "chưa từng nêu" not in hint  # that guard lives in the prompt rules
+    assert "TUYỆT ĐỐI KHÔNG chủ động nhắc" in hint
+    assert "nêu đúng vấn đề đăng nhập" in hint
+
+
+async def test_employee_support_criteria_requires_an_actual_login_problem() -> None:
+    """A bare "hệ thống" mention must not classify as account support.
+
+    Operator bug: "xem lại hệ thống nhà mình 312 Nguyễn Công Hòa" was parsed
+    as employee_support and answered with the TingTing password redirect — a
+    password flow the candidate never asked for.
+    """
+    criteria = _INTENT_CRITERIA["employee_support"]
+    assert "VẤN ĐỀ ĐĂNG NHẬP" in criteria
+    assert "'hệ thống nhà mình'" in criteria  # the observed false positive, named
+    assert "KHÔNG thuộc nhóm này" in criteria
 
 
 async def test_route_out_of_scope() -> None:
@@ -251,7 +311,9 @@ async def test_route_not_job_seeking_keeps_exempt_intents_reachable() -> None:
     """Account support and contact questions are in scope whatever the intention."""
     support = route_from_decisions(
         "em quên mật khẩu",
-        TurnDecisions(intent="employee_support", job_seeking="not_seeking"),
+        TurnDecisions(
+            intent="employee_support", job_seeking="not_seeking", login_problem=True
+        ),
     )
     assert support.reason == "employee_support_terms"
     contact = route_from_decisions(
@@ -293,9 +355,19 @@ async def test_client_parses_full_fan_out() -> None:
     assert decisions.pleasantry is False
     assert decisions.recent_vacancy is True
     assert decisions.job_seeking == "unknown"  # absent answer never gates
+    assert decisions.login_problem is False  # absent answer keeps the flow closed
     assert decisions.degraded is False
     assert decisions.model == _MODEL
     assert decisions.input_tokens == 650
+
+
+async def test_client_parses_login_problem_answer() -> None:
+    client = _client()
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(login_problem=_noul(0.93)))
+    )
+    decisions = await client.decide_turn(user_text="x", recent_messages=[])
+    assert decisions.login_problem is True
 
 
 async def test_client_parses_job_seeking_answer() -> None:

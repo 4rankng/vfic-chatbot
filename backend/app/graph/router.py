@@ -131,6 +131,17 @@ def route_from_decisions(user_text: str, decisions: TurnDecisions) -> TurnRoute:
             confidence=max(decisions.intent_confidence, 0.9 if decisions.pleasantry else 0.0),
         )
 
+    # The password flow needs a positively-judged login problem (operator bug
+    # 2026-10-03: "xem lại hệ thống nhà mình..." reached the TingTing password
+    # redirect on an intent label alone). ``login_problem`` is Jev's own narrow
+    # question, answered independently of the intent choice; absent/low reads
+    # are False (conservative) and mid-flow continuation already returned
+    # above, so a real reset conversation never loses its thread here. A
+    # demoted turn falls through as ``general`` — the agent answers it with no
+    # password tools and no redirect.
+    if intent == "employee_support" and not decisions.login_problem:
+        intent = "general"
+
     # Real-intention gate (operator rule 2026-10-03): a confident "not looking
     # for new work" reading — an existing worker with a contract/HR matter or an
     # explicit stay-put — must never reach the recommendation lanes (the
@@ -331,9 +342,11 @@ def routing_instruction(route: TurnRoute) -> str:
     if route.intent == "out_of_scope":
         return (
             "Ý định ngoài phạm vi hỗ trợ của VFIC (tuyển dụng + hỗ trợ nhân viên đang làm). "
-            "TRƯỚC KHI TỪ CHỐI: nếu mục API TINGTING đang có sẵn cho việc đang được hỏi thì phải "
-            "gọi verify_tingting_identity theo hướng dẫn và trả lời theo kết quả tool, không "
-            "từ chối. "
+            "TRƯỚC KHI TỪ CHỐI: CHỈ khi tin nhắn nêu đúng vấn đề đăng nhập/mật khẩu/OTP của "
+            "tài khoản dự án mới kiểm tra mục API TINGTING và gọi verify_tingting_identity theo "
+            "hướng dẫn, trả lời theo kết quả tool; ứng viên không hề nêu vấn đề đăng nhập thì "
+            "KHÔNG kiểm tra hướng dẫn này và TUYỆT ĐỐI KHÔNG chủ động nhắc, hỏi hay gợi ý "
+            "đổi/đặt lại mật khẩu. "
             "Chỉ khi không có hướng dẫn phù hợp mới từ chối nhẹ nhàng và kéo cuộc trò chuyện về "
             "tìm việc, hồ sơ, lịch xe, hoặc vấn đề của nhân viên tại dự án VFIC. "
             "KHÔNG được trả lời nội dung câu hỏi (ví dụ cách tính thuế) hay hướng dẫn cách làm "
