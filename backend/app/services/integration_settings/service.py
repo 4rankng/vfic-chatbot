@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.services.integration_settings.cipher import IntegrationSettingsCipher
+from app.services.integration_settings.providers.email_digest import EmailDigestSettingsMixin
 from app.services.integration_settings.providers.facebook import FacebookSettingsMixin
 from app.services.integration_settings.providers.geo import GeoSettingsMixin
 from app.services.integration_settings.providers.llm import LlmSettingsMixin
@@ -27,6 +28,7 @@ class IntegrationSettingsService(
     FacebookSettingsMixin,
     TingtingSettingsMixin,
     GeoSettingsMixin,
+    EmailDigestSettingsMixin,
 ):
     """Resolve / admin-view / persist integration credentials per provider group."""
 

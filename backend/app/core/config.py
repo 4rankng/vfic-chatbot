@@ -469,6 +469,29 @@ class Settings(BaseSettings):
             ) from exc
         return value
 
+    # Candidate email digest: the send cadence (daily/weekly) and the send hour
+    # are ADMIN-EDITABLE at runtime (integration_settings rows), so the tick
+    # fires hourly and self-checks due-ness — a mid-day frequency flip takes
+    # effect without re-registering the scheduler job. This env only pins the
+    # hourly check itself; "8 * * * *" = :08 past every hour UTC. Same TZ caveat
+    # as kb_sync_cron: container TZ must stay UTC.
+    email_digest_tick_cron: str = "8 * * * *"
+
+    @field_validator("email_digest_tick_cron")
+    @classmethod
+    def _validate_email_digest_tick_cron(cls, value: str) -> str:
+        # Same parser as kb_sync_cron so accepted/rejected strings match what
+        # rq-scheduler will actually run.
+        from crontab import CronTab
+
+        try:
+            CronTab(value)
+        except (ValueError, KeyError) as exc:
+            raise ValueError(
+                f"email_digest_tick_cron must be a valid cron expression (got {value!r})"
+            ) from exc
+        return value
+
     @field_validator("jwt_algorithm")
     @classmethod
     def _validate_jwt_algorithm(cls, value: str) -> str:

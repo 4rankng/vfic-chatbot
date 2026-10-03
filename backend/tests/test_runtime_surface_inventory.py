@@ -44,12 +44,13 @@ EXPECTED_ROUTE_COUNTS = {
     "bot_runs": 2,
     "conversations": 18,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
     "dashboard": 2,
-    "integrations": 36,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints; +2 geocoder credential endpoints (settings page)
+    "integrations": 39,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints; +2 geocoder credential endpoints (settings page)
     # +2 the TingTing support OA: save-and-check the four credentials (PUT /tingting)
     # and a re-probe endpoint (POST /tingting/oa/check)
     # +2 deployment-wide TingTing app API key (GET / PUT, secrets status-only)
     # +2 Meta App credentials UI; +4 multi-Page per-Page project CRUD
     # +1 admin-only credentials reveal (audited, no-store)
+    # +3 candidate email digest: GET/PUT /email-digest config + POST test send
     "installation": 8,
     "jobs": 7,
     "knowledge": 18,  # -7 the legacy KB-version lane (versions CRUD/ingest/publish + canonical format template)
@@ -177,7 +178,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # inventory and the file stops being provider transport. `google_reverse` stays
     # as the only reverse source. Net row count back to 96, with a different row
     # set: the digest moved, the count did not.
-    "provider_boundary": 96,
+    # +5 candidate email digest: the generic Resend sender in email_service.py
+    # (get + post inside send_email_via_resend), its two call sites in
+    # services/email_digest/service.py (run_digest + send_test_digest), and the
+    # admin test-send route in api/integrations.py.
+    "provider_boundary": 101,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -311,7 +316,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # neither adding a row — google_geocode's `get` 5→6 (the coarse-`types` read that
 # replaced the ladder's precision gate) and decisions.decide_turn's `get` 20→21
 # (unrelated prompt work on the employee_support intent, landed concurrently).
-EXPECTED_BROAD_BOUNDARY_SHA256 = "4bf9caddbee1596078dd8fbf3a6520ec8f95384063c3221c5166639ed49d6669"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "16eef017bb0d29e3b95364d3731a82e18bc7d8e83854b7bf24278f48f96c1395"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

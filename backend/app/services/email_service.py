@@ -16,6 +16,52 @@ class EmailDeliveryError(RuntimeError):
     """Raised when the email provider rejects a send request."""
 
 
+async def send_email_via_resend(
+    *,
+    api_key: str,
+    from_email: str,
+    to: list[str],
+    subject: str,
+    html: str,
+) -> str | None:
+    """Generic Resend send shared by the digest email (password reset keeps its
+    own inline payload). Returns the provider message id, or None when Resend
+    answers without one. Raises :class:`EmailDeliveryError` on rejection so the
+    caller decides between surfacing (test send) and retrying (scheduled run).
+    """
+    if not api_key:
+        raise EmailDeliveryError("RESEND_API_KEY is not configured")
+
+    payload = {
+        "from": from_email,
+        "to": to,
+        "subject": subject,
+        "html": html,
+    }
+    # Reuse the process-scoped Resend client (Tech-Lead Directive §4). The key
+    # travels per-request in the Authorization header so an admin-rotated Resend
+    # key takes effect on the next send without rebuilding the client.
+    from app.core.http import get_http_client
+
+    client = await get_http_client("resend", timeout=10, settings=get_settings())
+    response = await client.post(
+        RESEND_EMAILS_URL, json=payload, headers={"Authorization": f"Bearer {api_key}"}
+    )
+    if response.status_code >= 400:
+        logger.warning(
+            "resend email failed status=%s body=%s",
+            response.status_code,
+            response.text[:500],
+        )
+        raise EmailDeliveryError(f"Resend rejected the email (status {response.status_code})")
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    provider_id = body.get("id")
+    return provider_id if isinstance(provider_id, str) else None
+
+
 async def send_password_reset_otp(*, to_email: str, otp: str) -> str | None:
     """Send a password reset OTP through Resend.
 

@@ -90,6 +90,7 @@ async def lifespan(app: FastAPI):
         from rq_scheduler import Scheduler
 
         from app.core.redis import get_redis_sync
+        from app.workers.email_digest_worker import run_email_digest_tick
         from app.workers.followup_worker import run_proactive_followup_tick
         from app.workers.outbound_dispatch_worker import run_outbound_dispatch_tick
         from app.workers.reconcile_worker import run_reconcile_tick
@@ -159,6 +160,18 @@ async def lifespan(app: FastAPI):
             logger.exception(
                 "single-page external source sync scheduler registration failed (non-fatal)"
             )
+        try:
+            register_unique_cron_tick(
+                maintenance_sched,
+                run_email_digest_tick,
+                settings.email_digest_tick_cron,
+            )
+            logger.info(
+                "email digest tick registered: cron=%s queue=maintenance",
+                settings.email_digest_tick_cron,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("email digest scheduler registration failed (non-fatal)")
     except Exception:  # noqa: BLE001
         logger.exception("rq-scheduler setup failed (non-fatal)")
 

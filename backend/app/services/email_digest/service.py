@@ -1,0 +1,236 @@
+"""Candidate email digest orchestration: window → summarize → render → send.
+
+One ``run_digest`` pass: resolve the admin config, gate on the schedule
+(ICT-based daily/weekly, catch-up if the moment passed while the worker was
+down), collect the new candidates, summarize each conversation (fail-soft),
+render the HTML, send through Resend, and — only on success — advance the
+send-state row so the next window starts where this one ended.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.services.email_digest.renderer import (
+    DIGEST_FROM_EMAIL,
+    digest_subject,
+    render_digest_html,
+)
+from app.services.email_digest.repository import (
+    DigestCandidate,
+    collect_new_candidates,
+)
+from app.services.integration_settings.providers.email_digest import (
+    FREQUENCY_WEEKLY,
+    EmailDigestRuntimeConfig,
+)
+from app.services.integration_settings.service import IntegrationSettingsService
+from app.services.email_service import EmailDeliveryError, send_email_via_resend
+
+logger = logging.getLogger(__name__)
+
+ICT = ZoneInfo("Asia/Ho_Chi_Minh")
+# Fallback window when nothing has ever been sent (first run).
+DIGEST_FIRST_WINDOW = timedelta(days=1)
+
+SUMMARY_SYSTEM_PROMPT = (
+    "Bạn là trợ lý tóm tắt hội thoại tuyển dụng. Viết 2-4 câu tiếng Việt tóm tắt "
+    "những gì ỨNG VIÊN đã nói trong hội thoại với chatbot (quan tâm dự án nào, "
+    "kinh nghiệm, mong muốn, câu hỏi của ứng viên). Chỉ dùng thông tin có trong "
+    "hội thoại; không suy đoán; không dùng markdown."
+)
+
+# Bounded human-readable statuses for the tick log line.
+STATUS_DISABLED = "disabled"  # no recipients configured
+STATUS_UNCONFIGURED = "unconfigured"  # recipients set, no Resend key
+STATUS_NOT_DUE = "not_due"
+STATUS_EMPTY = "empty"  # due, but no new candidates in the window
+STATUS_SENT = "sent"
+
+
+@dataclass(frozen=True)
+class DigestRunResult:
+    status: str
+    candidate_count: int = 0
+    provider_id: str | None = None
+
+
+def _period_key(ict_now: datetime, frequency: str) -> str:
+    """Identity of the send period: ICT date for daily, ISO week for weekly."""
+    if frequency == FREQUENCY_WEEKLY:
+        iso = ict_now.isocalendar()
+        return f"{iso.year}-W{iso.week:02d}"
+    return ict_now.date().isoformat()
+
+
+def is_due(config: EmailDigestRuntimeConfig, *, now: datetime) -> bool:
+    """True when the digest should fire now (or catch up) for this period.
+
+    ``>=`` against the configured ICT send time — not equality — so a worker
+    that was down through the scheduled moment still sends at the next tick
+    instead of skipping a whole day. The period marker then prevents a second
+    send within the same day/week.
+    """
+    ict_now = now.astimezone(ICT)
+    hour, minute = (int(part) for part in config.send_time.split(":"))
+    scheduled = ict_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if ict_now < scheduled:
+        return False
+    if config.last_sent_at is None:
+        return True
+    last_ict = config.last_sent_at.astimezone(ICT)
+    return _period_key(last_ict, config.frequency) != _period_key(ict_now, config.frequency)
+
+
+async def _candidate_summary(candidate: DigestCandidate) -> str | None:
+    """LLM summary of what the candidate said; None on any failure."""
+    if not candidate.candidate_messages:
+        return None
+    transcript = "\n".join(f"- {line[:300]}" for line in candidate.candidate_messages)
+    try:
+        # Imported per call: graph factories pull in the LLM stack.
+        from app.graph.factories import build_minimax_extractor
+
+        extractor = build_minimax_extractor()
+        text = await extractor(
+            SUMMARY_SYSTEM_PROMPT,
+            f"Hội thoại với chatbot (lời của ứng viên):\n{transcript}",
+        )
+        return text.strip() or None
+    except Exception:  # noqa: BLE001 — a summary failure must not block the email
+        logger.warning(
+            "email digest summary failed lead_id=%s", candidate.lead_id, exc_info=True
+        )
+        return None
+
+
+async def run_digest(
+    db: AsyncSession,
+    *,
+    now: datetime | None = None,
+    settings_service: IntegrationSettingsService | None = None,
+) -> DigestRunResult:
+    """One digest pass. Sends at most once per configured period."""
+    moment = now or datetime.now(timezone.utc)
+    service = settings_service or IntegrationSettingsService(db)
+    config = await service.resolve_email_digest()
+
+    if not config.recipients:
+        return DigestRunResult(status=STATUS_DISABLED)
+    if not config.resend_api_key:
+        logger.warning("email digest has recipients but no Resend API key")
+        return DigestRunResult(status=STATUS_UNCONFIGURED)
+    if not is_due(config, now=moment):
+        return DigestRunResult(status=STATUS_NOT_DUE)
+
+    window_start = config.last_sent_at or (moment - DIGEST_FIRST_WINDOW)
+    candidates = await collect_new_candidates(
+        db, window_start=window_start, window_end=moment
+    )
+    if not candidates:
+        return DigestRunResult(status=STATUS_EMPTY)
+
+    for candidate in candidates:
+        candidate.summary = await _candidate_summary(candidate)
+
+    ict_now = moment.astimezone(ICT)
+    html = render_digest_html(candidates)
+    subject = digest_subject(len(candidates), ict_date=ict_now.strftime("%d/%m/%Y"))
+    provider_id = await send_email_via_resend(
+        api_key=config.resend_api_key,
+        from_email=DIGEST_FROM_EMAIL,
+        to=list(config.recipients),
+        subject=subject,
+        html=html,
+    )
+
+    await _mark_sent(db, moment)
+    logger.info(
+        "email digest sent: candidates=%d recipients=%d provider_id=%s",
+        len(candidates),
+        len(config.recipients),
+        provider_id or "-",
+    )
+    return DigestRunResult(
+        status=STATUS_SENT, candidate_count=len(candidates), provider_id=provider_id
+    )
+
+
+async def _mark_sent(db: AsyncSession, when: datetime) -> None:
+    """Advance the worker-owned send-state row (commit included)."""
+    from app.models.integration import IntegrationSetting
+
+    from app.services.integration_settings.providers.email_digest import (
+        EMAIL_DIGEST_LAST_SENT_AT,
+    )
+
+    row = await db.get(IntegrationSetting, EMAIL_DIGEST_LAST_SENT_AT)
+    if row is None:
+        row = IntegrationSetting(
+            key=EMAIL_DIGEST_LAST_SENT_AT, encrypted_value=when.isoformat(), is_secret=False
+        )
+        db.add(row)
+    else:
+        row.encrypted_value = when.isoformat()
+        row.is_secret = False
+    await db.commit()
+
+
+@dataclass(frozen=True)
+class TestDigestResult:
+    ok: bool
+    configured: bool
+    missing: list[str]
+    error: str | None = None
+    provider_id: str | None = None
+
+
+_SYNTHETIC_CANDIDATE = DigestCandidate(
+    lead_id=0,
+    name="Nguyễn Văn Thử",
+    phone="0900000000",
+    age=27,
+    gender="Nam",
+    living_area="Hải Phòng",
+    desired_job="Công nhân sản xuất",
+    expected_salary="8-10 triệu",
+    channel_label="Zalo Chatbot",
+    project_name="LG Display (mẫu)",
+    candidate_messages=("Tôi muốn hỏi về việc làm tại LG Display",),
+    summary="Ứng viên hỏi về vị trí công nhân sản xuất tại LG Display và mong muốn mức lương 8-10 triệu.",
+)
+
+
+async def send_test_digest(
+    db: AsyncSession,
+    *,
+    settings_service: IntegrationSettingsService | None = None,
+) -> TestDigestResult:
+    """Console test send: synthetic candidate, real Resend call, no state write."""
+    service = settings_service or IntegrationSettingsService(db)
+    config = await service.resolve_email_digest()
+    missing: list[str] = []
+    if not config.resend_api_key:
+        missing.append("resend_api_key")
+    if not config.recipients:
+        missing.append("recipients")
+    if missing:
+        return TestDigestResult(ok=False, configured=False, missing=missing)
+
+    ict_now = datetime.now(ICT)
+    try:
+        provider_id = await send_email_via_resend(
+            api_key=config.resend_api_key,
+            from_email=DIGEST_FROM_EMAIL,
+            to=list(config.recipients),
+            subject=digest_subject(1, ict_date=ict_now.strftime("%d/%m/%Y"), test=True),
+            html=render_digest_html([_SYNTHETIC_CANDIDATE], test=True),
+        )
+    except EmailDeliveryError as exc:
+        return TestDigestResult(ok=False, configured=True, missing=[], error=str(exc))
+    return TestDigestResult(ok=True, configured=True, missing=[], provider_id=provider_id)

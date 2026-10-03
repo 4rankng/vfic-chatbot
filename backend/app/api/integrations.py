@@ -35,6 +35,9 @@ from app.schemas.integrations import (
     CustomLlmIntegrationSettingsOut,
     CustomLlmIntegrationSettingsUpdate,
     CustomLlmIntegrationTestOut,
+    EmailDigestSettingsOut,
+    EmailDigestSettingsUpdate,
+    EmailDigestTestOut,
     JevIntegrationSettingsOut,
     JevIntegrationSettingsUpdate,
     JevIntegrationTestOut,
@@ -53,6 +56,7 @@ from app.schemas.integrations import (
     ZaloOaSignatureVerifyOut,
     ZaloOaSignatureVerifyRequest,
 )
+from app.services.email_digest import send_test_digest
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.tingting_oa import TingtingOaLinkError
 from app.services.integrations.facebook_oauth_flow import (
@@ -359,6 +363,38 @@ async def test_jev_integration_settings(
     being saved; anything omitted falls back to the stored configuration.
     """
     return await probe_jev(body, db)
+
+
+@router.get("/email-digest", response_model=EmailDigestSettingsOut)
+async def get_email_digest_settings(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> EmailDigestSettingsOut:
+    return EmailDigestSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_email_digest_view()
+    )
+
+
+@router.put("/email-digest", response_model=EmailDigestSettingsOut)
+async def update_email_digest_settings(
+    body: EmailDigestSettingsUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> EmailDigestSettingsOut:
+    view = await IntegrationSettingsService(db).update_email_digest(
+        body.model_dump(exclude_unset=True),
+        actor_id=admin.id,
+    )
+    return EmailDigestSettingsOut.model_validate(view)
+
+
+@router.post("/email-digest/test", response_model=EmailDigestTestOut)
+async def test_email_digest(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> EmailDigestTestOut:
+    """Send the synthetic sample through the saved config (real Resend call)."""
+    return await send_test_digest(db)
 
 
 @router.get("/tingting", response_model=TingtingIntegrationSettingsOut)

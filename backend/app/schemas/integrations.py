@@ -524,3 +524,38 @@ class FacebookCredentialsUpdate(BaseModel):
     facebook_webhook_verify_token: str | None = Field(
         default=None, min_length=4, max_length=256
     )
+
+
+# ─── Candidate email digest (Resend) ─────────────────────────────────────────
+# Admin-configured daily/weekly candidate email: one Resend key (env-fallback),
+# a recipient list, and a send cadence. The key stays secret-status only (SEC-07)
+
+
+class EmailDigestSettingsOut(BaseModel):
+    resend_api_key: SecretStatus
+    recipients: list[str]
+    frequency: str
+    # ICT schedule "HH:MM" (minutes on :00/:30); the worker gates on it.
+    send_time: str
+    # The whole feature is off while the recipient list is empty.
+    enabled: bool
+    last_sent_at: str | None = None
+
+
+class EmailDigestSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resend_api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    recipients: list[str] | None = None
+    frequency: str | None = None
+    send_time: str | None = None
+
+
+class EmailDigestTestOut(BaseModel):
+    """Outcome of the console test send (synthetic candidate, real Resend call)."""
+
+    ok: bool
+    configured: bool
+    missing: list[str]
+    error: str | None = None
+    provider_id: str | None = None
