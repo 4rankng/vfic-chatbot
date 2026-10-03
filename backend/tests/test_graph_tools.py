@@ -525,6 +525,12 @@ async def test_list_active_projects_surfaces_whole_catalog_without_truncation(no
     # Rule (8) is the only place the agent is told the distance answers "gần nhà".
     assert "(8) " in _PRESENTATION_CONTRACT
     assert "distance_km" in _PRESENTATION_CONTRACT
+    # Ordering must be unambiguous: the payload order wins whenever distances
+    # exist — the 2026-10-03 bug was the model re-sorting a correctly ordered
+    # payload by fit while claiming "gần nhất trước" (rule (2) used to say
+    # "xếp theo fit_score" unconditionally).
+    assert "thứ tự của payload đã quyết định" in _PRESENTATION_CONTRACT
+    assert "tuyệt đối KHÔNG đảo lại" in _PRESENTATION_CONTRACT
     surfaced_line = out.splitlines()[1]
     assert surfaced_line.count("id=") == 12
     assert set(surfaced_line.removeprefix("SURFACED_PROJECT_IDS=").split(",")) == {

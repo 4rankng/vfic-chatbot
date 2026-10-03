@@ -114,8 +114,9 @@ _PRESENTATION_CONTRACT = (
     "(1) nếu chưa rõ mong muốn và không yêu cầu xem dự án → hỏi một câu ngắn để hiểu nhu cầu; "
     "không bắt khai đủ công việc/khu vực/mức lương mới tư vấn; "
     "(2) khi đã có bất kỳ tiêu chí, đã nêu dự án hoặc muốn xem các lựa chọn → giới thiệu theo DỰ ÁN, "
-    "mỗi dự án một khối: tên dự án, khu vực, mức lương, phạm vi công việc; "
-    "xếp theo fit_score và nêu fit_notes trung thực, không bịa; "
+    "mỗi dự án một khối: tên dự án, khu vực, mức lương, phạm vi công việc; xếp theo fit_score "
+    "(khi payload có distance_km thì thứ tự của payload đã quyết định — xem (8)), "
+    "nêu fit_notes trung thực, không bịa; "
     "(3) số dự án là total trong payload — không tự đếm, không bịa; "
     "(4) phạm vi công việc nêu bằng title_plain (đã dịch thuật ngữ) — "
     "đây là thông tin thêm của dự án, không đăng tuyển từng việc; "
@@ -126,8 +127,9 @@ _PRESENTATION_CONTRACT = (
     "để hoàn thành danh sách, chỉ dùng các dự án trong phạm vi tool đã trả về; "
     "(8) khi ứng viên hỏi dự án gần nhà/chỗ ở hoặc khoảng cách, nêu distance_km của từng dự án "
     "dưới dạng \"khoảng X km\" — đó là ước tính theo bản đồ, không phải số đo chính xác; có "
-    "duration_min thì nêu thêm \"khoảng Y phút\"; xếp gần nhất trước; không tự bịa khoảng cách "
-    "hay địa chỉ."
+    "duration_min thì nêu thêm \"khoảng Y phút\"; payload đã được xếp sẵn gần nhất trước — "
+    "trình bày ĐÚNG thứ tự các dự án trong payload, tuyệt đối KHÔNG đảo lại theo mức lương, "
+    "fit hay cảm tính; không tự bịa khoảng cách hay địa chỉ."
 )
 
 _NO_CRITERIA_REPLY = (
