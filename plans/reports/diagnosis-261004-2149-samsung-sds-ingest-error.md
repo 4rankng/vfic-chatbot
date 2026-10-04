@@ -104,3 +104,41 @@ Data repair (04 Oct ~15:05 UTC, after backup):
   badge input = PUBLISHED `kb-samsung-sds.md` (13:59 UTC) → `ingest_state =
   "ready"` → the card shows "Đã nạp". The old "Lỗi nạp" snapshot clears on a
   page refresh.
+
+## Addendum — the meals deadlock and the per-category card (04–05 Oct night)
+
+After the repair the owner's screenshot showed one remaining red card:
+"Bữa ăn — Cập nhật lỗi — nội dung cũ vẫn đang dùng". Root cause chain, all
+verified on prod:
+
+1. Today's canonical re-import (`kb-samsung-sds.md`) refreshed **11 of 12**
+   categories at 13:59 (new ACTIVE revisions, insurance included — its
+   serving record has the proper "Chế độ: … BHXH, BHYT, BHTN" label). The
+   meals section was byte-identical to 02 Oct, so `stage` reused the failed
+   training-batch revision instead of creating a new one.
+2. That revision still carried the batch's ownership key and its prepared
+   child document still held the `category_revision_id` unique key, so every
+   activation path was blocked. Attempting it surfaced a second gap: the
+   generic handler in `KnowledgeCategoryService.activate_revision` swallowed
+   the real exception (`raise … from None`, no log) — the unique-violation
+   cause was only found by re-running the activation steps by hand.
+3. Prod fix (backed up first): stripped the ownership key, released the
+   child document's `category_revision_id`, re-enqueued through the product's
+   own category queue. `meals rev4` activated at 15:59:49 UTC; all 12
+   categories now have ACTIVE latest revisions and the card reads clean.
+
+Code shipped for the underlying gaps (commit `a46cf7fb`):
+
+- `recovery_sweep._abandon_training_batch` now strips ownership from **all**
+  the batch's revisions — FAILED ones keep their original failure code but
+  lose the blocking key — and releases the prepared child documents'
+  `category_revision_id` links, so an abandoned batch can never deadlock a
+  later activation again. Regression-tested.
+- `activate_revision` logs the swallowed exception (with revision id and
+  category key) before raising the stable code.
+
+Open follow-up (owner's call, not built tonight): the LLM extraction authored
+the bad `"BHXH, BHYT, BHTN"` label on 02 Oct and nothing repairs it — a
+bounded LLM rewrite of self-test-offending record labels inside `prepare`
+(rewrite → re-embed → re-test, N attempts, then fail with the real error)
+would close that class.
