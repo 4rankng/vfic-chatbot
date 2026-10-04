@@ -824,10 +824,6 @@
     overflow-wrap: anywhere;
   }
 
-  .project-category-source-link {
-    margin-top: 16px;
-  }
-
   .project-category-editor-skeleton {
     height: var(--project-editor-box);
     margin-top: 20px;
@@ -875,7 +871,6 @@
   }
 
   .project-migration-section,
-  .project-source-section,
   .project-transport-panel {
     min-width: 0;
     padding-top: 20px;
@@ -1039,22 +1034,6 @@
     line-height: 1.7;
   }
 
-  .project-single-page-sync-label {
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .project-single-page-sync-label h3 {
-    flex-wrap: wrap;
-    white-space: normal;
-  }
-
-  .project-single-page-reload {
-    max-width: 100%;
-    min-width: 0;
-    white-space: normal;
-  }
-
   .project-discovery-wide-field,
   .project-discovery-actions {
     grid-column: 1 / -1;
@@ -1065,111 +1044,6 @@
     justify-content: flex-end;
     padding-top: 16px;
     border-top: 1px solid var(--border);
-  }
-
-  .project-source-link-form {
-    width: 100%;
-    min-width: 0;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--card);
-  }
-
-  .project-source-link-header,
-  .project-source-link-footer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
-    background: var(--surface-hover);
-  }
-
-  .project-source-link-header {
-    border-bottom: 1px solid var(--border);
-  }
-
-  .project-source-link-footer {
-    justify-content: flex-end;
-    border-top: 1px solid var(--border);
-  }
-
-  .project-source-link-body {
-    display: grid;
-    min-width: 0;
-    gap: 12px;
-    padding: 16px;
-  }
-
-  .project-external-source-row {
-    display: grid;
-    min-width: 0;
-    grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) auto;
-    align-items: center;
-    gap: 20px;
-    padding-block: 16px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .project-external-source-identity,
-  .project-external-source-sync {
-    min-width: 0;
-  }
-
-  .project-external-source-heading,
-  .project-external-source-status-line,
-  .project-external-source-actions {
-    display: flex;
-    min-width: 0;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .project-external-source-name,
-  .project-external-source-url {
-    min-width: 0;
-    margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--foreground);
-    font-size: var(--fs-body-sm);
-    line-height: var(--lh-normal);
-  }
-
-  .project-external-source-name {
-    font-weight: var(--fw-semibold);
-  }
-
-  .project-external-source-url {
-    margin-top: 4px;
-    color: var(--muted-foreground);
-  }
-
-  .project-external-source-status-label {
-    font-size: var(--fs-body-sm);
-    font-weight: var(--fw-medium);
-  }
-
-  .project-external-source-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    margin-top: 6px;
-    color: var(--muted-foreground);
-    font-size: var(--fs-caption);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .project-external-source-error {
-    flex-basis: 100%;
-    overflow-wrap: anywhere;
-  }
-
-  .project-external-source-actions {
-    justify-content: flex-end;
   }
 
   .project-ingest-progress-row {
@@ -1193,17 +1067,6 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     background: var(--card);
-  }
-
-  @media (max-width: 1023px) {
-    .project-external-source-row {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 12px;
-    }
-
-    .project-external-source-actions {
-      justify-content: flex-start;
-    }
   }
 
   @media (min-width: 768px) and (max-width: 1023px) {
@@ -1427,28 +1290,8 @@
       width: 100%;
     }
 
-    .project-single-page-reload {
-      min-height: 40px;
-      height: auto;
-      padding-block: 10px;
-    }
-
     .project-discovery-content {
       grid-template-columns: minmax(0, 1fr);
-    }
-
-    .project-source-link-body {
-      padding: 16px;
-    }
-
-    .project-external-source-actions {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 44px;
-    }
-
-    .project-external-source-sync-button,
-    .project-source-delete {
-      width: 100%;
     }
   }
 
