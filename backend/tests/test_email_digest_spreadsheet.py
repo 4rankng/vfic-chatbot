@@ -55,10 +55,7 @@ def test_attachment_metadata():
     assert workbook.filename == "danh_sach_ung_vien_03-10-2026.xlsx"
     assert workbook.content_type == XLSX_CONTENT_TYPE
     assert workbook.content[:2] == b"PK"  # a real zip archive
-    sample = build_lead_workbook(
-        [_full_candidate()], ict_date="03-10-2026", test=True
-    )
-    assert sample.filename == "danh_sach_ung_vien_mau_03-10-2026.xlsx"
+
 
 
 def test_title_banner_header_and_layout():

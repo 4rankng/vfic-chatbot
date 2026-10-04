@@ -134,6 +134,13 @@ async def _candidate_summary(
         return None
 
 
+def _with_phone(candidates: list[DigestCandidate]) -> list[DigestCandidate]:
+    """The Excel file is the payload: a lead without a mobile number is not
+    actionable for the recipient, so the whole digest — subject count, letter,
+    attachment — covers phone-having candidates only."""
+    return [candidate for candidate in candidates if (candidate.phone or "").strip()]
+
+
 async def run_digest(
     db: AsyncSession,
     *,
@@ -161,10 +168,7 @@ async def run_digest(
     candidates = await collect_new_candidates(
         db, window_start=window_start, window_end=moment
     )
-    # The Excel file is the payload: a lead without a mobile number is not
-    # actionable for the recipient, so the whole digest — subject count,
-    # letter, attachment — covers phone-having candidates only.
-    candidates = [candidate for candidate in candidates if (candidate.phone or "").strip()]
+    candidates = _with_phone(candidates)
     if not candidates:
         return DigestRunResult(status=STATUS_EMPTY)
 
@@ -223,54 +227,70 @@ class TestDigestResult:
     missing: list[str]
     error: str | None = None
     provider_id: str | None = None
-
-
-_SYNTHETIC_CANDIDATE = DigestCandidate(
-    lead_id=0,
-    name="Nguyễn Văn Thử",
-    phone="0900000000",
-    age=27,
-    gender="Nam",
-    living_area="Hải Phòng",
-    desired_job="Công nhân sản xuất",
-    expected_salary="8-10 triệu",
-    channel_label="Zalo Chatbot",
-    project_name="LG Display (mẫu)",
-    candidate_messages=("Tôi muốn hỏi về việc làm tại LG Display",),
-    summary="Ứng viên hỏi về vị trí công nhân sản xuất tại LG Display và mong muốn mức lương 8-10 triệu.",
-)
+    candidate_count: int = 0
 
 
 async def send_test_digest(
     db: AsyncSession,
     *,
+    to_email: str,
     settings_service: IntegrationSettingsService | None = None,
+    now: datetime | None = None,
 ) -> TestDigestResult:
-    """Console test send: synthetic candidate, real Resend call, no state write."""
+    """Console preview send: the REAL pending digest to one typed address.
+
+    Renders and sends exactly what a scheduled run would deliver — same
+    window, same subject, same body, same workbook — so the operator previews
+    the letter recipients get, without advancing the send state or marking any
+    lead processed. The cron toggle is ignored (explicit operator action); the
+    only required config is the Resend key, since the address comes from the
+    console input.
+    """
     service = settings_service or IntegrationSettingsService(db)
     config = await service.resolve_email_digest()
     missing: list[str] = []
     if not config.resend_api_key:
         missing.append("resend_api_key")
-    if not config.recipients:
-        missing.append("recipients")
     if missing:
         return TestDigestResult(ok=False, configured=False, missing=missing)
 
-    ict_now = datetime.now(ICT)
+    moment = now or datetime.now(timezone.utc)
+    window_start = config.last_sent_at or (moment - DIGEST_FIRST_WINDOW)
+    candidates = _with_phone(
+        await collect_new_candidates(
+            db, window_start=window_start, window_end=moment
+        )
+    )
+    if not candidates:
+        return TestDigestResult(
+            ok=False,
+            configured=True,
+            missing=[],
+            error="Không có ứng viên mới trong kỳ gửi.",
+        )
+
+    ict_now = moment.astimezone(ICT)
     try:
         provider_id = await send_email_via_resend(
             api_key=config.resend_api_key,
             from_email=DIGEST_FROM_EMAIL,
-            to=list(config.recipients),
-            subject=digest_subject(1, ict_date=ict_now.strftime("%d/%m/%Y"), test=True),
-            html=render_digest_html([_SYNTHETIC_CANDIDATE], test=True),
+            to=[to_email],
+            subject=digest_subject(
+                len(candidates), ict_date=ict_now.strftime("%d/%m/%Y")
+            ),
+            html=render_digest_html(candidates),
             attachments=(
                 build_lead_workbook(
-                    [_SYNTHETIC_CANDIDATE], ict_date=ict_now.strftime("%d-%m-%Y"), test=True
+                    candidates, ict_date=ict_now.strftime("%d-%m-%Y")
                 ),
             ),
         )
     except EmailDeliveryError as exc:
         return TestDigestResult(ok=False, configured=True, missing=[], error=str(exc))
-    return TestDigestResult(ok=True, configured=True, missing=[], provider_id=provider_id)
+    return TestDigestResult(
+        ok=True,
+        configured=True,
+        missing=[],
+        provider_id=provider_id,
+        candidate_count=len(candidates),
+    )

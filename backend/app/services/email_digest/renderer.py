@@ -24,52 +24,30 @@ _PREHEADER = (
     "Danh sách ứng viên mới và file Excel đính kèm từ hệ thống TingTing."
 )
 
-_TEST_BANNER = (
-    "<tr><td style='padding:8px 24px 0;'>"
-    "<p style='margin:0;padding:12px 16px;background:#fef9c3;border-radius:6px;"
-    "font-size:13px;color:#854d0e;line-height:1.5;'>"
-    "Đây là email <strong>KIỂM TRA</strong> cấu hình hệ thống — file Excel "
-    "đính kèm chỉ là dữ liệu mẫu, vui lòng bỏ qua.</p></td></tr>"
-)
+
+def digest_subject(candidate_count: int, *, ict_date: str) -> str:
+    return f"Danh sách ứng viên mới — {candidate_count} ứng viên ({ict_date})"
 
 
-def digest_subject(candidate_count: int, *, ict_date: str, test: bool = False) -> str:
-    prefix = "[KIỂM TRA] " if test else ""
-    return (
-        f"{prefix}Danh sách ứng viên mới — {candidate_count} ứng viên ({ict_date})"
-    )
-
-
-def render_digest_html(
-    candidates: Sequence[DigestCandidate],
-    *,
-    test: bool = False,
-) -> str:
+def render_digest_html(candidates: Sequence[DigestCandidate]) -> str:
     """The full digest email body, styled after the payroll statement email.
 
     The candidate list is deliberately NOT rendered here — the Excel
-    attachment is the list. ``test=True`` renders the synthetic-sample banner
-    so a configuration test never reads like a real candidate report.
+    attachment is the list. One render path: the console preview send shows
+    exactly what a scheduled run delivers.
     """
     count = len(candidates)
     greeting = (
         "<p style='margin:0 0 6px;color:#64748b;font-size:13px;line-height:20px;'>"
         "Kính gửi Quý Công ty,</p>"
     )
-    if test:
-        body = (
-            "<p style='margin:0;color:#334155;font-size:15px;line-height:23px;'>"
-            "Đây là email kiểm tra cấu hình hệ thống. File Excel đính kèm chỉ là "
-            "dữ liệu mẫu, vui lòng bỏ qua email này.</p>"
-        )
-    else:
-        body = (
-            "<p style='margin:0;color:#334155;font-size:15px;line-height:23px;'>"
-            f"Hệ thống vừa ghi nhận <strong>{count} ứng viên mới</strong>. "
-            "Danh sách chi tiết gồm số điện thoại, khu vực, dự án quan tâm và "
-            "tóm tắt hội thoại được đính kèm file Excel để Quý Công ty tiện "
-            "theo dõi và đối chiếu.</p>"
-        )
+    body = (
+        "<p style='margin:0;color:#334155;font-size:15px;line-height:23px;'>"
+        f"Hệ thống vừa ghi nhận <strong>{count} ứng viên mới</strong>. "
+        "Danh sách chi tiết gồm số điện thoại, khu vực, dự án quan tâm và "
+        "tóm tắt hội thoại được đính kèm file Excel để Quý Công ty tiện "
+        "theo dõi và đối chiếu.</p>"
+    )
     attach_callout = (
         "<table role='presentation' width='100%' cellpadding='0' cellspacing='0' "
         "style='width:100%;background:#eff6ff;border-left:3px solid #2563eb;"
@@ -111,7 +89,6 @@ font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Danh sách ứng
 font-weight:750;">Tuyển dụng TingTing</h1>
             </td></tr>
             <tr><td style="padding:4px 24px 0;">{greeting}{body}</td></tr>
-            {"" if not test else _TEST_BANNER}
             <tr><td style="padding:20px 24px 0;">{attach_callout}</td></tr>
             <tr><td style="padding:22px 24px 24px;">
               <p style="margin:0;color:#475569;font-size:14px;line-height:22px;">

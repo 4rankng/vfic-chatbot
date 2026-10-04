@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class SecretStatus(BaseModel):
@@ -554,11 +554,18 @@ class EmailDigestSettingsUpdate(BaseModel):
     enabled: bool | None = None
 
 
+class EmailDigestTestIn(BaseModel):
+    """Console preview send: the address to deliver the pending digest to."""
+
+    to_email: EmailStr
+
+
 class EmailDigestTestOut(BaseModel):
-    """Outcome of the console test send (synthetic candidate, real Resend call)."""
+    """Outcome of the console preview send (real pending digest, no state write)."""
 
     ok: bool
     configured: bool
     missing: list[str]
     error: str | None = None
     provider_id: str | None = None
+    candidate_count: int = 0

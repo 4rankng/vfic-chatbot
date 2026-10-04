@@ -37,6 +37,7 @@ from app.schemas.integrations import (
     CustomLlmIntegrationTestOut,
     EmailDigestSettingsOut,
     EmailDigestSettingsUpdate,
+    EmailDigestTestIn,
     EmailDigestTestOut,
     JevIntegrationSettingsOut,
     JevIntegrationSettingsUpdate,
@@ -390,11 +391,13 @@ async def update_email_digest_settings(
 
 @router.post("/email-digest/test", response_model=EmailDigestTestOut)
 async def test_email_digest(
+    body: EmailDigestTestIn,
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> EmailDigestTestOut:
-    """Send the synthetic sample through the saved config (real Resend call)."""
-    return await send_test_digest(db)
+    """Preview send: the real pending digest to the typed address (no state
+    write), exactly what a scheduled run would deliver to recipients."""
+    return await send_test_digest(db, to_email=str(body.to_email))
 
 
 @router.get("/tingting", response_model=TingtingIntegrationSettingsOut)

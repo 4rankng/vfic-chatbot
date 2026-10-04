@@ -184,15 +184,13 @@ def build_lead_workbook(
     candidates: Sequence[DigestCandidate],
     *,
     ict_date: str,
-    test: bool = False,
 ) -> EmailAttachment:
     """The lead list as a single-sheet xlsx email attachment.
 
-    ``ict_date`` ("DD-MM-YYYY") stamps the filename and the title banner;
-    ``test=True`` marks the filename so a sample workbook is never mistaken
-    for a real digest. Rows carry the bot-gathered details — a detail the bot
-    never learned is an empty cell, never a placeholder. Layout: row 1 title
-    banner (merged), row 2 header (frozen + auto-filter), data from row 3.
+    ``ict_date`` ("DD-MM-YYYY") stamps the filename and the title banner.
+    Rows carry the bot-gathered details — a detail the bot never learned is
+    an empty cell, never a placeholder. Layout: row 1 title banner (merged),
+    row 2 header (frozen + auto-filter), data from row 3.
     """
     column_count = len(_COLUMNS)
     last_col = chr(64 + column_count)
@@ -259,11 +257,7 @@ def build_lead_workbook(
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for part_name, xml_text in parts.items():
             archive.writestr(part_name, xml_text)
-    filename = (
-        f"danh_sach_ung_vien_mau_{ict_date}.xlsx"
-        if test
-        else f"danh_sach_ung_vien_{ict_date}.xlsx"
-    )
+    filename = f"danh_sach_ung_vien_{ict_date}.xlsx"
     return EmailAttachment(
         filename=filename,
         content_type=XLSX_CONTENT_TYPE,

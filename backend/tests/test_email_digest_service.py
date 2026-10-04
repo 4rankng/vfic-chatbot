@@ -191,28 +191,50 @@ async def test_run_digest_sends_and_advances_state(monkeypatch):
 
 
 async def test_test_send_reports_missing_config():
+    """The typed preview address replaces the recipient-list requirement."""
     result = await send_test_digest(
-        None, settings_service=_SettingsSvc(_config(resend_api_key="", recipients=()))
+        None,
+        to_email="xem.truoc@congty.vn",
+        settings_service=_SettingsSvc(_config(resend_api_key="")),
     )
     assert result.ok is False
     assert result.configured is False
-    assert result.missing == ["resend_api_key", "recipients"]
+    assert result.missing == ["resend_api_key"]
 
 
-async def test_test_send_sends_synthetic_sample(monkeypatch):
+async def test_test_send_previews_real_window_to_typed_address(monkeypatch):
+    """The preview is byte-for-byte what recipients get — real pending
+    window, real subject/body/workbook — delivered only to the typed
+    address, and it never advances the send state."""
+
+    async def fake_collect(db, *, window_start, window_end):
+        assert window_start is not None
+        return [_candidate()]
+
     async def fake_send(**kwargs):
-        assert kwargs["to"] == ["a@x.vn"]
-        assert "KIỂM TRA" in kwargs["subject"]
+        assert kwargs["to"] == ["xem.truoc@congty.vn"]
+        assert kwargs["subject"] == "Danh sách ứng viên mới — 1 ứng viên (05/10/2026)"
+        assert "KIỂM TRA" not in kwargs["html"]
+        assert "dữ liệu mẫu" not in kwargs["html"]
         (attachment,) = kwargs["attachments"]
-        assert attachment.filename.startswith("danh_sach_ung_vien_mau_")
-        assert attachment.filename.endswith(".xlsx")
+        assert attachment.filename == "danh_sach_ung_vien_05-10-2026.xlsx"
         assert attachment.content[:2] == b"PK"
         return "test-pid"
 
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
     monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)
-    result = await send_test_digest(None, settings_service=_SettingsSvc(_config()))
+    db = _StateDb()
+    result = await send_test_digest(
+        db,
+        to_email="xem.truoc@congty.vn",
+        settings_service=_SettingsSvc(_config(enabled=False)),  # toggle ignored
+        now=datetime(2026, 10, 5, 2, 5, tzinfo=timezone.utc),
+    )
     assert result.ok is True
     assert result.provider_id == "test-pid"
+    assert result.candidate_count == 1
+    assert db.rows == {}  # a preview never marks the window as sent
+    assert db.commit_count == 0
 
 
 async def test_test_send_reports_provider_rejection(monkeypatch):
@@ -221,10 +243,39 @@ async def test_test_send_reports_provider_rejection(monkeypatch):
     async def reject_send(**kwargs):
         raise EmailDeliveryError("Resend rejected the email (status 401)")
 
+    async def fake_collect(db, *, window_start, window_end):
+        return [_candidate()]
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
     monkeypatch.setattr(digest_module, "send_email_via_resend", reject_send)
-    result = await send_test_digest(None, settings_service=_SettingsSvc(_config()))
+    result = await send_test_digest(
+        None,
+        to_email="xem.truoc@congty.vn",
+        settings_service=_SettingsSvc(_config()),
+    )
     assert result.ok is False
     assert "401" in (result.error or "")
+
+
+async def test_test_send_empty_window_sends_nothing(monkeypatch):
+    """No pending candidates → nothing goes out; the console gets the reason."""
+
+    async def fake_collect(db, *, window_start, window_end):
+        return []
+
+    async def fail_send(**kwargs):
+        raise AssertionError("must not send on an empty window")
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
+    monkeypatch.setattr(digest_module, "send_email_via_resend", fail_send)
+    result = await send_test_digest(
+        None,
+        to_email="xem.truoc@congty.vn",
+        settings_service=_SettingsSvc(_config()),
+    )
+    assert result.ok is False
+    assert result.candidate_count == 0
+    assert "Không có ứng viên mới" in (result.error or "")
 
 
 # ── renderer ─────────────────────────────────────────────────────────────────
@@ -263,31 +314,6 @@ def test_renderer_letter_carries_no_candidate_rows():
     )
     assert "Trân trọng cảm ơn Quý Công ty" in html
     assert "— không gồm TingTing OA" not in html  # never reaches customers
-
-
-def test_renderer_test_banner():
-    from app.services.email_digest.renderer import render_digest_html
-
-    html = render_digest_html([_candidate()], test=True)
-    assert "KIỂM TRA" in html
-    assert "dữ liệu mẫu" in html
-    assert "bảng cài đặt" not in html  # no admin-console wording reaches customers
-
-
-async def test_test_send_never_advances_send_state(monkeypatch):
-    """A sample send validates the pipeline but marks no lead as processed."""
-
-    async def fake_send(**kwargs):
-        return "pid-test"
-
-    monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)
-    db = _StateDb()
-    result = await send_test_digest(db, settings_service=_SettingsSvc(_config()))
-    assert result.ok is True
-    # The send-state row is untouched: the next scheduled digest still covers
-    # the same lead window.
-    assert db.rows == {}
-    assert db.commit_count == 0
 
 
 async def test_run_digest_without_summarizer_still_sends(monkeypatch):
