@@ -4,6 +4,7 @@ import { useNotify } from "ra-core";
 import { Mail } from "lucide-react";
 
 import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -69,6 +70,7 @@ export const EmailDigestSection = () => {
     useState<EmailDigestFrequency | null>(null);
   const [sendTimeDraft, setSendTimeDraft] = useState<string | null>(null);
   const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
+  const [previewEmailDraft, setPreviewEmailDraft] = useState("");
 
   const settingsQuery = useQuery<EmailDigestSettings>({
     queryKey: emailDigestSettingsKey,
@@ -109,16 +111,23 @@ export const EmailDigestSection = () => {
   });
 
   const testSend = useMutation({
-    mutationFn: () => zaloIntegrationGateway.testEmailDigest(),
+    // The preview delivers the REAL pending digest (same subject, body and
+    // workbook as the scheduled send) to one typed address — never to the
+    // configured recipient list.
+    mutationFn: (toEmail: string) =>
+      zaloIntegrationGateway.testEmailDigest(toEmail),
     onSuccess: (result) => {
       if (result.ok) {
-        notify("Đã gửi email thử (dữ liệu mẫu).", { type: "success" });
+        notify(
+          `Đã gửi email thử tới ${previewEmailDraft.trim()} (${result.candidate_count} ứng viên).`,
+          { type: "success" },
+        );
       } else if (!result.configured) {
         notify(`Chưa cấu hình đủ: ${result.missing.join(", ")}.`, {
           type: "error",
         });
       } else {
-        notify(`Email thử thất bại: ${result.error ?? "không rõ lý do"}`, {
+        notify(`Gửi email thử thất bại: ${result.error ?? "không rõ lý do"}`, {
           type: "error",
         });
       }
@@ -310,6 +319,27 @@ export const EmailDigestSection = () => {
             </Button>
           </div>
 
+          <div className="settings-tingting-subhead">
+            <h3>Gửi email thử</h3>
+            <p>
+              Gửi thử đúng email người nhận sẽ nhận được — tới một địa chỉ bạn
+              nhập, không gửi tới danh sách người nhận.
+            </p>
+          </div>
+          <label
+            htmlFor="email_digest_test_recipient"
+            className="text-body-sm text-foreground"
+          >
+            Email nhận thử
+          </label>
+          <Input
+            id="email_digest_test_recipient"
+            type="email"
+            value={previewEmailDraft}
+            onChange={(event) => setPreviewEmailDraft(event.target.value)}
+            placeholder="ten@congty.vn"
+            className="h-10"
+          />
           <div className="settings-tingting-link">
             <span className="settings-tingting-link-copy" role="status">
               {enabled
@@ -328,8 +358,8 @@ export const EmailDigestSection = () => {
               type="button"
               color="secondary"
               className="uu-scope settings-test-button tt-btn-touch"
-              onClick={() => testSend.mutate()}
-              isDisabled={testSend.isPending}
+              onClick={() => testSend.mutate(previewEmailDraft.trim())}
+              isDisabled={testSend.isPending || previewEmailDraft.trim() === ""}
               aria-busy={testSend.isPending}
             >
               {testSend.isPending ? "Đang gửi…" : "Gửi email thử"}

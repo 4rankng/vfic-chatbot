@@ -172,13 +172,14 @@ export type EmailDigestSettingsUpdate = {
   enabled?: boolean;
 };
 
-/** Result of POST /email-digest/test (synthetic candidate, real Resend call). */
+/** Result of POST /email-digest/test (real pending digest, no state write). */
 export type EmailDigestTestResult = {
   ok: boolean;
   configured: boolean;
   missing: string[];
   error: string | null;
   provider_id: string | null;
+  candidate_count: number;
 };
 
 /** PUT body. Omit a key to keep the stored value. */
@@ -433,10 +434,10 @@ export const zaloIntegrationGateway = {
       { method: "PUT", body },
     ),
 
-  testEmailDigest: async (): Promise<EmailDigestTestResult> =>
+  testEmailDigest: async (toEmail: string): Promise<EmailDigestTestResult> =>
     apiJson<EmailDigestTestResult>(
       `${ADMIN_INTEGRATIONS_BASE_PATH}/email-digest/test`,
-      { method: "POST" },
+      { method: "POST", body: { to_email: toEmail } },
     ),
 
   /** Re-probe the stored OA credentials without changing them. */

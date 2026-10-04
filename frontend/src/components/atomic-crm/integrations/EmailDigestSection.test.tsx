@@ -110,14 +110,28 @@ describe("EmailDigestSection", () => {
       missing: [],
       error: null,
       provider_id: "test-pid",
+      candidate_count: 3,
     });
     const screen = await renderSection();
 
-    await screen.getByRole("button", { name: "Gửi email thử" }).click();
-    await expect.poll(() => mocks.testEmailDigest.mock.calls.length).toBe(1);
+    // The button stays disabled until the operator types a preview address.
+    const button = screen.getByRole("button", { name: "Gửi email thử" });
+    await expect.element(button).toBeDisabled();
+    await screen
+      .getByRole("textbox", { name: "Email nhận thử" })
+      .fill("xem.truoc@congty.vn");
+    await button.click();
+    await expect
+      .poll(() => mocks.testEmailDigest.mock.calls)
+      .toEqual([["xem.truoc@congty.vn"]]);
     await expect
       .poll(() => mocks.notify.mock.calls)
-      .toEqual([["Đã gửi email thử (dữ liệu mẫu).", { type: "success" }]]);
+      .toEqual([
+        [
+          "Đã gửi email thử tới xem.truoc@congty.vn (3 ứng viên).",
+          { type: "success" },
+        ],
+      ]);
   });
 
   it("saves the cron toggle through the schedule save", async () => {
@@ -159,17 +173,19 @@ describe("EmailDigestSection", () => {
     mocks.testEmailDigest.mockResolvedValue({
       ok: false,
       configured: false,
-      missing: ["resend_api_key", "recipients"],
+      missing: ["resend_api_key"],
       error: null,
       provider_id: null,
+      candidate_count: 0,
     });
     const screen = await renderSection();
 
+    await screen
+      .getByRole("textbox", { name: "Email nhận thử" })
+      .fill("xem.truoc@congty.vn");
     await screen.getByRole("button", { name: "Gửi email thử" }).click();
     await expect
       .poll(() => mocks.notify.mock.calls)
-      .toEqual([
-        ["Chưa cấu hình đủ: resend_api_key, recipients.", { type: "error" }],
-      ]);
+      .toEqual([["Chưa cấu hình đủ: resend_api_key.", { type: "error" }]]);
   });
 });
