@@ -430,6 +430,11 @@ class Settings(BaseSettings):
 
     # Reconcile sweep — recovers lost bot turns after worker crash / restart.
     reconcile_interval_seconds: int = 60  # sweep cadence
+    # Knowledge recovery sweep — fails ingest documents/category revisions
+    # orphaned by a dead worker or an abandoned training batch. The grace
+    # window inside the sweep itself is deliberately long (a day); the tick
+    # only sets how often abandoned work gets noticed.
+    knowledge_recovery_interval_seconds: int = 1800  # sweep cadence
     # MUST exceed chat_turn_job_timeout (F6 safety — see break_stale_lock): a
     # candidate only surfaces after this grace, by which point RQ has killed the
     # job, so a stale-heartbeat lock is always a dead worker, never a live turn.

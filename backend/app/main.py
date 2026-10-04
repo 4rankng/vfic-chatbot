@@ -116,6 +116,20 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001
             logger.exception("outbound dispatcher scheduler registration failed (non-fatal)")
         try:
+            from app.workers.knowledge_recovery_worker import run_knowledge_recovery_tick
+
+            register_unique_tick(
+                maintenance_sched,
+                run_knowledge_recovery_tick,
+                settings.knowledge_recovery_interval_seconds,
+            )
+            logger.info(
+                "knowledge recovery tick registered: interval=%ds queue=maintenance",
+                settings.knowledge_recovery_interval_seconds,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("knowledge recovery scheduler registration failed (non-fatal)")
+        try:
             from app.workers.external_source_sync_worker import (
                 run_external_source_sync_tick,
             )
