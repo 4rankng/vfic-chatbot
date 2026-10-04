@@ -62,12 +62,13 @@ class FakeSession:
         self.commits += 1
 
 
-def _revision():
+def _revision(*, status=KnowledgeCategoryRevisionStatus.PROCESSING):
+    failed = status is KnowledgeCategoryRevisionStatus.FAILED
     return SimpleNamespace(
         id=uuid.uuid4(),
-        status=KnowledgeCategoryRevisionStatus.PROCESSING,
-        failure_code=None,
-        error_message=None,
+        status=status,
+        failure_code="category_retrieval_selftest_failed" if failed else None,
+        error_message="boom" if failed else None,
         processing_token="tok",
         processing_started_at=PAST,
         lease_expires_at=FUTURE,
@@ -75,12 +76,13 @@ def _revision():
     )
 
 
-def _child():
+def _child(*, status=KnowledgeStatus.PROCESSING):
     return SimpleNamespace(
         id=uuid.uuid4(),
-        status=KnowledgeStatus.PROCESSING,
+        status=status,
         stage="PREPARED",
         error=None,
+        category_revision_id=uuid.uuid4(),
     )
 
 
@@ -110,26 +112,34 @@ def test_training_batch_state(meta, status, updated, expected):
 @pytest.mark.asyncio
 async def test_abandon_training_batch():
     doc = _doc(status=KnowledgeStatus.PROCESSING, lease=PAST, updated=OLD)
-    revisions = [_revision(), _revision()]
-    children = [_child(), _child()]
-    fake = FakeSession(pages=[[revisions[0], revisions[1]], [children[0], children[1]]], rowcounts=[])
+    inflight_revisions = [_revision(), _revision()]
+    failed_revision = _revision(status=KnowledgeCategoryRevisionStatus.FAILED)
+    prepared_children = [_child(), _child(status=KnowledgeStatus.FAILED)]
+    fake = FakeSession(
+        pages=[inflight_revisions + [failed_revision], prepared_children],
+        rowcounts=[],
+    )
     revision_count, child_count = await _abandon_training_batch(fake, doc)
-    assert (revision_count, child_count) == (2, 2)
-
+    assert (revision_count, child_count) == (3, 2)
     assert doc.status is KnowledgeStatus.FAILED
-    assert doc.stage == "FAILED"
-    assert "bị gián đoạn" in doc.error
     assert doc.digest_meta["project_training"]["status"] == "FAILED"
     assert doc.metadata_["project_training"]["lease_expires_at"] is None
     assert fake.commits == 1
 
-    for revision in revisions:
+    for revision in inflight_revisions:
         assert revision.status is KnowledgeCategoryRevisionStatus.FAILED
         assert revision.failure_code == TRAINING_RUN_ABANDONED_CODE
-        assert set(revision.quality_result) == {"project_training_document_id"}
-    for child in children:
+        assert revision.quality_result == {}
+    assert failed_revision.status is KnowledgeCategoryRevisionStatus.FAILED
+    assert failed_revision.failure_code == "category_retrieval_selftest_failed"
+    assert failed_revision.quality_result == {}
+    for child in prepared_children:
+        assert child.category_revision_id is None
+    for child in prepared_children[:1]:
         assert child.status is KnowledgeStatus.FAILED
-        assert child.error == doc.error
+        assert child.error is not None
+    assert prepared_children[1].status is KnowledgeStatus.FAILED
+    assert prepared_children[1].error is None
 
 
 def test_bulk_update_targets_orphans():

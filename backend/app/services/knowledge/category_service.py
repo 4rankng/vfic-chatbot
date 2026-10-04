@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from time import monotonic
@@ -72,6 +73,8 @@ class CategoryEmbedder(Protocol):
 CATEGORY_PROCESSING_LEASE_SECONDS = 3_900
 MAX_CATEGORY_PROCESSING_ATTEMPTS = 3
 CATEGORY_ACTIVATION_FAILURE = "category_activation_failed"
+
+logger = logging.getLogger(__name__)
 CATEGORY_RETRY_EXHAUSTED = "category_retry_exhausted"
 CATEGORY_RETRIEVAL_SELFTEST_FAILED = "category_retrieval_selftest_failed"
 
@@ -599,6 +602,14 @@ class KnowledgeCategoryService:
                 await self.db.commit()
             raise CategoryActivationError(CATEGORY_RETRIEVAL_SELFTEST_FAILED) from None
         except Exception:
+            # The row only records the stable code; without this log the real
+            # cause is invisible to operators (the 04 Oct meals deadlock was
+            # diagnosed by re-running steps by hand because of this gap).
+            logger.exception(
+                "category activation failed revision_id=%s category_key=%s",
+                revision_id,
+                category.category_key,
+            )
             await self.db.rollback()
             failed = await self.db.get(KnowledgeCategoryRevision, revision_id)
             if failed is not None and failed.processing_token == claim_token:

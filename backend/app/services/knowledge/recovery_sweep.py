@@ -174,13 +174,20 @@ async def _sweep_abandoned_training_batches(db: AsyncSession, now: datetime) -> 
 
 
 async def _abandon_training_batch(db: AsyncSession, doc: KnowledgeDocument) -> tuple[int, int]:
-    """Fail one dead batch's in-flight artifacts and drop its prepared evidence.
+    """Fail one dead batch's artifacts and strip every trace of its ownership.
 
-    The revision's ``quality_result`` keeps only the ownership key: the child
-    documents fail below, so ``prepare``'s evidence guard would refuse to
-    reuse them anyway — clearing the evidence lets the retry path re-prepare
-    the category from its staged markdown instead of dead-ending on a
-    ConflictError.
+    Abandonment must leave the batch's artifacts in a plain-FAILED state with
+    no special guards attached, or the standard repair affordances stay
+    blocked forever:
+
+    - Revisions lose their ``quality_result`` entirely (the ownership key it
+      carries makes ``stage``/``activate_revision`` refuse per-category
+      repair). FAILED revisions of the batch keep their original failure
+      code/message — that is truthful history — but lose the key too.
+    - Prepared child documents fail like any in-flight document AND release
+      the ``category_revision_id`` link: the link backs a unique constraint,
+      so a surviving link makes any later activation of that revision die on
+      a duplicate-key error (the meals deadlock of 04–05 Oct).
     """
     training = dict((doc.metadata_ or {}).get("project_training") or {})
     if doc.status in _INFLIGHT_DOC_STATUSES:
@@ -205,30 +212,37 @@ async def _abandon_training_batch(db: AsyncSession, doc: KnowledgeDocument) -> t
             select(KnowledgeCategoryRevision).where(
                 KnowledgeCategoryRevision.quality_result["project_training_document_id"].astext
                 == str(doc.id),
-                KnowledgeCategoryRevision.status.in_(_INFLIGHT_REVISION_STATUSES),
+                KnowledgeCategoryRevision.status.in_(
+                    [*_INFLIGHT_REVISION_STATUSES, KnowledgeCategoryRevisionStatus.FAILED]
+                ),
             )
         )
     ).all()
     for revision in revisions:
-        revision.status = KnowledgeCategoryRevisionStatus.FAILED
-        revision.failure_code = TRAINING_RUN_ABANDONED_CODE
-        revision.error_message = TRAINING_RUN_ABANDONED_MESSAGE
-        revision.processing_token = None
-        revision.processing_started_at = None
-        revision.lease_expires_at = None
-        revision.quality_result = {"project_training_document_id": str(doc.id)}
+        if revision.status in _INFLIGHT_REVISION_STATUSES:
+            revision.status = KnowledgeCategoryRevisionStatus.FAILED
+            revision.failure_code = TRAINING_RUN_ABANDONED_CODE
+            revision.error_message = TRAINING_RUN_ABANDONED_MESSAGE
+            revision.processing_token = None
+            revision.processing_started_at = None
+            revision.lease_expires_at = None
+        revision.quality_result = {}
     children = (
         db.scalars(
             select(KnowledgeDocument).where(
                 KnowledgeDocument.metadata_["project_training_document_id"].astext == str(doc.id),
-                KnowledgeDocument.status.in_(_INFLIGHT_DOC_STATUSES),
+                KnowledgeDocument.status.in_(
+                    [*_INFLIGHT_DOC_STATUSES, KnowledgeStatus.FAILED]
+                ),
             )
         )
     ).all()
     for child in children:
-        child.status = KnowledgeStatus.FAILED
-        child.stage = "FAILED"
-        child.error = TRAINING_RUN_INTERRUPTED_MESSAGE
+        child.category_revision_id = None
+        if child.status in _INFLIGHT_DOC_STATUSES:
+            child.status = KnowledgeStatus.FAILED
+            child.stage = "FAILED"
+            child.error = TRAINING_RUN_INTERRUPTED_MESSAGE
     await db.commit()
     return len(revisions), len(children)
 
