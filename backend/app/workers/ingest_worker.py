@@ -146,11 +146,12 @@ def _mark_doc_failed_sync(doc_id: str, exc: Exception, *, processing_token=None)
     try:
         from app.core.config import get_settings
         from app.services.knowledge.document_repository import mark_document_failed_sync
+        from app.services.knowledge.recovery_sweep import INGEST_INTERRUPTED_MESSAGE
 
         mark_document_failed_sync(
             get_settings().database_url_sync,
             doc_id,
-            "Tiến trình xử lý bị gián đoạn. Vui lòng thử xử lý lại tệp đã lưu.",
+            INGEST_INTERRUPTED_MESSAGE,
             processing_token=processing_token,
         )
     except Exception:  # noqa: BLE001 — do not mask the original RQ failure
