@@ -10,6 +10,7 @@ send-state row so the next window starts where this one ended.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -89,6 +90,23 @@ def is_due(config: EmailDigestRuntimeConfig, *, now: datetime) -> bool:
     return _period_key(last_ict, config.frequency) != _period_key(ict_now, config.frequency)
 
 
+_THINK_PAIR_RE = re.compile(
+    r"<think\b[^>]*>.*?</think\b[^>]*>\s*", re.DOTALL | re.IGNORECASE
+)
+_THINK_OPEN_RE = re.compile(r"<think\b[^>]*>.*\Z", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_reasoning(text: str) -> str:
+    """Remove reasoning-model ``<think>`` blocks from an extractor reply.
+
+    Some models emit their chain-of-thought before the answer; the digest must
+    never quote that to a customer. An unterminated ``<think>`` (no closing
+    tag) is treated as all-reasoning: everything from the tag on is dropped.
+    """
+    text = _THINK_PAIR_RE.sub("", text)
+    return _THINK_OPEN_RE.sub("", text).strip()
+
+
 async def _candidate_summary(
     candidate: DigestCandidate,
     extractor: Callable[[str, str], Awaitable[str]] | None,
@@ -108,7 +126,7 @@ async def _candidate_summary(
             SUMMARY_SYSTEM_PROMPT,
             f"Hội thoại với chatbot (lời của ứng viên):\n{transcript}",
         )
-        return text.strip() or None
+        return _strip_reasoning(text) or None
     except Exception:  # noqa: BLE001 — a summary failure must not block the email
         logger.warning(
             "email digest summary failed lead_id=%s", candidate.lead_id, exc_info=True
@@ -143,6 +161,10 @@ async def run_digest(
     candidates = await collect_new_candidates(
         db, window_start=window_start, window_end=moment
     )
+    # The Excel file is the payload: a lead without a mobile number is not
+    # actionable for the recipient, so the whole digest — subject count,
+    # letter, attachment — covers phone-having candidates only.
+    candidates = [candidate for candidate in candidates if (candidate.phone or "").strip()]
     if not candidates:
         return DigestRunResult(status=STATUS_EMPTY)
 

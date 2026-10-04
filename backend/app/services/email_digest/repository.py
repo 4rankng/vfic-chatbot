@@ -1,10 +1,10 @@
 """Windowed candidate collection for the candidate email digest.
 
-One digest run issues four batched queries (leads, identities, conversations,
-messages) — never a per-candidate query loop, which would trip the repo's
-static I/O-in-loop findings. Channel labels reuse ``channel_accounts.label``
-when the operator named the account (e.g. "VietPhap OA"), falling back to a
-code map.
+One digest run issues only batched queries (leads, identities, channel
+accounts, Page↔Project mappings, conversations, projects, messages) — never a
+per-candidate query loop, which would trip the repo's static I/O-in-loop
+findings. Channel labels reuse ``channel_accounts.label`` when the operator
+named the account (e.g. "VietPhap OA"), falling back to a code map.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from datetime import datetime
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.channel_account import ChannelAccount
+from app.models.channel_account import ChannelAccount, ChannelAccountProject
 from app.models.company import Project
 from app.models.contact import ContactChannelIdentity
 from app.models.conversation import Conversation, Message, MessageSender
@@ -57,11 +57,31 @@ class DigestCandidate:
     summary: str | None = None
 
 
+# The seeded default OA label (Alembic 0047) reads like a product name in a
+# customer-facing file; the digest always shows the short brand form.
+_LABEL_CANONICALIZATION = {"Zalo Official Account": "Zalo OA"}
+
+
 def channel_label(provider: str, account_key: str, account_label: str | None) -> str:
     """Display label for one contact identity; the operator's account label wins."""
     if provider == PROVIDER_ZALO_OA and account_label:
-        return account_label
-    return _FALLBACK_CHANNEL_LABELS.get(provider, provider)
+        label: str = account_label
+    else:
+        label = _FALLBACK_CHANNEL_LABELS.get(provider, provider)
+    return _LABEL_CANONICALIZATION.get(label, label)
+
+
+def _project_of_interest(
+    focused_id: object,
+    project_names: dict,
+    mapped_names: list[str],
+) -> str | None:
+    """Project of interest for one candidate: the bot-confirmed focus wins;
+    a Page mapped to exactly one project implies it (the LG Display fanpage
+    case); with several mappings nothing is guessed."""
+    if focused_id is not None:
+        return project_names.get(focused_id)
+    return mapped_names[0] if len(mapped_names) == 1 else None
 
 
 async def collect_new_candidates(
@@ -96,6 +116,7 @@ async def collect_new_candidates(
     # ── Identities + operator account labels (channel display names) ────────
     identity_by_contact: dict = {}
     account_labels: dict[tuple[str, str], str] = {}
+    account_id_by_pair: dict[tuple[str, str], object] = {}
     if contact_ids:
         ident_rows = (
             await db.execute(
@@ -124,6 +145,30 @@ async def collect_new_candidates(
             account_labels = {
                 (row.provider, row.account_key): row.label for row in account_rows
             }
+            account_id_by_pair = {
+                (row.provider, row.account_key): row.id for row in account_rows
+            }
+
+    # ── Page↔Project mapping → the fallback project of interest ────────────
+    # A fanpage mapped to exactly one project (e.g. the LG Display page)
+    # implies that project for leads arriving through it — most candidates ask
+    # one-off questions and the bot never confirms a focused project. The
+    # bot-confirmed focus still wins; with several mapped projects nothing is
+    # guessed.
+    mapped_projects_by_pair: dict[tuple[str, str], set] = {}
+    if account_id_by_pair:
+        pair_by_account_id = {v: k for k, v in account_id_by_pair.items()}
+        mapping_rows = (
+            await db.scalars(
+                select(ChannelAccountProject).where(
+                    ChannelAccountProject.channel_account_id.in_(set(pair_by_account_id))
+                )
+            )
+        ).all()
+        for row in mapping_rows:
+            pair = pair_by_account_id.get(row.channel_account_id)
+            if pair is not None:
+                mapped_projects_by_pair.setdefault(pair, set()).add(row.project_id)
 
     # ── Latest conversation per contact → project of interest ──────────────
     conversation_rows: list = []
@@ -147,6 +192,8 @@ async def collect_new_candidates(
         for conv in latest_conversation.values()
         if conv.focused_project_id is not None
     }
+    for project_set in mapped_projects_by_pair.values():
+        project_ids.update(project_set)
     project_names: dict = {}
     if project_ids:
         project_rows = (
@@ -179,6 +226,14 @@ async def collect_new_candidates(
         ident = identity_by_contact.get(lead.contact_id)
         conv = latest_conversation.get(lead.contact_id)
         messages = messages_by_conversation.get(conv.id, []) if conv is not None else []
+        pair = (ident.provider, ident.account_key) if ident is not None else None
+        focused_id = conv.focused_project_id if conv is not None else None
+        mapped_names = [
+            project_names[pid]
+            for pid in mapped_projects_by_pair.get(pair, set())
+            if pid in project_names
+        ]
+        project_name = _project_of_interest(focused_id, project_names, mapped_names)
         candidates.append(
             DigestCandidate(
                 lead_id=lead.id,
@@ -200,9 +255,7 @@ async def collect_new_candidates(
                     if ident is not None
                     else ""
                 ),
-                project_name=(
-                    project_names.get(conv.focused_project_id) if conv is not None else None
-                ),
+                project_name=project_name,
                 candidate_messages=tuple(messages[-MESSAGES_PER_CANDIDATE:]),
             )
         )

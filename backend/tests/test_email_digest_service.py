@@ -58,13 +58,14 @@ def _config(**overrides) -> EmailDigestRuntimeConfig:
 
 
 def _candidate(**overrides) -> DigestCandidate:
-    return DigestCandidate(
-        lead_id=1,
-        name="Test",
-        phone="09",
-        channel_label="Zalo Chatbot",
-        **overrides,
-    )
+    values: dict = {
+        "lead_id": 1,
+        "name": "Test",
+        "phone": "09",
+        "channel_label": "Zalo Chatbot",
+    }
+    values.update(overrides)
+    return DigestCandidate(**values)
 
 
 # ── is_due (pure) ────────────────────────────────────────────────────────────
@@ -163,7 +164,7 @@ async def test_run_digest_sends_and_advances_state(monkeypatch):
 
     async def fake_send(**kwargs):
         assert "Danh sách ứng viên mới" in kwargs["subject"]
-        assert "Tóm tắt hội thoại" in kwargs["html"]
+        assert "1 ứng viên mới" in kwargs["html"]  # the letter announces the count
         (attachment,) = kwargs["attachments"]
         assert attachment.filename == "danh_sach_ung_vien_05-10-2026.xlsx"
         assert attachment.content_type == XLSX_CONTENT_TYPE
@@ -229,38 +230,8 @@ async def test_test_send_reports_provider_rejection(monkeypatch):
 # ── renderer ─────────────────────────────────────────────────────────────────
 
 
-def test_renderer_omits_missing_fields():
-    from app.services.email_digest.renderer import render_digest_html
-
-    candidate = DigestCandidate(
-        lead_id=2,
-        name="Lan",
-        phone=None,
-        age=None,
-        gender=None,
-        living_area=None,
-        address=None,
-        desired_job=None,
-        years_experience=None,
-        expected_salary=None,
-        channel_label="Messenger",
-        project_name=None,
-        candidate_messages=("Chào", "Hỏi về ca làm"),
-        summary=None,
-    )
-    html = render_digest_html([candidate])
-    assert "Chưa có tên" not in html  # name present → real name shown
-    assert "Lan" in html
-    assert "Tuổi" not in html  # age None → field omitted entirely
-    assert "Giới tính" not in html
-    assert "Khu vực" not in html
-    # Project unknown → the whole line is omitted (exclude-missing-details).
-    assert "Dự án quan tâm" not in html
-    assert "Tóm tắt hội thoại" in html
-    assert "Chào" in html  # verbatim fallback summary
-
-
-def test_renderer_shows_phone_project_summary():
+def test_renderer_letter_carries_no_candidate_rows():
+    """The Excel attachment is the list; the letter must not repeat it."""
     from app.services.email_digest.renderer import render_digest_html
 
     candidate = DigestCandidate(
@@ -277,12 +248,21 @@ def test_renderer_shows_phone_project_summary():
         candidate_messages=("Hỏi lương", "Hỏi vị trí"),
         summary="Ứng viên hỏi lương và vị trí.",
     )
-    html = render_digest_html([candidate])
-    assert "0912345678" in html
-    assert "LG Display" in html
-    assert "Ứng viên hỏi lương và vị trí." in html
-    assert "Khu vực" in html
-    assert "Việc làm mong muốn" in html
+    html = render_digest_html([candidate, candidate])
+    assert "Bình" not in html
+    assert "0912345678" not in html
+    assert "LG Display" not in html
+    assert "Ứng viên hỏi lương và vị trí." not in html
+    assert "Hỏi vị trí" not in html
+    # …but it announces the count and points the recipient at the attachment.
+    assert "Kính gửi Quý Công ty" in html
+    assert "<strong>2 ứng viên mới</strong>" in html
+    assert (
+        "Danh sách đầy đủ của các ứng viên nằm trong file Excel đính kèm email này."
+        in html
+    )
+    assert "Trân trọng cảm ơn Quý Công ty" in html
+    assert "— không gồm TingTing OA" not in html  # never reaches customers
 
 
 def test_renderer_test_banner():
@@ -310,15 +290,15 @@ async def test_test_send_never_advances_send_state(monkeypatch):
     assert db.commit_count == 0
 
 
-async def test_run_digest_without_summarizer_falls_back_verbatim(monkeypatch):
-    """No injected extractor → summary stays None; the renderer uses the
-    candidate's own last messages, and the email still goes out."""
+async def test_run_digest_without_summarizer_still_sends(monkeypatch):
+    """No injected extractor → the summary column falls back to the
+    candidate's verbatim messages in the workbook, and the email still goes
+    out (fallback content itself is covered by the spreadsheet tests)."""
 
     async def fake_collect(db, *, window_start, window_end):
         return [_candidate(candidate_messages=("Hỏi lương", "Hỏi ca làm"))]
 
     async def fake_send(**kwargs):
-        assert "Hỏi ca làm" in kwargs["html"]  # verbatim fallback present
         return "pid-2"
 
     monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
@@ -349,3 +329,124 @@ async def test_run_digest_skips_when_toggle_off(monkeypatch):
         _StateDb(), settings_service=_SettingsSvc(_config(enabled=False)), now=now
     )
     assert result.status == STATUS_DISABLED
+
+
+# ── phone filter (the Excel is the payload) ──────────────────────────────────
+
+
+async def test_run_digest_keeps_only_candidates_with_phone(monkeypatch):
+    """A lead without a mobile number is not actionable — the whole digest
+    (letter count, workbook rows, summary calls) covers phone-having leads."""
+    summarized: list = []
+
+    async def fake_collect(db, *, window_start, window_end):
+        return [
+            _candidate(lead_id=1, name="Reachable"),
+            _candidate(lead_id=2, name="Blank", phone=None),
+            _candidate(lead_id=3, name="Spaces", phone="   "),
+        ]
+
+    async def fake_summary(candidate, extractor=None):
+        summarized.append(candidate.lead_id)
+        return "Tóm tắt."
+
+    async def fake_send(**kwargs):
+        assert "1 ứng viên" in kwargs["subject"]
+        assert "1 ứng viên mới" in kwargs["html"]
+        assert "Blank" not in kwargs["html"] and "Spaces" not in kwargs["html"]
+        (attachment,) = kwargs["attachments"]
+        assert attachment.filename == "danh_sach_ung_vien_05-10-2026.xlsx"
+        return "pid-3"
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
+    monkeypatch.setattr(digest_module, "_candidate_summary", fake_summary)
+    monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)
+
+    now = datetime(2026, 10, 5, 2, 5, tzinfo=timezone.utc)
+    result = await run_digest(_StateDb(), settings_service=_SettingsSvc(_config()), now=now)
+    assert result.status == STATUS_SENT
+    assert result.candidate_count == 1
+    assert summarized == [1]  # no summarizer cost on filtered-out leads
+
+
+async def test_run_digest_empty_when_no_candidate_has_phone(monkeypatch):
+    async def fake_collect(db, *, window_start, window_end):
+        return [_candidate(lead_id=1, phone=None)]
+
+    async def fail_send(**kwargs):
+        raise AssertionError("must not send when no candidate is reachable")
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
+    monkeypatch.setattr(digest_module, "send_email_via_resend", fail_send)
+
+    now = datetime(2026, 10, 5, 2, 5, tzinfo=timezone.utc)
+    result = await run_digest(_StateDb(), settings_service=_SettingsSvc(_config()), now=now)
+    assert result.status == STATUS_EMPTY
+
+
+# ── reasoning-model <think> strip ────────────────────────────────────────────
+
+
+def test_strip_reasoning_removes_think_blocks():
+    from app.services.email_digest.service import _strip_reasoning
+
+    assert (
+        _strip_reasoning("<think>người dùng hỏi về địa điểm</think>\n\nỨng viên hỏi địa điểm.")
+        == "Ứng viên hỏi địa điểm."
+    )
+    assert _strip_reasoning("<THINK>abc</THINK>Kết luận.") == "Kết luận."
+    assert _strip_reasoning("<think>blok chưa đóng, tất cả là suy luận") == ""
+    assert _strip_reasoning("Tóm tắt sạch không thẻ.") == "Tóm tắt sạch không thẻ."
+    assert _strip_reasoning("   ") == ""
+
+
+async def test_all_reasoning_summary_still_sends(monkeypatch):
+    """An extractor reply that is all reasoning → summary None → the send
+    still goes out; the workbook's verbatim fallback carries the candidate's
+    messages."""
+    async def fake_collect(db, *, window_start, window_end):
+        return [_candidate(candidate_messages=("Hỏi xe đưa đón",))]
+
+    async def reasoning_extractor(_system, _user):
+        return "<think>chỉ có suy luận</think>"
+
+    async def fake_send(**kwargs):
+        return "pid-4"
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
+    monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)
+
+    now = datetime(2026, 10, 5, 2, 5, tzinfo=timezone.utc)
+    result = await run_digest(
+        _StateDb(),
+        settings_service=_SettingsSvc(_config()),
+        now=now,
+        summarizer=reasoning_extractor,
+    )
+    assert result.status == STATUS_SENT
+
+
+# ── project-of-interest precedence (repository helper) ───────────────────────
+
+
+def test_project_precedence_focus_wins_over_page_mapping():
+    from app.services.email_digest.repository import _project_of_interest
+
+    assert (
+        _project_of_interest("p1", {"p1": "Rorze", "p2": "LG Display"}, ["LG Display"])
+        == "Rorze"
+    )
+
+
+def test_project_precedence_single_page_mapping_implies_project():
+    from app.services.email_digest.repository import _project_of_interest
+
+    assert _project_of_interest(None, {"p2": "LG Display"}, ["LG Display"]) == "LG Display"
+
+
+def test_project_precedence_multiple_mappings_guess_nothing():
+    from app.services.email_digest.repository import _project_of_interest
+
+    assert _project_of_interest(None, {"p2": "LG Display", "p3": "Rorze"}, []) is None
+    assert _project_of_interest(None, {"p2": "LG Display", "p3": "Rorze"}, ["LG Display", "Rorze"]) is None
+    assert _project_of_interest(None, {}, []) is None

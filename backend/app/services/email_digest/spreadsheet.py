@@ -3,8 +3,9 @@
 Built with the standard library (zipfile + minimal OOXML) on purpose: the repo
 already hand-parses xlsx with stdlib in ``knowledge/file_extraction.py`` and
 carries no spreadsheet dependency, so the writer adds none either. The output
-is a single-sheet workbook with inline strings — Excel, Google Sheets and
-LibreOffice read it without a sharedStrings part.
+is a single-sheet business report — merged title banner, styled frozen header,
+banded rows, auto-filter — that Excel, Google Sheets and LibreOffice all read
+(inline strings, no sharedStrings part).
 """
 
 from __future__ import annotations
@@ -24,68 +25,108 @@ XLSX_CONTENT_TYPE = (
 
 _SHEET_NAME = "Ứng viên"
 
-# (header, candidate attribute, column width) in the sheet's reading order:
-# identity first, then the bot-gathered details, then source and summary.
-# The single ``None`` attribute is the STT sequence column.
-_COLUMNS: tuple[tuple[str, str | None, float], ...] = (
-    ("STT", None, 5),
-    ("Họ và tên", "name", 24),
-    ("Số điện thoại", "phone", 16),
-    ("Tuổi", "age", 7),
-    ("Giới tính", "gender", 10),
-    ("Khu vực", "living_area", 16),
-    ("Địa chỉ", "address", 24),
-    ("Việc làm mong muốn", "desired_job", 22),
-    ("Kinh nghiệm", "years_experience", 14),
-    ("Mức lương mong muốn", "expected_salary", 18),
-    ("Dự án quan tâm", "project_name", 22),
-    ("Nguồn", "channel_label", 16),
-    ("Tóm tắt hội thoại", "summary", 60),
+# (header, candidate attribute, column width, cell kind). ``kind`` picks the
+# data-cell style: "center" for sequence/number columns, "wrap" for the long
+# summary text, "text" for the rest. The single ``None`` attribute is the STT
+# sequence column.
+_COLUMNS: tuple[tuple[str, str | None, float, str], ...] = (
+    ("STT", None, 6, "center"),
+    ("Họ và tên", "name", 26, "text"),
+    ("Số điện thoại", "phone", 18, "text"),
+    ("Tuổi", "age", 7, "center"),
+    ("Khu vực", "living_area", 18, "text"),
+    ("Dự án quan tâm", "project_name", 22, "text"),
+    ("Nguồn", "channel_label", 14, "text"),
+    ("Tóm tắt hội thoại", "summary", 70, "wrap"),
 )
+
+# Style indexes into styles.xml cellXfs (see _STYLES_XML): 1 = title banner,
+# 2 = header row, 3-8 = data cells per kind (plain, banded).
+_TITLE_STYLE = "1"
+_HEADER_STYLE = "2"
+_DATA_STYLES: dict[str, tuple[str, str]] = {  # kind -> (plain, banded)
+    "text": ("3", "4"),
+    "wrap": ("5", "6"),
+    "center": ("7", "8"),
+}
 
 
 def _column_xml() -> str:
     cols = "".join(
         f'<col min="{index}" max="{index}" width="{width:g}" customWidth="1"/>'
-        for index, (_header, _attr, width) in enumerate(_COLUMNS, start=1)
+        for index, (_header, _attr, width, _kind) in enumerate(_COLUMNS, start=1)
     )
     return f"<cols>{cols}</cols>"
 
 
-def _text_cell(ref: str, value: str, *, bold: bool = False) -> str:
-    style = ' s="1"' if bold else ""
+def _candidate_value(candidate: DigestCandidate, attr: str) -> str | int | None:
+    """The cell value for one attribute; a missing summary falls back to the
+    candidate's own last messages so the column stays useful when the LLM
+    summarizer failed."""
+    value = getattr(candidate, attr, None)
+    if attr == "summary":
+        text = str(value or "").strip()
+        if text:
+            return text
+        if candidate.candidate_messages:
+            return " · ".join(candidate.candidate_messages[-3:])
+        return None
+    return value
+
+
+def _text_cell(ref: str, value: str, style: str) -> str:
     return (
-        f'<c r="{ref}" t="inlineStr"{style}><is><t xml:space="preserve">'
+        f'<c r="{ref}" t="inlineStr" s="{style}"><is><t xml:space="preserve">'
         f"{escape(value)}</t></is></c>"
     )
 
 
-def _number_cell(ref: str, value: int, *, bold: bool = False) -> str:
-    style = ' s="1"' if bold else ""
-    return f'<c r="{ref}"{style}><v>{int(value)}</v></c>'
+def _number_cell(ref: str, value: int, style: str) -> str:
+    return f'<c r="{ref}" s="{style}"><v>{int(value)}</v></c>'
 
 
-def _empty_cell(ref: str) -> str:
-    return f'<c r="{ref}"/>'
+def _styled_blank(ref: str, style: str) -> str:
+    """A valueless cell that still paints its style (banding, borders)."""
+    return f'<c r="{ref}" s="{style}"/>'
 
 
-def _row_xml(row_number: int, candidate: DigestCandidate | None) -> str:
-    """The bold header row (``candidate=None``) or one candidate row."""
+def _title_row(ict_date: str, column_count: int) -> str:
+    blanks = "".join(
+        _styled_blank(f"{chr(64 + index)}1", _TITLE_STYLE)
+        for index in range(2, column_count + 1)
+    )
+    title = f"Danh sách ứng viên mới — {ict_date.replace('-', '/')}"
+    return (
+        '<row r="1" ht="30" customHeight="1">'
+        f'{_text_cell("A1", title, _TITLE_STYLE)}{blanks}</row>'
+    )
+
+
+def _header_row() -> str:
+    cells = "".join(
+        _text_cell(f"{chr(64 + index)}2", header, _HEADER_STYLE)
+        for index, (header, _attr, _width, _kind) in enumerate(_COLUMNS, start=1)
+    )
+    return f'<row r="2" ht="22" customHeight="1">{cells}</row>'
+
+
+def _data_row(row_number: int, candidate: DigestCandidate) -> str:
+    """One candidate row; banding alternates from the first data row (3)."""
+    banded = (row_number - 3) % 2 == 1
     cells: list[str] = []
-    for index, (header, attr, _width) in enumerate(_COLUMNS, start=1):
+    for index, (_header, attr, _width, kind) in enumerate(_COLUMNS, start=1):
         ref = f"{chr(64 + index)}{row_number}"
-        if candidate is None:
-            cells.append(_text_cell(ref, header, bold=True))
-        elif attr is None:  # the STT sequence column
-            cells.append(_number_cell(ref, row_number - 1))
+        style = _DATA_STYLES[kind][1 if banded else 0]
+        if attr is None:  # the STT sequence column
+            cells.append(_number_cell(ref, row_number - 2, style))
+            continue
+        value = _candidate_value(candidate, attr)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            cells.append(_styled_blank(ref, style))
+        elif attr == "age":
+            cells.append(_number_cell(ref, int(value), style))
         else:
-            value = getattr(candidate, attr, None)
-            if value is None or (isinstance(value, str) and not value.strip()):
-                cells.append(_empty_cell(ref))
-            elif attr == "age":
-                cells.append(_number_cell(ref, int(value)))
-            else:
-                cells.append(_text_cell(ref, str(value).strip()))
+            cells.append(_text_cell(ref, str(value).strip(), style))
     return f'<row r="{row_number}">{"".join(cells)}</row>'
 
 
@@ -103,19 +144,36 @@ def _workbook_xml(sheet_name: str) -> str:
 _STYLES_XML = (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-    '<fonts count="2">'
+    '<fonts count="3">'
     '<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>'
-    '<font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font>'
+    '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>'
+    '<font><b/><sz val="14"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>'
     "</fonts>"
-    '<fills count="2">'
+    '<fills count="5">'
     '<fill><patternFill patternType="none"/></fill>'
     '<fill><patternFill patternType="gray125"/></fill>'
+    '<fill><patternFill patternType="solid"><fgColor rgb="FF0F172A"/><bgColor indexed="64"/></patternFill></fill>'
+    '<fill><patternFill patternType="solid"><fgColor rgb="FF2563EB"/><bgColor indexed="64"/></patternFill></fill>'
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/><bgColor indexed="64"/></patternFill></fill>'
     "</fills>"
-    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+    '<borders count="2">'
+    "<border><left/><right/><top/><bottom/><diagonal/></border>"
+    '<border><left style="thin"><color rgb="FFDCE3ED"/></left>'
+    '<right style="thin"><color rgb="FFDCE3ED"/></right>'
+    '<top style="thin"><color rgb="FFDCE3ED"/></top>'
+    '<bottom style="thin"><color rgb="FFDCE3ED"/></bottom><diagonal/></border>'
+    "</borders>"
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-    '<cellXfs count="2">'
+    '<cellXfs count="9">'
     '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
-    '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
+    '<xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+    '<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>'
+    '<xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>'
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>'
+    '<xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>'
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>'
+    '<xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>'
     "</cellXfs>"
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
     "</styleSheet>"
@@ -130,19 +188,34 @@ def build_lead_workbook(
 ) -> EmailAttachment:
     """The lead list as a single-sheet xlsx email attachment.
 
-    ``ict_date`` ("DD-MM-YYYY") stamps the filename; ``test=True`` marks the
-    filename so a sample workbook is never mistaken for a real digest. Rows
-    carry the bot-gathered details — a detail the bot never learned is an
-    empty cell, never a placeholder.
+    ``ict_date`` ("DD-MM-YYYY") stamps the filename and the title banner;
+    ``test=True`` marks the filename so a sample workbook is never mistaken
+    for a real digest. Rows carry the bot-gathered details — a detail the bot
+    never learned is an empty cell, never a placeholder. Layout: row 1 title
+    banner (merged), row 2 header (frozen + auto-filter), data from row 3.
     """
+    column_count = len(_COLUMNS)
+    last_col = chr(64 + column_count)
+    last_row = 2 + len(candidates)
     rows = "".join(
-        _row_xml(number, candidate)
-        for number, candidate in enumerate([None, *candidates], start=1)
+        [
+            _title_row(ict_date, column_count),
+            _header_row(),
+            *(
+                _data_row(number, candidate)
+                for number, candidate in enumerate(candidates, start=3)
+            ),
+        ]
     )
     sheet = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<sheetViews><sheetView workbookViewId="0">'
+        '<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/>'
+        "</sheetView></sheetViews>"
         f"{_column_xml()}<sheetData>{rows}</sheetData>"
+        f'<autoFilter ref="A2:{last_col}{last_row}"/>'
+        f'<mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>'
         "</worksheet>"
     )
     content_types = (
