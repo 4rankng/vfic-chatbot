@@ -203,6 +203,14 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/presentation/use-brief-file-ingest.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/presentation/WorkspaceCommandBar.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/presentation/SinglePageEditor.tsx",
           "type": "registry:component"
         },
@@ -248,6 +256,10 @@
         },
         {
           "path": "src/components/atomic-crm/projects/domain/project-brief-ingest.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/domain/category-markdown-reader.ts",
           "type": "registry:component"
         },
         {

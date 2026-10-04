@@ -10,6 +10,7 @@ import {
 import {
   Boxes,
   CheckCircle2,
+  EllipsisVertical,
   FileText,
   Pencil,
   Plus,
@@ -24,6 +25,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -484,16 +491,35 @@ export const ProjectAccordionList = ({
                         </Button>
                       )}
                       {isAdmin && (
-                        <DeleteButton
-                          record={project}
-                          resource="projects"
-                          label="Xóa dự án"
-                          size="sm"
-                          variant="outline"
-                          redirect={false}
-                          successMessage="Đã xóa dự án."
-                          mutationOptions={{ onSuccess: onDeleted }}
-                        />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              aria-label={`Thao tác khác cho dự án ${project.name}`}
+                            >
+                              <EllipsisVertical
+                                className="size-4"
+                                aria-hidden="true"
+                              />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <DeleteButton
+                                record={project}
+                                resource="projects"
+                                label="Xóa dự án"
+                                size="sm"
+                                variant="outline"
+                                redirect={false}
+                                successMessage="Đã xóa dự án."
+                                mutationOptions={{ onSuccess: onDeleted }}
+                              />
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                     </div>
                   ) : undefined

@@ -480,7 +480,11 @@ describe("ProjectKnowledgePanel", () => {
       "Kiểm tra và thay thế mục này",
     );
     expect(screen.container.textContent).not.toContain("Xóa dữ liệu mục");
-    await expect.element(screen.getByText("Nhập từ tệp văn bản")).toBeVisible();
+    await screen.getByRole("button", { name: "Nhập", exact: true }).click();
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Từ tệp văn bản…" }))
+      .toBeVisible();
+    await userEvent.keyboard("{Escape}");
     await expect
       .element(
         screen.getByText(

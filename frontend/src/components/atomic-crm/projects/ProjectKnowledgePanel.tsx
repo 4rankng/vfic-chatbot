@@ -2,9 +2,10 @@ import { useRef, useState, type ReactNode } from "react";
 import { AlertCircle, ChevronRight, Database, Upload } from "lucide-react";
 import { useNotify, useRefresh } from "ra-core";
 
-import { Loading01 } from "@untitledui/icons";
+import { ChevronDown, FileDownload02, Loading01 } from "@untitledui/icons";
 
 import { Badge } from "@/components/base/badges/badges";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { Button } from "@/components/base/buttons/button";
 import { Select as UntitledSelect } from "@/components/base/select/select";
 import type { SelectItemType } from "@/components/base/select/select-shared";
@@ -18,11 +19,14 @@ import {
 import { useCategoryDraft } from "./presentation/use-category-draft";
 import { useProjectKnowledgeCatalog } from "./presentation/use-project-knowledge-catalog";
 import { useProjectIngest } from "./presentation/use-project-ingest";
+import { useBriefFileIngest } from "./presentation/use-brief-file-ingest";
+import type { BriefFileIngest } from "./presentation/use-brief-file-ingest";
 import { IngestProgressBoard } from "./presentation/IngestProgressBoard";
 import { useSinglePageDraft } from "./presentation/use-single-page-draft";
+import { WorkspaceCommandBar } from "./presentation/WorkspaceCommandBar";
 import {
   ProjectKnowledgeExport,
-  ProjectKnowledgeTemplate,
+  useKnowledgeDownload,
 } from "./ProjectKnowledgeExport";
 import { CategoryEditor } from "./presentation/CategoryEditor";
 import { DiscoveryCardEditor } from "./presentation/DiscoveryCardEditor";
@@ -32,6 +36,7 @@ import {
   clearProjectKnowledgeCategory,
   cutoverProjectKnowledgeCategories,
   getProjectKnowledgeCategories,
+  getProjectKnowledgeFullTemplate,
   PROJECT_TEXT_FILE_ACCEPT,
   assertProjectTextFile,
   type KnowledgeCategoryKey,
@@ -51,55 +56,71 @@ type Props = {
  * Composition only — the application hooks own data access, the presentation
  * modules own the markup.
  */
+const KnowledgeExportAction = ({ projectId }: { projectId: string }) => (
+  <ProjectKnowledgeExport key={projectId} projectId={projectId} />
+);
+
 export const ProjectKnowledgePanel = ({
   project,
   editable = false,
   canManageSources = editable,
   toolbar,
 }: Props) => {
+  const showBar = Boolean(toolbar) || canManageSources;
+  const leading = showBar ? toolbar : undefined;
   return (
     <div className="space-y-3">
-      {toolbar || canManageSources ? (
-        <div className="project-knowledge-toolbar">
-          {toolbar}
-          {canManageSources && (
-            <ProjectKnowledgeExport
-              key={String(project.id)}
-              projectId={String(project.id)}
-            />
-          )}
-        </div>
-      ) : null}
       {project.knowledge_mode === "DIRECT_CONTEXT" ? (
-        <SinglePagePanel project={project} editable={canManageSources} />
+        <SinglePagePanel
+          project={project}
+          editable={canManageSources}
+          leading={leading}
+          showExport={canManageSources}
+        />
       ) : project.knowledge_mode === "RAG" ? (
         <RagCategoriesPanel
           project={project}
           editable={editable}
           canManageSources={canManageSources}
+          leading={leading}
         />
       ) : (
-        <section className="project-legacy-knowledge" aria-label="Kiến thức cũ">
-          <Database
-            className="size-5 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <div>
-            <h2 className="text-section-title font-semibold">
-              Kiến thức chưa được chuyển đổi
-            </h2>
-            <p className="text-helper text-muted-foreground">
-              Dự án chưa có KB riêng để quản lý theo danh mục. Tài liệu hiện có
-              được giữ lại.
-            </p>
-            {canManageSources && (
+        <>
+          {showBar && (
+            <WorkspaceCommandBar
+              leading={leading}
+              trailing={
+                canManageSources ? (
+                  <KnowledgeExportAction projectId={String(project.id)} />
+                ) : undefined
+              }
+            />
+          )}
+          <section
+            className="project-legacy-knowledge"
+            aria-label="Kiến thức cũ"
+          >
+            <Database
+              className="size-5 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <div>
+              <h2 className="text-section-title font-semibold">
+                Kiến thức chưa được chuyển đổi
+              </h2>
               <p className="text-helper text-muted-foreground">
-                Hoàn tất chuyển đổi kiến thức của dự án trước khi chỉnh sửa danh
-                mục.
+                Dự án chưa có KB riêng để quản lý theo danh mục. Tài liệu hiện
+                có được giữ lại.
               </p>
-            )}
-          </div>
-        </section>
+              {canManageSources && (
+                <p className="text-helper text-muted-foreground">
+                  Hoàn tất chuyển đổi kiến thức của dự án trước khi chỉnh sửa
+                  danh mục.
+                </p>
+              )}
+            </div>
+          </section>
+        </>
       )}
     </div>
   );
@@ -108,9 +129,13 @@ export const ProjectKnowledgePanel = ({
 const SinglePagePanel = ({
   project,
   editable,
+  leading,
+  showExport,
 }: {
   project: Project;
   editable: boolean;
+  leading?: ReactNode;
+  showExport?: boolean;
 }) => {
   const draft = useSinglePageDraft(String(project.id), {
     isActive: project.is_active,
@@ -118,6 +143,16 @@ const SinglePagePanel = ({
 
   return (
     <div className="space-y-4">
+      {(leading || showExport) && (
+        <WorkspaceCommandBar
+          leading={leading}
+          trailing={
+            showExport ? (
+              <KnowledgeExportAction projectId={String(project.id)} />
+            ) : undefined
+          }
+        />
+      )}
       <SinglePageEditor draft={draft} editable={editable} />
       {/* The one-brief migration to the 12-category catalog is an admin move:
           the clear and cutover calls it finishes with are admin endpoints. */}
@@ -369,16 +404,30 @@ const RagCategoriesPanel = ({
   project,
   editable,
   canManageSources,
+  leading,
 }: {
   project: Project;
   editable: boolean;
   canManageSources: boolean;
+  leading?: ReactNode;
 }) => {
   const projectId = String(project.id);
   const [selected, setSelected] = useState<KnowledgeCategoryKey>("jobs");
   const categoryDetailRef = useRef<HTMLElement>(null);
   const catalog = useProjectKnowledgeCatalog(projectId);
   const draft = useCategoryDraft(projectId, selected, catalog);
+  const ingest = useBriefFileIngest(projectId, {
+    disabled: !canManageSources || !editable,
+    onIngested: async () => {
+      await catalog.reload();
+    },
+  });
+  const templateDownload = useKnowledgeDownload({
+    projectId,
+    getFile: getProjectKnowledgeFullTemplate,
+    emptyMessage: "Mẫu KB chưa có nội dung. Vui lòng thử lại.",
+    failureMessage: "Chưa tải được mẫu KB. Vui lòng thử lại.",
+  });
 
   const { categories } = catalog;
   const selectedCategory = categories?.find((item) => item.key === selected);
@@ -428,49 +477,61 @@ const RagCategoriesPanel = ({
     });
   };
 
+  const importMenu =
+    canManageSources &&
+    editable &&
+    project.category_authority_started !== false ? (
+      <KnowledgeImportMenu
+        onPickFile={() => ingest.inputRef.current?.click()}
+        onTemplate={() => templateDownload.download()}
+      />
+    ) : null;
+
   return (
     <section
       className="project-knowledge-panel"
       aria-labelledby="project-knowledge-title"
     >
-      <header className="project-knowledge-header">
-        <h2 id="project-knowledge-title" className="project-knowledge-title">
-          <Database className="size-5" aria-hidden="true" />
-          Kiến thức theo danh mục
-        </h2>
-        <p className="project-knowledge-description">
-          Kiểm tra và cập nhật nội dung chatbot dùng để tư vấn.
-        </p>
-        {categories && (
-          <div className="project-knowledge-progress" aria-live="polite">
-            <strong>
-              {activeCategoryCount}/{categories.length} danh mục có dữ liệu
-            </strong>
-          </div>
-        )}
-        <div className="project-knowledge-full-template">
-          <ProjectKnowledgeTemplate projectId={projectId} />
-        </div>
-      </header>
+      <h2 id="project-knowledge-title" className="sr-only">
+        Kiến thức theo danh mục
+      </h2>
+      {(leading || canManageSources) && (
+        <WorkspaceCommandBar
+          leading={leading}
+          trailing={
+            <>
+              {importMenu}
+              {canManageSources && (
+                <KnowledgeExportAction projectId={projectId} />
+              )}
+            </>
+          }
+        />
+      )}
       <div className="project-knowledge-content">
         {canManageSources &&
           editable &&
           (project.category_authority_started === false ? (
             <MigrationSection projectId={projectId} />
           ) : (
-            <BriefIngestSection
-              projectId={projectId}
-              disabled={false}
-              onIngested={async () => {
-                await catalog.reload();
-              }}
-            />
+            <RagIngestStrip ingest={ingest} />
           ))}
         <div className="project-category-workspace">
           <nav
             className="project-category-navigation"
             aria-label="Danh mục kiến thức"
           >
+            <div className="project-category-rail-caption">
+              <span>Danh mục kiến thức</span>
+              {categories && (
+                <span
+                  className="project-category-rail-count"
+                  aria-live="polite"
+                >
+                  {activeCategoryCount}/{categories.length} có dữ liệu
+                </span>
+              )}
+            </div>
             {categories && (
               <UntitledSelect
                 id="project-category-mobile-select"
@@ -609,6 +670,89 @@ const RagCategoriesPanel = ({
           </section>
         )}
       </div>
+    </section>
+  );
+};
+
+/** The command bar's import menu: the file chain and the full-template
+ *  download. The hidden input itself lives beside the ingest strip, outside
+ *  any popover, so a closed menu never unmounts it. */
+const KnowledgeImportMenu = ({
+  onPickFile,
+  onTemplate,
+}: {
+  onPickFile: () => void;
+  onTemplate: () => void;
+}) => (
+  <Dropdown.Root>
+    <Button type="button" color="primary" size="sm" iconTrailing={ChevronDown}>
+      Nhập
+    </Button>
+    <Dropdown.Popover>
+      <Dropdown.Menu
+        onAction={(key) => (key === "file" ? onPickFile() : onTemplate())}
+      >
+        <Dropdown.Item id="file" label="Từ tệp văn bản…" icon={Upload} />
+        <Dropdown.Item id="template" label="Tải mẫu KB" icon={FileDownload02} />
+      </Dropdown.Menu>
+    </Dropdown.Popover>
+  </Dropdown.Root>
+);
+
+/** Idle-quiet ingest strip of the RAG workspace: the permanent hidden file
+ *  input plus the progress and result messages; there is no heading or button
+ *  because the command bar's import menu owns the entry point. */
+const RagIngestStrip = ({ ingest }: { ingest: BriefFileIngest }) => {
+  const { state } = ingest;
+  return (
+    <section
+      className="project-rag-ingest-strip"
+      aria-label="Nhập kiến thức từ tệp"
+    >
+      <input
+        ref={ingest.inputRef}
+        type="file"
+        hidden
+        accept={PROJECT_TEXT_FILE_ACCEPT}
+        className="sr-only"
+        aria-label="Chọn tệp phiếu thông tin dự án"
+        disabled={ingest.ingesting}
+        onChange={(event) => void ingest.read(event.target.files?.[0])}
+      />
+      {state.phase === "running" ? (
+        <>
+          <p role="status" className="text-helper text-foreground">
+            {state.current
+              ? `Đang nạp «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (${state.items.findIndex((item) => item.key === state.current) + 1}/${state.total})…`
+              : "Đang phân loại nội dung tệp…"}
+          </p>
+          <IngestProgressBoard items={state.items} slow={state.slow} />
+        </>
+      ) : null}
+      {state.phase === "done" ? (
+        <p role="status" className="text-helper text-foreground">
+          {state.requiresCutover
+            ? `Đã chuẩn bị và kiểm tra ${state.activated.length} phần kiến thức từ phiếu. Cần hoàn tất bước chuyển sang 12 danh mục trước khi Chatbot sử dụng dữ liệu mới. Nguồn kiến thức hiện tại vẫn được dùng.`
+            : `Đã nạp xong ${state.activated.length} phần kiến thức từ phiếu.`}
+          {ingest.needsHuman && ingest.needsHuman.length > 0
+            ? ` Cần nhập tay: ${ingest.needsHuman.join(", ")}.`
+            : ""}
+        </p>
+      ) : null}
+      {state.phase === "failed" ? (
+        <p role="alert" className="text-helper text-destructive">
+          {state.failed
+            ? `Chưa xác nhận hoàn tất «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.failed]}»`
+            : "Chưa nạp được tệp"}
+          {state.message ? `: ${state.message}` : "."} Kiểm tra trạng thái danh
+          mục trước khi nạp lại. Các phần đã xác nhận vẫn được giữ.
+        </p>
+      ) : null}
+      {ingest.error ? (
+        <p role="alert" className="text-helper text-destructive">
+          {ingest.error}
+        </p>
+      ) : null}
     </section>
   );
 };

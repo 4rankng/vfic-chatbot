@@ -13,22 +13,20 @@ import type { ProjectKnowledgeExport as KnowledgeFile } from "./domain/project-k
 type ExportContext = { projectId: string };
 type ExportRequest = { context: ExportContext; controller: AbortController };
 
-/** The text download's request and browser attachment share one owner. */
-const KnowledgeDownloadButton = ({
-  projectId,
-  getFile,
-  label,
-  descriptionId,
-  emptyMessage,
-  failureMessage,
-}: {
+type KnowledgeDownloadOptions = {
   projectId: string;
   getFile: (projectId: string, signal: AbortSignal) => Promise<KnowledgeFile>;
-  label: string;
-  descriptionId?: string;
   emptyMessage: string;
   failureMessage: string;
-}) => {
+};
+
+/** The text download's request and browser attachment share one owner. */
+export const useKnowledgeDownload = ({
+  projectId,
+  getFile,
+  emptyMessage,
+  failureMessage,
+}: KnowledgeDownloadOptions) => {
   const notify = useNotify();
   const [exporting, setExporting] = useState(false);
   const contextRef = useRef<ExportContext | null>(null);
@@ -89,6 +87,19 @@ const KnowledgeDownloadButton = ({
     }
   };
 
+  return { exporting, download: () => void download() };
+};
+
+/** The text download's request and browser attachment share one owner. */
+const KnowledgeDownloadButton = ({
+  label,
+  descriptionId,
+  ...options
+}: KnowledgeDownloadOptions & {
+  label: string;
+  descriptionId?: string;
+}) => {
+  const { exporting, download } = useKnowledgeDownload(options);
   return (
     <Button
       className="uu-scope"
@@ -100,7 +111,7 @@ const KnowledgeDownloadButton = ({
       isLoading={exporting}
       isDisabled={exporting}
       showTextWhileLoading
-      onClick={() => void download()}
+      onClick={download}
     >
       {label}
     </Button>

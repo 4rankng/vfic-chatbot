@@ -552,62 +552,56 @@
     margin-top: 8px;
   }
 
-  .project-knowledge-toolbar {
+  .project-workspace-command-bar {
     display: flex;
     min-width: 0;
     flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
+    justify-content: space-between;
+    gap: 8px 16px;
   }
 
-  .project-knowledge-toolbar > :last-child {
+  .project-workspace-command-leading,
+  .project-workspace-command-trailing {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .project-workspace-command-trailing {
+    justify-content: flex-end;
     margin-left: auto;
   }
 
-  .project-knowledge-header {
+  .project-rag-ingest-strip {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "title template" "desc progress";
-    align-items: center;
-    gap: 8px 16px;
-    padding: 24px;
+    gap: 8px;
+  }
+
+  .project-category-rail-caption {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 8px;
     border-bottom: 1px solid var(--border);
   }
 
-  .project-knowledge-title {
-    display: flex;
-    min-width: 0;
-    grid-area: title;
-    align-items: center;
-    gap: 10px;
-    margin: 0;
-  }
-
-  .project-knowledge-title svg {
-    flex: 0 0 auto;
-    color: var(--muted-foreground);
-  }
-
-  .project-knowledge-description {
-    grid-area: desc;
-    margin: 0;
-    text-wrap: pretty;
-  }
-
-  .project-knowledge-progress {
-    grid-area: progress;
+  .project-category-rail-caption > span:first-child {
     color: var(--muted-foreground);
     font-size: var(--fs-helper);
-    text-align: right;
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
   }
 
-  .project-knowledge-progress strong {
+  .project-category-rail-count {
+    color: var(--muted-foreground);
+    font-size: var(--fs-helper);
     font-weight: var(--fw-medium);
-  }
-
-  .project-knowledge-full-template {
-    grid-area: template;
-    justify-self: end;
+    white-space: nowrap;
   }
 
   .project-knowledge-content {
@@ -1261,21 +1255,6 @@
 
     .project-show-layout {
       gap: 16px;
-    }
-
-    .project-knowledge-header {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-areas: "title" "desc" "progress" "template";
-      gap: 12px;
-      padding: 16px;
-    }
-
-    .project-knowledge-progress {
-      text-align: left;
-    }
-
-    .project-knowledge-full-template {
-      justify-self: start;
     }
 
     .project-knowledge-content {
