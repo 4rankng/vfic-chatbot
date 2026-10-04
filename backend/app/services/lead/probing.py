@@ -59,7 +59,7 @@ def oa_profile_name_guidance(
 # Mobile is the only mandatory contact field. Optional information is captured
 # as it is offered rather than turning the consultation into a questionnaire.
 ASKABLE_FIELDS: list[tuple[str, str]] = [
-    ("phone", "Anh/chị cho em xin số điện thoại di động để chuyên viên VFIC hỗ trợ đặt lịch đi làm cho mình nhé?"),
+    ("phone", "Anh/chị cho em xin số điện thoại di động để em tiện liên hệ nhé"),
 ]
 
 # Subtlety guard: the ask must be rare, not a per-turn nag. Any recent bot
