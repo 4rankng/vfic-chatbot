@@ -878,6 +878,48 @@ async def test_get_project_distance_unresolvable_location_asks_for_a_better_addr
     assert "địa chỉ" in payload["safe_reply"]
 
 
+@pytest.mark.asyncio
+async def test_get_project_distance_far_origin_asks_for_province_not_km(no_cache_io):
+    """The 2026-10-04 incident: the bare, diacritic-free "312 nguyen cong hoan"
+    geocoded to a same-named HCMC street (10.80, 106.69) and the tool quoted
+    1,663 km. An origin measuring beyond the Hải Phòng recruiting ceiling is a
+    geocode miss, so the tool must refuse to quote distances and ask which
+    province the candidate is in instead."""
+    plants = [
+        _geo_project(1, lat=20.90, lng=106.70),
+        _geo_project(2, lat=21.20, lng=107.20),
+    ]
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(plants),
+        geocode_area=_geo_area(origin=(10.80, 106.69)),  # HCMC
+    )
+
+    out = await get_project_distance(retrieval=repo, location="312 nguyen cong hoan")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+
+    assert payload["status"] == "implausible_origin"
+    assert payload["projects"] == []  # no distance numbers reach the agent
+    assert "TỈNH/THÀNH" in payload["safe_reply"]
+
+
+@pytest.mark.asyncio
+async def test_list_active_projects_far_origin_asks_for_province_not_km(no_cache_io):
+    """The "gần nhà" ranking path carries the same gate: a far-resolved origin
+    must not rank or quote projects against wrong evidence."""
+    plants = [_geo_project(1, lat=20.90, lng=106.70)]
+    repo = _make_repo(
+        list_active_projects=lambda self: _const(plants),
+        geocode_area=_geo_area(origin=(10.80, 106.69)),  # HCMC
+    )
+
+    out = await list_active_projects(retrieval=repo, location="312 nguyen cong hoan")
+    payload = json.loads(out.splitlines()[0].removeprefix("ACTIVE_PROJECT_LOOKUP_JSON="))
+
+    assert payload["status"] == "implausible_origin"
+    assert payload["projects"] == []
+    assert "TỈNH/THÀNH" in payload["safe_reply"]
+
+
 # ---------------------------------------------------------------------------
 # search_knowledge — unknown slug short-circuits before embeddings/cache
 # ---------------------------------------------------------------------------

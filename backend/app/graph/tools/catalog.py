@@ -154,6 +154,23 @@ _NO_PROJECT_COORDS_REPLY = (
     "Dự án này chưa có địa chỉ đã định vị nên chưa tính được khoảng cách từ chỗ của anh/chị."
 )
 
+# Sanity ceiling on any origin the geocoder resolved. VFIC and every active
+# project sit in Hải Phòng, and the farthest plausible candidate source (Hà Nội)
+# measures ~110 road-km — so a nearest-project distance beyond this ceiling is
+# not an answer, it is a geocode miss: the 2026-10-04 incident had Google answer
+# the bare, diacritic-free "312 nguyen cong hoan" with a same-named street in
+# HCMC (durably cached), and the tool quoted 1,663 km without blinking. The
+# candidate's province is unknown the moment this fires, so the tools must ask
+# for a fuller address and never quote the absurd numbers.
+_IMPLAUSIBLE_ORIGIN_KM = 150.0
+_IMPLAUSIBLE_ORIGIN_REPLY = (
+    "Vị trí vừa nêu cách toàn bộ dự án quá xa (trên 150 km) — gần như chắc chắn "
+    "hệ thống định vị SAI địa chỉ, thường vì thiếu tỉnh/thành hoặc tên đường trùng "
+    "ở tỉnh khác. TUYỆT ĐỐI KHÔNG nêu bất kỳ con số khoảng cách/thời gian nào ở trên. "
+    "Thay vào đó, hỏi lại anh/chị đang ở TỈNH/THÀNH nào, và xin địa chỉ đầy đủ hơn "
+    "(số nhà + đường + quận/huyện + tỉnh/thành) để em tính lại khoảng cách cho chính xác ạ."
+)
+
 
 def _salary_amount(value: int | None) -> str:
     millions = _millions(value)
@@ -399,6 +416,25 @@ async def list_active_projects(
         enriched.sort(
             key=lambda item: (item[0].distance_km is None, item[0].distance_km or 0.0)
         )
+        # Same plausibility gate as get_project_distance: a resolved origin far
+        # outside the Hải Phòng region is a geocode miss, and a list ranked —
+        # or quoted — against it would carry the same absurd "1663 km" into the
+        # reply. Ask for the province instead of presenting wrong evidence.
+        nearest_km = min(
+            (
+                fit.distance_km
+                for fit, _estimate in enriched
+                if fit.distance_km is not None
+            ),
+            default=None,
+        )
+        if nearest_km is not None and nearest_km > _IMPLAUSIBLE_ORIGIN_KM:
+            return _project_tool_result(
+                "implausible_origin",
+                [],
+                _IMPLAUSIBLE_ORIGIN_REPLY,
+                total=lookup.total,
+            )
     projects = []
     for fit, estimate in enriched:
         payload = _project_payload(fit)
@@ -495,6 +531,19 @@ async def get_project_distance(
         distance_km = estimate[0] if estimate is not None else straight_line
         ranked.append((fit, float(distance_km), estimate))
     ranked.sort(key=lambda row: row[1])
+    # The plausibility gate BEFORE anything distance-shaped reaches the agent:
+    # an origin the geocoder put far outside the Hải Phòng recruiting region is
+    # a wrong resolution (bare/diacritic-free address matching another
+    # province's street), so the honest reply is a province question, not
+    # 1,663 km. Covers the unmatched-name fallback below too — those distances
+    # are equally absurd.
+    if ranked[0][1] > _IMPLAUSIBLE_ORIGIN_KM:
+        return _project_tool_result(
+            "implausible_origin",
+            [],
+            _IMPLAUSIBLE_ORIGIN_REPLY,
+            total=len(ranked),
+        )
     projects = []
     for fit, distance_km, estimate in ranked:
         entry: dict[str, object] = {
