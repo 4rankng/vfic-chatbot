@@ -1485,6 +1485,42 @@ class TestLeadCollectionQuestion:
         question = self._ask(lead=None, current_user_text="0987654321 hoặc 0912345678", recent_messages=[])
         assert "điện thoại" in question
 
+    @staticmethod
+    def _bot_msg(body: str):
+        from types import SimpleNamespace
+
+        from app.conversation_messaging.domain.statuses import MessageSender
+
+        return SimpleNamespace(sender=MessageSender.BOT, body=body)
+
+    def test_recent_phone_ask_suppresses_this_turn(self):
+        """The 2026-10-04 prod nag: three naked asks in four minutes. A bot
+        message that already carried the ask must silence the probe now."""
+        history = [
+            self._bot_msg("Dạ LG Display có xe đưa đón ạ."),
+            self._bot_msg("Anh/chị cho em xin số điện thoại để VFIC liên hệ hỗ trợ nhé?"),
+            self._bot_msg("Nhà máy ở KCN Tràng Duệ, An Dương, Hải Phòng ạ."),
+        ]
+        assert self._ask(lead=None, current_user_text="công ty có xe đưa đón không?", recent_messages=history) == ""
+
+    def test_ask_returns_after_cooldown_window(self):
+        from app.services.lead.probing import _PHONE_ASK_LOOKBACK_BOT_MESSAGES
+
+        history = [self._bot_msg("Anh/chị cho em xin số điện thoại nhé?")] + [
+            self._bot_msg(f"Trả lời tư vấn số {i} cho anh/chị.") for i in range(_PHONE_ASK_LOOKBACK_BOT_MESSAGES)
+        ]
+        question = self._ask(lead=None, current_user_text="lương thế nào ạ?", recent_messages=history)
+        assert "điện thoại" in question
+
+    def test_candidate_answer_does_not_count_as_ask(self):
+        history = [self._bot_msg("Dạ lương 12-15 triệu ạ.")]
+        question = self._ask(
+            lead=None,
+            current_user_text="cho xin số điện thoại của công ty đi",
+            recent_messages=history,
+        )
+        assert "điện thoại" in question
+
 
 # ---------------------------------------------------------------------------
 # Messenger turns are contact-keyed (Alembic 0047): the conversation carries no
