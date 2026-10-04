@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { AlertCircle, ChevronRight, Database, Upload } from "lucide-react";
+import { AlertCircle, Database, Upload } from "lucide-react";
 import { useNotify, useRefresh } from "ra-core";
 
 import { ChevronDown, FileDownload02, Loading01 } from "@untitledui/icons";
@@ -560,7 +560,7 @@ const RagCategoriesPanel = ({
                 {Array.from({ length: 12 }).map((_, index) => (
                   <span
                     key={index}
-                    className="block h-[72px] animate-pulse rounded-md bg-[var(--surface-hover)]"
+                    className="block h-10 animate-pulse rounded-md bg-[var(--surface-hover)]"
                   />
                 ))}
               </div>
@@ -578,72 +578,55 @@ const RagCategoriesPanel = ({
                     <button
                       key={category.key}
                       type="button"
-                      data-allow-tall
                       onClick={() => selectCategory(category.key)}
                       aria-pressed={isSelected}
                       aria-controls="project-category-detail"
+                      aria-label={
+                        hasError
+                          ? `${category.label_vi} — cập nhật lỗi, nội dung cũ vẫn đang dùng`
+                          : undefined
+                      }
+                      title={
+                        hasError
+                          ? "Cập nhật lỗi — nội dung cũ vẫn đang dùng"
+                          : undefined
+                      }
                       className={cn(
                         "project-category-card",
                         isSelected && "is-selected",
                       )}
                     >
-                      <div className="project-category-card-heading">
-                        <span className="project-category-name">
-                          {category.label_vi}
-                        </span>
-                        <span className="project-category-card-state">
-                          {isProcessing || hasPendingRevision ? (
-                            <Loading01
-                              className="size-4 shrink-0 animate-spin text-primary"
-                              aria-hidden="true"
-                            />
-                          ) : hasError ? (
-                            <AlertCircle
-                              className="size-4 text-destructive"
-                              aria-hidden="true"
-                            />
-                          ) : isActive ? (
-                            <Badge
-                              className="uu-scope"
-                              type="pill-color"
-                              size="sm"
-                              color="gray"
-                              aria-label={`Đang dùng phiên bản ${category.active_revision_no ?? 1}`}
-                            >
-                              v{category.active_revision_no ?? 1}
-                            </Badge>
-                          ) : (
-                            <span
-                              className="project-category-empty-dot"
-                              aria-hidden="true"
-                            />
-                          )}
-                          <ChevronRight
-                            className="project-category-chevron"
+                      <span className="project-category-name">
+                        {category.label_vi}
+                      </span>
+                      <span className="project-category-card-state">
+                        {isProcessing || hasPendingRevision ? (
+                          <Loading01
+                            className="size-4 shrink-0 animate-spin text-primary"
                             aria-hidden="true"
                           />
-                        </span>
-                      </div>
-                      <div className="project-category-status">
-                        {isProcessing || hasPendingRevision ? (
-                          <span className="text-muted-foreground">
-                            Đang xử lý
-                          </span>
                         ) : hasError ? (
-                          <span className="text-destructive">
-                            Cập nhật lỗi — nội dung cũ vẫn đang dùng
-                          </span>
-                        ) : !isActive ? (
-                          <span className="text-muted-foreground">
-                            Chưa có dữ liệu
-                          </span>
-                        ) : null}
-                      </div>
-                      {category.updated_at && (
-                        <p className="project-category-date">
-                          Cập nhật {formatDate(category.updated_at)}
-                        </p>
-                      )}
+                          <AlertCircle
+                            className="size-4 text-destructive"
+                            aria-label="Cập nhật lỗi — nội dung cũ vẫn đang dùng"
+                          />
+                        ) : isActive ? (
+                          <Badge
+                            className="uu-scope"
+                            type="pill-color"
+                            size="sm"
+                            color="gray"
+                            aria-label={`Đang dùng phiên bản ${category.active_revision_no ?? 1}`}
+                          >
+                            v{category.active_revision_no ?? 1}
+                          </Badge>
+                        ) : (
+                          <span
+                            className="project-category-empty-dot"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </span>
                     </button>
                   );
                 })}
@@ -756,10 +739,3 @@ const RagIngestStrip = ({ ingest }: { ingest: BriefFileIngest }) => {
     </section>
   );
 };
-
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(value));

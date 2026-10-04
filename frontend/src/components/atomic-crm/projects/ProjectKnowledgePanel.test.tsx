@@ -260,14 +260,14 @@ describe("ProjectKnowledgePanel", () => {
     );
   });
 
-  it("contains category status and date inside the compound navigation card", async () => {
+  it("keeps each category rail row on one compact line with its state", async () => {
     await page.viewport(1280, 900);
     mocks.getProjectKnowledgeCategories.mockResolvedValue({
       data: [
         {
           ...categories[0],
           status: "FAILED",
-          updated_at: "2026-07-18T00:00:00Z",
+          updated_at: "2026-10-02T00:00:00Z",
         },
       ],
       total: 1,
@@ -275,18 +275,17 @@ describe("ProjectKnowledgePanel", () => {
     const screen = await renderPanel(
       <ProjectKnowledgePanel project={project} editable />,
     );
-    await expect
-      .element(screen.getByText("Cập nhật lỗi — nội dung cũ vẫn đang dùng"))
-      .toBeVisible();
-    const card = screen.container.querySelector<HTMLElement>(
+    const row = screen.container.querySelector<HTMLElement>(
       ".project-category-card",
     )!;
-    const date = card.querySelector<HTMLElement>(".project-category-date")!;
-    const cardRect = card.getBoundingClientRect();
-    expect(getComputedStyle(card).maxHeight).toBe("none");
-    expect(date.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      cardRect.bottom - 10,
-    );
+    // The failure explanation rides on the row's accessible name, not a
+    // second text line.
+    expect(row.getAttribute("aria-label")).toContain("cập nhật lỗi");
+    const rect = row.getBoundingClientRect();
+    expect(rect.height).toBeGreaterThanOrEqual(36);
+    expect(rect.height).toBeLessThanOrEqual(44);
+    expect(row.querySelector(".project-category-date")).toBeNull();
+    expect(row.textContent).not.toContain("Cập nhật lỗi");
   });
 
   it.each([null, undefined])(
