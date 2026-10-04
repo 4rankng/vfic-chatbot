@@ -90,7 +90,11 @@ class SqlAlchemyKnowledgeIngestionAdapter:
                 resolved_json_extractor,
             ).run(document)
             if training is not None:
-                await training.run(document, BatchCategoryEmbedder(resolved_embedder))
+                await training.run(
+                    document,
+                    BatchCategoryEmbedder(resolved_embedder),
+                    llm_json=resolved_json_extractor,
+                )
         except Exception as exc:  # noqa: BLE001 - preserve recorded failure behavior
             # A failed SQL operation requires rollback before recording failure.
             await self._db.rollback()

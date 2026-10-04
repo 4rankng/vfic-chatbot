@@ -165,7 +165,7 @@ class ProjectTrainingService:
         training_progress(doc, planned=[write.key.value for write in plan.writes])
         await self.db.commit()
 
-    async def run(self, doc: KnowledgeDocument, embedder) -> None:
+    async def run(self, doc: KnowledgeDocument, embedder, llm_json=None) -> None:
         training = dict((doc.metadata_ or {})["project_training"])
         plan = ProjectTrainingPlan.model_validate({"writes": training["writes"]})
         validate_training_plan(plan)
@@ -183,7 +183,7 @@ class ProjectTrainingService:
             )
             doc.stage = "TRAINING_CATEGORIES"
             await self.db.commit()
-            await self.batch.prepare(doc, revision, embedder)
+            await self.batch.prepare(doc, revision, embedder, llm_json=llm_json)
         await self._guard(doc)
         await self.batch.publish(doc, revisions)
         training = dict(doc.metadata_["project_training"])

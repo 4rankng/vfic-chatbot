@@ -84,7 +84,7 @@ def _categories(*, refuse_activation=False):
         }
         return result
 
-    async def prepare(_doc, revision, _embedder):
+    async def prepare(_doc, revision, _embedder, llm_json=None):
         calls.append(revision.key)
 
     async def publish(_doc, _revisions):
