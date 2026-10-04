@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import { useEffect, useMemo, useState, type Ref } from "react";
 import { Save, Pencil } from "lucide-react";
 import { useTranslate } from "ra-core";
 
@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { parseCategoryMarkdownView } from "../domain/category-markdown-reader";
 import type { CategoryDraft } from "./use-category-draft";
 import type { KnowledgeCategoryStatus } from "../domain/project-knowledge-contracts";
 import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-policy";
 import { PROJECT_KNOWLEDGE_CATEGORY_LABELS } from "../domain/project-knowledge-policy";
+import { CategoryRecordCards } from "./CategoryRecordCards";
 
 type Props = {
   ref?: Ref<HTMLElement>;
@@ -18,13 +20,15 @@ type Props = {
   selectedKey: ProjectKnowledgeCategory;
   category?: KnowledgeCategoryStatus;
   draft: CategoryDraft;
-  /** The selected category has a revision under review. */
+  /** The selected category has a revision under review. "processing" drives
+   *  the review-state badge and the meta line. */
   processing: boolean;
   editable: boolean;
 };
 
-/** Detail pane of the selected knowledge category: review state, actions, the
- *  category's markdown source. */
+/** Detail pane of the selected knowledge category: sticky review header, the
+ *  category's record cards (or the raw markdown behind "Xem markdown"), and
+ *  the editing flow. */
 export const CategoryEditor = ({
   ref,
   selectedKey,
@@ -51,6 +55,36 @@ export const CategoryEditor = ({
     setContent,
     startEditing,
   } = draft;
+  /** Cards are the default read view; the toggle reveals the raw markdown. */
+  const [rawView, setRawView] = useState(false);
+  useEffect(() => {
+    setRawView(false);
+    // A new selection lands on the cards view.
+  }, [selectedKey]);
+
+  const meta = useMemo(() => {
+    const updated = category?.updated_at
+      ? new Intl.DateTimeFormat("vi-VN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        }).format(new Date(category.updated_at))
+      : null;
+    if (processing) {
+      return `Phiên bản mới đang được kiểm tra · ${filename}`;
+    }
+    if (hasCurrentSource) {
+      return updated ? `${filename} · Cập nhật ${updated}` : filename;
+    }
+    return null;
+  }, [category?.updated_at, filename, hasCurrentSource, processing]);
+
+  const view = useMemo(
+    () => parseCategoryMarkdownView(content.replace(/\\n/g, "\n"), selectedKey),
+    [content, selectedKey],
+  );
+  const showCards =
+    hasCurrentSource && !isEditing && !processing && view.records.length > 0;
 
   return (
     <section
@@ -89,11 +123,8 @@ export const CategoryEditor = ({
               ? "Chưa đọc được dữ liệu hiện tại. Hãy thử tải lại trước khi sửa nội dung."
               : isEditing
                 ? "Chỉnh sửa nội dung trực tiếp, sau đó lưu để hệ thống kiểm tra."
-                : processing
-                  ? `Phiên bản mới đang được kiểm tra · ${filename}`
-                  : hasCurrentSource
-                    ? `Dữ liệu hiện tại chatbot đang sử dụng · ${filename}`
-                    : "Danh mục này chưa có dữ liệu đang dùng. Nhập tệp văn bản của dự án để hệ thống phân loại nội dung."}
+                : (meta ??
+                  "Danh mục này chưa có dữ liệu đang dùng. Nhập tệp văn bản của dự án để hệ thống phân loại nội dung.")}
           </p>
         </div>
         <div className="project-category-editor-actions">
@@ -168,6 +199,32 @@ export const CategoryEditor = ({
           aria-label={`Dữ liệu hiện tại của danh mục ${label}`}
           placeholder="Nhập nội dung của danh mục để kiểm tra và lưu."
         />
+      ) : showCards ? (
+        <div className="project-category-read-surface">
+          {rawView ? (
+            <Textarea
+              value={content.replace(/\\n/g, "\n")}
+              readOnly
+              rows={14}
+              className="project-category-textarea font-mono"
+              aria-label={`Dữ liệu hiện tại của danh mục ${label}`}
+            />
+          ) : (
+            <CategoryRecordCards view={view} />
+          )}
+          <div className="project-category-read-footer">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="tt-btn-touch"
+              aria-pressed={rawView}
+              onClick={() => setRawView((value) => !value)}
+            >
+              {rawView ? "Xem thẻ" : "Xem markdown"}
+            </Button>
+          </div>
+        </div>
       ) : hasCurrentSource ? (
         <div className="project-category-source-content">
           <Textarea
@@ -176,7 +233,6 @@ export const CategoryEditor = ({
             rows={14}
             className="project-category-textarea font-mono"
             aria-label={`Dữ liệu hiện tại của danh mục ${label}`}
-            placeholder="Danh mục này chưa có dữ liệu đang dùng."
           />
         </div>
       ) : (

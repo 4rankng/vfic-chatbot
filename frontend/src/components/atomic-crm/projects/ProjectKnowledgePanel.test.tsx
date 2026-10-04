@@ -113,6 +113,7 @@ const categories: KnowledgeCategoryStatus[] = [
     active_revision_id: "revision-jobs",
     active_revision_no: 2,
     status: "ACTIVE",
+    updated_at: "2026-07-18T00:00:00Z",
   },
   {
     key: "compensation",
@@ -485,11 +486,7 @@ describe("ProjectKnowledgePanel", () => {
       .toBeVisible();
     await userEvent.keyboard("{Escape}");
     await expect
-      .element(
-        screen.getByText(
-          "Dữ liệu hiện tại chatbot đang sử dụng · jobs-current.yaml",
-        ),
-      )
+      .element(screen.getByText("jobs-current.yaml · Cập nhật 18/07/2026"))
       .toBeVisible();
 
     await screen.getByRole("button", { name: "Lương & thu nhập" }).click();

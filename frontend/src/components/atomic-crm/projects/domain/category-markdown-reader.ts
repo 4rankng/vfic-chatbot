@@ -322,10 +322,7 @@ export const parseCategoryMarkdownView = (
       continue;
     }
     const [, name, raw = ""] = match;
-    if (recordId === null) {
-      recordId = "record-1";
-      ordinal = 1;
-    }
+    if (recordId === null) continue;
     if (raw === "" || raw === "[]") {
       const nextEntry: ParsedEntry =
         raw === "[]"
