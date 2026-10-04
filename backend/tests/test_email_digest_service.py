@@ -450,3 +450,20 @@ def test_project_precedence_multiple_mappings_guess_nothing():
     assert _project_of_interest(None, {"p2": "LG Display", "p3": "Rorze"}, []) is None
     assert _project_of_interest(None, {"p2": "LG Display", "p3": "Rorze"}, ["LG Display", "Rorze"]) is None
     assert _project_of_interest(None, {}, []) is None
+
+
+# ── channel label canonicalization ───────────────────────────────────────────
+
+
+def test_channel_label_canonicalizes_seeded_oa_label():
+    """The Alembic-0047 seeded OA label reads like a product name in a
+    customer-facing file; the digest always shows the short brand form."""
+    from app.services.email_digest.repository import channel_label
+
+    assert (
+        channel_label("zalo_oa", "default:zalo_oa", "Zalo Official Account")
+        == "Zalo OA"
+    )
+    assert channel_label("zalo_oa", "acc", "VietPhap OA") == "VietPhap OA"
+    assert channel_label("facebook_messenger", "486833177846024", None) == "Messenger"
+    assert channel_label("zalo_bot", "default:zalo_bot", None) == "Zalo Chatbot"
