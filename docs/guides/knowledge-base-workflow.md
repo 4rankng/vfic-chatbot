@@ -152,9 +152,14 @@ embeddings, credentials, or runtime settings.
   "ready". RAG Projects keep using category readiness.
 - The Project still needs a compact discovery card so candidates can find it while exploring.
 
-### Public Google Sheet sync
+### Public Google Sheet sync (retired from the console)
 
-Direct-context Projects can attach one additive Google Sheet sync row in
+The owner retired Google Sheet sources on 2026-10-05: the console no longer
+offers attaching, listing or running Sheet syncs. The backend chain below still
+runs for rows created earlier (and the daily tick still fires) until the
+backend decommission lands; new rows cannot be created from the console.
+
+Direct-context Projects could attach one additive Google Sheet sync row in
 `single_page_external_source_sync_state`. That row is a public-source control
 plane, not a replacement for the page itself.
 

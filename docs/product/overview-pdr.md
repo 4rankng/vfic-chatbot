@@ -175,8 +175,9 @@ per-lead `run_followup_job` fan-out.
 - **FR-7.2** Retrieval: HNSW candidate generation (default 200) → exact
   vector re-rank → return top-k.
 - **FR-7.3** Versioned documents; re-index on content change.
-- **FR-7.4** Direct-context projects may attach one public Google Sheet sync
-  row. The sync resolves one exact `gid` from the pasted URL, accepts the
+- **FR-7.4** (console surface retired 2026-10-05; backend chain kept for rows
+  created earlier) Direct-context projects may attach one public Google Sheet
+  sync row. The sync resolves one exact `gid` from the pasted URL, accepts the
   current four-column FAQ sheet shape, and updates the page atomically on
   success.
 - **FR-7.5** Manual sync and daily auto-sync share the same worker path; if a
