@@ -267,6 +267,53 @@ async def test_employee_support_criteria_requires_an_actual_login_problem() -> N
     assert "KHÔNG thuộc nhóm này" in criteria
 
 
+async def test_intent_criteria_reads_meaning_not_job_keywords() -> None:
+    """Hotline regression (2026-10-04): "làm gì đơn giản điều hoà ko quá lạnh"
+    carries no job word, so the old criteria let Jev read it as out_of_scope
+    and the hotline gate answered. The criteria must judge the sender's goal —
+    a work-preference message is a job question — and push uncertainty to
+    ``general`` (the safe lane), never out_of_scope.
+    """
+    recommend = _INTENT_CRITERIA["recommend"]
+    assert "không theo từ khóa" in recommend
+    assert "điều kiện công việc mong muốn" in recommend
+    out_of_scope = _INTENT_CRITERIA["out_of_scope"]
+    assert "KHÔNG PHẢI nhóm này" in out_of_scope
+    assert "chưa chắc chắn" in out_of_scope
+    general = _INTENT_CRITERIA["general"]
+    assert "an toàn" in general
+
+
+async def test_job_seeking_criteria_requires_positive_evidence_to_gate() -> None:
+    """Only positive evidence may produce ``not_seeking`` — the label that
+    gates a turn to the hotline. Missing job vocabulary is not evidence of
+    staying put; that case must read ``unknown``.
+    """
+    seeking = _JOB_SEEKING_CRITERIA["seeking"]
+    assert "không có từ" in seeking  # implicit work-preference messages count
+    not_seeking = _JOB_SEEKING_CRITERIA["not_seeking"]
+    assert "CHỈ khi có" in not_seeking
+    assert "KHÔNG phải bằng chứng" in not_seeking
+
+
+async def test_gender_criteria_reads_evidence_not_name_lists() -> None:
+    """The gender judgment must rank evidence (statement > self-reference >
+    provided full name > display label) and fall to ``unknown`` on ambiguous
+    names, not guess against a hard-coded name list; forms addressing the bot
+    are not self-reference.
+    """
+    male, female = _GENDER_CRITERIA["male"], _GENDER_CRITERIA["female"]
+    assert "tự xưng" in male and "tự xưng" in female
+    assert "không dấu" in male and "không dấu" in female  # ambiguous names never prove
+    assert "đoán" in _GENDER_CRITERIA["unknown"]
+    gender = build_turn_questions()["gender"]["instructions"]
+    assert "TỰ XƯNG" in gender
+    assert "gọi trợ lý" in gender  # address forms are excluded
+    assert "unknown, không đoán" in gender
+    stated = build_turn_questions()["gender_stated"]["instructions"]
+    assert "không phải tự xưng" in stated
+
+
 async def test_route_out_of_scope() -> None:
     route = route_from_decisions(
         "hôm nay trời đẹp", TurnDecisions(intent="out_of_scope", intent_confidence=0.9)

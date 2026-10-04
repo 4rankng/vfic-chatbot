@@ -45,6 +45,10 @@ JEV_RETRY_BACKOFF_S = 0.25
 _BOT_CONTEXT = (
     "Tro ly tuyen dung tren Zalo cho cac du an cong nghiep/nha may. "
     "Ung vien hoi ve viec lam, luong, ca lam, ky tuc xa, xe dua don, ho so ung tuyen. "
+    "Ung vien la lao dong pho thong, viet tin nhan nga ngu/tat, thuong KHONG dung tu chuan "
+    "nhu 'viec', 'du an', 'tuyen': mo ta dieu kien lam mong muon (lam gi don gian, nhe, "
+    "ngoi, phong dieu hoa khong qua lanh, gan nha, tang ca nhieu...) cung la HOI VIEC — "
+    "doc Y NGHIA nguoi gui, khong xep loai theo tu khoa. "
     "Nhan vien dang lam hoi ve TAI KHOAN cua chinh du an (quen mat khau, qua han mat khau, "
     "khong nhan duoc OTP, khong dang nhap duoc) la trong pham vi ho tro; nhac chung chung "
     "ve 'he thong' ma khong neu van de dang nhap (vi du 'xem lai he thong', 'he thong nha "
@@ -65,22 +69,28 @@ _NOUL_GATE = 0.5
 # Intent taxonomy — mirrors the TurnIntent Literal in app.graph.router.
 _INTENT_CRITERIA = {
     "small_talk": "Chào hỏi, cảm ơn, tạm biệt hoặc câu xã giao, không có nội dung chính",
-    "recommend": "Muốn được gợi ý việc làm phù hợp hoặc xem việc đang tuyển — tức muốn tìm "
-    "việc MỚI hoặc đổi việc; nhân viên nêu vấn đề hợp đồng/chế độ của nơi đang làm "
+    "recommend": "Người gửi MUỐN CÔNG VIỆC phù hợp với mình hoặc muốn xem việc đang tuyển — "
+    "phán theo Ý MUỐN của người gửi, không theo từ khóa: tin nhắn mô tả điều kiện công việc "
+    "mong muốn (làm gì đơn giản, việc nhẹ, ngồi làm, phòng điều hòa không quá lạnh, gần nhà, "
+    "tăng ca nhiều...) là hỏi việc, dù không có từ 'việc', 'dự án' hay 'tuyển'. "
+    "Nhân viên nêu vấn đề hợp đồng/chế độ của nơi đang làm "
     "(hết hạn hợp đồng, ký hợp đồng chính thức) không thuộc nhóm này",
     "profile_update": "Cung cấp thông tin cá nhân: tên, khu vực sống, lương mong muốn, kinh nghiệm",
     "timetable": "Hỏi về xe đưa đón, tuyến xe, điểm đón, giờ đón",
     "contact": "Hỏi số điện thoại, admin, hotline, cách thức liên hệ",
-    "faq_detail": "Hỏi chi tiết về việc đang tuyển: lương theo công việc, ca làm, ký túc xá, "
-    "yêu cầu, nội dung công việc; không gồm hỏi về thuế hay pháp luật",
+    "faq_detail": "Hỏi chi tiết về MỘT công việc/dự án cụ thể đang quan tâm: lương theo công việc, "
+    "ca làm, ký túc xá, yêu cầu, nội dung công việc; không gồm hỏi về thuế hay pháp luật",
     "employee_support": "Nhân viên đang làm nêu VẤN ĐỀ ĐĂNG NHẬP cụ thể của tài khoản/dự án: "
     "quên/quá hạn mật khẩu, đặt lại hoặc đổi mật khẩu, không nhận được mã OTP, tài khoản "
     "không đăng nhập được. Chỉ nhắc chung chung đến 'hệ thống' mà không nêu vấn đề đăng nhập "
     "(ví dụ 'xem lại hệ thống', 'hệ thống nhà mình', hỏi về việc khác) KHÔNG thuộc nhóm này",
-    "out_of_scope": "Ngoài phạm vi tuyển dụng và hỗ trợ nhân viên của công ty, và không thuộc "
-    "nhóm hỗ trợ tài khoản/hệ thống ở trên — ví dụ hỏi về thuế, pháp luật, bảo hiểm, "
-    "quy trình tính lương hay việc riêng không liên quan",
-    "general": "Liên quan đến tuyển dụng nhưng ý định chưa rõ",
+    "out_of_scope": "Chủ đề RÕ RÀNG ngoài phạm vi tuyển dụng và hỗ trợ nhân viên của công ty, "
+    "và không thuộc nhóm hỗ trợ tài khoản/hệ thống ở trên — ví dụ thuế, pháp luật, bảo hiểm, "
+    "quy trình tính lương hay việc riêng không liên quan đến công việc. Tin nhắn CÓ THỂ ĐỌC "
+    "ra là nói về điều kiện/dòng việc muốn làm thì KHÔNG PHẢI nhóm này, dù không có từ "
+    "'việc'/'dự án'; chưa chắc chắn thì xếp vào general",
+    "general": "Có vẻ liên quan đến công việc/việc làm nhưng ý định chưa rõ, hoặc không xếp "
+    "chắc chắn được vào nhóm nào khác — hướng xếp an toàn, không dùng để từ chối",
 }
 
 # Real-intention taxonomy — mirrors the ``job_seeking`` field in TurnDecisions.
@@ -88,12 +98,14 @@ _INTENT_CRITERIA = {
 # live recruiting conversation to the hotline, so the model must not guess when
 # the messages do not say. The criteria carry the observed failure cases.
 _JOB_SEEKING_CRITERIA = {
-    "seeking": "Muốn tìm việc mới, đổi việc hoặc xem việc đang tuyển — kể cả khi hiện đang "
-    "đi làm ở nơi khác nhưng muốn công việc khác",
-    "not_seeking": "Không muốn tìm việc mới: là nhân viên/người đang gắn bó và chỉ muốn giải "
-    "quyết việc với công ty hiện tại (hết hạn hợp đồng thử việc, ký hoặc gia hạn hợp "
-    "đồng chính thức, lương/phúc lợi/khiếu nại tại nơi đang làm), hoặc nói rõ không "
-    "quan tâm việc mới",
+    "seeking": "Muốn tìm việc mới, đổi việc, xem việc đang tuyển, hoặc mô tả điều kiện công "
+    "việc mong muốn (đơn giản, nhẹ nhàng, phòng điều hòa mát, gần nhà, lương/tăng ca...) "
+    "dù không có từ 'việc'/'dự án' — kể cả khi hiện đang đi làm nơi khác nhưng muốn "
+    "công việc khác",
+    "not_seeking": "CHỈ khi có BẰNG CHỨNG DƯƠNG: là nhân viên/người đang gắn bó và đang nói "
+    "việc với công ty hiện tại (hết hạn hợp đồng thử việc, ký hoặc gia hạn hợp đồng chính "
+    "thức, lương/phúc lợi/khiếu nại tại nơi đang làm), HOẶC nói rõ không quan tâm việc mới. "
+    "Thiếu từ khóa việc làm KHÔNG phải bằng chứng là không tìm việc",
     "unknown": "Không đủ căn cứ để kết luận — không đoán",
 }
 
@@ -132,15 +144,21 @@ def _retry_after_seconds(headers: Any) -> float | None:
     except (TypeError, ValueError):
         return None
 
-# Candidate-gender taxonomy. "unknown" is a first-class answer: a wrong "anh"/"chị"
-# reads worse to the candidate than staying neutral, so the runner stores only a
-# confident male/female and the next message re-judges anything else. The option
-# descriptions carry the Vietnamese cues (self-reference pronouns, name markers)
-# as guidance — the question stays a direction, not a rigid rule list.
+# Candidate-gender taxonomy. The judgment reads EVIDENCE, not a name list: an
+# explicit statement beats self-reference, which beats a full name the candidate
+# gave, which beats the display label — and any ambiguous signal (unisex or
+# diacritic-free names, nicknames, forms addressed to the bot) stays "unknown".
+# "unknown" is a first-class answer: a wrong "anh"/"chị" reads worse to the
+# candidate than staying neutral, so the runner stores only a confident
+# male/female and the next message re-judges anything else.
 _GENDER_CRITERIA = {
-    "male": "Nam — tự xưng 'anh'/'chú'/'ông', hoặc tên đệm 'Văn' / tên riêng nam",
-    "female": "Nữ — tự xưng 'chị'/'cô'/'bà', hoặc tên đệm 'Thị' / tên riêng nữ",
-    "unknown": "Không xác định — chưa đủ dấu hiệu về giới tính",
+    "male": "Nam — có tín hiệu nam rõ về bản thân người gửi: nói rõ là nam, hoặc tự xưng nam "
+    "('anh', 'chú', 'ông' khi nói về mình), hoặc họ tên thật người Việt theo quy ước tên nam. "
+    "Tên viết không dấu, tên trung tính, biệt danh thì KHÔNG đủ để chọn nam",
+    "female": "Nữ — có tín hiệu nữ rõ về bản thân người gửi: nói rõ là nữ, hoặc tự xưng nữ "
+    "('chị', 'cô', 'bà' khi nói về mình), hoặc họ tên thật người Việt theo quy ước tên nữ. "
+    "Tên viết không dấu, tên trung tính, biệt danh thì KHÔNG đủ để chọn nữ",
+    "unknown": "Không đủ tín hiệu đáng tin về giới tính — chọn mục này thay vì đoán",
 }
 
 # Display labels are short in practice; the cap stops a long profile label from
@@ -163,7 +181,11 @@ def build_turn_questions(
     questions = {
         "intent": {
             "type": "choice",
-            "instructions": "Ý định chính của tin nhắn `message` là gì?",
+            "instructions": (
+                "Ý định chính của tin nhắn `message` là gì? Phán theo MỤC ĐÍCH/Ý NGHĨA của "
+                "người gửi, không khớp từ khóa: dù người gửi dùng từ ngữ nào thì vẫn xếp theo "
+                "ý định thực sự."
+            ),
             "criteria": _INTENT_CRITERIA,
         },
         # The real-intention gate: judged over `message` + `recent` so a
@@ -173,7 +195,8 @@ def build_turn_questions(
             "type": "choice",
             "instructions": (
                 "Ý định THỰC SỰ của người gửi trong `message` (kèm `recent`): người này "
-                "CÓ muốn tìm việc làm MỚI không?"
+                "CÓ muốn tìm việc làm MỚI không? Phán theo ý muốn của người gửi, không theo "
+                "từ khóa; thiếu căn cứ thì chọn unknown, không đoán."
             ),
             "criteria": _JOB_SEEKING_CRITERIA,
         },
@@ -254,22 +277,23 @@ def build_turn_questions(
         questions["gender"] = {
             "type": "choice",
             "instructions": (
-                "Ứng viên (người gửi tin nhắn `message`) là Nam hay Nữ? Hãy suy luận "
-                "từ cách ứng viên tự xưng trong `message`/`recent`, tên hiển thị "
-                "trong `profile_name`, và — mạnh nhất — họ tên đầy đủ ứng viên TỰ cung "
-                "cấp trong `message`/`recent`: tên đệm 'Văn' là nam, 'Thị' là nữ; tên "
-                "gọi Việt Nam ('Dũng', 'Tuấn', 'Hùng'… nam; 'Dung', 'Hằng', 'Thảo', "
-                "'Hương'… nữ). Cách tự xưng và họ tên do ứng viên cung cấp đáng tin hơn "
-                "tên hiển thị hồ sơ. Không đủ căn cứ thì chọn unknown, không đoán."
+                "Giới tính của người gửi tin nhắn `message` là Nam hay Nữ? Đọc TÍN HIỆU về "
+                "bản thân người gửi, xếp theo độ tin: (1) nói rõ giới tính, (2) cách người "
+                "gửi TỰ XƯNG trong `message`/`recent` — phân biệt tự xưng với từ dùng để "
+                "GỌI trợ lý ('anh/chị cho em hỏi' là gọi trợ lý, không phải tự xưng), "
+                "(3) họ tên đầy đủ người gửi TỰ cung cấp trong `message`/`recent`, (4) "
+                "`profile_name` CHỈ khi đó là tên người thật. Tên trung tính, viết không "
+                "dấu, biệt danh thì không đủ căn cứ — chọn unknown, không đoán."
             ),
             "criteria": _GENDER_CRITERIA,
         }
         questions["gender_stated"] = {
             "type": "noul",
             "instructions": (
-                "Trong tin nhắn `message`, ứng viên có tự xưng hoặc nói rõ giới tính "
-                "của chính mình không (ví dụ tự xưng 'anh'/'chị', hoặc nói 'tôi là "
-                "nam/nữ')?"
+                "Trong tin nhắn `message`, người gửi có TỰ nói rõ giới tính của chính mình "
+                "không — bằng câu khai trực tiếp ('tôi là nam/nữ') hoặc cách tự xưng mang "
+                "giới ('anh', 'chị'… khi nói về bản thân)? Từ dùng để GỌI trợ lý (ví dụ "
+                "'anh/chị cho em hỏi') không phải tự xưng — không tính."
             ),
             "criteria": _NOUL_CRITERIA,
         }
