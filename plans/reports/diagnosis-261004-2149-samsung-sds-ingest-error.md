@@ -142,3 +142,31 @@ the bad `"BHXH, BHYT, BHTN"` label on 02 Oct and nothing repairs it — a
 bounded LLM rewrite of self-test-offending record labels inside `prepare`
 (rewrite → re-embed → re-test, N attempts, then fail with the real error)
 would close that class.
+
+## Addendum 2 — the LLM self-repair loop (owner approved, built same night)
+
+Owner asked whether KB import should be all-LLM; decision recorded here:
+no — the two-path architecture stands (LLM authors canonical content from
+freeform sources; the deterministic engine validates, embeds and activates).
+What was missing is LLM self-review, shipped in `b712d87b`:
+
+- `TrainingCategoryBatch.prepare` now runs up to
+  `SELFTEST_REPAIR_MAX_ATTEMPTS` (2) repair rounds when the retrieval
+  self-test rejects a record: each round asks the json extractor to rewrite
+  the offending record's query-like field (`question`/`title`/`name`),
+  grounded in the record's own content and forbidden from inventing facts,
+  then re-renders, re-embeds and re-tests. A round that changes nothing ends
+  the loop immediately; after the bound the batch fails with the real
+  self-test error exactly as before.
+- On success the repaired document is persisted into the revision
+  (`source_markdown`, `normalized_payload`, `content_sha256` via
+  `category_checksum`) before the prepared evidence is written, and
+  `quality_result.selftest_repair_attempts` records how many rounds ran.
+- The raised `CategoryActivationError` now carries the row's stable failure
+  code (mirrors `KnowledgeCategoryService.activate_revision`), instead of
+  the default code for every cause.
+- Tests: `backend/tests/test_selftest_repair.py` (7 cases: label rewrite,
+  unusable-LLM stop, non-offending records untouched, value parsing,
+  happy-path persistence, one-round stop, bounded attempts). Caught two
+  real bugs pre-deploy: `category_checksum` takes a document, not markdown,
+  and the raised error always carried the default code.
