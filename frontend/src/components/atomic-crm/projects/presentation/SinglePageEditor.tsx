@@ -1,11 +1,4 @@
-import {
-  AlertCircle,
-  ArrowRight,
-  ChevronDown,
-  FileText,
-  Link2,
-  Upload,
-} from "lucide-react";
+import { FileText, Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,35 +8,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useId, useRef } from "react";
 import type { SinglePageDraft } from "./use-single-page-draft";
-import { ExternalSourceLinkForm } from "../ExternalSourceLinkForm";
-import { ExternalSourceList } from "../ExternalSourceList";
 
 type Props = {
-  projectId: string;
   draft: SinglePageDraft;
   editable: boolean;
 };
 
-/** The single knowledge page an Agent reads in full, plus its Sheet sync. */
-export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
+/** The single knowledge page an Agent reads in full. */
+export const SinglePageEditor = ({ draft, editable }: Props) => {
   const {
-    autoSyncOn,
     filename,
-    handleSourceChange,
-    handleSynchronized,
     hasCurrentPage,
     loadFailed,
-    remoteChanged,
     loading,
     readFile,
-    refreshing,
     reload,
-    discardChanges,
     save,
     saving,
     setFilename,
     setText,
-    syncRefreshKey,
     text,
   } = draft;
   const filenameId = useId();
@@ -79,26 +62,6 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
                 </p>
                 <Button variant="outline" onClick={() => void reload()}>
                   Thử lại
-                </Button>
-              </div>
-            ) : null}
-            {remoteChanged ? (
-              <div
-                role="status"
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-body"
-              >
-                <p>
-                  Nguồn đồng bộ có nội dung mới. Bản chỉnh sửa chưa lưu của bạn
-                  được giữ lại.
-                </p>
-                <Button
-                  variant="outline"
-                  data-allow-tall
-                  className="project-single-page-reload"
-                  disabled={saving}
-                  onClick={discardChanges}
-                >
-                  Bỏ bản sửa và xem nội dung mới
                 </Button>
               </div>
             ) : null}
@@ -169,79 +132,6 @@ export const SinglePageEditor = ({ projectId, draft, editable }: Props) => {
                   ? "Thay thế trang hiện tại"
                   : "Lưu trang kiến thức"}
               </Button>
-            )}
-            {editable && (
-              <section
-                className="space-y-3 border-t border-border/60 pt-4"
-                aria-labelledby="single-page-sync-heading"
-              >
-                <header className="project-single-page-sync-header flex flex-wrap items-center gap-x-2 gap-y-1 text-label font-semibold">
-                  <div className="project-single-page-sync-label inline-flex min-w-0 items-center gap-2">
-                    <Link2
-                      className="size-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <h3
-                      id="single-page-sync-heading"
-                      className="flex min-w-0 items-center gap-1.5"
-                    >
-                      <span>Google Sheet</span>
-                      <ArrowRight
-                        className="size-3.5 shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      <span>Trang kiến thức</span>
-                    </h3>
-                  </div>
-                  {refreshing && (
-                    <span
-                      className="text-body-sm font-normal text-muted-foreground"
-                      aria-live="polite"
-                    >
-                      · Đang nạp nội dung mới nhất…
-                    </span>
-                  )}
-                </header>
-
-                <div className="space-y-3">
-                  {autoSyncOn && (
-                    <details className="group rounded-md border border-warning/30 bg-warning/10 text-foreground">
-                      <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 px-3 py-1.5 text-label font-medium outline-none transition-colors hover:bg-warning/10 focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-                        <AlertCircle
-                          className="size-4 shrink-0 text-warning"
-                          aria-hidden="true"
-                        />
-                        <span className="flex-1">
-                          Sheet sẽ ghi đè nội dung sửa tay
-                        </span>
-                        <ChevronDown
-                          className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
-                          aria-hidden="true"
-                        />
-                      </summary>
-                      <div className="border-t border-warning/20 px-9 py-2 text-body-sm text-muted-foreground">
-                        Khi lịch hàng ngày đang bật, dữ liệu mới từ Google Sheet
-                        sẽ thay thế nội dung sửa thủ công ở lần đồng bộ tiếp
-                        theo.
-                      </div>
-                    </details>
-                  )}
-                  <ExternalSourceLinkForm
-                    projectId={projectId}
-                    variant="single-page"
-                    onCreated={handleSourceChange}
-                    disabled={saving || loadFailed}
-                  />
-                  <ExternalSourceList
-                    projectId={projectId}
-                    variant="single-page"
-                    refreshSignal={syncRefreshKey}
-                    onChange={handleSourceChange}
-                    onSynchronized={handleSynchronized}
-                    disabled={saving}
-                  />
-                </div>
-              </section>
             )}
           </>
         )}

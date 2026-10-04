@@ -1,8 +1,6 @@
 import type {
-  ExternalSourceCreatePayload,
   FeaturePatch,
   ProjectFaqPayload,
-  SinglePageExternalSourceCreatePayload,
 } from "../domain/project-knowledge-contracts";
 import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-policy";
 import type {
@@ -65,26 +63,4 @@ export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
     ) => port.updateFaq(projectId, faqId, payload),
     deleteFaq: (projectId: string, faqId: string) =>
       port.deleteFaq(projectId, faqId),
-    listExternalSources: (projectId: string, signal?: CancellationSignal) =>
-      port.listExternalSources(projectId, signal),
-    createExternalSource: (
-      projectId: string,
-      payload: ExternalSourceCreatePayload,
-    ) => port.createExternalSource(projectId, payload),
-    runExternalSourceNow: (projectId: string, sourceId: string) =>
-      port.runExternalSourceNow(projectId, sourceId),
-    deleteExternalSource: (projectId: string, sourceId: string) =>
-      port.deleteExternalSource(projectId, sourceId),
-    listSinglePageExternalSources: (
-      projectId: string,
-      signal?: CancellationSignal,
-    ) => port.listSinglePageExternalSources(projectId, signal),
-    createSinglePageExternalSource: (
-      projectId: string,
-      payload: SinglePageExternalSourceCreatePayload,
-    ) => port.createSinglePageExternalSource(projectId, payload),
-    runSinglePageExternalSourceNow: (projectId: string, sourceId: string) =>
-      port.runSinglePageExternalSourceNow(projectId, sourceId),
-    deleteSinglePageExternalSource: (projectId: string, sourceId: string) =>
-      port.deleteSinglePageExternalSource(projectId, sourceId),
   });

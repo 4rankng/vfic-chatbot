@@ -23,7 +23,7 @@ const shownProject = vi.hoisted(() => ({
   id: "project-a",
   name: "LG Hải Phòng",
   slug: "TênDựÁnRấtDài".repeat(10),
-  summary: "Tuyển dụng công nhân tại khu công nghiệp Tràng Duệ. ".repeat(10),
+  summary: "Tuyển dụng công nhân tại khu công nghiệp Trảng Duệ. ".repeat(10),
   is_active: true,
   knowledge_mode: "RAG",
   created_at: "2026-10-02T00:00:00Z",
@@ -46,33 +46,25 @@ vi.mock("./ProjectKnowledgePanel", () => ({
 vi.mock("./project-knowledge-service", async (importOriginal) => ({
   ...(await importOriginal()),
   getProjectBusTimetable: mocks.loadBus,
-  listSinglePageExternalSources: () => Promise.resolve([]),
 }));
 
 const longRoute =
   "Tuyến đưa đón công nhân Hải Phòng — " + "TênTuyếnRấtDài".repeat(8);
 const longStop =
-  "Điểm đón tại khu công nghiệp Tràng Duệ — " + "TênĐiểmĐónRấtDài".repeat(8);
+  "Điểm đón tại khu công nghiệp Trảng Duệ — " + "TênĐiểmĐónRấtDài".repeat(8);
 
 const draft: SinglePageDraft = {
   loading: false,
   saving: false,
-  refreshing: true,
   filename: "Thông tin tuyển dụng dự án Hải Phòng.md",
   text: "Kiến thức tư vấn của dự án. ".repeat(40),
   hasCurrentPage: true,
   loadFailed: false,
-  remoteChanged: true,
-  autoSyncOn: true,
-  syncRefreshKey: 0,
   setFilename: () => undefined,
   setText: () => undefined,
   save: async () => undefined,
   readFile: async () => undefined,
-  handleSourceChange: () => undefined,
-  handleSynchronized: () => undefined,
   reload: async () => undefined,
-  discardChanges: () => undefined,
 };
 
 const categoryDraft: CategoryDraft = {
@@ -155,40 +147,25 @@ afterEach(async () => {
 
 describe("project forms on narrow phones", () => {
   it.each([320, 360, 390, 1440])(
-    "keeps filename and Sheet controls compact without shrinking the KB editor at %ipx",
+    "keeps the filename field compact without shrinking the KB editor at %ipx",
     async (width) => {
       await page.viewport(width, 900);
       const screen = await render(
-        workspace(
-          <SinglePageEditor projectId="project-a" draft={draft} editable />,
-        ),
+        workspace(<SinglePageEditor draft={draft} editable />),
       );
-      await screen
-        .getByRole("button", { name: "Liên kết Google Sheet" })
-        .click();
       const expectedHeight = width < 768 ? 40 : 36;
       const editableFont = window.matchMedia("(pointer: coarse)").matches
         ? "16px"
         : "12px";
-      for (const name of ["Tên file trang kiến thức", "Link Google Sheet"]) {
-        const input = screen.getByRole("textbox", { name }).element();
-        expect(input.getBoundingClientRect().height).toBe(expectedHeight);
-        expect(getComputedStyle(input).fontSize).toBe(editableFont);
-      }
-      for (const name of ["Chọn file", "Hủy", "Nhập một lần"]) {
-        const button = screen
-          .getByRole("button", { name, exact: true })
-          .element();
-        expect(button.getBoundingClientRect().height).toBe(expectedHeight);
-      }
-      const sourceBody = screen.container.querySelector<HTMLElement>(
-        ".project-source-link-body",
-      )!;
-      expect(getComputedStyle(sourceBody).gap).toBe("12px");
-      expect(getComputedStyle(sourceBody).padding).toBe("16px");
-      expect(
-        getComputedStyle(sourceBody.querySelector("label")!).fontSize,
-      ).toBe("13px");
+      const input = screen
+        .getByRole("textbox", { name: "Tên file trang kiến thức" })
+        .element();
+      expect(input.getBoundingClientRect().height).toBe(expectedHeight);
+      expect(getComputedStyle(input).fontSize).toBe(editableFont);
+      const button = screen
+        .getByRole("button", { name: "Chọn file", exact: true })
+        .element();
+      expect(button.getBoundingClientRect().height).toBe(expectedHeight);
       const editor = screen
         .getByRole("textbox", { name: "Nội dung trang kiến thức" })
         .element();
@@ -262,35 +239,7 @@ describe("project forms on narrow phones", () => {
   );
 
   it.each([320, 360, 390])(
-    "keeps single-page sync, refresh notices and linking controls contained at %ipx",
-    async (width) => {
-      await page.viewport(width, 844);
-      const screen = await render(
-        workspace(
-          <SinglePageEditor projectId="project-a" draft={draft} editable />,
-        ),
-      );
-      await screen
-        .getByRole("button", { name: "Liên kết Google Sheet" })
-        .click();
-      await screen
-        .getByRole("switch", { name: "Bật đồng bộ tự động hàng ngày" })
-        .click();
-      expectContained(screen.container, width);
-      const summary = screen
-        .getByText("Sheet sẽ ghi đè nội dung sửa tay")
-        .element()
-        .closest("summary")!;
-      expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(40);
-      await screen.getByRole("button", { name: "Hủy", exact: true }).click();
-      await expect
-        .element(screen.getByRole("button", { name: "Liên kết Google Sheet" }))
-        .toBeVisible();
-    },
-  );
-
-  it.each([320, 360, 390])(
-    "keeps long category descriptions and Sheet forms contained at %ipx",
+    "keeps long category descriptions contained at %ipx",
     async (width) => {
       await page.viewport(width, 844);
       const screen = await render(
@@ -298,27 +247,20 @@ describe("project forms on narrow phones", () => {
           <section className="project-knowledge-panel">
             <div className="project-knowledge-content">
               <CategoryEditor
-                projectId="project-a"
                 selectedKey="compensation"
                 draft={categoryDraft}
                 processing={false}
                 editable
-                canManageSources
-                onSourceCreated={() => undefined}
               />
             </div>
           </section>,
         ),
       );
-      await screen
-        .getByRole("button", { name: "Liên kết Google Sheet" })
-        .click();
       expectContained(screen.container, width);
-      const category = screen.getByRole("combobox");
-      await category.click();
-      const list = screen.getByRole("listbox").element();
-      expect(list.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-      expect(list.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+      const editor = screen.container.querySelector<HTMLElement>(
+        ".project-category-editor",
+      )!;
+      expect(editor.getBoundingClientRect().width).toBeGreaterThan(0);
     },
   );
 });

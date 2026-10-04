@@ -1,10 +1,7 @@
 import { createProjectKnowledgeOperations } from "./application/project-knowledge-operations";
 import type { CancellationSignal } from "./application/project-knowledge-port";
 export type { ProjectTrainingDocument } from "./application/project-knowledge-port";
-import { singlePageSyncErrorMessage } from "./application/sync-error-message";
 import type {
-  ExternalSourceCreatePayload,
-  ExternalSourceSyncState,
   FeaturePatch,
   KnowledgeCategoryCatalog,
   KnowledgeCategoryRevision,
@@ -14,14 +11,8 @@ import type {
   ProjectFaq,
   ProjectFaqList,
   ProjectFaqPayload,
-  SinglePageExternalSourceCreatePayload,
-  SinglePageExternalSourceSyncState,
   SinglePageKnowledge,
 } from "./domain/project-knowledge-contracts";
-import {
-  isValidGoogleSheetUrl,
-  resolveGoogleSheetGid,
-} from "./domain/google-sheet-policy";
 import type { ProjectKnowledgeCategory } from "./domain/project-knowledge-policy";
 import { httpProjectKnowledgeAdapter } from "./infrastructure/http-project-knowledge-adapter";
 export {
@@ -95,44 +86,13 @@ export const getProjectFaq = operations.getFaq;
 export const createProjectFaq = operations.createFaq;
 export const updateProjectFaq = operations.updateFaq;
 export const deleteProjectFaq = operations.deleteFaq;
-export const createExternalSource = operations.createExternalSource;
-export const runExternalSourceNow = operations.runExternalSourceNow;
-export const deleteExternalSource = operations.deleteExternalSource;
-export const createSinglePageExternalSource =
-  operations.createSinglePageExternalSource;
-export const runSinglePageExternalSourceNow =
-  operations.runSinglePageExternalSourceNow;
-export const deleteSinglePageExternalSource =
-  operations.deleteSinglePageExternalSource;
 
 export const getProjectBusTimetable = (
   projectId: string,
   { page = 1, perPage = 6 }: { page?: number; perPage?: number } = {},
 ) => operations.getBusTimetable(projectId, page, perPage);
 
-export const listExternalSources = (projectId: string, signal?: AbortSignal) =>
-  operations.listExternalSources(
-    projectId,
-    signal ? cancellationSignal(signal) : undefined,
-  );
-
-export const listSinglePageExternalSources = (
-  projectId: string,
-  signal?: AbortSignal,
-) =>
-  operations.listSinglePageExternalSources(
-    projectId,
-    signal ? cancellationSignal(signal) : undefined,
-  );
-
-export {
-  isValidGoogleSheetUrl,
-  resolveGoogleSheetGid,
-  singlePageSyncErrorMessage,
-};
 export type {
-  ExternalSourceCreatePayload,
-  ExternalSourceSyncState,
   FeaturePatch,
   KnowledgeCategoryCatalog,
   KnowledgeCategoryRevision,
@@ -143,7 +103,5 @@ export type {
   ProjectFaqList,
   ProjectFaqPayload,
   ProjectKnowledgeCategory as KnowledgeCategoryKey,
-  SinglePageExternalSourceCreatePayload,
-  SinglePageExternalSourceSyncState,
   SinglePageKnowledge,
 };

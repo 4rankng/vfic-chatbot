@@ -22,7 +22,6 @@ export const SupportingStats = ({ data }: { data: PerfMetrics }) => {
   const sendRate = total > 0 ? `${Math.round((sent / total) * 100)}%` : "—";
   const lanes = Object.entries(data.by_lane).sort(([, a], [, b]) => b - a);
   const quality = data.quality;
-  const sync = data.external_source_sync;
   const tokensTotal =
     (quality?.prompt_tokens_total ?? 0) +
     (quality?.completion_tokens_total ?? 0);
@@ -81,7 +80,7 @@ export const SupportingStats = ({ data }: { data: PerfMetrics }) => {
       <article>
         <div>
           <Database01 aria-hidden="true" />
-          <h2>Dữ liệu &amp; đồng bộ</h2>
+          <h2>Dữ liệu</h2>
         </div>
         <strong>{data.trend.length > 0 ? "Có dữ liệu" : "Chưa đủ"}</strong>
         <p>
@@ -89,14 +88,6 @@ export const SupportingStats = ({ data }: { data: PerfMetrics }) => {
             ? `${data.trend.length} điểm xu hướng trong khoảng đã chọn.`
             : "Chưa có điểm thời gian để kiểm tra."}
         </p>
-        <ul>
-          <li>
-            <span>Đồng bộ nguồn ngoài</span>
-            <b>
-              {sync?.success_total ?? 0}✓ / {sync?.failure_total ?? 0}✗
-            </b>
-          </li>
-        </ul>
       </article>
     </section>
   );

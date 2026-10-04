@@ -31,10 +31,6 @@ const mocks = vi.hoisted(() => ({
   getProjectKnowledgeCategoryTemplate: vi.fn(),
   getProjectKnowledgeExport: vi.fn(),
   getProjectSinglePage: vi.fn(),
-  listSinglePageExternalSources: vi.fn(),
-  createSinglePageExternalSource: vi.fn(),
-  runSinglePageExternalSourceNow: vi.fn(),
-  deleteSinglePageExternalSource: vi.fn(),
   replaceProjectSinglePage: vi.fn(),
   replaceProjectKnowledgeCategory: vi.fn(),
   /** The migration's explicit empty state for a brief-carried gap. */
@@ -46,7 +42,6 @@ const mocks = vi.hoisted(() => ({
   getProjectTrainingDocument: vi.fn(),
   /** The brief's highlights PATCHed onto the discovery card. */
   updateProjectDiscoveryCard: vi.fn(),
-  listExternalSources: vi.fn(),
 }));
 
 vi.mock("ra-core", async (importOriginal) => ({
@@ -66,10 +61,6 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
     mocks.getProjectKnowledgeCategoryTemplate,
   getProjectKnowledgeExport: mocks.getProjectKnowledgeExport,
   getProjectSinglePage: mocks.getProjectSinglePage,
-  listSinglePageExternalSources: mocks.listSinglePageExternalSources,
-  createSinglePageExternalSource: mocks.createSinglePageExternalSource,
-  runSinglePageExternalSourceNow: mocks.runSinglePageExternalSourceNow,
-  deleteSinglePageExternalSource: mocks.deleteSinglePageExternalSource,
   replaceProjectSinglePage: mocks.replaceProjectSinglePage,
   replaceProjectKnowledgeCategory: mocks.replaceProjectKnowledgeCategory,
   clearProjectKnowledgeCategory: mocks.clearProjectKnowledgeCategory,
@@ -77,7 +68,6 @@ vi.mock("./project-knowledge-service", async (importOriginal) => ({
   uploadProjectDocument: mocks.uploadProjectDocument,
   getProjectTrainingDocument: mocks.getProjectTrainingDocument,
   updateProjectDiscoveryCard: mocks.updateProjectDiscoveryCard,
-  listExternalSources: mocks.listExternalSources,
 }));
 
 import { ProjectKnowledgePanel } from "./ProjectKnowledgePanel";
@@ -259,8 +249,6 @@ describe("ProjectKnowledgePanel", () => {
       category_authority_started: true,
       category_cutover_at: "2026-07-18T00:00:00Z",
     });
-    mocks.listSinglePageExternalSources.mockResolvedValue([]);
-    mocks.listExternalSources.mockResolvedValue([]);
     mocks.getProjectKnowledgeCategoryTemplate.mockImplementation(
       (_projectId: string, key: string) =>
         Promise.resolve({
@@ -450,263 +438,6 @@ describe("ProjectKnowledgePanel", () => {
     confirm.mockRestore();
   });
 
-  it("shows the sync flow and progressively discloses the overwrite warning", async () => {
-    await page.viewport(390, 844);
-    mocks.getProjectSinglePage.mockResolvedValue({
-      id: "single-page-1",
-      knowledge_base_id: "kb-1",
-      filename: "single-page.md",
-      text: "Nội dung hiện tại",
-      char_count: 17,
-      line_count: 1,
-      content_sha256: "sha",
-      updated_at: "2026-07-22T00:00:00Z",
-    });
-    mocks.listSinglePageExternalSources.mockResolvedValue([
-      {
-        id: "src-sp-1",
-        project_id: "project-rorze",
-        source_kind: "google_sheet",
-        sheet_url: "https://docs.google.com/spreadsheets/d/demo/edit#gid=42",
-        sheet_gid: 42,
-        auto_sync_enabled: true,
-        consecutive_failures: 0,
-        last_status: "OK",
-        created_at: "2026-07-22T00:00:00Z",
-        updated_at: "2026-07-22T00:00:00Z",
-      },
-    ]);
-
-    const screen = await renderPanel(
-      <ProjectKnowledgePanel project={singlePageProject} editable />,
-    );
-
-    await expect
-      .element(screen.getByText("Google Sheet", { exact: true }))
-      .toBeVisible();
-    // Auto-sync state now surfaces via the source-row badge, not the flow
-    // diagram caption (which was removed to cut visual noise).
-    await expect
-      .element(screen.getByLabelText("Tự động mỗi ngày"))
-      .toBeVisible();
-    await expect
-      .element(screen.getByText("Trang kiến thức", { exact: true }))
-      .toBeVisible();
-    const syncHeading = screen.container.querySelector(
-      "#single-page-sync-heading",
-    )!;
-    expect(syncHeading.parentElement?.querySelector("svg")).not.toBeNull();
-    // Keep the readable flow inside the editor. It may wrap on a narrow phone
-    // instead of enforcing a single line that spills outside the KB surface.
-    const syncFlow = syncHeading.parentElement!;
-    expect(syncFlow.scrollWidth).toBeLessThanOrEqual(syncFlow.clientWidth + 1);
-    expect(syncFlow.getBoundingClientRect().right).toBeLessThanOrEqual(390);
-
-    const warning = screen.getByText("Sheet sẽ ghi đè nội dung sửa tay");
-    const warningDetail = screen.getByText(
-      "Khi lịch hàng ngày đang bật, dữ liệu mới từ Google Sheet sẽ thay thế nội dung sửa thủ công ở lần đồng bộ tiếp theo.",
-    );
-    await expect.element(warning).toBeVisible();
-    await expect.element(warningDetail).not.toBeVisible();
-    const warningCallout = warning.element().closest("details");
-    expect(warningCallout?.className).toContain("text-foreground");
-    expect(warningCallout?.className).not.toContain("text-warning-foreground");
-
-    await warning.click();
-
-    await expect.element(warningDetail).toBeVisible();
-  });
-
-  it("ignores an older single-page refresh response after a newer one wins", async () => {
-    const firstRefresh = deferred<{
-      id: string;
-      knowledge_base_id: string;
-      filename: string;
-      text: string;
-      char_count: number;
-      line_count: number;
-      content_sha256: string;
-      updated_at: string;
-    }>();
-    const secondRefresh = deferred<{
-      id: string;
-      knowledge_base_id: string;
-      filename: string;
-      text: string;
-      char_count: number;
-      line_count: number;
-      content_sha256: string;
-      updated_at: string;
-    }>();
-
-    // Without the manual "Nạp lại" button, overlapping single-page reloads are
-    // driven by ExternalSourceList's onSynchronized callback, which fires each
-    // time a sync signature changes. Each list call returns a row with a fresh
-    // signature so every post-runNow poll fires onSynchronized → loadPage.
-    let sourceCall = 0;
-    mocks.listSinglePageExternalSources.mockImplementation(() => {
-      sourceCall += 1;
-      return Promise.resolve([
-        {
-          id: "src-sp-1",
-          project_id: "project-rorze",
-          source_kind: "google_sheet",
-          sheet_url: "https://docs.google.com/spreadsheets/d/demo/edit#gid=42",
-          sheet_gid: 42,
-          auto_sync_enabled: false,
-          consecutive_failures: 0,
-          last_status: "OK",
-          last_content_hash: `h${sourceCall}`,
-          last_synced_at: `2026-07-22T00:0${sourceCall}:00Z`,
-          created_at: "2026-07-22T00:00:00Z",
-          updated_at: `2026-07-22T00:0${sourceCall}:00Z`,
-        },
-      ]);
-    });
-    mocks.runSinglePageExternalSourceNow.mockResolvedValue({ job_id: "job-1" });
-
-    mocks.getProjectSinglePage
-      // mount loadPage (non-background) → editor becomes interactive
-      .mockResolvedValueOnce({
-        id: "single-page-1",
-        knowledge_base_id: "kb-1",
-        filename: "single-page.md",
-        text: "Nội dung ban đầu",
-        char_count: 15,
-        line_count: 1,
-        content_sha256: "sha-1",
-        updated_at: "2026-07-22T00:00:00Z",
-      })
-      // onSynchronized #1 → the older in-flight request
-      .mockImplementationOnce(() => firstRefresh.promise)
-      // onSynchronized #2 → the newer in-flight request
-      .mockImplementationOnce(() => secondRefresh.promise);
-
-    const screen = await renderPanel(
-      <ProjectKnowledgePanel project={singlePageProject} editable />,
-    );
-
-    await expect
-      .element(screen.getByLabelText("Nội dung trang kiến thức"))
-      .toHaveValue("Nội dung ban đầu");
-
-    vi.useFakeTimers();
-
-    // First sync completion → onSynchronized → loadPage (firstRefresh, pending).
-    await screen.getByRole("button", { name: "Đồng bộ ngay" }).click();
-    await vi.advanceTimersByTimeAsync(4000);
-
-    // Clear the 5-minute run-now cooldown before triggering a second sync.
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
-    await screen.getByRole("button", { name: "Đồng bộ ngay" }).click();
-    await vi.advanceTimersByTimeAsync(4000);
-
-    // Newer request resolves first → its content is applied.
-    secondRefresh.resolve({
-      id: "single-page-1",
-      knowledge_base_id: "kb-1",
-      filename: "single-page.md",
-      text: "Bản mới nhất",
-      char_count: 11,
-      line_count: 1,
-      content_sha256: "sha-3",
-      updated_at: "2026-07-22T00:03:00Z",
-    });
-    await vi.waitFor(() =>
-      expect(
-        screen.getByLabelText("Nội dung trang kiến thức").element(),
-      ).toHaveValue("Bản mới nhất"),
-    );
-
-    // Older request resolves after → discarded by loadPage's request guard.
-    firstRefresh.resolve({
-      id: "single-page-1",
-      knowledge_base_id: "kb-1",
-      filename: "single-page.md",
-      text: "Phản hồi cũ",
-      char_count: 11,
-      line_count: 1,
-      content_sha256: "sha-2",
-      updated_at: "2026-07-22T00:02:00Z",
-    });
-
-    await vi.waitFor(() =>
-      expect(
-        screen.getByLabelText("Nội dung trang kiến thức").element(),
-      ).toHaveValue("Bản mới nhất"),
-    );
-  });
-
-  it("does not request admin-only sync state in single-page read-only mode", async () => {
-    mocks.getProjectSinglePage.mockResolvedValue({
-      id: "single-page-1",
-      knowledge_base_id: "kb-1",
-      filename: "single-page.md",
-      text: "Nội dung hiện tại",
-      char_count: 17,
-      line_count: 1,
-      content_sha256: "sha",
-      updated_at: "2026-07-22T00:00:00Z",
-    });
-    mocks.listSinglePageExternalSources.mockResolvedValue([
-      {
-        id: "src-sp-1",
-        project_id: "project-rorze",
-        source_kind: "google_sheet",
-        sheet_url: "https://docs.google.com/spreadsheets/d/demo/edit#gid=42",
-        sheet_gid: 42,
-        auto_sync_enabled: false,
-        consecutive_failures: 0,
-        last_status: "NO_OP",
-        created_at: "2026-07-22T00:00:00Z",
-        updated_at: "2026-07-22T00:00:00Z",
-      },
-    ]);
-
-    const screen = await renderPanel(
-      <ProjectKnowledgePanel project={singlePageProject} editable={false} />,
-    );
-
-    expect(mocks.listSinglePageExternalSources).not.toHaveBeenCalled();
-    expect(screen.container.textContent).not.toContain(
-      "Google Sheet → trang kiến thức",
-    );
-    expect(screen.container.textContent).not.toContain("Liên kết Google Sheet");
-    expect(
-      screen.container.querySelector(".project-external-source-actions"),
-    ).toBeNull();
-    expect(screen.container.textContent).not.toContain(
-      "Thay thế trang hiện tại",
-    );
-  });
-
-  it("does not refetch sync state while an admin edits page text", async () => {
-    mocks.getProjectSinglePage.mockResolvedValue({
-      id: "single-page-1",
-      knowledge_base_id: "kb-1",
-      filename: "single-page.md",
-      text: "Nội dung hiện tại",
-      char_count: 17,
-      line_count: 1,
-      content_sha256: "sha",
-      updated_at: "2026-07-22T00:00:00Z",
-    });
-    const screen = await renderPanel(
-      <ProjectKnowledgePanel project={singlePageProject} editable />,
-    );
-    await vi.waitFor(() =>
-      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(2),
-    );
-
-    await screen
-      .getByLabelText("Nội dung trang kiến thức")
-      .fill("Nội dung đang chỉnh sửa");
-
-    await vi.waitFor(() =>
-      expect(mocks.listSinglePageExternalSources).toHaveBeenCalledTimes(2),
-    );
-  });
-
   it("shows current category data without the category template download action", async () => {
     mocks.getProjectKnowledgeCategorySource.mockImplementation(
       (_projectId: string, key: string) => {
@@ -883,7 +614,6 @@ describe("ProjectKnowledgePanel", () => {
       .toBeVisible();
     expect(screen.container.textContent).not.toContain("Tải file YAML");
     expect(screen.container.textContent).not.toContain("Sync From Link");
-    expect(mocks.listExternalSources).not.toHaveBeenCalled();
   });
 
   it("offers source-read recovery without enabling a blank replacement", async () => {

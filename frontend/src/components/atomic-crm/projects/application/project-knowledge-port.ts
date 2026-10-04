@@ -6,8 +6,6 @@ import type {
 } from "../../types";
 import type {
   CategoryAuthorityState,
-  ExternalSourceCreatePayload,
-  ExternalSourceSyncState,
   FeaturePatch,
   KnowledgeCategoryCatalog,
   KnowledgeCategoryRevision,
@@ -17,8 +15,6 @@ import type {
   ProjectFaqList,
   ProjectFaqPayload,
   ProjectKnowledgeExport,
-  SinglePageExternalSourceCreatePayload,
-  SinglePageExternalSourceSyncState,
   SinglePageKnowledge,
 } from "../domain/project-knowledge-contracts";
 import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-policy";
@@ -155,33 +151,4 @@ export type ProjectKnowledgePort = Readonly<{
     payload: Partial<ProjectFaqPayload>,
   ) => Promise<ProjectFaq>;
   deleteFaq: (projectId: string, faqId: string) => Promise<void>;
-  listExternalSources: (
-    projectId: string,
-    signal?: CancellationSignal,
-  ) => Promise<ExternalSourceSyncState[]>;
-  createExternalSource: (
-    projectId: string,
-    payload: ExternalSourceCreatePayload,
-  ) => Promise<ExternalSourceSyncState>;
-  runExternalSourceNow: (
-    projectId: string,
-    sourceId: string,
-  ) => Promise<{ job_id: string }>;
-  deleteExternalSource: (projectId: string, sourceId: string) => Promise<void>;
-  listSinglePageExternalSources: (
-    projectId: string,
-    signal?: CancellationSignal,
-  ) => Promise<SinglePageExternalSourceSyncState[]>;
-  createSinglePageExternalSource: (
-    projectId: string,
-    payload: SinglePageExternalSourceCreatePayload,
-  ) => Promise<SinglePageExternalSourceSyncState>;
-  runSinglePageExternalSourceNow: (
-    projectId: string,
-    sourceId: string,
-  ) => Promise<{ job_id: string }>;
-  deleteSinglePageExternalSource: (
-    projectId: string,
-    sourceId: string,
-  ) => Promise<void>;
 }>;

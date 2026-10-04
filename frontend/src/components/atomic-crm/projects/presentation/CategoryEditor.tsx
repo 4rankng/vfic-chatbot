@@ -11,11 +11,9 @@ import type { CategoryDraft } from "./use-category-draft";
 import type { KnowledgeCategoryStatus } from "../domain/project-knowledge-contracts";
 import type { ProjectKnowledgeCategory } from "../domain/project-knowledge-policy";
 import { PROJECT_KNOWLEDGE_CATEGORY_LABELS } from "../domain/project-knowledge-policy";
-import { ExternalSourceLinkForm } from "../ExternalSourceLinkForm";
 
 type Props = {
   ref?: Ref<HTMLElement>;
-  projectId: string;
   /** Selected key, used as the label fallback until the catalog lands. */
   selectedKey: ProjectKnowledgeCategory;
   category?: KnowledgeCategoryStatus;
@@ -23,22 +21,17 @@ type Props = {
   /** The selected category has a revision under review. */
   processing: boolean;
   editable: boolean;
-  canManageSources: boolean;
-  onSourceCreated: () => void;
 };
 
 /** Detail pane of the selected knowledge category: review state, actions, the
  *  category's markdown source. */
 export const CategoryEditor = ({
   ref,
-  projectId,
   selectedKey,
   category,
   draft,
   processing,
   editable,
-  canManageSources,
-  onSourceCreated,
 }: Props) => {
   const translate = useTranslate();
   const label =
@@ -149,15 +142,6 @@ export const CategoryEditor = ({
           )}
         </div>
       </div>
-      {canManageSources && !isEditing && (
-        <div className="project-category-source-link">
-          <ExternalSourceLinkForm
-            projectId={projectId}
-            defaultCategory={selectedKey}
-            onCreated={onSourceCreated}
-          />
-        </div>
-      )}
       {loading ? (
         <Skeleton className="project-category-editor-skeleton" />
       ) : loadFailed ? (

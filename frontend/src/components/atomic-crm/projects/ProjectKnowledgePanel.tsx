@@ -1,11 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import {
-  AlertCircle,
-  ChevronRight,
-  Database,
-  Link2,
-  Upload,
-} from "lucide-react";
+import { AlertCircle, ChevronRight, Database, Upload } from "lucide-react";
 import { useNotify, useRefresh } from "ra-core";
 
 import { Loading01 } from "@untitledui/icons";
@@ -22,19 +16,16 @@ import {
   type ProjectKnowledgeCategory,
 } from "./domain/project-knowledge-policy";
 import { useCategoryDraft } from "./presentation/use-category-draft";
-import { useFaqAutoSyncNotice } from "./presentation/use-faq-auto-sync-notice";
 import { useProjectKnowledgeCatalog } from "./presentation/use-project-knowledge-catalog";
 import { useProjectIngest } from "./presentation/use-project-ingest";
 import { IngestProgressBoard } from "./presentation/IngestProgressBoard";
 import { useSinglePageDraft } from "./presentation/use-single-page-draft";
-import { ExternalSourceList } from "./ExternalSourceList";
 import {
   ProjectKnowledgeExport,
   ProjectKnowledgeTemplate,
 } from "./ProjectKnowledgeExport";
 import { CategoryEditor } from "./presentation/CategoryEditor";
 import { DiscoveryCardEditor } from "./presentation/DiscoveryCardEditor";
-import { FaqAutoSyncSection } from "./presentation/FaqAutoSyncSection";
 import { SinglePageEditor } from "./presentation/SinglePageEditor";
 import { BusTimetableSection } from "./ProjectBusTimetable";
 import {
@@ -123,16 +114,11 @@ const SinglePagePanel = ({
 }) => {
   const draft = useSinglePageDraft(String(project.id), {
     isActive: project.is_active,
-    canManageSources: editable,
   });
 
   return (
     <div className="space-y-4">
-      <SinglePageEditor
-        projectId={String(project.id)}
-        draft={draft}
-        editable={editable}
-      />
+      <SinglePageEditor draft={draft} editable={editable} />
       {/* The one-brief migration to the 12-category catalog is an admin move:
           the clear and cutover calls it finishes with are admin endpoints. */}
       {editable && <MigrationSection projectId={String(project.id)} />}
@@ -390,14 +376,9 @@ const RagCategoriesPanel = ({
 }) => {
   const projectId = String(project.id);
   const [selected, setSelected] = useState<KnowledgeCategoryKey>("jobs");
-  const [externalSourceSignal, setExternalSourceSignal] = useState(0);
   const categoryDetailRef = useRef<HTMLElement>(null);
   const catalog = useProjectKnowledgeCatalog(projectId);
   const draft = useCategoryDraft(projectId, selected, catalog);
-  const faqAutoSyncOn = useFaqAutoSyncNotice(projectId, {
-    enabled: canManageSources,
-    refreshSignal: externalSourceSignal,
-  });
 
   const { categories } = catalog;
   const selectedCategory = categories?.find((item) => item.key === selected);
@@ -611,36 +592,13 @@ const RagCategoriesPanel = ({
 
           <CategoryEditor
             ref={categoryDetailRef}
-            projectId={projectId}
             selectedKey={selected}
             category={selectedCategory}
             draft={draft}
             processing={selectedIsProcessing}
             editable={editable}
-            canManageSources={canManageSources}
-            onSourceCreated={() =>
-              setExternalSourceSignal((value) => value + 1)
-            }
           />
         </div>
-
-        {selected === "faq" && (
-          <FaqAutoSyncSection autoSyncOn={faqAutoSyncOn} />
-        )}
-
-        {canManageSources && (
-          <section className="project-source-section space-y-2">
-            <h3 className="inline-flex items-center gap-2 text-body font-semibold">
-              <Link2 className="size-4" aria-hidden="true" />
-              Google Sheet
-            </h3>
-            <ExternalSourceList
-              projectId={projectId}
-              refreshSignal={externalSourceSignal}
-              onChange={() => setExternalSourceSignal((value) => value + 1)}
-            />
-          </section>
-        )}
 
         {selected === "transportation" && (
           <section className="project-transport-panel">

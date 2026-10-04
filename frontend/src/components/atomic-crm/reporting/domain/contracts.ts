@@ -104,10 +104,4 @@ export interface PerfMetrics {
   trend: PerfTrendBucket[];
   reliability?: PerfReliability;
   quality?: PerfQuality;
-  external_source_sync?: {
-    auto_sync_count: number;
-    last_synced_at_max: string | null;
-    success_total: number;
-    failure_total: number;
-  };
 }

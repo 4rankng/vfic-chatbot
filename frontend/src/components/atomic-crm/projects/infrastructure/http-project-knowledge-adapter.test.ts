@@ -276,28 +276,6 @@ describe("HTTP project-knowledge adapter", () => {
     ]);
   });
 
-  it("keeps external-source abort and route behavior in infrastructure", async () => {
-    mocks.apiJson.mockResolvedValue([]);
-    const listeners = new Set<() => void>();
-
-    await httpProjectKnowledgeAdapter.listSinglePageExternalSources(
-      "project-1",
-      {
-        aborted: false,
-        onAbort: (listener) => {
-          listeners.add(listener);
-          return () => listeners.delete(listener);
-        },
-      },
-    );
-
-    expect(mocks.apiJson).toHaveBeenCalledWith(
-      "/api/v1/knowledge/projects/project-1/single-page/external-sources",
-      { signal: expect.any(AbortSignal) },
-    );
-    expect(listeners.size).toBe(0);
-  });
-
   it("replaces manually edited category content through the JSON endpoint", async () => {
     mocks.apiJson.mockResolvedValue({});
 
