@@ -30,7 +30,11 @@ from app.services.retrieval.catalog_repository import CatalogRepository
 from app.services.retrieval.document_repository import DocumentRepository
 from app.services.retrieval.faq_repository import FaqRepository
 from app.services.retrieval.timetable_repository import TimetableRepository
-from app.services.tingting_api import TingtingApiService, TingtingFlowStore, TingtingVerifyAttemptsStore
+from app.services.tingting_api import (
+    TingtingApiService,
+    TingtingFlowStore,
+    TingtingVerifyAttemptsStore,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -163,9 +167,7 @@ class RetrievalRepository:
 
         viewbox = await self._catalog.active_area_viewbox()
         providers = await IntegrationSettingsService(self.db).resolve_geocoder()
-        return await geocode(
-            query, viewbox=viewbox, providers=providers, precision=precision
-        )
+        return await geocode(query, viewbox=viewbox, providers=providers, precision=precision)
 
     async def estimate_distances_km(
         self,
@@ -190,9 +192,6 @@ class RetrievalRepository:
 
     async def active_projects_with_card(self) -> list:
         return await self._catalog.active_projects_with_card()
-
-    async def active_persona_body(self, provider: str | None = None) -> str | None:
-        return await self._catalog.active_persona_body(provider)
 
     async def active_project_ids(self) -> list[str]:
         return await self._catalog.active_project_ids()
@@ -230,9 +229,7 @@ class RetrievalRepository:
         try:
             runtime = await service.runtime()
         except Exception as exc:  # noqa: BLE001 — a config read must not 500 a turn
-            logger.warning(
-                "tingting api runtime read failed error_type=%s", type(exc).__name__
-            )
+            logger.warning("tingting api runtime read failed error_type=%s", type(exc).__name__)
             runtime = None
         return await service.invoke(runtime, method=method, path=path, params=params)
 

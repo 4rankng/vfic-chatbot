@@ -24,7 +24,6 @@ ROUTE_MODULE_CLASSIFICATION = {
     "knowledge": "capability.knowledge",
     "knowledge_bases": "capability.knowledge",
     "projects": "capability.recruitment",
-    "personas": "auth_setup",
     "jobs": "capability.recruitment",
     "dashboard": "capability.recruitment",
     "performance": "active_kernel",
@@ -60,7 +59,6 @@ EXPECTED_ROUTE_COUNTS = {
     "leads": 15,
     "main": 3,
     "performance": 2,
-    "personas": 11,  # adapter assignment GET/PUT replace project bulk assignment
     # +4 single-page external-source-sync endpoints
     # +2 project external-API endpoints (get / put)
     # +1 project external-API admin test-call endpoint (post)
@@ -72,11 +70,13 @@ EXPECTED_ROUTE_COUNTS = {
 # is the re-review this digest records.
 # 0062-era: +2 integrations routes — GET/PUT /api/v1/admin/integrations/geocoder
 # (the admin-editable Google Maps credential behind the distance feature).
-EXPECTED_ROUTE_INVENTORY_SHA256 = "95bc8893f1d2b11e5bb8d0b413d512e4d0d5ef87dc3f2e5d009b2f056080a832"
+# 0066-era: -11 persona routes (the persona router, its adapter-assignment
+# routes and its versions routes) — persona storage is a code constant now.
+EXPECTED_ROUTE_INVENTORY_SHA256 = "0d38eb2ba2eaa3660da7f26ac9a8d0b83452c4e65d96a5dbe689e5d40ac6cb6a"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
-    "outbox_boundary": 10,
+    "outbox_boundary": 8,
     # Same 10 sites; the claim_send / record_bot_outcome rows moved from
     # bot_path.py into send_claim.py / bot_outcome.py when the bot-send state
     # layer was split by change reason (file/scope keys only).
@@ -184,7 +184,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # (get + post inside send_email_via_resend), its two call sites in
     # services/email_digest/service.py (run_digest + send_test_digest), and the
     # admin test-send route in api/integrations.py.
-    "provider_boundary": 101,
+    "provider_boundary": 100,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -224,7 +224,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: a turn that held the per-chat mutex hands the conversation to a newer
     # inbound the ingress guard dropped, via chatbot_worker._handoff_to_newer_inbound
     # -> enqueue_latest_unanswered_worker_message.
-    "queue_producer": 39,  # -3 the legacy KB-version lane enqueue sites
+    "queue_producer": 37,  # -3 the legacy KB-version lane enqueue sites
     # -1: the custom provider stopped reading a stored context-window row (the
     # field left the settings UI), so resolve_custom_llm._load's `get` count
     # drops 7→6 at the same site.
@@ -318,7 +318,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # neither adding a row — google_geocode's `get` 5→6 (the coarse-`types` read that
 # replaced the ladder's precision gate) and decisions.decide_turn's `get` 20→21
 # (unrelated prompt work on the employee_support intent, landed concurrently).
-EXPECTED_BROAD_BOUNDARY_SHA256 = "16eef017bb0d29e3b95364d3731a82e18bc7d8e83854b7bf24278f48f96c1395"
+# 0066-era: -2 outbox_boundary (the proactive turn's
+# prepare_proactive_message/record_proactive_outcome write path) and
+# -2 queue_producer (the removed followup tick and its enqueue),
+# -1 provider_boundary (the proactive send). Digest recomputed.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "e80dfbf56264f3a1dc46aef732aff9b0df4f63684867a51790322b282eaa8fc1"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

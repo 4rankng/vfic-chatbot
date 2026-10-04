@@ -36,7 +36,6 @@ def _body(*, pack_key: str = "recruitment") -> InstallationRevisionCreate:
             "automation_enabled": True,
         },
         capability_ids=[],
-        persona_version_id=uuid.uuid4(),
         template_version_refs=[],
         provider_policy={
             "chat_integration_key": "openrouter",

@@ -1,183 +1,119 @@
-"""One persona resolver for every lane that builds a prompt.
+"""One persona, every lane.
 
-The agent lane fetched the DB persona through ``context.resolve_persona`` (which
-strips the legacy privacy/refusal rules) while the direct-context lane read
-``PersonaRepository.active_persona_body`` raw. A persona still carrying those
-rules therefore made the bot refuse/hedge on focused-project turns while the same
-persona answered normally on agent turns — the exact drift the single-assembly
-rule exists to prevent. ``context.resolve_effective_persona`` is now the one
-owner, and both lanes go through it.
+The agent lane and the direct-context lane used to read the persona through two
+different paths — the agent lane via ``context.resolve_effective_persona`` (which
+stripped the legacy privacy/refusal rules), the direct-context lane raw from
+``PersonaRepository.active_persona_body``. A persona still carrying those rules made
+the bot refuse/hedge on focused-project turns while the same persona answered
+normally on agent turns: the exact drift this module exists to prevent.
+
+Persona storage was removed on 2026-10-04, so the drift source is gone rather than
+policed: both lanes read the same code constant, and neither can reach a second
+copy. These tests hold that invariant, plus the two rules blocks that must ride
+along with the persona on **both** lanes.
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 
-# A persona carrying the legacy lines the strip exists to remove, plus one line
-# that must survive.
-_LEGACY_PERSONA = (
-    "Bạn là trợ lý của Ting Ting.\n"
-    "Không tiết lộ thông tin cá nhân của người dùng khác.\n"
-    "Nói rõ đây là số cá nhân của ứng viên/người dùng khác.\n"
-    "Trả lời bằng tiếng Việt, thân thiện.\n"
-)
-_STALE_MARKERS = ("thông tin cá nhân", "số cá nhân")
-_VOICE_LINES = ("Bạn là trợ lý của Ting Ting.", "Trả lời bằng tiếng Việt, thân thiện.")
+from app.graph.context import build_system_prompt, resolve_effective_persona
+from app.graph.direct_context import DirectContext, build_direct_system
+from app.graph.prompts import AGENT_SYSTEM_PROMPT
+from app.prompts.vfic_persona import IDENTITY_AND_OPENING_RULES
 
 
 class _Retrieval:
-    def __init__(self, body: str | None, *, raises: bool = False) -> None:
-        self._body = body
-        self._raises = raises
+    """A repository that can only serve the project index, and serves none.
 
-    async def active_persona_body(self, provider: str | None = None) -> str | None:  # noqa: ARG002
-        if self._raises:
-            raise RuntimeError("persona table unreachable")
-        return self._body
+    The persona used to be read through this same port. It now has no persona
+    method at all, which is the point: a lane that still tried to read one would
+    raise ``AttributeError`` rather than silently diverge.
+    """
 
     async def active_projects_with_card(self) -> list[object]:
         return []
 
 
-async def test_resolver_strips_the_legacy_refusal_rules():
-    from app.graph.context import resolve_effective_persona
-
-    resolved = await resolve_effective_persona(_Retrieval(_LEGACY_PERSONA), provider="zalo_bot")
-
-    for marker in _STALE_MARKERS:
-        assert marker not in resolved
-    # The persona's own voice survives; only the stale rules are removed.
-    for line in _VOICE_LINES:
-        assert line in resolved
+async def test_resolver_is_the_committed_persona():
+    assert resolve_effective_persona() == AGENT_SYSTEM_PROMPT
 
 
-async def test_resolver_falls_back_to_the_committed_persona():
-    from app.graph.context import resolve_effective_persona
-    from app.graph.prompts import AGENT_SYSTEM_PROMPT
+async def test_agent_lane_gets_the_persona_with_no_persona_read():
+    """A repository with no persona method must not stop the turn."""
+    prompt, _cache_hit = await build_system_prompt(_Retrieval(), provider="zalo_bot")
 
-    assert await resolve_effective_persona(_Retrieval(None)) == AGENT_SYSTEM_PROMPT
-    assert await resolve_effective_persona(_Retrieval("   ")) == AGENT_SYSTEM_PROMPT
-    # A persona read failure degrades to persona.md, never breaks the turn.
-    assert (
-        await resolve_effective_persona(_Retrieval(None, raises=True))
-        == AGENT_SYSTEM_PROMPT
-    )
+    assert prompt.startswith(AGENT_SYSTEM_PROMPT)
 
 
-async def test_build_system_prompt_assembles_from_the_shared_resolver(monkeypatch):
-    """The agent lane's prompt is the resolver's output, appended to, verbatim.
+async def test_agent_lane_ends_with_the_identity_and_opening_rules():
+    """The rules must be the last thing the model reads before it replies.
 
-    ``build_system_prompt`` used to strip the persona a second time after the
-    resolver had already stripped it, so the invariant had no single owner.
+    They override the persona's own §1 and §5, so a persona body appended after
+    them would quietly win the conflict.
     """
-    from app.graph import context
+    prompt, _cache_hit = await build_system_prompt(_Retrieval(), provider="zalo_bot")
 
-    calls: list[str] = []
-    resolved = "Persona đã resolve"
-
-    async def _resolver(_retrieval, *, provider=None):
-        calls.append(provider or "default")
-        return resolved
-
-    async def _uncached(factory, **_kwargs):
-        # The real cache returns (prompt, cache_hit).
-        return await factory(), False
-
-    monkeypatch.setattr(context, "resolve_effective_persona", _resolver)
-    monkeypatch.setattr(context, "cached_system_prompt", _uncached)
-
-    prompt, cache_hit = await context.build_system_prompt(
-        _Retrieval(_LEGACY_PERSONA), provider="zalo_bot"
-    )
-
-    assert calls == ["zalo_bot"]
-    assert prompt.startswith(resolved)
-    assert cache_hit is False
+    assert IDENTITY_AND_OPENING_RULES in prompt
+    assert prompt.index(IDENTITY_AND_OPENING_RULES) > prompt.index("### 1. Vai trò của tôi")
 
 
-async def test_direct_context_lane_drops_the_same_stale_rules(monkeypatch):
-    """Both lanes now build their persona the same way.
+async def test_direct_context_lane_carries_the_same_rules():
+    """The lane most likely to miss them: it builds its own prompt.
 
-    The direct-context lane used to read ``active_persona_body`` raw, so a
-    persona carrying the legacy refusal lines made the bot hedge on focused-project
-    turns while the agent lane answered normally from the same persona.
+    ``build_direct_system`` receives none of the agent lane's rule blocks, so a
+    rule added only to ``context.build_system_prompt`` silently does not apply to
+    every focused-project turn.
     """
-    from app.graph import adapters
-
-    catalog = [
-        SimpleNamespace(
-            project_id="p1",
-            kb_id=7,
-            slug="lg-display",
-            name="LG Display",
-            aliases=(),
-            mode="DIRECT_CONTEXT",
+    direct = build_direct_system(
+        DirectContext(
+            knowledge_base_id="kb-1",
+            persona_body=AGENT_SYSTEM_PROMPT,
+            knowledge_text="KB TEXT",
         )
-    ]
-
-    async def _catalog(_db):
-        return catalog
-
-    async def _fits(*_args, **_kwargs):
-        return None
-
-    class _Repo:
-        def __init__(self, _db) -> None:
-            pass
-
-        async def active_persona_body(self, provider=None):  # noqa: ARG002
-            return _LEGACY_PERSONA
-
-    class _DB:
-        def __init__(self) -> None:
-            self.commits = 0
-
-        async def commit(self) -> None:
-            self.commits += 1
-
-        async def scalar(self, _stmt):
-            return SimpleNamespace(normalized_text="Nội dung dự án.")
-
-        async def execute(self, _stmt):
-            return SimpleNamespace(all=lambda: [(
-                SimpleNamespace(id="p1", slug="lg-display", name="LG Display", aliases=[]),
-                SimpleNamespace(id=7, mode="DIRECT_CONTEXT"),
-            )])
-
-    monkeypatch.setattr(adapters, "_load_direct_context_catalog", _catalog)
-    monkeypatch.setattr("app.services.personas.repository.PersonaRepository", _Repo)
-    monkeypatch.setattr(
-        "app.services.knowledge_base_capacity.ensure_direct_context_fits", _fits
     )
 
-    conversation = SimpleNamespace(
-        zalo_chat_id="bot-user-1",
-        zalo_channel="bot",
-        focused_project_id=None,
-        project_context_state="EXPLORE",
-    )
-
-    turn_context = await adapters._DirectContextAdapter(_DB()).resolve(
-        conversation, "LG Display đang tuyển gì?"
-    )
-
-    assert turn_context.state == "FOCUSED"
-    assert turn_context.direct_context is not None
-    persona = turn_context.direct_context.persona_body
-    for marker in _STALE_MARKERS:
-        assert marker not in persona
-    for line in _VOICE_LINES:
-        assert line in persona
+    assert IDENTITY_AND_OPENING_RULES in direct
+    assert direct.startswith(AGENT_SYSTEM_PROMPT)
 
 
-def test_manifest_persona_is_deliberately_not_run_through_the_db_persona_strip():
-    """The manifest lane's persona is pinned installation content, not a DB row.
+async def test_the_rules_never_name_the_bot_an_ai_or_a_helper():
+    """The regression this all exists for.
+
+    Production opened every conversation with "Em là trợ lý của Nhân lực VFIC…"
+    and asked for a phone number as the closing line of an opening message that
+    had delivered nothing. Enforcement is prompt-only by decision, so the rule text
+    is the only lever — these assertions are the ratchet.
+    """
+    for text in (AGENT_SYSTEM_PROMPT, IDENTITY_AND_OPENING_RULES):
+        lowered = text.lower()
+        assert "trợ lý ai" not in lowered
+        assert "một trợ lý ai" not in lowered
+
+    assert "Bạn là Dũng" in AGENT_SYSTEM_PROMPT
+    assert "KHÔNG" in IDENTITY_AND_OPENING_RULES
+    for marker in ("AI", "bot", "robot"):
+        assert marker in IDENTITY_AND_OPENING_RULES, marker
+
+
+def test_the_persona_port_no_longer_exists():
+    """The DB persona seam is gone from the ports, not just unused."""
+    from app.graph import ports as graph_ports
+    from app.recruitment.application import ports as recruitment_ports
+
+    assert not hasattr(recruitment_ports, "PersonaBodyResolver")
+    assert not hasattr(recruitment_ports, "PersonaFollowupRulesResolver")
+    assert not hasattr(recruitment_ports, "ProactiveStatePort")
+    assert "PersonaBodyResolver" not in graph_ports.__all__
+
+
+def test_manifest_persona_is_deliberately_composed_verbatim():
+    """The manifest lane's persona is pinned installation content.
 
     ``build_policy_system_prompt`` composes ``policy.persona_body`` verbatim.
-    Stripping lines out of a signed manifest would change installation content
-    behind its own checksum, so that lane is intentionally NOT routed through
-    the DB-persona resolver. Pinned here so the audit result reads as a decision
-    rather than an omission.
+    Rewriting lines out of a checksummed manifest would change installation
+    content behind its own checksum, so that lane is intentionally NOT run
+    through the retrieval/composition path. Pinned so the result reads as a
+    decision rather than an omission.
     """
     from app.graph.runtime_policy import build_policy_system_prompt
     from app.graph.types import ResolvedRuntimePolicy, ResolvedToolRegistry
@@ -188,11 +124,11 @@ def test_manifest_persona_is_deliberately_not_run_through_the_db_persona_strip()
         pack_key="recruitment",
         capability_ids=frozenset(),
         terminology={},
-        persona_body=_LEGACY_PERSONA,
+        persona_body="PERSONA ĐÃ PIN",
         tool_registry=ResolvedToolRegistry(names=frozenset()),
     )
 
     prompt = build_policy_system_prompt(policy)
 
-    assert prompt.startswith(_LEGACY_PERSONA)
+    assert prompt.startswith("PERSONA ĐÃ PIN")
     assert "RUNTIME AUTHORITY" in prompt

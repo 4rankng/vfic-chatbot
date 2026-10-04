@@ -47,7 +47,6 @@ REQUIRED_BEHAVIORAL_BASELINES: dict[str, tuple[str, ...]] = {
     "test_graph_runner_turn": ("run_turn",),
     "test_graph_factories": ("build_deps",),
     "test_lead_extraction": ("CandidateExtractionService",),
-    "test_proactive_followup_rules": ("_rule_allows",),
     "test_dashboard_attention": ("AttentionDashboardOut",),
 }
 # Symbols the baseline reaches through a module object (`runner.run_turn`) or
@@ -56,7 +55,6 @@ REQUIRED_BEHAVIORAL_BASELINES: dict[str, tuple[str, ...]] = {
 _RESOLVED_IN_PRODUCTION = {
     "run_turn": "app.graph.runner",
     "build_deps": "app.graph.factories",
-    "_rule_allows": "app.services.proactive.repository",
 }
 
 
@@ -203,7 +201,7 @@ def test_digest_fallback_is_source_grounded_and_domain_neutral():
 
 
 @pytest.mark.asyncio
-async def test_current_system_prompt_uses_database_persona_but_appends_recruitment_rules(
+async def test_current_system_prompt_uses_the_code_persona_and_appends_recruitment_rules(
     monkeypatch: pytest.MonkeyPatch,
 ):
     async def uncached(assemble, *, key_suffix="default"):
@@ -212,15 +210,16 @@ async def test_current_system_prompt_uses_database_persona_but_appends_recruitme
         assert key_suffix == f"zalo_bot:r{_PROMPT_TEXT_REVISION}"
         return await assemble(), False
 
-    retrieval = SimpleNamespace(
-        active_persona_body=AsyncMock(return_value="Neutral configured persona"),
-        active_projects_with_card=AsyncMock(return_value=[]),
-    )
+    # No persona method on the retrieval port at all: the persona is a code
+    # constant, so the lane that would have fetched it no longer has one.
+    retrieval = SimpleNamespace(active_projects_with_card=AsyncMock(return_value=[]))
     monkeypatch.setattr("app.graph.context.cached_system_prompt", uncached)
 
     prompt, cache_hit = await build_system_prompt(retrieval, provider="zalo_bot")
 
-    assert prompt.startswith("Neutral configured persona")
+    from app.graph.prompts import AGENT_SYSTEM_PROMPT
+
+    assert prompt.startswith(AGENT_SYSTEM_PROMPT)
     assert "đang tuyển" in prompt
     assert "search_knowledge" in prompt
     assert "list_active_projects là nguồn kiểm tra" in prompt
@@ -244,10 +243,7 @@ async def test_system_prompt_allows_company_identity_from_persona_without_tool_e
     async def uncached(assemble, *, key_suffix="default"):
         return await assemble(), False
 
-    retrieval = SimpleNamespace(
-        active_persona_body=AsyncMock(return_value="Persona giới thiệu VFIC."),
-        active_projects_with_card=AsyncMock(return_value=[]),
-    )
+    retrieval = SimpleNamespace(active_projects_with_card=AsyncMock(return_value=[]))
     monkeypatch.setattr("app.graph.context.cached_system_prompt", uncached)
 
     prompt, _ = await build_system_prompt(retrieval)

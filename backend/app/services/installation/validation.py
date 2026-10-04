@@ -33,9 +33,24 @@ from app.services.installation.catalog import (
     integration_reference_ids,
 )
 from app.services.installation.hashing import sha256_json
+from app.prompts.vfic_persona import DEFAULT_PERSONA_BODY_MD
 from app.schemas.installation import InstallationRevisionCreate
 
 VALIDATOR_VERSION = "1"
+
+
+def current_persona_checksum() -> str:
+    """Checksum of the persona the running code actually ships.
+
+    Replaces the ``persona_versions`` snapshot (2026-10-04): the manifest used
+    to pin a stored copy and compare the row against itself. With the persona as
+    a code constant there is one persona by construction, so this hashes the
+    deployed text and the recorded ``persona_checksum`` is compared against it
+    directly. A persona edit therefore invalidates a manifest validated against
+    the previous text — the same fail-closed guarantee, with the drift source
+    (two copies of one persona) removed rather than policed.
+    """
+    return sha256_json({"body_md": DEFAULT_PERSONA_BODY_MD.strip()})
 
 
 class ValidationMixin:
@@ -165,15 +180,6 @@ class ValidationMixin:
                 lifecycle,
             )
 
-        persona_version = await self.repo.get_persona_version(body.persona_version_id)
-        if persona_version is None:
-            raise self._error(
-                "Persona version does not exist",
-                "INSTALLATION_VALIDATION_FAILED",
-                lifecycle,
-                status_code=422,
-                issues=[self._issue("PERSONA_VERSION_NOT_FOUND", "persona_version_id")],
-            )
         secret_paths = {
             "customer_identity": body.customer_identity,
             "branding": body.branding,
@@ -228,7 +234,6 @@ class ValidationMixin:
             workflow_policy=data["workflow_policy"],
             workflow_policy_checksum=workflow_checksum,
             capability_ids=list(capability_ids),
-            persona_version_id=body.persona_version_id,
             template_version_refs=data["template_version_refs"],
             provider_policy=data["provider_policy"],
             provider_policy_checksum=provider_checksum,
@@ -323,17 +328,13 @@ class ValidationMixin:
                 )
             )
 
-        persona = await self.repo.get_persona_version(revision.persona_version_id)
-        if persona is None:
-            issues.append(self._issue("PERSONA_VERSION_NOT_FOUND", "persona_version_id"))
-            persona_checksum = ""
-        else:
-            persona_checksum = persona.checksum
-            expected_persona_checksum = sha256_json(
-                {"body_md": persona.body_md, "followup_rules": persona.followup_rules}
-            )
-            if persona.checksum != expected_persona_checksum:
-                issues.append(self._issue("PERSONA_CHECKSUM_MISMATCH", "persona_version_id"))
+        # The persona is a code constant now (app.prompts.vfic_persona), so there
+        # is no stored row to be missing or to disagree with itself: the checksum
+        # recorded here is the hash of the persona the running code ships, and
+        # the currency check below re-derives it. Deploying a persona edit
+        # without re-validating the manifest is therefore what invalidates it —
+        # the fail-closed property the persona_versions snapshot used to provide.
+        persona_checksum = current_persona_checksum()
 
         expected_refs = {
             str(item["version_id"]): str(item["checksum"])
@@ -375,7 +376,7 @@ class ValidationMixin:
             is_valid=not issues,
             issues=issues,
             reference_snapshot={
-                "persona_version_id": str(revision.persona_version_id),
+                "persona_checksum": persona_checksum,
                 "template_version_ids": sorted(expected_refs),
                 "integration_keys": required_keys,
                 "authentication_policy_checksum": revision.authentication_policy_checksum,
@@ -430,10 +431,7 @@ class ValidationMixin:
         require_kb_snapshot: bool = True,
     ) -> bool:
         revision = await self.repo.get_revision(revision_id)
-        persona = (
-            await self.repo.get_persona_version(revision.persona_version_id) if revision else None
-        )
-        if revision is None or persona is None:
+        if revision is None:
             return False
         if (
             revision.workflow_version_id is None
@@ -490,7 +488,7 @@ class ValidationMixin:
             and integrations_current
             and validation.manifest_checksum == revision.manifest_checksum
             and validation.pack_contract_hash == revision.pack_contract_hash
-            and validation.persona_checksum == persona.checksum
+            and validation.persona_checksum == current_persona_checksum()
             and validation.workflow_policy_checksum == revision.workflow_policy_checksum
             and validation.provider_policy_checksum == revision.provider_policy_checksum
             and revision.authentication_policy is not None

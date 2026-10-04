@@ -256,7 +256,6 @@ async def test_cached_project_cannot_keep_inactive_focus(monkeypatch):
 
 async def test_cached_direct_mode_uses_current_kb_assignment(monkeypatch):
     from app.graph import adapters
-    from app.services.personas.repository import PersonaRepository
 
     cached = adapters._DirectContextCatalogEntry(
         project_id="p1", slug="project", name="Project", aliases=(),
@@ -267,7 +266,6 @@ async def test_cached_direct_mode_uses_current_kb_assignment(monkeypatch):
     db = _FakeDB([(current_project, current_kb)])
     db.scalar = AsyncMock(side_effect=AssertionError("old direct file must never be loaded"))
     monkeypatch.setattr(adapters, "_load_direct_context_catalog", AsyncMock(return_value=[cached]))
-    monkeypatch.setattr(PersonaRepository, "active_persona_body", AsyncMock(return_value="persona"))
     conversation = SimpleNamespace(focused_project_id=None, project_context_state="EXPLORE")
 
     context = await _DirectContextAdapter(db).resolve(conversation, "Project lương bao nhiêu?")
@@ -356,7 +354,6 @@ async def test_focused_direct_context_turn_fetches_only_the_selected_file(monkey
     import app.core.cache as cache_mod
     from app.models.conversation import ConversationProjectState
     from app.services import knowledge_base_capacity
-    from app.services.personas.repository import PersonaRepository
 
     async def fake_cache_version(_namespace):
         return "1"
@@ -380,13 +377,9 @@ async def test_focused_direct_context_turn_fetches_only_the_selected_file(monkey
     async def fake_active_model(_db):
         return "minimax", "MiniMax-M2.7-highspeed", 1_024_000
 
-    async def fake_persona_body(_self, _provider):
-        return "PERSONA BODY"
-
     monkeypatch.setattr(
         knowledge_base_capacity, "_active_model_context", fake_active_model
     )
-    monkeypatch.setattr(PersonaRepository, "active_persona_body", fake_persona_body)
     conversation = SimpleNamespace(
         focused_project_id=None,
         project_context_state=ConversationProjectState.EXPLORE,

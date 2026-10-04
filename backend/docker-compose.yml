@@ -11,7 +11,7 @@
 # Memory-limit ledger (OPS-09, re-based 2026-09-28): every service carries a
 # deploy.resources.limits.memory ceiling — postgres 448M, redis 320M, web-blue
 # 512M, web-green 512M, worker-chatbot 4×512M, worker-persistence 512M,
-# worker-ingest 512M, worker-category 256M, worker-followup 512M,
+# worker-ingest 512M, worker-category 256M,
 # worker-maintenance 384M, scheduler 128M, metrics-watch 128M, frontend 64M,
 # adminer 128M, caddy 128M, oa-profile-backfill 512M (profile-gated). Sum of
 # ceilings ≈ 6.5 GB against
@@ -125,8 +125,8 @@ services:
     environment:
       # DB connection budget (see config.py): each of the colour's two uvicorn
       # workers holds its own pool, so the steady state — ONE active web colour
-      # (2 × (8+4)) + 4 chatbot + persistence/ingest/followup/maintenance
-      # workers (6 each) = 12 DB-touching processes — draws at most
+      # (2 × (8+4)) + 4 chatbot + persistence/ingest/maintenance
+      # workers (6 each) = 11 DB-touching processes — draws at most
       # 24 + 8×6 = 72 of the max_connections=150 ceiling. A cutover briefly
       # adds the second colour's 24 (96 worst case).
       DB_POOL_SIZE: "8"
@@ -322,7 +322,7 @@ services:
           memory: 256M
     restart: unless-stopped
 
-  # rq-scheduler: hourly Drive reconcile, 5-min outbound retry, 30-min proactive follow-up tick.
+  # rq-scheduler: reconcile tick + outbound dispatch tick on the `maintenance` queue.
   scheduler:
     logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
@@ -357,43 +357,10 @@ services:
           memory: 128M
     restart: unless-stopped
 
-  # RQ worker: proactive follow-up nudges (dedicated queue, isolated from reactive path).
-  # Single replica — proactive volume is low (~5 candidates/tick, 30-min interval).
-  # The reconcile sweep and outbound-dispatch ticks moved to worker-maintenance
-  # so a backlog-driven reconcile cannot head-of-line-block the nudges.
-  worker-followup:
-    logging: *default-logging
-    image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
-    env_file: .env
-    environment:
-      DB_POOL_SIZE: "4"
-      DB_MAX_OVERFLOW: "2"
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-    # SEC-11: no `--url` — rq 2.10 falls back to os.environ["REDIS_URL"] when the
-    # flag is absent (rq/cli/helpers.py:388 -> get_redis_from_config), so env_file
-    # already supplies the broker and the credential stops appearing in argv.
-    command: ["rq", "worker", "followup"]
-    healthcheck:
-      # Loop liveness via the RQ worker registry — see worker-chatbot.
-      test: ["CMD-SHELL", "python -c \"import os,socket,sys;from rq import Worker;import redis as r;c=r.from_url(os.environ['REDIS_URL'],socket_connect_timeout=3,socket_timeout=3);sys.exit(0 if any(w.hostname==socket.gethostname() for w in Worker.all(connection=c)) else 1)\""]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          # Executes full proactive-nudge turns (graph + LLM clients in
-          # memory) — same fence class as the other turn-executing workers.
-          memory: 512M
-    restart: unless-stopped
-
   # RQ worker: reconcile sweep + outbound dispatch ticks (maintenance queue,
-  # split from followup). Single replica — the reconcile tick holds a Redis
-  # non-reentrancy lock (reconcile_tick_lock, 300s), so overlapping schedules
-  # skip; one worker keeps the two 60s ticks from competing with nudges.
+  # split out when the proactive follow-up worker was removed on 2026-10-04).
+  # Single replica — the reconcile tick holds a Redis non-reentrancy lock
+  # (reconcile_tick_lock, 300s), so overlapping schedules skip.
   worker-maintenance:
     logging: *default-logging
     image: ghcr.io/4rankng/tinghire-be:${IMAGE_TAG:?IMAGE_TAG is required — the deploy passes the git sha}
@@ -454,7 +421,7 @@ services:
         # Must be one of allowed_hosts (SEC-06) — see get().
         HOST_HEADER = os.environ.get("METRICS_WATCH_HOST_HEADER", "bot.tingting.vip")
         COLORS = ("web-blue", "web-green")
-        QUEUE_KEYS = ("webhook_high", "recovery", "persistence_low", "ingest", "followup", "maintenance")
+        QUEUE_KEYS = ("webhook_high", "recovery", "persistence_low", "ingest", "maintenance")
         COUNTERS = ("reconcile_enqueue_failed_total", "reconcile_unknown_send_outcome")
 
         def get(url):

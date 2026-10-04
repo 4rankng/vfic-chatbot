@@ -13,7 +13,7 @@ cd /opt/vfic
 ACTIVE_FILE="/opt/vfic/ACTIVE_COLOR"
 PREV_COLOR_FILE="/opt/vfic/PREV_COLOR"
 PREV_TAG_FILE="/opt/vfic/PREV_TAG"
-WORKERS="worker-chatbot worker-persistence worker-ingest worker-category worker-followup scheduler worker-maintenance metrics-watch"
+WORKERS="worker-chatbot worker-persistence worker-ingest worker-category scheduler worker-maintenance metrics-watch"
 PUBLIC_BASE_URL="https://bot.tingting.vip"
 
 _count_lines() {
@@ -199,7 +199,6 @@ PY
       require_running_service_count "worker-chatbot" &&
       require_running_service_count "worker-persistence" &&
       require_running_service_count "worker-ingest" &&
-      require_running_service_count "worker-followup" &&
       require_running_service_count "scheduler" &&
       require_running_service_count "worker-maintenance" &&
       require_running_service_count "metrics-watch" && break

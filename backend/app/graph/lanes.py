@@ -295,9 +295,7 @@ async def _tingting_addressing(state: BotRunState, deps: GraphDeps) -> str:
             f'"{pronoun}" thay vì "anh/chị" trong mọi tin nhắn. KHÔNG gọi tên họ.'
         )
     except Exception as exc:  # noqa: BLE001 — addressing is best-effort, never breaks a turn
-        logger.warning(
-            "tingting addressing inference failed error_type=%s", type(exc).__name__
-        )
+        logger.warning("tingting addressing inference failed error_type=%s", type(exc).__name__)
         return ""
 
 
@@ -506,12 +504,12 @@ async def _agent_turn(
     required_authority_tool = (
         "list_active_projects"
         if vacancy_catalog_required
-        else "compare_income" if compare_income_required_args is not None else None
+        else "compare_income"
+        if compare_income_required_args is not None
+        else None
     )
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
-        allowed_tools = (
-            route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
-        )
+        allowed_tools = route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
         if vacancy_catalog_required:
             allowed_tools = ("list_active_projects",)
         elif compare_income_required_args is not None:
@@ -542,13 +540,13 @@ async def _agent_turn(
             required_tool=(
                 "list_active_projects"
                 if vacancy_catalog_required
-                else "compare_income" if compare_income_required_args is not None else None
+                else "compare_income"
+                if compare_income_required_args is not None
+                else None
             ),
             # The model composes the vacancy criteria args from the conversation;
             # the tool ranks the whole catalog against whatever the candidate stated.
-            required_tool_args=(
-                None if vacancy_catalog_required else compare_income_required_args
-            ),
+            required_tool_args=(None if vacancy_catalog_required else compare_income_required_args),
             metrics=timings,
         )
         if composed is not None:
@@ -560,8 +558,9 @@ async def _agent_turn(
 
     # System prompt = active persona + master index of active products (best-effort;
     # collapses to AGENT_SYSTEM_PROMPT on any failure so a turn never breaks).
-    # Redis-cached (10min TTL, version-bumped on persona/project edits) so a hit
-    # is sub-ms; a miss does 2 DB reads (persona + active-product index). Timed
+    # Redis-cached (10min TTL, version-bumped on project edits) so a hit
+    # is sub-ms; a miss does 1 DB read (the active-product index — the persona is
+    # a code constant). Timed
     # separately so the dashboard can attribute it rather than hiding it inside
     # the (post-preamble) total_ms slice.
     from app.graph.context import build_system_prompt
@@ -596,11 +595,7 @@ async def _agent_turn(
             deps.retrieval,
             provider=provider,
         )
-    if (
-        project_context is not None
-        and not tingting_reset_allowed
-        and not tingting_support_account
-    ):
+    if project_context is not None and not tingting_reset_allowed and not tingting_support_account:
         if project_context.state == "FOCUSED":
             system += (
                 "\n\n=== DỰ ÁN ĐANG ĐƯỢC CHỌN ===\n"
@@ -625,9 +620,7 @@ async def _agent_turn(
     # prompt and the turn runs tool-free (a tool cannot add evidence the KB
     # already carries). The same route exclusions the old lane used apply.
     direct_context = (
-        getattr(project_context, "direct_context", None)
-        if project_context is not None
-        else None
+        getattr(project_context, "direct_context", None) if project_context is not None else None
     )
     direct_context_turn = (
         direct_context is not None
@@ -688,9 +681,7 @@ async def _agent_turn(
         else:
             resolved_tool_registry = frozenset(resolved_tool_registry) - TINGTING_TOOL_NAMES
         if allowed_tools is not None:
-            allowed_tools = tuple(
-                name for name in allowed_tools if name in resolved_tool_registry
-            )
+            allowed_tools = tuple(name for name in allowed_tools if name in resolved_tool_registry)
     if (
         required_authority_tool is not None
         and resolved_tool_registry is not None
@@ -731,11 +722,7 @@ async def _agent_turn(
                 )
                 if resolved_tool_registry is None or name in resolved_tool_registry
             )
-        authority_tool = (
-            None
-            if employee_support
-            else required_authority_tool or "search_knowledge"
-        )
+        authority_tool = None if employee_support else required_authority_tool or "search_knowledge"
         if (
             authority_tool is not None
             and resolved_tool_registry is not None
@@ -836,9 +823,7 @@ async def _agent_turn(
                 user_text, embedder=deps.embedder, scope=answer_scope_token
             )
             if timings is not None:
-                timings["answer_cache_lookup_ms"] = int(
-                    round((time.monotonic() - cache_t0) * 1000)
-                )
+                timings["answer_cache_lookup_ms"] = int(round((time.monotonic() - cache_t0) * 1000))
                 timings["answer_cache"] = (
                     {"hit": True, "tier": cached.tier, "similarity": round(cached.similarity, 3)}
                     if cached is not None
@@ -889,8 +874,10 @@ async def _agent_turn(
     # tool); a focused project names its knowledge base exactly, so a turn never
     # has to ask which project a lookup belongs to.
     project_slug = getattr(project_context, "project_slug", None)
-    if project_slug and not tingting_reset_allowed and (
-        employee_support or (focused_rag and not vacancy_catalog_required)
+    if (
+        project_slug
+        and not tingting_reset_allowed
+        and (employee_support or (focused_rag and not vacancy_catalog_required))
     ):
         agent_kwargs["forced_project_slug"] = project_slug
     if vacancy_catalog_required:

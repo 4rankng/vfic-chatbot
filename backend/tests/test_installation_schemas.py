@@ -27,7 +27,6 @@ REQUIRED_BUSINESS_FIELDS = {
     "terminology",
     "workflow_policy",
     "capability_ids",
-    "persona_version_id",
     "template_version_refs",
     "provider_policy",
     "integration_requirements",
@@ -92,7 +91,6 @@ def _valid_revision_payload() -> dict[str, object]:
             "automation_enabled": True,
         },
         "capability_ids": [],
-        "persona_version_id": str(uuid.uuid4()),
         "template_version_refs": [],
         "provider_policy": {
             "chat_integration_key": "openrouter",
@@ -255,7 +253,6 @@ def test_historical_revision_output_accepts_null_authentication_authority() -> N
         "workflow_policy": {},
         "workflow_policy_checksum": "c" * 64,
         "capability_ids": [],
-        "persona_version_id": str(uuid.uuid4()),
         "template_version_refs": [],
         "provider_policy": {},
         "provider_policy_checksum": "d" * 64,

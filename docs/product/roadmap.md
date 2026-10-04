@@ -17,12 +17,13 @@ chatbot loop is live:
   a current-hiring claim; a true no-match and a lookup outage produce distinct
   candidate-facing replies.
 - Recruiter console (React Admin, Vietnamese-only) with realtime Socket.IO
-  inbox, lead kanban, knowledge base, personas, projects.
-- Proactive follow-up worker (6h/24h/46h cadence, Zalo-48h-safe).
+  inbox, lead kanban, knowledge base, projects.
+- Proactive follow-up removed (2026-10-04) — the bot no longer initiates
+  contact. Recruiter follow-up tasks and reactive opt-out matching remain.
 - Reconcile worker recovers lost turns after crashes (~3-4 min).
 - Auth via JWT (replaces Supabase Auth, decommissioned 2026-06-26) with
   `token_version` revocation.
-- Alembic HEAD = `0044_generic_contact_case_kernel` (15 Jul 2026).
+- Alembic HEAD = `0066_drop_persona_storage` (4 Oct 2026).
 - Manual deploy via `make deploy` over SSH (no CI deploys to prod).
 
 Zalo Official Account integration is implemented in the working tree and
@@ -61,7 +62,7 @@ recruitment-specific and is **not** yet a universal-industry platform.
   database rather than business environment variables or browser fallbacks.
 - Phase 4 added the dormant backend/frontend capability compiler, canonical
   `recruitment@1` parity artifact (hash
-  `2a7c602a2e222d14686fca6d86e12da34b0e2ce8ee6b4af32a95af7bd58622d9`),
+  `29aaea6c8508d4da77b8abbb63b14e566ce415fcb29f1313d6232b9da175a06a`),
   immutable workflow authoring, typed Contacts/channel identities, generic
   workflow-pinned Cases, and generation-owned frontend reset. The frontend
   renders compiled React Admin resources/routes directly and fails closed on
@@ -78,10 +79,10 @@ recruitment routers remain unchanged.
 
 Before any readiness flip:
 
-1. **Phase 5 — runtime policy authority:** replace or deliberately capability-
-   own the setup persona contract that still serializes disabled recruitment
-   keys `hot`, `warm`, and `not_interested`; compose pinned persona/policy/tool
-   authority and fence active-KB mutation.
+1. **Phase 5 — runtime policy authority:** compose pinned policy/tool authority
+   and fence active-KB mutation. (The setup persona contract that serialized the
+   hard-coded recruitment keys `hot`, `warm`, and `not_interested` is gone with
+   the persona tables in `0066`; the persona is now a code constant.)
 2. **Phase 6 — recruitment parity:** extract the current Lead/Job behavior into
    the recruitment adapter without changing candidate-facing behavior, and
    prove a generic flow has no recruitment rows, imports, requests, or copy.

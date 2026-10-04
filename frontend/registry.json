@@ -931,10 +931,6 @@
           "type": "registry:style"
         },
         {
-          "path": "src/components/atomic-crm/conversations/inbox/personas-studio.css",
-          "type": "registry:style"
-        },
-        {
           "path": "src/components/atomic-crm/conversations/inbox/personas-responsive.css",
           "type": "registry:style"
         },
@@ -943,19 +939,7 @@
           "type": "registry:style"
         },
         {
-          "path": "src/components/atomic-crm/conversations/inbox/personas-directory.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/personas-context.css",
-          "type": "registry:style"
-        },
-        {
           "path": "src/components/atomic-crm/conversations/inbox/mobile-recruiting.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/conversations/inbox/mobile-persona-editor.css",
           "type": "registry:style"
         },
         {

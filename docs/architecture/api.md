@@ -42,7 +42,7 @@ request first loaded the account.
 An email uniqueness conflict remains a conflict response after transaction
 rollback, rather than attempting an implicit async reload of expired attributes.
 
-## Routes (15 route groups)
+## Routes (14 route groups)
 
 The application registers the API routers in `backend/app/main.py` under
 `API_V1_PREFIX = "/api/v1"`; realtime and webhook groups keep their root paths.
@@ -56,7 +56,6 @@ The application registers the API routers in `backend/app/main.py` under
 | `bot_runs` | `/api/v1/bot_runs` | `bot_runs` | JWT (read-only) | Bot turn audit log |
 | `knowledge` | `/api/v1/knowledge` | `knowledge` | `require_admin` | KB documents, chunks, versions |
 | `projects` | `/api/v1/knowledge/projects` | `projects` | `require_recruiter` (list/get); `require_admin` (create/delete) | Product/project knowledge CRUD, direct-context sync, FAQ, features |
-| `personas` | `/api/v1/knowledge/personas`, `/api/v1/knowledge/persona-assignments` | `personas` | `require_admin` | AI agent persona CRUD and adapter assignment |
 | `jobs` | `/api/v1/jobs` | `jobs` | JWT (list/get); `require_admin` (create/update) | Job postings |
 | `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics + recruiter attention queue |
 | `performance` | `/api/v1/admin/performance` | `performance` | `require_admin` | Performance observability |
@@ -155,9 +154,6 @@ workspace. An absent `installation_state` row is returned as `UNCONFIGURED`.
 | `POST /api/v1/admin/installation/revisions/{revision_id}/rollback` | Admin | Attempt a validated same-pack rollback with a new authority generation. |
 | `POST /api/v1/admin/installation/suspend` | Admin | Suspend the active installation and advance authority generation. |
 | `POST /api/v1/admin/installation/resume` | Admin | Resume from current validation evidence and advance authority generation. |
-| `GET /api/v1/personas/{persona_id}/versions` | Admin | Immutable persona version metadata (`id`, version, checksum, timestamp) without persona content. |
-| `GET /api/v1/knowledge/persona-assignments` | Admin | Effective Agent assignment for Zalo Chatbot, Zalo OA, and Messenger. An adapter without an override inherits the global default Agent. |
-| `PUT /api/v1/knowledge/persona-assignments/{provider}` | Admin | Set one adapter override with `{ "persona_id": "<uuid>" }`, or send `{ "persona_id": null }` to return that adapter to the global default. |
 
 Installation lifecycle failures use the compatibility `detail` field plus
 stable machine-readable fields:
@@ -169,9 +165,9 @@ stable machine-readable fields:
   "lifecycle": "DRAFT",
   "issues": [
     {
-      "code": "PERSONA_VERSION_NOT_FOUND",
-      "message": "Persona Version Not Found",
-      "path": "persona_version_id"
+      "code": "TEMPLATE_VERSION_NOT_FOUND",
+      "message": "Template Version Not Found",
+      "path": "template_version_refs"
     }
   ]
 }
@@ -188,12 +184,15 @@ The code-owned recruitment pack is the only active runtime contract. Lifecycle
 configuration is retained for administrator Settings, not as a multi-industry
 installation flow.
 
-Administrator-authored personas must carry an explicit policy. The current no-proactive-
-follow-up path stores disabled rules with no cadence or eligible stage, but its
-wire shape still requires the recruitment-specific keys `hot`, `warm`, and
-`not_interested`. That hard-coded category shape is not a universal contract and
-must be replaced or made capability-owned in the protected Phase 5 work before
-any pack can become runtime-ready.
+The agent persona is a code constant, not administrator-authored content. Its
+body and its identity/opening rules live in
+`backend/app/prompts/vfic_persona.py`; there is no persona table, no persona
+schema, and therefore no admin-authored persona policy to validate. The
+manifest's fail-closed persona check is `current_persona_checksum()` in
+`backend/app/services/installation/validation.py`, which hashes the body the
+running code ships (`sha256_json({"body_md": ...})`) and compares the recorded
+`persona_checksum` against it, so shipping a persona edit without
+re-validating the manifest still invalidates it.
 
 Revision input is closed rather than free-form. `workflow_policy` accepts only
 `workflow_id`, the selected immutable `workflow_version_id` and
@@ -208,9 +207,10 @@ and currency must be present in the server's current ISO-4217 alphabetic-code
 allowlist.
 
 A `READY` response is not based only on the stored lifecycle flag. The service
-rechecks the active revision, validation, pack contract, immutable persona and
-template checksums, required integrations, and checksum-pinned active-KB
-evidence against PostgreSQL before reporting readiness.
+rechecks the active revision, validation, pack contract, the code-derived persona
+checksum and immutable template checksums, required integrations, and
+checksum-pinned active-KB evidence against PostgreSQL before reporting
+readiness.
 
 ## Facebook Messenger settings flow
 
@@ -622,4 +622,3 @@ The category clear/cutover/rollback request bodies all use the same required fie
 |---|---|
 | `knowledge_sources` | `/api/v1/knowledge/documents` |
 | `projects` | `/api/v1/knowledge/projects` |
-| `personas` | `/api/v1/knowledge/personas` |

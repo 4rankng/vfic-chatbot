@@ -51,7 +51,7 @@ type EmptyStateProps = {
 /**
  * The console's single empty state, rendered on Untitled UI's empty-state
  * anatomy. Every surface that can be empty routes through here — knowledge
- * base, automation, knowledge, personas, projects and conversations — so the
+ * base, automation, knowledge, projects and conversations — so the
  * icon treatment, type scale and action placement move together.
  *
  * The icon stays a caller-supplied element (callers pass a sized lucide icon)

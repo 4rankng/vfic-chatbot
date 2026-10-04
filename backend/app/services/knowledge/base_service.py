@@ -19,7 +19,6 @@ from app.models.knowledge import (
     KnowledgeCategory,
     KnowledgeDocument,
 )
-from app.models.persona import Persona
 from app.models.user import User
 from app.schemas.knowledge_bases import (
     DirectContextCapacityOut,
@@ -54,15 +53,10 @@ class KnowledgeBaseService:
         self,
         knowledge_base: KnowledgeBase,
         *,
-        attached_agent_count: int | None = None,
         project_count: int | None = None,
         direct_file: KnowledgeBaseDirectFile | None = None,
         direct_file_loaded: bool = False,
     ) -> KnowledgeBaseOut:
-        if attached_agent_count is None:
-            attached_agent_count = await self.db.scalar(
-                select(func.count(Persona.id)).where(Persona.knowledge_base_id == knowledge_base.id)
-            )
         if project_count is None:
             project_count = await self.db.scalar(
                 select(func.count(Project.id)).where(Project.knowledge_base_id == knowledge_base.id)
@@ -74,7 +68,6 @@ class KnowledgeBaseService:
                 )
             )
         out = KnowledgeBaseOut.model_validate(knowledge_base)
-        out.attached_agent_count = int(attached_agent_count or 0)
         out.project_count = int(project_count or 0)
         out.direct_file = (
             DirectContextFileOut.model_validate(direct_file) if direct_file is not None else None
@@ -82,12 +75,6 @@ class KnowledgeBaseService:
         return out
 
     async def list_detailed(self) -> list[KnowledgeBaseOut]:
-        attached_agent_count = (
-            select(func.count(Persona.id))
-            .where(Persona.knowledge_base_id == KnowledgeBase.id)
-            .correlate(KnowledgeBase)
-            .scalar_subquery()
-        )
         project_count = (
             select(func.count(Project.id))
             .where(Project.knowledge_base_id == KnowledgeBase.id)
@@ -98,7 +85,6 @@ class KnowledgeBaseService:
             await self.db.execute(
                 select(
                     KnowledgeBase,
-                    attached_agent_count.label("attached_agent_count"),
                     project_count.label("project_count"),
                     KnowledgeBaseDirectFile,
                 )
@@ -112,7 +98,6 @@ class KnowledgeBaseService:
         return [
             await self.describe(
                 knowledge_base,
-                attached_agent_count=int(agent_count or 0),
                 project_count=int(project_count or 0),
                 direct_file=direct_file,
                 direct_file_loaded=True,
@@ -121,7 +106,9 @@ class KnowledgeBaseService:
         ]
 
     async def list(self) -> list[KnowledgeBase]:
-        return list((await self.db.scalars(select(KnowledgeBase).order_by(KnowledgeBase.name))).all())
+        return list(
+            (await self.db.scalars(select(KnowledgeBase).order_by(KnowledgeBase.name))).all()
+        )
 
     async def get(self, knowledge_base_id: uuid.UUID) -> KnowledgeBase:
         knowledge_base = await self.db.get(KnowledgeBase, knowledge_base_id)
@@ -178,14 +165,11 @@ class KnowledgeBaseService:
 
     async def delete(self, knowledge_base_id: uuid.UUID, actor: User) -> None:
         knowledge_base = await self.get(knowledge_base_id)
-        attached_agents = await self.db.scalar(
-            select(func.count(Persona.id)).where(Persona.knowledge_base_id == knowledge_base.id)
-        )
         projects = await self.db.scalar(
             select(func.count(Project.id)).where(Project.knowledge_base_id == knowledge_base.id)
         )
-        if attached_agents or projects:
-            raise ConflictError("Detach all Agents and Projects before deleting this knowledge base")
+        if projects:
+            raise ConflictError("Detach all Projects before deleting this knowledge base")
         await record_audit(
             self.db,
             action="delete_knowledge_base",
@@ -258,11 +242,14 @@ class KnowledgeBaseService:
                         and_(
                             Project.category_authority_started.is_(True),
                             Job.source_category_revision_id.is_not(None),
-                            select(KnowledgeCategory.id).where(
+                            select(KnowledgeCategory.id)
+                            .where(
                                 KnowledgeCategory.project_id == Project.id,
                                 KnowledgeCategory.category_key == KnowledgeCategoryKey.JOBS.value,
-                                KnowledgeCategory.active_revision_id == Job.source_category_revision_id,
-                            ).exists(),
+                                KnowledgeCategory.active_revision_id
+                                == Job.source_category_revision_id,
+                            )
+                            .exists(),
                         ),
                         and_(
                             Project.category_authority_started.is_(False),
@@ -288,7 +275,9 @@ class KnowledgeBaseService:
             for project in projects
         ]
 
-    async def get_direct_file_detail(self, knowledge_base_id: uuid.UUID) -> DirectContextFileDetailOut:
+    async def get_direct_file_detail(
+        self, knowledge_base_id: uuid.UUID
+    ) -> DirectContextFileDetailOut:
         knowledge_base = await self.get(knowledge_base_id)
         direct_file = await self.db.scalar(
             select(KnowledgeBaseDirectFile).where(
@@ -381,15 +370,10 @@ class KnowledgeBaseService:
             await self.db.refresh(direct_file)
         return direct_file
 
-    async def bootstrap_legacy(
-        self, body: LegacyKnowledgeBootstrap, actor: User
-    ) -> KnowledgeBase:
+    async def bootstrap_legacy(self, body: LegacyKnowledgeBootstrap, actor: User) -> KnowledgeBase:
         """Idempotently migrate one legacy Project to its owned RAG KB."""
         if len(set(body.project_ids)) != 1:
             raise ConflictError("Legacy migration requires exactly one Project per knowledge base")
-        persona = await self.db.get(Persona, body.persona_id)
-        if persona is None:
-            raise NotFoundError("Agent not found")
         knowledge_base = await self.db.scalar(
             select(KnowledgeBase).where(KnowledgeBase.slug == body.knowledge_base_slug)
         )
@@ -406,14 +390,10 @@ class KnowledgeBaseService:
             raise ConflictError("Legacy Projects can only be attached to a RAG knowledge base")
 
         projects = list(
-            (
-                await self.db.scalars(select(Project).where(Project.id.in_(body.project_ids)))
-            ).all()
+            (await self.db.scalars(select(Project).where(Project.id.in_(body.project_ids)))).all()
         )
         if len(projects) != len(set(body.project_ids)):
             raise NotFoundError("One or more Projects were not found")
-        if persona.knowledge_base_id not in (None, knowledge_base.id):
-            raise ConflictError("Agent already belongs to another knowledge base")
         for project in projects:
             if project.knowledge_base_id not in (None, knowledge_base.id):
                 raise ConflictError("A Project already belongs to another knowledge base")
@@ -422,11 +402,6 @@ class KnowledgeBaseService:
         if getattr(knowledge_base, "project_id", None) not in (None, project.id):
             raise ConflictError("Knowledge base already belongs to another Project")
 
-        persona.knowledge_base_id = knowledge_base.id
-        if body.persona_name is not None:
-            persona.name = body.persona_name.strip()
-        if body.persona_slug is not None:
-            persona.slug = body.persona_slug
         knowledge_base.project_id = project.id
         project.knowledge_base_id = knowledge_base.id
         existing_categories = {
@@ -452,10 +427,7 @@ class KnowledgeBaseService:
             actor_id=actor.id,
             target_type="knowledge_base",
             target_id=str(knowledge_base.id),
-            payload={
-                "persona_id": str(persona.id),
-                "project_ids": sorted(str(project.id) for project in projects),
-            },
+            payload={"project_ids": sorted(str(project.id) for project in projects)},
         )
         await self.db.commit()
         # The direct-context routing catalog keys off NS_PREAMBLE; a legacy

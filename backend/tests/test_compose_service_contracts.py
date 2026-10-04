@@ -330,7 +330,7 @@ def test_no_container_argv_element_is_a_credential_value(services) -> None:
 
 
 @pytest.mark.parametrize(
-    "service_name", ("worker-ingest", "worker-category", "worker-followup", "worker-maintenance")
+    "service_name", ("worker-ingest", "worker-category", "worker-maintenance")
 )
 def test_worker_reaches_the_broker_through_rqs_own_resolution(
     services, service_name: str

@@ -69,7 +69,6 @@ Path: `backend/app/models/`
 | `lead.py` | `Lead`, `LeadStage`, `LeadScore`, `LeadEvent`, `FollowUpTask`, `FollowupStatus` | Lead CRM pipeline + follow-ups |
 | `job.py` | `Job`, `JobStatus` | Job postings |
 | `knowledge.py` | `KnowledgeDocument`, `KnowledgeStatus`, `KnowledgeChunk`, `KBVersion`, `KBVersionStatus`, `KBTextFile` | KB documents, chunks (with vector embeddings), versioned releases |
-| `persona.py` | `Persona` | AI agent personas |
 | `integration.py` | `IntegrationSetting` | Integration credentials (Zalo, OpenRouter, etc.) |
 | `installation.py` | `InstallationManifestRevision`, `InstallationManifestValidation`, `InstallationState`, `InstallationSetupDraft` | Immutable installation authority plus the mutable admin setup workspace |
 | `password_reset.py` | `PasswordResetOtp` | Password reset OTP tokens |
@@ -111,9 +110,12 @@ older one during activation or rollback.
 
 ### Installation configuration authority
 
-Customer identity, industry-pack selection, terminology, workflow, persona and
+Customer identity, industry-pack selection, terminology, workflow, and
 template references, provider policy, and authentication policy are stored in
-PostgreSQL rather than business environment variables or browser storage.
+PostgreSQL rather than business environment variables or browser storage. The
+agent persona is deliberately not among them: it is a code constant in
+`backend/app/prompts/vfic_persona.py`, so there is no persona copy in the
+database to drift from the deployed voice.
 
 - `installation_setup_drafts` is a singleton mutable authoring row. It starts
   absent, contains only strict partial admin input and encrypted-integration
@@ -132,6 +134,25 @@ PostgreSQL rather than business environment variables or browser storage.
   are not future activation authority.
 - Integration secrets remain encrypted in `integration_settings`; setup drafts
   store logical references only and reject secret-shaped values.
+
+### Persona storage dropped (`0066`)
+
+Migration `0066_drop_persona_storage` (down_revision `0065_geo_gazetteer`) drops
+`personas`, `persona_versions`, and `adapter_persona_assignments`, plus the
+`installation_manifest_revisions.persona_version_id` pin. The agent persona is
+now the code constant in `backend/app/prompts/vfic_persona.py`, so there is no
+database copy to drift from the deployed voice and no provider-level persona
+override. The manifest keeps its fail-closed persona check: `persona_checksum`
+is compared against `current_persona_checksum()`, a hash of the persona the
+running code ships, so a persona edit shipped without re-validating the manifest
+invalidates it.
+
+The drop order is forced by the foreign keys and is not interchangeable. The
+migration is fully reversible — `downgrade()` recreates the full pre-`0066`
+schema rather than a `FORWARD_ONLY: pass`, because
+`tests/integration/test_installation_migration_roundtrip.py` downgrades to
+`0041` and re-upgrades. Reversibility is load-bearing for CI and for the deploy
+rollback path.
 
 ### Dormant generic workflow, Contact, and Case kernel (`0044`)
 
@@ -172,7 +193,7 @@ Redis serves multiple roles — all ephemeral (not backed up):
 
 | Role | Usage | Key pattern |
 |---|---|---|
-| **RQ broker** | Job queue for 5 queues (webhook_high, recovery, persistence_low, ingest, followup) | `rq:queue:*` |
+| **RQ broker** | Job queue for 5 queues (webhook_high, recovery, persistence_low, ingest, maintenance) | `rq:queue:*` |
 | **Cache** | General-purpose cache (preamble cache, etc.) | `cache:*` |
 | **Pub/sub** | Socket.IO cross-process emit bridge (`AsyncRedisManager`) | `socketio:*` |
 | **Semantic cache** | LLM response cache for non-personalized knowledge queries | `semcache:*` |

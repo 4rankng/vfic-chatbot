@@ -35,7 +35,6 @@ from .leads import (  # noqa: E402
 )
 from .message_scripts import CONVERSATION_SCRIPTS, RECRUITER_SCRIPTS  # noqa: E402
 from .messages import make_messages_and_bot_runs  # noqa: E402
-from .personas import make_personas  # noqa: E402
 from .projects import make_projects  # noqa: E402
 from .runner import seed  # noqa: E402
 from .telemetry import seed_performance_metrics  # noqa: E402
@@ -61,7 +60,6 @@ __all__ = [
     "make_lead_events",
     "make_leads",
     "make_messages_and_bot_runs",
-    "make_personas",
     "make_projects",
     "make_users",
     "make_worker_features",

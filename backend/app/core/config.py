@@ -404,9 +404,8 @@ class Settings(BaseSettings):
     chat_queue_max_depth: int = 40
     # Same contract for the low-volume worker queues (enqueue_job applies these
     # as the default bound for their queue; an explicit max_depth at a call site
-    # wins). followup bounds per-lead nudge fan-out (~5/30 min); maintenance
-    # bounds manual tick triggers — scheduler-enqueued ticks bypass enqueue_job.
-    followup_queue_max_depth: int = 50
+    # wins). maintenance bounds manual tick triggers — scheduler-enqueued ticks
+    # bypass enqueue_job.
     maintenance_queue_max_depth: int = 20
 
     # Structured Job↔Lead recommendation engine weights (Phase 2).
@@ -502,8 +501,7 @@ class Settings(BaseSettings):
         normalized = value.strip().upper()
         if normalized not in ALLOWED_JWT_ALGORITHMS:
             raise ValueError(
-                f"jwt_algorithm must be one of {sorted(ALLOWED_JWT_ALGORITHMS)} "
-                f"(got {value!r})"
+                f"jwt_algorithm must be one of {sorted(ALLOWED_JWT_ALGORITHMS)} (got {value!r})"
             )
         return normalized
 

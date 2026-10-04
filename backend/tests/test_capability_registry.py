@@ -193,7 +193,7 @@ def test_shipped_pack_contract_hash_is_pinned_to_the_published_contract() -> Non
         fixture["contract_hash"]
     )
     assert fixture["contract_hash"] == (
-        "2a7c602a2e222d14686fca6d86e12da34b0e2ce8ee6b4af32a95af7bd58622d9"
+        "29aaea6c8508d4da77b8abbb63b14e566ce415fcb29f1313d6232b9da175a06a"
     )
     assert all("import" not in item for item in fixture["pack"]["capabilities"])
     assert all("factory" not in item for item in fixture["pack"]["capabilities"])

@@ -84,10 +84,12 @@ from contributions in `capabilities/kernel/` and `capabilities/recruitment/`;
 
 The CRM `users` resource maps to the backend `users` table (formerly Supabase
 `profiles`). `RESOURCE_PATH` in the dataProvider keeps the legacy REST
-aliases — `knowledge_bases`, `knowledge_sources` → `/api/v1/knowledge/documents`
-and `personas` → `/api/v1/knowledge/personas` — none of which has an admin
-page any more. The agent persona itself is a backend code constant
-(`app/services/personas/constant.py`), not operator-editable content.
+aliases — `knowledge_bases` → `/api/v1/knowledge/knowledge-bases` and
+`knowledge_sources` → `/api/v1/knowledge/documents` — none of which has an
+admin page any more. There is no `personas` resource: the `Persona`,
+`PersonaFollowupRule(s)`, and `AdapterPersonaAssignment` types and the
+`personas` resource path were removed, and the agent persona is a backend code
+constant (`app/prompts/vfic_persona.py`), not operator-editable content.
 
 ### Directory Structure
 

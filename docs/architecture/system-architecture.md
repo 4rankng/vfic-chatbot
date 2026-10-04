@@ -27,9 +27,10 @@ Compose at `/opt/vfic`, Caddy edge.
 │   app/main.py · Socket.IO ASGIApp wrap · request_id middleware ·     │
 │   domain exception handlers · CORS (credentials, no '*')             │
 │                                                                      │
-│   Lifespan registers rq-scheduler ticks:                             │
-│     - run_proactive_followup_tick   (1800s)                          │
+│   Lifespan registers rq-scheduler ticks (queue: maintenance):        │
 │     - run_reconcile_tick            (60s)    via register_unique_tick│
+│     - run_outbound_dispatch_tick    (60s)                             │
+│     - external source sync + single-page sync + email digest (cron)  │
 └───────┬──────────────┬───────────────────────────────────┬───────────┘
         │              │                                   │
         │   enqueue    │  resolve admin-managed creds      │ Socket.IO
@@ -49,12 +50,12 @@ Compose at `/opt/vfic`, Caddy edge.
 ┌────────────────────────────────────────────────────────────────────┐
 │  RQ workers (sync RQ → persistent async loop via async_runner.py)  │
 │                                                                    │
-│  worker-chatbot (×3) │ worker-persistence │ worker-ingest        │
+│  worker-chatbot (×4) │ worker-persistence │ worker-ingest        │
 │  chat turns          │ durable writes     │ KB ingestion,        │
 │  webhook_high first, │ off the hot path   │ re-embedding         │
 │  recovery second     │ persistence_low    │                      │
-│  worker-followup     │ scheduler          │ worker-maintenance   │
-│  proactive digests   │ rqscheduler        │ reconcile + dispatch │
+│  worker-category     │ scheduler          │ worker-maintenance   │
+│  KB classification   │ rqscheduler        │ reconcile + dispatch │
 └────────────────────────────────────────────────────────────────────┘
           │                                            ▲
           ▼                                            │
@@ -75,9 +76,11 @@ recruitment runtime to universal composition:
 - No `installation_state` row means `UNCONFIGURED`. Migration `0042` creates
   `persona_versions`, installation revisions, validation evidence, and the
   singleton state table but inserts no seed, adoption, persona, or active rows.
-  The first explicit admin draft creates singleton row `1`.
-- Manifest revisions, validation evidence, and persona versions are append-only
-  and checksum-pinned. The singleton state row owns current/validated/active
+  The first explicit admin draft creates singleton row `1`. Migration `0066`
+  has since dropped `persona_versions` (with `personas` and
+  `adapter_persona_assignments`), because the persona is a code constant.
+- Manifest revisions and validation evidence are append-only and
+  checksum-pinned. The singleton state row owns current/validated/active
   pointers, an optimistic lock version, and monotonic `authority_generation`;
   activation, rollback, suspend, and resume advance the generation. Revision
   creation must match the state's `expected_lock_version`, so a stale Settings
@@ -100,7 +103,11 @@ recruitment runtime to universal composition:
   invalidation are best-effort and cannot change a committed lifecycle result.
   `READY` is derived only after rechecking the current active pointers,
   validation, pack/persona/template/integration evidence, and checksum-pinned
-  active-KB state; it is not trusted from the lifecycle string alone.
+  active-KB state; it is not trusted from the lifecycle string alone. The
+  persona leg of that evidence is now a hash of the persona the running code
+  ships (`current_persona_checksum()` in
+  `app/services/installation/validation.py`), not a stored row compared with
+  itself — the same fail-closed guarantee, with the drift source removed.
 
 Activation is deliberately unavailable: the only registered recruitment pack
 declares `runtime_ready=false`, so activation fails with
@@ -114,11 +121,13 @@ recruitment count-versus-write race. The pack contract defaults
 `runtime_ready=false`; future non-recruitment packs must keep it false until
 equivalent guards cover their operational writers.
 
-Two required integrations are explicitly deferred. The existing bot still
-consumes the legacy mutable `Persona` projection until the runtime-composition
-phase starts reading pinned `PersonaVersion` content. Active-KB publish/rollback
-writers are not yet wired to the installation authority barrier and generation
-advance; that fencing remains required before activation can be enabled.
+Two required integrations are explicitly deferred. The bot reads its persona
+directly from the code constant in `backend/app/prompts/vfic_persona.py`
+(re-exported as `AGENT_SYSTEM_PROMPT`), not from a mutable database projection
+and not from a pinned `PersonaVersion` row — there is no provider-level persona
+override left to resolve. Active-KB publish/rollback writers are not yet wired
+to the installation authority barrier and generation advance; that fencing
+remains required before activation can be enabled.
 
 ### 1.2 Fixed static recruitment runtime
 
@@ -224,19 +233,23 @@ paths, bot policy, and user experience remain compatible.
 
 ## 2. Request lifecycle — Zalo webhook to sent reply
 
-### 2.0 Agent assignment authority
+### 2.0 Agent identity is code-owned
 
-Agent configuration is channel-adapter scoped, never Project scoped. Exactly one
-global default Persona is the fallback for every installed adapter. Zalo
-Chatbot, Zalo OA, and Messenger may each store one optional Persona override;
-removing an override immediately returns that adapter to the global default.
+Agent configuration is channel-adapter scoped, never Project scoped. There is
+exactly one persona — the code constant `DEFAULT_PERSONA_BODY_MD` in
+`backend/app/prompts/vfic_persona.py`, re-exported as `AGENT_SYSTEM_PROMPT` — and
+every installed adapter speaks it. The `persona-assignments` override table and
+the persona CRUD API were removed, so no adapter and no operator can give one
+channel a different voice.
 
 At turn time the canonical conversation channel identity supplies the provider.
-The runtime resolves the effective Persona from that provider before prompt or
-follow-up assembly. Project focus independently selects recruiting knowledge,
-so changing Project context cannot change the Agent's voice or follow-up policy.
-The assembled prompt cache includes the provider scope to prevent one adapter's
-override from leaking into another adapter's replies.
+Project focus independently selects recruiting knowledge, so changing Project
+context cannot change the Agent's voice. `app/graph/context.py` builds the system
+prompt for the agent lane and `app/graph/direct_context.py` for the direct-context
+lane; both append `IDENTITY_AND_OPENING_RULES` after the persona body, so the
+rule that the bot never presents itself as an AI, never opens with a
+self-introduction, and never asks for a mobile number before delivering real
+value cannot be lost by refactoring either lane.
 
 ```
 Candidate ──► Zalo ──► POST /webhooks/zalo/{chatbot,oa}
@@ -511,8 +524,7 @@ and source conversation version before its LLM call; the final transition repeat
 the source-version and non-CLOSED checks atomically. Stale work therefore cannot
 override a newer inbound or recruiter action, and work queued after a takeover,
 close, or earlier intent handoff exits without spending model tokens. `HUMAN` is
-excluded by later webhook bot starts, reconciler recovery, extraction, and
-proactive follow-up. An unassigned
+excluded by later webhook bot starts and reconciler recovery. An unassigned
 thread is read-only in the console until a recruiter clicks **Tiếp quản**.
 Returning it to `BOT` is rejected until it has been claimed; an authorized
 release clears the review flag and restores chatbot processing.
@@ -532,7 +544,7 @@ admits the bot again on the next inbound — no manual release required.
 | `verify signature (HMAC)` | Two schemes: Bot = shared-secret compare; OA = SHA256 HMAC (`zalo_oa_signature.py:58`) |
 | `apply mode policy` (one step) | Four layers: webhook gate, lock, recheck, atomic `claim_send` (`webhook.py:130`, `:134`, `runner.py:273`, `state.py:329`) |
 | `worker: retrieve → generate → policy` | Ten stages incl. two no-LLM fast paths (template + FAQ bypass), routing, lead context, grounding, safety (`runner.py:259-515`) |
-| `enqueue → Zalo Send API` | Bot, OA, proactive, and recruiter replies first persist one immutable outbox command, then dispatch it. OA commands retain the inbound quote id; a retry reuses the original message and command. |
+| `enqueue → Zalo Send API` | Bot, OA, and recruiter replies first persist one immutable outbox command, then dispatch it. OA commands retain the inbound quote id; a retry reuses the original message and command. |
 | (missing) | **First-message resilience (2026-09-28 outage):** a webhook failure AFTER `record_inbound` commits (a realtime serialization `MissingGreenlet` on a just-created conversation) left the message durable but never enqueued; Zalo's redeliveries then hit `uq_messages_conv_provider_message` and 500'd forever. Three guards now close the loop: the conversation create-path eagerly loads `contact`/`channel_identity` for event serialization, `record_inbound` inserts with `ON CONFLICT DO NOTHING` against the partial unique index (a redelivery past the dedup window returns the durable row and re-drives it toward lock+enqueue), and the post-commit event fan-out is failure-armored — a realtime hiccup can no longer turn a persisted message into a 500. |
 | (missing) | The outbound dispatcher recovers PENDING commands (~60s). Retryable failures may be explicitly retried from the same recruiter bubble; terminal `SEND_UNKNOWN` is never resent, including a stale SENDING command after a worker crash. |
 
@@ -712,15 +724,15 @@ load_conversation_state -> typing -> direct_context?
 
 ---
 
-## 4. RQ queue model (4 queues)
+## 4. RQ queue model (5 queues)
 
 | Queue | Consumer | Job timeout | Backpressure | Purpose |
 |---|---|---|---|---|
-| `webhook_high` | `worker-chatbot` (×3, priority 1) | 60s (`chat_turn_job_timeout`) | 40 jobs | Live candidate chat turns. |
-| `recovery` | `worker-chatbot` (×3, priority 2) | 60s (`chat_turn_job_timeout`) | 40 jobs | Recovered turns re-enqueued by the reconcile sweep; consumed only when `webhook_high` is empty. |
+| `webhook_high` | `worker-chatbot` (×4, priority 1) | 60s (`chat_turn_job_timeout`) | 40 jobs | Live candidate chat turns. |
+| `recovery` | `worker-chatbot` (×4, priority 2) | 60s (`chat_turn_job_timeout`) | 40 jobs | Recovered turns re-enqueued by the reconcile sweep; consumed only when `webhook_high` is empty. |
 | `persistence_low` | `worker-persistence` (×1) | — | — | One post-SENT LLM extraction for lead fields, memory facts, and contact intent; high-confidence non-candidate/spam/testing results switch future turns to HUMAN. Isolated from the interactive queue. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
-| `followup` | `worker-followup` (×1) | — | — | Proactive follow-up, reconcile, and outbound-dispatch sweeps. |
+| `maintenance` | `worker-maintenance` (×1) | — | 20 jobs | Reconcile sweep, outbound dispatch, external source sync, and email digest ticks. The `followup` queue and its worker were removed. |
 
 - Container entrypoint: `app/workers/run_worker.py` → calls
   `Worker.clean_registries()` on startup (requeues stuck jobs). It preloads the
@@ -729,8 +741,10 @@ load_conversation_state -> typing -> direct_context?
 - Async bridge: `workers/async_runner.py` — one persistent event loop per
   worker process.
 - rq-scheduler runs in its own container; the FastAPI lifespan also registers
-  unique ticks via `register_unique_tick`: `run_proactive_followup_tick` (1800s),
-  `run_reconcile_tick` (60s), and `run_outbound_dispatch_tick` (60s).
+  unique ticks via `register_unique_tick` (queue `maintenance`):
+  `run_reconcile_tick` (60s) and `run_outbound_dispatch_tick` (60s), plus
+  external source sync, single-page source sync, and email digest as cron ticks.
+  The proactive follow-up tick and the `followup` queue were removed.
 
 ### 4.1 Composition roots and runtime lifetimes
 
@@ -769,7 +783,7 @@ Queue and event results deliberately remain operation-specific until their
 owning context migrates. Chat enqueue returns a backpressure/failure boolean;
 category and version ingestion use a stable receipt and can still report
 indeterminate acceptance; single-page sync returns an optional receipt with its
-own retry policy; persistence and follow-up are best-effort schedules;
+own retry policy; persistence is a best-effort schedule;
 reconciliation returns a recovery boolean over already-durable state. Realtime
 publishes are separate post-commit snapshot events, not durability claims.
 These shapes must not be flattened behind one generic job port.
@@ -779,7 +793,7 @@ These shapes must not be flattened behind one generic job port.
 | Chat turn enqueue | Backpressure-aware boolean; no claim that rejection was accepted |
 | Category/version ingestion | Stable receipt; callers can represent indeterminate acceptance |
 | Single-page external sync | Optional receipt with operation-owned retry policy |
-| Persistence/follow-up scheduling | Best effort after the owning state transition |
+| Persistence scheduling | Best effort after the owning state transition |
 | Reconciliation | Recovery boolean for an already durable conversation/outbox state |
 | Conversation realtime | Eager immutable snapshot, post-commit, best effort; never substitutes for audit/outbox durability |
 | Audit and outbound outbox | Written in the protected mutation's explicit transaction |
@@ -825,10 +839,12 @@ mid-turn.
 
 ### Tables
 Core tables include users, audit events, projects, companies, conversations,
-messages, outbound commands, bot runs, personas/persona versions, integration
+messages, outbound commands, bot runs, integration
 settings, installation revisions/validations/setup/state, and versioned
 knowledge/provenance records. The legacy recruitment adapter continues to own
 jobs, leads, lead events/tags, follow-up tasks, and worker/job feature tables.
+The agent persona is not among them: it is a code constant in
+`backend/app/prompts/vfic_persona.py`.
 
 The dormant generic kernel adds `case_workflow_versions`,
 `case_workflow_stages`, `case_workflow_transitions`, `case_tag_definitions`,
@@ -838,7 +854,7 @@ The dormant generic kernel adds `case_workflow_versions`,
 persona, credential, or sample row.
 
 ### Redis roles (single instance, 7-alpine, AOF on, 256 MB allkeys-lru)
-1. RQ broker (4 queues) + scheduler.
+1. RQ broker (5 queues) + scheduler.
 2. Cross-process LLM concurrency semaphore (`llm_concurrency_limit`, 0=disabled).
 3. Pub/sub bridge for cross-process Socket.IO emits (worker → web → client).
 4. Rate-limit counters (login, forgot-password).
@@ -1199,8 +1215,8 @@ reset (ADR-0012) is a second channel account, `zalo_oa / tingting`.
   canonical identity (`support_account_condition` / `support_account_sql`) and the
   lead twin, applied through `viewer_conversation_filter` / `viewer_lead_filter` at
   every conversation and lead read, plus the dashboard's raw-SQL aggregates and
-  the realtime socket check. Candidate extraction, inbound name capture and
-  proactive follow-ups skip the account. Admins read the threads via the
+  the realtime socket check. Candidate extraction and inbound name capture
+  skip the account. Admins read the threads via the
   `tingting_oa` badge on `/#/conversations`
   (`ChannelAdapterSelector` + `conversation-list-filters.ts`, one extra per-badge
   attention count); the plain `zalo_oa` badge excludes the `tingting` account key,
@@ -1208,16 +1224,32 @@ reset (ADR-0012) is a second channel account, `zalo_oa / tingting`.
 
 ---
 
-## 12. Proactive follow-up
+## 12. Proactive follow-up — REMOVED
 
-`app/workers/followup_worker.py` fans out per-lead `run_followup_job`:
-- Gaps: 6h / 24h / 46h, cap 3 per lead.
-- 48h Zalo rule minus 1h margin → 47h window (`PROACTIVE_48H_WINDOW_SECONDS`).
-- Per-tick cap 5 (`PROACTIVE_PER_TICK_CAP`); tick every 1800s.
-- Opt-out phrase matching (Vietnamese + English substrings, policy constant in
-  `recruitment/domain/proactive_policy.py`): `dừng`, `ko quan tâm`, `stop`,
-  `unsubscribe`, etc.
-- Single `worker-followup` replica (proactive volume is low).
+The bot no longer initiates contact. The whole proactive path was removed:
+`app/workers/followup_worker.py`, `app/services/proactive/`,
+`app/recruitment/domain/proactive.py`, `app/graph/proactive.py`, the `followup`
+RQ queue, its scheduler tick, the `followup_queue_max_depth` setting, the
+`followup_allowed` / `proactive_state` fields on `GraphDeps`, and the
+`worker-followup` service. Cadence, per-tick cap, and the 47h Zalo-rule window
+are gone with it; nothing is queued and no in-chat follow-up is promised.
+
+What survives is the reactive half:
+- Opt-out phrase matching still applies, as policy constant
+  `PROACTIVE_OPTOUT_PHRASES` in `recruitment/domain/proactive_policy.py`
+  (Vietnamese + English substrings: `dừng`, `ko quan tâm`, `stop`,
+  `unsubscribe`, …). It is matched reactively in
+  `app/services/conversation/bot_path.py` and sets the
+  `conversation.followup_opted_out` column.
+- Recruiter follow-up **tasks** are a separate, live feature:
+  `FollowUpTask` rows, `/api/v1/leads/{id}/follow-ups`, and the dashboard's
+  `FOLLOWUP_TODAY` / `FOLLOWUP_OVERDUE` attention states. A human, not the bot,
+  creates them. Lead stage, lead score, and the `followup_count`,
+  `last_followup_at`, and `last_followup_attempt_at` columns are unchanged.
+
+Outbound escalation uses the code-authored hotline reply
+(`vfic_hotline_reply()` in `app/prompts/vfic_persona.py`) on the gated lane,
+which hands off to a human rather than queuing a later turn.
 
 ---
 

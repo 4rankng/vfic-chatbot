@@ -102,9 +102,17 @@ async def test_empty_installation_migration_downgrades_and_reapplies(
                 await connection.scalar(text("SELECT to_regclass('public.installation_state')"))
                 == "installation_state"
             )
+            # persona_versions is created by 0042 and removed again by 0066
+            # (the persona is a code constant), so at head it must be absent —
+            # the roundtrip proves 0066 is reversible, not that the table
+            # survives.
             assert (
                 await connection.scalar(text("SELECT to_regclass('public.persona_versions')"))
-                == "persona_versions"
+                is None
+            )
+            assert (
+                await connection.scalar(text("SELECT to_regclass('public.personas')"))
+                is None
             )
     finally:
         await engine.dispose()

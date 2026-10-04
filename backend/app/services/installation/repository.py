@@ -20,7 +20,6 @@ from app.models.integration import IntegrationSetting
 from app.models.job import Job
 from app.models.knowledge import KnowledgeCategory, KnowledgeCategoryRevision
 from app.models.lead import Lead
-from app.models.persona import Persona, PersonaVersion
 from app.services.installation.catalog import (
     INTEGRATION_REFERENCE_ENABLE_KEYS,
     INTEGRATION_REFERENCE_REQUIREMENTS,
@@ -40,7 +39,9 @@ class InstallationRepository:
 
     async def acquire_runtime_dispatch_lock(self) -> None:
         """Hold a shared authority lock until a runtime-bound send is finalized."""
-        await self.db.execute(select(func.pg_advisory_xact_lock_shared(INSTALLATION_AUTHORITY_LOCK)))
+        await self.db.execute(
+            select(func.pg_advisory_xact_lock_shared(INSTALLATION_AUTHORITY_LOCK))
+        )
 
     async def get_state(self, *, for_update: bool = False) -> InstallationState | None:
         statement = select(InstallationState).where(InstallationState.singleton_id == 1)
@@ -60,9 +61,6 @@ class InstallationRepository:
 
     async def get_revision(self, revision_id: uuid.UUID) -> InstallationManifestRevision | None:
         return await self.db.get(InstallationManifestRevision, revision_id)
-
-    async def get_persona_version(self, version_id: uuid.UUID) -> PersonaVersion | None:
-        return await self.db.get(PersonaVersion, version_id)
 
     async def get_valid_validations(
         self, revision_id: uuid.UUID, *, limit: int = 100
@@ -184,9 +182,10 @@ class InstallationRepository:
 
         The setup lifecycle was added after the original single-tenant CRM. A
         fresh deployment has none of these records; an existing workspace has
-        a configured project, persona, integration settings, and history.
+        a configured project, integration settings, and history. (Personas were
+        part of this tuple until 2026-10-04, when persona storage was removed.)
         """
-        for model in (Project, Persona, IntegrationSetting, Conversation):
+        for model in (Project, IntegrationSetting, Conversation):
             if not await self.db.scalar(select(func.count()).select_from(model)):
                 return False
         return True

@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import "@/index.css";
 // `../inbox.css` is the barrel the console loads, and it fixes the cascade
-// order: personas-studio.css lands *before* personas-responsive.css, so the
-// ≤760px overrides in the responsive section win. Importing the two files
+// order: the per-area section sheets land *before* the responsive section, so
+// the ≤768px overrides in the responsive section win. Importing the files
 // directly in a different order silently inverts which rule applies.
 import "../inbox.css";
 
@@ -365,48 +365,5 @@ describe("settings destination navigation", () => {
         link.outerHTML,
       ).toBeGreaterThanOrEqual(168);
     }
-  });
-});
-
-describe("Agent scope and activity columns", () => {
-  it("stacks the two columns instead of squeezing them on a phone", async () => {
-    // Below 760px `.persona-scope-activity-grid` drops to one track. The scope
-    // and activity panels share the row above that, where both are readable.
-    const grid = () => (
-      <div className="inbox-bg-container">
-        <div className="persona-workspace-content">
-          <div className="persona-scope-activity-grid">
-            <div className="persona-scope-row">Phạm vi kênh</div>
-            <div className="persona-scope-activity">Hoạt động</div>
-          </div>
-        </div>
-      </div>
-    );
-
-    await page.viewport(phone, 900);
-    const phoneScreen = await render(grid());
-    const phoneColumns = Array.from(
-      phoneScreen.container.querySelectorAll<HTMLElement>(
-        ".persona-scope-activity-grid > *",
-      ),
-    );
-    expect(phoneColumns).toHaveLength(2);
-    expect(phoneColumns[1].getBoundingClientRect().top).toBeGreaterThanOrEqual(
-      phoneColumns[0].getBoundingClientRect().bottom - 1,
-    );
-
-    await cleanup();
-    await page.viewport(wide, 900);
-    const wideScreen = await render(grid());
-    const wideColumns = Array.from(
-      wideScreen.container.querySelectorAll<HTMLElement>(
-        ".persona-scope-activity-grid > *",
-      ),
-    );
-    // Two tracks side by side, each wide enough for its own label.
-    expect(wideColumns[1].getBoundingClientRect().left).toBeGreaterThan(
-      wideColumns[0].getBoundingClientRect().right - 1,
-    );
-    expect(wideColumns[0].getBoundingClientRect().width).toBeGreaterThan(100);
   });
 });

@@ -126,9 +126,9 @@ class InstallationManifestRevision(Base):
     workflow_policy: Mapped[dict] = mapped_column(JSONB, nullable=False)
     workflow_policy_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     capability_ids: Mapped[list] = mapped_column(JSONB, nullable=False)
-    persona_version_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("persona_versions.id", ondelete="RESTRICT"), nullable=False
-    )
+    # The persona is a code constant (app.prompts.vfic_persona); the revision
+    # used to pin a persona_versions row here. The persona is still pinned, as
+    # a checksum over the deployed text, on installation_manifest_validations.
     template_version_refs: Mapped[list] = mapped_column(JSONB, nullable=False)
     provider_policy: Mapped[dict] = mapped_column(JSONB, nullable=False)
     provider_policy_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -196,6 +196,8 @@ class InstallationManifestValidation(Base):
     reference_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
     manifest_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     pack_contract_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Hash of the persona the running code ships (see validation.current_persona_checksum),
+    # not a stored persona row — persona storage was removed on 2026-10-04.
     persona_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     workflow_policy_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     provider_policy_checksum: Mapped[str] = mapped_column(String(64), nullable=False)

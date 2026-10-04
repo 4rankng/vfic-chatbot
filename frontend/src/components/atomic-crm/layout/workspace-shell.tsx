@@ -179,7 +179,7 @@ export const WorkspaceShell = ({
     content.scrollTop = 0;
     content
       .querySelectorAll<HTMLElement>(
-        ".dashboard-center-panel, .knowledge-center-panel, .settings-center-panel, .profile-center-panel, .persona-center-panel, .project-center-panel",
+        ".dashboard-center-panel, .knowledge-center-panel, .settings-center-panel, .profile-center-panel, .project-center-panel",
       )
       .forEach((panel) => {
         panel.scrollTop = 0;

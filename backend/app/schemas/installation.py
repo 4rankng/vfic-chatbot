@@ -34,6 +34,8 @@ SHIPPED_LOCALES = ("vi-VN",)
 TERMINOLOGY_KEYS = frozenset(
     {"application", "candidate", "case", "contact", "conversation", "job", "lead", "organization"}
 )
+
+
 class WorkflowPolicySettings(BaseModel):
     """Bounded, declarative workflow choices; never executable configuration."""
 
@@ -141,7 +143,6 @@ class InstallationRevisionCreate(BaseModel):
     terminology: dict[str, str]
     workflow_policy: WorkflowPolicySettings
     capability_ids: list[str]
-    persona_version_id: uuid.UUID
     template_version_refs: list[TemplateVersionReference]
     provider_policy: ProviderPolicySettings
     integration_requirements: list[IntegrationRequirement]
@@ -220,7 +221,6 @@ class InstallationRevisionOut(BaseModel):
     workflow_version_id: uuid.UUID | None = None
     workflow_version_checksum: str | None = None
     capability_ids: list[str]
-    persona_version_id: uuid.UUID
     template_version_refs: list[TemplateVersionReference]
     provider_policy: dict[str, JsonValue]
     provider_policy_checksum: str

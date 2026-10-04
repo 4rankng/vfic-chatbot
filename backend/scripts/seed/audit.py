@@ -21,7 +21,6 @@ def make_audit_events(users: list[User]) -> list[AuditEvent]:
         ("change_lead_stage", "lead", None),
         ("login", "user", None),
         ("takeover_conversation", "conversation", None),
-        ("create_persona", "persona", None),
         ("login", "user", None),
         ("upload_knowledge", "knowledge_document", None),
         ("send_reply", "conversation", None),

@@ -80,7 +80,6 @@ class KnowledgeBaseOut(BaseModel):
     created_by: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
-    attached_agent_count: int = 0
     project_count: int = 0
     direct_file: DirectContextFileOut | None = None
 
@@ -112,13 +111,6 @@ class LegacyKnowledgeBootstrap(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    persona_id: uuid.UUID
     knowledge_base_name: str = Field(min_length=1, max_length=160)
-    knowledge_base_slug: str = Field(
-        min_length=1, max_length=96, pattern=r"^[a-z0-9][a-z0-9._-]*$"
-    )
+    knowledge_base_slug: str = Field(min_length=1, max_length=96, pattern=r"^[a-z0-9][a-z0-9._-]*$")
     project_ids: list[uuid.UUID] = Field(min_length=1)
-    persona_name: str | None = Field(default=None, min_length=1, max_length=160)
-    persona_slug: str | None = Field(
-        default=None, min_length=1, max_length=96, pattern=r"^[a-z0-9][a-z0-9._-]*$"
-    )

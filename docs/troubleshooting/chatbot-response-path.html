@@ -179,7 +179,7 @@ flowchart TD
     S2 --> Reply([Zalo reply bubble]):::start
     DG --> Reply
 
-    REC["RECONCILE SWEEP&lt;br/&gt;followup queue, non-reentrant SETNX 300s&lt;br/&gt;grace 120s, re-enqueues lost or stuck turns every 3-4 min"]:::rec
+    REC["RECONCILE SWEEP&lt;br/&gt;maintenance queue, non-reentrant SETNX 300s&lt;br/&gt;grace 120s, re-enqueues lost or stuck turns every 3-4 min"]:::rec
     REC -. recovers crashes / OOM / enqueue-fail / stuck-PENDING .-> Q1
 
     classDef start fill:#0F766E,stroke:#0F766E,color:#fff,stroke-width:2px
@@ -224,7 +224,7 @@ flowchart TD
 
     B0["TIMEOUT / LATENCY&lt;br/&gt;Read bot_runs.stage_timings: llm_ms, safety_ms, send_ms&lt;br/&gt;Usual culprit: llm_ms, no hard cap now&lt;br/&gt;Check: LLM semaphore, MiniMax latency, queue_depth, worker count"]:::warn
     C0["VERSION / OWNERSHIP RACE&lt;br/&gt;recheck_ownership or db.refresh skipped / failed&lt;br/&gt;Stale reply sent after a recruiter takeover&lt;br/&gt;Check: should it have been SUPPRESSED? version bumps mid-turn?"]:::warn
-    D0["DEDUP / DOUBLE-ENQUEUE&lt;br/&gt;Same msg_id inside the 8s dedup window missed?&lt;br/&gt;or reconcile double-enqueued a live turn&lt;br/&gt;Check: dedup table, msg_hash, followup queue"]:::warn
+    D0["DEDUP / DOUBLE-ENQUEUE&lt;br/&gt;Same msg_id inside the 8s dedup window missed?&lt;br/&gt;or reconcile double-enqueued a live turn&lt;br/&gt;Check: dedup table, msg_hash, maintenance queue"]:::warn
     E0["LOCK NOT CLEARED&lt;br/&gt;LLMThrottled without record_bot_outcome&lt;br/&gt;or worker died before clearing mutex&lt;br/&gt;Check: bot_locked_until, worker restarts, LLMThrottled logs&lt;br/&gt;Fix: lock auto-expires at TTL 180s plus reconcile sweep"]:::warn
 
     classDef start fill:#0F766E,stroke:#0F766E,color:#fff,stroke-width:2px
@@ -253,12 +253,12 @@ flowchart TD
         <tr><td class="stage">9</td><td class="stage">record_bot_pending</td><td>Load conv + last 16 msgs; write PENDING bot row "Đang soạn trả lời…"; native status pulses immediately and every 3 seconds, with bounded requests (no version bump).</td><td>Status task is cancelled and joined before every real send, suppression, error, or cancellation.</td><td><span class="mono">messages</span> PENDING row · <span class="grep">chat_turn_start</span> (observability — was broken in prod)</td></tr>
         <tr><td class="stage">10</td><td class="stage">Fast lane</td><td>Greeting/thanks/goodbye/help → Vietnamese templates. Zero LLM.</td><td>Returns inside slow_ack window so no ack fires.</td><td>Reply with no LLM call in logs</td></tr>
         <tr><td class="stage">11</td><td class="stage">FAQ bypass</td><td>Deterministic KB lookup, 2s budget. High-conf → canonical answer.</td><td>Miss/ambiguity/timeout → abstain → fall through to agent.</td><td><span class="grep">FaqBypassPort</span> / abstain log</td></tr>
-        <tr><td class="stage">12</td><td class="stage">Agent turn</td><td>Persona + product index system prompt, lead context, RAG tools, MiniMax→OpenRouter. <b>No hard cap</b> (8.5s advisory only).</td><td class="bad">LLMThrottled → degradation reply + clear lock. Latency = usual slow-reply culprit.</td><td><span class="grep">LLMThrottled</span> · LLM client timing</td></tr>
+        <tr><td class="stage">12</td><td class="stage">Agent turn</td><td>Persona (code constant <span class="grep">app/prompts/vfic_persona.py</span>, incl. the identity/opening rules) + product index system prompt, lead context, RAG tools, MiniMax→OpenRouter. <b>No hard cap</b> (8.5s advisory only).</td><td class="bad">LLMThrottled → degradation reply + clear lock. Latency = usual slow-reply culprit.</td><td><span class="grep">LLMThrottled</span> · LLM client timing</td></tr>
         <tr><td class="stage">13</td><td class="stage">Safety</td><td>lexical fast filter → blocklist (hard redirect) → LLM judge, 1 retry rewrite.</td><td>Blocklist hit skips judge and redirects.</td><td><span class="grep">blocklist_hit</span> / safety judge log</td></tr>
         <tr><td class="stage">14</td><td class="stage">pre_send_guard</td><td><span class="mono">db.refresh(conv)</span> (defeat identity map) + <span class="mono">recheck_ownership(version_at_start)</span>.</td><td class="bad">Version changed mid-turn → SUPPRESSED (recruiter/human took over). Forgetting db.refresh hides takeover.</td><td><span class="grep">SUPPRESSED</span> / outcome column</td></tr>
         <tr><td class="stage">15</td><td class="stage">send_message</td><td><span class="mono">ZaloChannelSender</span>: Bot (token in path) or OA (access_token, lazy refresh).</td><td class="bad">Definite rejection → FAILED (the bot reconciler may re-enqueue a new guarded turn). Ambiguous transport failure → SEND_UNKNOWN (never replayed). OA token-invalid triggers one Redis-locked refresh.</td><td><span class="grep">send_message</span> · delivery_status SENT/DELIVERED/READ</td></tr>
         <tr><td class="stage">16</td><td class="stage">record_bot_outcome</td><td>SENT (clear lock, last_outbound_at, candidate extraction). Or SUPPRESSED.</td><td>If outcome never written, mutex stalls ~3min until TTL.</td><td><span class="mono">messages.outcome = SENT</span> + lock cleared</td></tr>
-        <tr><td class="stage">♻</td><td class="stage">Reconcile sweep</td><td>followup queue, SETNX non-reentrant 300s. Finds unanswered / stale-PENDING / failed-send (grace 120s). Re-checks guard, re-locks, refreshes version, re-enqueues.</td><td>Primary reliability guarantee: OOM, deploy force-recreate, enqueue-fail — all recovered within one ~3-4min cycle.</td><td><span class="grep">reconcile</span> · stale PENDING → FAILED transitions</td></tr>
+        <tr><td class="stage">♻</td><td class="stage">Reconcile sweep</td><td>maintenance queue, SETNX non-reentrant 300s. Finds unanswered / stale-PENDING / failed-send (grace 120s). Re-checks guard, re-locks, refreshes version, re-enqueues.</td><td>Primary reliability guarantee: OOM, deploy force-recreate, enqueue-fail — all recovered within one ~3-4min cycle.</td><td><span class="grep">reconcile</span> · stale PENDING → FAILED transitions</td></tr>
       </tbody>
     </table>
   </section>

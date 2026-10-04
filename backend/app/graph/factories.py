@@ -65,9 +65,7 @@ def build_minimax_extractor():
     llm = _chat_for_role("extractor", temperature=0.0)
 
     async def extractor(system: str, user: str) -> str:
-        response = await llm.ainvoke(
-            [SystemMessage(content=system), HumanMessage(content=user)]
-        )
+        response = await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])
         return _message_text(response.content)
 
     return extractor
@@ -98,9 +96,7 @@ def make_minimax_llm_json(
     )
 
     async def _call(system: str, user: str) -> str:
-        response = await llm.ainvoke(
-            [SystemMessage(content=system), HumanMessage(content=user)]
-        )
+        response = await llm.ainvoke([SystemMessage(content=system), HumanMessage(content=user)])
         return _message_text(response.content)
 
     return _call
@@ -248,11 +244,7 @@ def _build_failover_chain(
 
     rank = {name: index for index, name in enumerate(failover_order)}
     # Stable sort: unranked candidates keep their canonical append order.
-    candidates.sort(
-        key=lambda candidate: (
-            rank[candidate[0]] if candidate[0] in rank else len(rank)
-        )
-    )
+    candidates.sort(key=lambda candidate: rank[candidate[0]] if candidate[0] in rank else len(rank))
     for _, label, build in candidates:
         _add(label, build)
     return chain
@@ -348,9 +340,7 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
     # that received this conversation's message: on a linked second OA the reply
     # must leave with that OA's own token, never the original OA's.
     zalo_account_key = (
-        await resolve_zalo_account_key(db, conversation_id)
-        if conversation_id is not None
-        else None
+        await resolve_zalo_account_key(db, conversation_id) if conversation_id is not None else None
     )
     zalo_config = await integration_settings.resolve_zalo(zalo_account_key)
     zalo_sender = ZaloChannelSender(
@@ -391,9 +381,9 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
         # a slow OA response never pins that transaction or connection.
         if session_factory is not None:
             async with session_factory() as profile_db:
-                return await ProfileEnrichmentService(
-                    profile_db, profile_sender
-                ).enrich_oa_user(zalo_id, user_id=user_id)
+                return await ProfileEnrichmentService(profile_db, profile_sender).enrich_oa_user(
+                    zalo_id, user_id=user_id
+                )
         return await ProfileEnrichmentService(db, profile_sender).enrich_oa_user(
             zalo_id, user_id=user_id
         )
@@ -433,23 +423,14 @@ async def build_deps(db, *, session_factory=None, conversation_id=None, page_pro
         make_retrieval=make_retrieval,
         lead=_build_lead_context(db),
         lead_gender=_build_lead_gender(db),
-        followup_allowed=_make_followup_allowed(db),
         enrich_oa_profile=_enrich_oa_profile,
         recipient_unreachable=_recipient_unreachable,
         runtime_policy=_RuntimePolicyAdapter(db),
         direct_context=_DirectContextAdapter(db, page_project_ids=page_project_ids),
-        proactive_state=_build_proactive_state(db),
         delivery_statuses=_build_delivery_statuses(),
         turn_decisions=turn_decisions,
         progressive_send=progressive_send,
     )
-
-
-def _make_followup_allowed(db):
-    from app.composition.recruitment import build_followup_eligibility
-
-    adapter = build_followup_eligibility(db)
-    return adapter.allowed
 
 
 def _build_lead_context(db):
@@ -462,12 +443,6 @@ def _build_lead_gender(db):
     from app.composition.recruitment import build_lead_gender
 
     return build_lead_gender(db)
-
-
-def _build_proactive_state(db):
-    from app.composition.recruitment import build_proactive_state
-
-    return build_proactive_state(db)
 
 
 def _build_delivery_statuses():

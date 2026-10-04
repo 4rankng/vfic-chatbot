@@ -30,7 +30,10 @@ def test_every_console_resource_path_is_a_real_backend_get_route():
     fastapi_app = getattr(main_app, "other_asgi_app", main_app)
     paths = fastapi_app.openapi()["paths"]
     table = _load_table()
-    assert len(table) >= 8, "the shared resource-path table must not silently shrink"
+    # Ratchet, same shape as the CSS scoping test: it may go down only when a
+    # resource is deliberately removed. Dropped 8 -> 7 on 2026-10-04 with the
+    # persona API, whose routes no longer exist.
+    assert len(table) >= 7, "the shared resource-path table must not silently shrink"
 
     for resource, segment in sorted(table.items()):
         url = f"/api/v1/{segment}"

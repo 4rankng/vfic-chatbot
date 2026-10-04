@@ -22,7 +22,6 @@ from app.project_knowledge.application.retrieval import ProjectKnowledgeQueryPor
 from app.recruitment.application.ports import (
     LeadContextQueryPort,
     LeadGenderPort,
-    PersonaBodyResolver,
 )
 from app.shared.application.outbound import OutboundTelemetry
 
@@ -31,10 +30,10 @@ from app.shared.application.outbound import OutboundTelemetry
 class SendOutcome:
     """Provider-neutral value result for synthetic graph send outcomes.
 
-    The proactive turn constructs synthetic outcomes for non-send paths (the agent
-    decided not to send, safety blocked, generation threw). The optional delivery
-    metadata also lets the reactive runner represent a missing durable command
-    without constructing a provider service's concrete result type.
+    The runner constructs synthetic outcomes for non-send paths (the agent decided
+    not to send, safety blocked, generation threw). The optional delivery metadata
+    also lets it represent a missing durable command without constructing a
+    provider service's concrete result type.
     """
 
     ok: bool
@@ -133,10 +132,6 @@ class TurnDecisions:
 
 
 class ConversationStatePort(Protocol):
-    async def record_proactive_outcome(
-        self, conv: Any, *, message: str, result: Any, lock_owner: Any = None
-    ) -> Any: ...
-
     async def release_lock(self, conv: Any, lock_owner: Any = None) -> None: ...
 
 
@@ -201,9 +196,7 @@ class ConversationPort(Protocol):
         outbox_payload: dict | None = None,
     ) -> bool: ...
 
-    async def dispatch_outbound_message(
-        self, *, message_id: int
-    ) -> DeliveryResultPort | None: ...
+    async def dispatch_outbound_message(self, *, message_id: int) -> DeliveryResultPort | None: ...
 
     async def acquire_lock(self, conv_id: Any) -> Any: ...
 
@@ -213,7 +206,7 @@ class LeadContextPort(LeadContextQueryPort, Protocol):
 
     ``context`` does one DB fetch and returns both the profile text and the
     next lead-collection question (``""`` each on miss); ``profile_text`` is the
-    single-fetch flavor used by the proactive turn. ``instruction`` is a pure
+    single-fetch flavor used where only the profile text is needed. ``instruction`` is a pure
     prompt-assembly post-processor. The agent is the single owner of contact
     questions — there is no post-reply CTA append.
     """
@@ -233,7 +226,6 @@ class RuntimePolicyPort(Protocol):
 
 class GraphRetrievalPort(
     ProjectKnowledgeQueryPort,
-    PersonaBodyResolver,
     Protocol,
 ):
     """Graph-owned query surface composed from bounded-context read ports."""

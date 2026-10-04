@@ -123,7 +123,10 @@ class ServiceLeadContextAdapter:
         if isinstance(lead, UnresolvedLead):
             lead = await _resolve_lead(self._db, chat_id, contact_id)
         lead = await contact_evidence_context(
-            self._db, lead, current_user_text=current_user_text, recent_messages=recent_messages,
+            self._db,
+            lead,
+            current_user_text=current_user_text,
+            recent_messages=recent_messages,
         )
         oa_profile_display_name = None
         if chat_id.startswith("oa:"):
@@ -272,20 +275,6 @@ class ServiceLeadGenderAdapter:
         )
 
 
-class ServiceFollowupEligibilityAdapter:
-    """Follow-up decision adapter preserving provider rules and reason codes."""
-
-    def __init__(self, db) -> None:
-        self._db = db
-
-    async def allowed(self, conversation) -> tuple[bool, str]:
-        from app.services.proactive.repository import (
-            conversation_allowed_by_followup_rules,
-        )
-
-        return await conversation_allowed_by_followup_rules(self._db, conversation)
-
-
 class ServiceCandidatePersistenceAdapter:
     """Candidate persistence adapter over the established transactional service."""
 
@@ -308,50 +297,8 @@ class ServiceCandidatePersistenceAdapter:
         )
 
 
-class ServiceProactiveStateAdapter:
-    """SQLAlchemy adapter for proactive turn state and history checks."""
-
-    def __init__(self, db) -> None:
-        self._db = db
-
-    async def refresh(self, conversation) -> None:
-        await self._db.refresh(conversation)
-
-    async def flush(self) -> None:
-        await self._db.flush()
-
-    async def commit(self) -> None:
-        await self._db.commit()
-
-    async def has_worker_reply_since(self, conversation_id, since) -> bool:
-        from sqlalchemy import func, select
-
-        from app.models.conversation import Message, MessageSender
-
-        result = await self._db.execute(
-            select(func.count())
-            .select_from(Message)
-            .where(
-                Message.conversation_id == conversation_id,
-                Message.sender == MessageSender.WORKER,
-                Message.created_at > since,
-            )
-        )
-        return result.scalar() > 0
-
-    async def opt_out_for_silence(self, conversation) -> None:
-        conversation.followup_opted_out = True
-        await self._db.commit()
-
-    async def stamp_attempt(self, conversation, attempted_at) -> None:
-        conversation.last_followup_attempt_at = attempted_at
-        await self._db.flush()
-
-
 __all__ = [
     "ServiceCandidatePersistenceAdapter",
-    "ServiceFollowupEligibilityAdapter",
     "ServiceLeadContextAdapter",
     "ServiceLeadGenderAdapter",
-    "ServiceProactiveStateAdapter",
 ]

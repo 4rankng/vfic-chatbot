@@ -3,8 +3,9 @@
 The preamble is the slow-changing context assembled on every chat turn:
 - integration settings (zalo/minimax/openrouter/facebook oauth) — change only
   via admin writes or token refresh
-- the assembled system prompt (persona body + active-product index) — changes
-  only on persona/project/index-card edits
+- the assembled system prompt (persona body + active-product index) — the persona
+  half is a code constant now, so only project/index-card edits invalidate it,
+  plus a code deploy, which the prompt-text revision covers
 
 Secret-bearing integration settings are cached process-locally only. Redis is
 used exclusively for namespace-version counters, so decrypted secrets never
@@ -50,7 +51,8 @@ NS_PREAMBLE = "preamble"
 
 # Integration settings change only via the admin UI; 5 min is a safety net for
 # a missed version bump. The system prompt (persona + active-product index)
-# changes only on persona/project edits; 10 min mirrors the warm-window intent.
+# changes on project edits and on a code deploy that edits the persona;
+# 10 min mirrors the warm-window intent.
 _INTEGRATION_TTL_SECONDS = 300
 _SYSTEM_PROMPT_TTL_SECONDS = 600
 _LOCAL_SECRET_CACHE_MAX_ENTRIES = 16

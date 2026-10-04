@@ -223,23 +223,6 @@ async def _current_project_context_entries(db, entries):
     return [current[entry.project_id] for entry in entries if entry.project_id in current]
 
 
-class _PersonaRepositoryRetrieval:
-    """``GraphRetrievalPort``'s persona read, backed by the persona repository.
-
-    Exists so the direct-context lane can call the same
-    ``resolve_effective_persona`` the agent lane does instead of re-implementing
-    (and drifting from) the fetch-and-strip step.
-    """
-
-    def __init__(self, db) -> None:
-        self._db = db
-
-    async def active_persona_body(self, provider: str | None = None) -> str | None:
-        from app.services.personas.repository import PersonaRepository
-
-        return await PersonaRepository(self._db).active_persona_body(provider)
-
-
 class _DirectContextAdapter:
     """Route the turn to one active project's knowledge base.
 
@@ -267,7 +250,6 @@ class _DirectContextAdapter:
 
         from app.shared.domain.text import normalize_vietnamese_text
         from app.graph.direct_context import DirectContext, ProjectTurnContext
-        from app.recruitment.domain.provider import provider_from_conversation
         from app.models.knowledge import KnowledgeBaseDirectFile, KnowledgeBaseMode
         from app.models.conversation import ConversationProjectState
         from app.services.knowledge_base_capacity import ensure_direct_context_fits
@@ -275,7 +257,9 @@ class _DirectContextAdapter:
         normalized_message = normalize_vietnamese_text(user_text)
         entries = await _load_direct_context_catalog(self._db)
         if self._page_project_ids is not None:
-            entries = [entry for entry in entries if str(entry.project_id) in self._page_project_ids]
+            entries = [
+                entry for entry in entries if str(entry.project_id) in self._page_project_ids
+            ]
 
         def named_in_message(entry):
             names = [entry.slug, entry.name, *(entry.aliases or ())]
@@ -291,7 +275,8 @@ class _DirectContextAdapter:
         matches = [entry for entry in entries if named_in_message(entry)]
         named_match = bool(matches)
         matches = [
-            entry for entry in await _current_project_context_entries(self._db, matches)
+            entry
+            for entry in await _current_project_context_entries(self._db, matches)
             if named_in_message(entry)
         ]
         if len(matches) > 1:
@@ -325,40 +310,39 @@ class _DirectContextAdapter:
             # projects and ask which one the candidate means.
             return ProjectTurnContext(state="EXPLORE")
         if selected is None and focused_id is not None and not named_match:
-            selected = next(
-                (entry for entry in entries if entry.project_id == focused_id), None
-            )
+            selected = next((entry for entry in entries if entry.project_id == focused_id), None)
             current = await _current_project_context_entries(
                 self._db, [selected] if selected is not None else []
             )
             selected = current[0] if current else None
         if selected is None:
-            if focused_id is not None or getattr(
-                conversation, "project_context_state", "EXPLORE"
-            ) != ConversationProjectState.EXPLORE:
+            if (
+                focused_id is not None
+                or getattr(conversation, "project_context_state", "EXPLORE")
+                != ConversationProjectState.EXPLORE
+            ):
                 conversation.project_context_state = ConversationProjectState.EXPLORE
                 conversation.focused_project_id = None
                 await self._db.commit()
             return ProjectTurnContext(state="EXPLORE")
 
-        if focused_id != selected.project_id or getattr(
-            conversation, "project_context_state", "EXPLORE"
-        ) != ConversationProjectState.FOCUSED:
+        if (
+            focused_id != selected.project_id
+            or getattr(conversation, "project_context_state", "EXPLORE")
+            != ConversationProjectState.FOCUSED
+        ):
             conversation.project_context_state = ConversationProjectState.FOCUSED
             conversation.focused_project_id = selected.project_id
             await self._db.commit()
 
         direct_context = None
         if selected.mode == KnowledgeBaseMode.DIRECT_CONTEXT.value:
-            # Same resolver the agent lane uses (graph.context), so both lanes
-            # build their persona the same way — including the strip of the
-            # legacy privacy/refusal rules a DB persona may still carry.
+            # The persona is the code constant, so this lane and the agent lane
+            # cannot drift onto different voices — there is no second copy to
+            # read. Same owner: app.graph.context.resolve_effective_persona.
             from app.graph.context import resolve_effective_persona
 
-            provider = provider_from_conversation(conversation)
-            persona_body = await resolve_effective_persona(
-                _PersonaRepositoryRetrieval(self._db), provider=provider
-            )
+            persona_body = resolve_effective_persona()
             direct_file = await self._db.scalar(
                 select(KnowledgeBaseDirectFile)
                 .options(load_only(KnowledgeBaseDirectFile.normalized_text))
@@ -371,9 +355,7 @@ class _DirectContextAdapter:
                     knowledge_text="",
                 )
             else:
-                await ensure_direct_context_fits(
-                    self._db, direct_file, agent_markdown=persona_body
-                )
+                await ensure_direct_context_fits(self._db, direct_file, agent_markdown=persona_body)
                 direct_context = DirectContext(
                     knowledge_base_id=str(selected.kb_id),
                     persona_body=persona_body,
@@ -396,6 +378,7 @@ class _RuntimePolicyAdapter:
         self._db = db
 
     async def resolve_active_policy(self):
+        from app.graph.prompts import AGENT_SYSTEM_PROMPT
         from app.graph.runtime_policy import build_resolved_runtime_policy
         from app.shared.domain.errors import InstallationError
         from app.services.installation.service import InstallationService
@@ -405,10 +388,13 @@ class _RuntimePolicyAdapter:
             active = await installation.require_active()
         except InstallationError:
             return None
-        persona = await installation.repo.get_persona_version(active.revision.persona_version_id)
+        # The persona is a code constant, so the manifest lane speaks the same
+        # text as every other lane. It still has to go through this gate: an
+        # unconfigured or invalid installation returns None here and the caller
+        # falls back rather than acting on a manifest that was never validated.
         return build_resolved_runtime_policy(
             active,
-            persona_body=persona.body_md if persona is not None else None,
+            persona_body=AGENT_SYSTEM_PROMPT,
         )
 
     async def runtime_stamp_is_current(

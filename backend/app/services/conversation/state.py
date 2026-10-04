@@ -56,7 +56,6 @@ class ConversationState:
         self._bot = BotConversationState(db, repo, events)
         self._recruiter = RecruiterMessagingState(db, events)
 
-
     async def ensure(
         self,
         zalo_chat_id: str,
@@ -288,42 +287,6 @@ class ConversationState:
     ) -> int:
         return await self._bot.resolve_unconfirmed_sending(
             conv_id,
-        )
-
-    async def record_proactive_outcome(
-        self,
-        conv: Conversation,
-        *,
-        message: str,
-        result: DeliveryResultPort,
-        lock_owner: uuid.UUID | str | None = None,
-        pending_message_id: int | None = None,
-        outbox_channel: str | None = None,
-        outbox_payload: dict | None = None,
-    ) -> Message:
-        return await self._bot.record_proactive_outcome(
-            conv,
-            message=message,
-            result=result,
-            lock_owner=lock_owner,
-            pending_message_id=pending_message_id,
-            outbox_channel=outbox_channel,
-            outbox_payload=outbox_payload,
-        )
-
-    async def prepare_proactive_message(
-        self,
-        conv: Conversation,
-        *,
-        body: str,
-        channel: str,
-        payload: dict,
-    ) -> Message:
-        return await self._bot.prepare_proactive_message(
-            conv,
-            body=body,
-            channel=channel,
-            payload=payload,
         )
 
     async def finalize_outbound_dispatch(

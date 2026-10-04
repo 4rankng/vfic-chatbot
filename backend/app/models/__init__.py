@@ -24,7 +24,6 @@ from app.models.distance_estimate import DistanceEstimate
 from app.models.geocode_place_check import GeocodePlaceCheck
 from app.models.geo_gazetteer import GeoGazetteer
 from app.models.integration import IntegrationSetting
-from app.models.persona import AdapterPersonaAssignment, Persona, PersonaVersion
 from app.models.installation import (
     InstallationLifecycle,
     InstallationManifestRevision,
@@ -117,9 +116,6 @@ __all__ = [
     "Job",
     "JobStatus",
     "IntegrationSetting",
-    "Persona",
-    "PersonaVersion",
-    "AdapterPersonaAssignment",
     "InstallationLifecycle",
     "InstallationManifestRevision",
     "InstallationManifestValidation",

@@ -22,13 +22,11 @@ from app.api import (
     knowledge_bases,
     leads,
     performance,
-    personas,
     projects,
     users,
     webhooks,
 )
 from app.core.config import get_settings
-from app.recruitment.domain.proactive_policy import PROACTIVE_TICK_INTERVAL_SECONDS
 from app.workers.scheduler_utils import register_unique_cron_tick, register_unique_tick
 from app.core.db import engine
 from app.core.errors import register_domain_exception_handlers
@@ -91,24 +89,12 @@ async def lifespan(app: FastAPI):
 
         from app.core.redis import get_redis_sync
         from app.workers.email_digest_worker import run_email_digest_tick
-        from app.workers.followup_worker import run_proactive_followup_tick
         from app.workers.outbound_dispatch_worker import run_outbound_dispatch_tick
         from app.workers.reconcile_worker import run_reconcile_tick
 
-        sched = Scheduler(connection=get_redis_sync(), queue_name="followup")
-        # Reconcile sweep + outbound dispatch moved to a dedicated `maintenance`
-        # queue: the backlog-driven reconcile used to share the single
-        # followup worker with proactive nudges and head-of-line-blocked them.
+        # The proactive follow-up tick and its `followup` queue were removed
+        # (2026-10-04). Reconcile sweep + outbound dispatch stay on `maintenance`.
         maintenance_sched = Scheduler(connection=get_redis_sync(), queue_name="maintenance")
-        try:
-            register_unique_tick(
-                sched, run_proactive_followup_tick, PROACTIVE_TICK_INTERVAL_SECONDS
-            )
-            logger.info(
-                "proactive follow-up tick registered: interval=%ds", PROACTIVE_TICK_INTERVAL_SECONDS
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("proactive scheduler registration failed (non-fatal)")
         try:
             register_unique_tick(
                 maintenance_sched, run_reconcile_tick, settings.reconcile_interval_seconds
@@ -135,10 +121,11 @@ async def lifespan(app: FastAPI):
             )
 
             register_unique_cron_tick(
-                sched, run_external_source_sync_tick, settings.kb_sync_cron
+                maintenance_sched, run_external_source_sync_tick, settings.kb_sync_cron
             )
             logger.info(
-                "external source sync tick registered: cron=%s", settings.kb_sync_cron
+                "external source sync tick registered: cron=%s queue=maintenance",
+                settings.kb_sync_cron,
             )
         except Exception:  # noqa: BLE001
             logger.exception("external source sync scheduler registration failed (non-fatal)")
@@ -148,7 +135,7 @@ async def lifespan(app: FastAPI):
             )
 
             register_unique_cron_tick(
-                sched,
+                maintenance_sched,
                 run_single_page_external_source_sync_tick,
                 settings.kb_sync_cron,
             )
@@ -211,9 +198,6 @@ app.include_router(bot_runs.router, prefix=API_V1_PREFIX)
 app.include_router(knowledge.router, prefix=API_V1_PREFIX)
 app.include_router(knowledge_bases.router, prefix=API_V1_PREFIX)
 app.include_router(projects.router, prefix=API_V1_PREFIX)
-app.include_router(personas.router, prefix=API_V1_PREFIX)
-app.include_router(personas.assignments_router, prefix=API_V1_PREFIX)
-app.include_router(personas.versions_router, prefix=API_V1_PREFIX)
 app.include_router(jobs.router, prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
 app.include_router(performance.router, prefix=API_V1_PREFIX)
@@ -246,7 +230,6 @@ async def metrics() -> dict:
             "persistence_low",
             "category",
             "ingest",
-            "followup",
             "maintenance",
         ):
             queues[name] = Queue(name, connection=conn).count  # O(1) Redis LLEN

@@ -14,7 +14,6 @@ from app.capabilities.recruitment.definition import CAPABILITIES, PACK
 from app.models.installation import InstallationState
 from app.models.integration import IntegrationSetting
 from app.models.lead import Lead
-from app.models.persona import Persona, PersonaVersion
 from app.models.case_workflow import CaseWorkflowStage, CaseWorkflowVersion
 from app.models.user import Role, User
 from app.schemas.installation import InstallationRevisionCreate
@@ -34,9 +33,9 @@ def _runtime_ready_registry() -> CapabilityRegistry:
 
 
 def _revision_body(
-    persona_version_id: uuid.UUID, *, display_name: str, expected_lock_version: int = 0
+    workflow_pin: uuid.UUID, *, display_name: str, expected_lock_version: int = 0
 ) -> InstallationRevisionCreate:
-    workflow_version_id, workflow_version_checksum = _WORKFLOW_PINS[persona_version_id]
+    workflow_version_id, workflow_version_checksum = _WORKFLOW_PINS[workflow_pin]
     return InstallationRevisionCreate(
         expected_lock_version=expected_lock_version,
         pack_key="recruitment",
@@ -61,7 +60,6 @@ def _revision_body(
             "automation_enabled": True,
         },
         capability_ids=["conversation", "candidate_intake"],
-        persona_version_id=persona_version_id,
         template_version_refs=[],
         provider_policy={
             "chat_integration_key": "openrouter",
@@ -76,32 +74,22 @@ def _revision_body(
     )
 
 
-async def _seed_actor_and_persona(integration_session) -> tuple[User, PersonaVersion]:
+async def _seed_actor_and_workflow_pin(integration_session) -> tuple[User, uuid.UUID]:
+    """Seed the actor plus a workflow version, and return a handle for the pin.
+
+    The revision used to pin a ``persona_versions`` row, which gave the test a
+    second thing to seed and a per-revision id to thread through. The persona is
+    a code constant now and the manifest pins it by checksum, so this returns a
+    plain token that only keys ``_WORKFLOW_PINS`` for the request body.
+    """
     actor = User(
         email=f"phase2-{uuid.uuid4().hex}@example.test",
         password_hash="not-used",
         role=Role.admin,
     )
-    persona = Persona(
-        name="Configured voice",
-        slug=f"configured-{uuid.uuid4().hex}",
-        body_md="Configured persona body",
-        followup_rules={},
-        created_by=None,
-    )
-    integration_session.add_all([actor, persona])
+    integration_session.add(actor)
     await integration_session.flush()
-    persona_version = PersonaVersion(
-        persona_id=persona.id,
-        version_no=1,
-        body_md=persona.body_md,
-        followup_rules=persona.followup_rules,
-        checksum=sha256_json(
-            {"body_md": persona.body_md, "followup_rules": persona.followup_rules}
-        ),
-        created_by=actor.id,
-    )
-    integration_session.add(persona_version)
+    workflow_pin = uuid.uuid4()
     workflow_version = CaseWorkflowVersion(
         pack_key="recruitment",
         workflow_key="candidate_intake",
@@ -131,9 +119,7 @@ async def _seed_actor_and_persona(integration_session) -> tuple[User, PersonaVer
             is_terminal=False,
         )
     )
-    persona_version._test_workflow_version_id = workflow_version.id
-    persona_version._test_workflow_version_checksum = workflow_version.checksum
-    _WORKFLOW_PINS[persona_version.id] = (workflow_version.id, workflow_version.checksum)
+    _WORKFLOW_PINS[workflow_pin] = (workflow_version.id, workflow_version.checksum)
     integration_session.add_all(
         [
             IntegrationSetting(
@@ -149,14 +135,14 @@ async def _seed_actor_and_persona(integration_session) -> tuple[User, PersonaVer
         ]
     )
     await integration_session.flush()
-    return actor, persona_version
+    return actor, workflow_pin
 
 
 async def test_revision_activation_rollback_suspend_and_resume_are_generation_safe(
     integration_session,
     monkeypatch,
 ):
-    actor, persona_version = await _seed_actor_and_persona(integration_session)
+    actor, workflow_pin = await _seed_actor_and_workflow_pin(integration_session)
     registry = _runtime_ready_registry()
     service = InstallationService(integration_session, registry=registry)
 
@@ -165,7 +151,7 @@ async def test_revision_activation_rollback_suspend_and_resume_are_generation_sa
     assert await integration_session.scalar(select(InstallationState)) is None
 
     first = await service.create_revision(
-        _revision_body(persona_version.id, display_name="Customer one"), actor.id
+        _revision_body(workflow_pin, display_name="Customer one"), actor.id
     )
     await service.validate_revision(first.id, actor.id)
 
@@ -191,7 +177,7 @@ async def test_revision_activation_rollback_suspend_and_resume_are_generation_sa
     current_lock = (await service.admin_view()).lock_version
     second = await service.create_revision(
         _revision_body(
-            persona_version.id,
+            workflow_pin,
             display_name="Customer two",
             expected_lock_version=current_lock,
         ),
@@ -238,11 +224,11 @@ async def test_resolve_active_serves_a_warm_hit_without_revalidating_and_rederiv
     integration_session,
     monkeypatch,
 ):
-    actor, persona_version = await _seed_actor_and_persona(integration_session)
+    actor, workflow_pin = await _seed_actor_and_workflow_pin(integration_session)
     registry = _runtime_ready_registry()
     service = InstallationService(integration_session, registry=registry)
     first = await service.create_revision(
-        _revision_body(persona_version.id, display_name="Cache first"), actor.id
+        _revision_body(workflow_pin, display_name="Cache first"), actor.id
     )
     await service.validate_revision(first.id, actor.id)
     first_active = await service.activate_revision(first.id, actor.id)
@@ -272,7 +258,7 @@ async def test_resolve_active_serves_a_warm_hit_without_revalidating_and_rederiv
     current_lock = (await service.admin_view()).lock_version
     second = await service.create_revision(
         _revision_body(
-            persona_version.id,
+            workflow_pin,
             display_name="After cutover",
             expected_lock_version=current_lock,
         ),
@@ -289,15 +275,15 @@ async def test_resolve_active_serves_a_warm_hit_without_revalidating_and_rederiv
 
 
 async def test_stale_admin_save_is_rejected_by_lock_version(integration_session):
-    actor, persona_version = await _seed_actor_and_persona(integration_session)
+    actor, workflow_pin = await _seed_actor_and_workflow_pin(integration_session)
     service = InstallationService(integration_session)
     await service.create_revision(
-        _revision_body(persona_version.id, display_name="First save"), actor.id
+        _revision_body(workflow_pin, display_name="First save"), actor.id
     )
 
     with pytest.raises(InstallationError) as conflict:
         await service.create_revision(
-            _revision_body(persona_version.id, display_name="Stale save"), actor.id
+            _revision_body(workflow_pin, display_name="Stale save"), actor.id
         )
 
     assert conflict.value.code == "INSTALLATION_CONFLICT"
@@ -306,7 +292,7 @@ async def test_stale_admin_save_is_rejected_by_lock_version(integration_session)
 async def test_operational_data_created_after_draft_blocks_incompatible_first_activation(
     integration_session,
 ):
-    actor, persona_version = await _seed_actor_and_persona(integration_session)
+    actor, workflow_pin = await _seed_actor_and_workflow_pin(integration_session)
     registry = CapabilityRegistry(
         capabilities=(CapabilityDefinition("conversation"),),
         packs=(
@@ -341,12 +327,12 @@ async def test_operational_data_created_after_draft_blocks_incompatible_first_ac
     )
     integration_session.add(unsupported_workflow)
     await integration_session.flush()
-    body = _revision_body(persona_version.id, display_name="Unsupported customer").model_copy(
+    body = _revision_body(workflow_pin, display_name="Unsupported customer").model_copy(
         update={
             "pack_key": "unsupported-pack",
             "capability_ids": ["conversation"],
             "workflow_policy": _revision_body(
-                persona_version.id, display_name="unused"
+                workflow_pin, display_name="unused"
             ).workflow_policy.model_copy(
                 update={
                     "workflow_version_id": unsupported_workflow.id,
@@ -377,12 +363,12 @@ async def test_real_recruitment_pack_activates_without_registry_override(
     fixture override. An admin can activate a recruitment installation without
     the bot being blocked by a dormant-pack rejection.
     """
-    actor, persona_version = await _seed_actor_and_persona(integration_session)
+    actor, workflow_pin = await _seed_actor_and_workflow_pin(integration_session)
     # Default registry = the real shipped packs. No override.
     service = InstallationService(integration_session)
 
     revision = await service.create_revision(
-        _revision_body(persona_version.id, display_name="Real pack customer"), actor.id
+        _revision_body(workflow_pin, display_name="Real pack customer"), actor.id
     )
     await service.validate_revision(revision.id, actor.id)
 

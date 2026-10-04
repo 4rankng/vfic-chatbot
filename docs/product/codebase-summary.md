@@ -21,23 +21,22 @@ ChatBot/
 │   │   │                 text                              (~2,000 LOC)
 │   │   ├── graph/        runner, clients, factories,
 │   │   │                 tools/, schemas, think_strip,
-│   │   │                 prompts, proactive                (~9,600 LOC)
-│   │   ├── models/       SQLAlchemy 2.x ORM (65 tables)
+│   │   │                 prompts                             (~9,600 LOC)
+│   │   ├── models/       SQLAlchemy 2.x ORM (64 tables)
 │   │   ├── schemas/      Pydantic v2
 │   │   ├── services/     conversation/, lead/, knowledge/,
-│   │   │                 dashboard/, personas/, project/,
-│   │   │                 retrieval/, proactive/ + installation,
+│   │   │                 dashboard/, project/, retrieval/ + installation,
 │   │   │                 generic workflow/contact/case services + flat
 │   │   │                 project knowledge modes, zalo_*,
 │   │   │                 integration_settings, auth (~33,200 LOC)
 │   │   ├── workers/      run_worker, chatbot, persistence,
-│   │   │                 ingest, followup, reconcile,
+│   │   │                 ingest, reconcile,
 │   │   │                 category_worker, async_runner,
 │   │   │                 scheduler_utils                   (~2,700 LOC)
 │   │   ├── realtime/     Socket.IO server + bridge         (~440 LOC)
 │   │   ├── prompts/
 │   │   └── main.py        FastAPI app + lifespan + ASGI wrap
-│   ├── alembic/          Hand-written migrations through 0056
+│   ├── alembic/          Hand-written migrations through 0066
 │   ├── mock_servers/     zalo_mock.py (local :8788)
 │   ├── scripts/          create_admin, seed_dev, prod-env,
 │   │                     benchmark_models, benchmark_rag,
@@ -123,13 +122,13 @@ moved.
 | `integrations/` | Integration-layer application services and adapters (admin runtime, Facebook OAuth). |
 | `shared/` | Small inward-facing contracts shared by multiple bounded contexts (`application/`, `domain/`, `infrastructure/`). |
 | `core/` | Cross-cutting infra: config (Pydantic BaseSettings), async DB engine + session, Redis pool, security (JWT/argon2), structured logging + request_id, error handlers, cache, ratelimit, embedding + vector helpers, text utils. |
-| `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools/` the per-domain tool modules; `schemas.py` owns `TOOL_SCHEMAS` + `_dispatch_tool`; `think_strip.py` provider-artefact stripping; `router.py` the Jev decision router; `prompts.py`; `proactive/`. |
+| `graph/` | The bot-turn pipeline. `runner.py` is the node chain; `clients.py` LLM client wrappers; `factories.py` dependency injection; `tools/` the per-domain tool modules; `schemas.py` owns `TOOL_SCHEMAS` + `_dispatch_tool`; `think_strip.py` provider-artefact stripping; `router.py` the Jev decision router; `prompts.py` re-exports the persona body. |
 | `models/` | SQLAlchemy 2.x ORM mirroring the schema. Retired universal-platform tables remain mapped for historical migration compatibility. **Does not generate migrations** — migrations remain hand-written. |
 | `schemas/` | Pydantic v2 request/response models. |
 | `services/` | Business logic, the largest subpackage. Includes recruitment services, project-owned knowledge modes, and installation lifecycle authority used by the admin Settings surface. |
 | `workers/` | RQ worker entrypoints + async bridge. `run_worker.py` is the container entrypoint; knowledge category activation/rebuild work has its own worker path. |
 | `realtime/` | Socket.IO ASGI server + cross-process emit bridge so workers can push to clients. |
-| `prompts/` | Prompt assets. |
+| `prompts/` | Prompt assets. `vfic_persona.py` is the single source of the agent persona (`DEFAULT_PERSONA_BODY_MD`), the `IDENTITY_AND_OPENING_RULES` block, and the VFIC hotline reply. It is the only persona the bot speaks — it lives here, in the neutral prompt-templates layer, because the graph runtime may not import a concrete service module (`tests/test_graph_import_guard.py`). |
 
 ## Module map — frontend `src/`
 
@@ -197,7 +196,6 @@ moved.
 | `backend/app/workers/run_worker.py` | RQ worker container entrypoint; calls `Worker.clean_registries()` on startup. |
 | `backend/app/workers/chatbot_worker.py` | Stable chat-turn RQ entry point (`webhook_high` for live turns, `recovery` for recovered ones, `persistence_low` in dev). |
 | `backend/app/workers/reconcile_worker.py` | Reconcile sweep; SETNX non-reentrancy guard and Redis observability counters. |
-| `backend/app/workers/followup_worker.py` | Stable proactive follow-up RQ entry point. |
 | `backend/app/workers/async_runner.py` | One persistent event loop per worker process (sync RQ → async bridge). |
 | `backend/app/realtime/` | Socket.IO server + cross-process emit bridge (264 LOC). |
 | `backend/app/api/webhooks.py` | Thin Zalo and Facebook webhook transport; messaging persistence/enqueue behavior is delegated to context adapters and composition. |
@@ -206,7 +204,7 @@ moved.
 | `backend/alembic/versions/0050_data_ingestion_recovery.py` | Adds durable category processing leases, retry metadata, quality-result storage, and Project cutover snapshot columns. |
 | `backend/alembic/env.py` | Injects `settings.database_url_sync`; registers models on `Base.metadata`; baseline is raw SQL. |
 | `backend/Makefile` | `dev`, `db`, `push`, `deploy`, `deploy-restart`, `deploy-restart-frontend`, `adminer`. |
-| `backend/docker-compose.yml` | 14-service prod stack: postgres, redis, web-blue + web-green (one active colour), worker-chatbot (replicas 3), worker-persistence, worker-ingest, scheduler, worker-followup, worker-maintenance, metrics-watch, frontend, adminer, caddy. |
+| `backend/docker-compose.yml` | 14-service prod stack: postgres, redis, web-blue + web-green (one active colour), worker-chatbot (replicas 4), worker-persistence, worker-ingest, worker-category, scheduler, worker-maintenance, metrics-watch, frontend, adminer, caddy. Plus the profile-gated `oa-profile-backfill`. The proactive `worker-followup` service was removed. |
 | `backend/Caddyfile` | Edge routes for `bot.tingting.vip`. |
 | `backend/scripts/create_admin.py` | Bootstrap admin; sync engine psycopg; idempotent `--only-if-no-admins`. |
 | `backend/scripts/seed_dev.py` | Truncate + re-insert Vietnamese dev data (LOCAL only). |

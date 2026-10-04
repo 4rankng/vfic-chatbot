@@ -22,7 +22,6 @@ TRUNCATE_ORDER = [
     "contact_channel_identities",
     "contacts",
     "jobs",
-    "personas",
     "companies",
     "projects",
     "users",

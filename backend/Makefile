@@ -182,13 +182,13 @@ deploy-breaking:
 	$(SCP) docker-compose.yml Caddyfile.template root@$(PROD_SERVER):$(PROD_DIR)/
 	$(SCP) scripts/flip_caddy.sh root@$(PROD_SERVER):$(PROD_DIR)/scripts/
 	$(SSH) root@$(PROD_SERVER) 'bash -s' < scripts/prod-env.sh
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose pull web-blue worker-chatbot worker-persistence worker-ingest worker-category worker-followup scheduler worker-maintenance metrics-watch frontend"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose pull web-blue worker-chatbot worker-persistence worker-ingest worker-category scheduler worker-maintenance metrics-watch frontend"
 	@echo "==> Stopping web colors (downtime starts)..."
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && docker compose stop web-blue web-green 2>/dev/null || true"
 	@echo "==> Applying non-additive migration..."
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web-blue sh -c 'python -m scripts.widen_alembic_version && alembic upgrade head'"
 	@echo "==> Bringing up web-blue + workers on the new schema (downtime ends)..."
-	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d --force-recreate web-blue worker-chatbot worker-persistence worker-ingest worker-category worker-followup scheduler worker-maintenance metrics-watch frontend"
+	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose up -d --force-recreate web-blue worker-chatbot worker-persistence worker-ingest worker-category scheduler worker-maintenance metrics-watch frontend"
 	$(SSH) root@$(PROD_SERVER) "cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) bash scripts/flip_caddy.sh blue && echo blue > ACTIVE_COLOR"
 
 # ---- Adminer over SSH tunnel (private; never public). ----

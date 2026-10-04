@@ -9,6 +9,7 @@ from typing import Any
 from app.shared.domain.text import normalize_vietnamese_text
 from app.graph.message_values import delivery_is, sender_is
 from app.graph.prompt_context import history_line
+from app.prompts.vfic_persona import IDENTITY_AND_OPENING_RULES
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,9 @@ _ROLE_QUERY = re.compile(
     r"\b(?:tuyen|nhan)\s+(?P<role>.+)$",
     re.IGNORECASE,
 )
-_GENERIC_ROLE_TERMS = frozenset({"cac", "cong", "dung", "gi", "lam", "nao", "nhung", "tri", "vi", "viec"})
+_GENERIC_ROLE_TERMS = frozenset(
+    {"cac", "cong", "dung", "gi", "lam", "nao", "nhung", "tri", "vi", "viec"}
+)
 _ROLE_CONFIRMATION_SUFFIXES = frozenset(
     {
         "a",
@@ -159,10 +162,7 @@ def build_direct_user_text(
         for message in recent_messages
         if (message.body or "").strip()
         and not delivery_is(message, "SUPPRESSED")
-        and not (
-            sender_is(message, "WORKER")
-            and message.body.strip() == current_user_text.strip()
-        )
+        and not (sender_is(message, "WORKER") and message.body.strip() == current_user_text.strip())
     ]
     used = 0
     lines: list[str] = []
@@ -188,6 +188,15 @@ def build_direct_user_text(
 
 
 def build_direct_system(context: DirectContext) -> str:
+    """Persona + the full KB text + this lane's answer rules.
+
+    ``IDENTITY_AND_OPENING_RULES`` is appended here as well as on the agent lane
+    (``app.graph.context.build_system_prompt``). This lane builds its own prompt
+    and receives none of the agent lane's rule blocks, so a rule that lives only
+    in one of the two builders is a rule that quietly does not apply to half the
+    bot's turns. It goes last here for the same reason: it must be the last thing
+    read before the model writes a reply.
+    """
     return (
         f"{context.persona_body.strip()}\n\n"
         "=== KIẾN THỨC ĐƯỢC CUNG CẤP TOÀN VĂN ===\n"
@@ -200,5 +209,6 @@ def build_direct_system(context: DirectContext) -> str:
         "hãy nói chưa tìm thấy thông tin đã xác minh.\n"
         "- Khi đề cập số lượng vị trí hoặc so sánh (nhiều việc nhất, lương cao nhất…), báo "
         "**chính xác** theo kiến thức toàn văn; không ước lượng, không nói khoảng. Nếu không "
-        "rõ con số, nói chưa tìm thấy thông tin đã xác minh."
+        "rõ con số, nói chưa tìm thấy thông tin đã xác minh.\n\n"
+        f"{IDENTITY_AND_OPENING_RULES}"
     )

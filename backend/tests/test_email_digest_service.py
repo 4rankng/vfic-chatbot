@@ -17,6 +17,8 @@ from app.services.email_digest.service import (
     STATUS_NOT_DUE,
     STATUS_SENT,
     STATUS_UNCONFIGURED,
+    SUMMARY_SYSTEM_PROMPT,
+    _candidate_summary,
     is_due,
     run_digest,
     send_test_digest,
@@ -450,6 +452,67 @@ async def test_all_reasoning_summary_still_sends(monkeypatch):
         summarizer=reasoning_extractor,
     )
     assert result.status == STATUS_SENT
+
+
+# ── the summary must agree with the columns beside it ────────────────────────
+
+
+async def test_summary_input_carries_the_project_the_sheet_column_shows():
+    """The LG Display regression: the column said LG-DISPLAY, the summary said
+    the candidate had given no project information.
+
+    The summarizer only ever saw the candidate's own words, and that candidate
+    wrote "giờ hạn tủi tuyển dụng và yêu cầu bằng cấp" — no project name. It is
+    the bot's reply, on the conversation's focused project, that establishes
+    LG-DISPLAY, and the repository already resolves that into ``project_name``.
+    Passing it as a system-provided fact is what makes the two agree.
+    """
+    seen: dict[str, str] = {}
+
+    async def capture(system_prompt: str, user_prompt: str) -> str:
+        seen["system"] = system_prompt
+        seen["user"] = user_prompt
+        return "Ứng viên hỏi về dự án LG Display về yêu cầu bằng cấp."
+
+    summary = await _candidate_summary(
+        _candidate(
+            project_name="LG Display",
+            channel_label="Zalo Chatbot",
+            candidate_messages=("giờ hạn tủi tuyển dụng và yêu cầu bằng cấp",),
+        ),
+        capture,
+    )
+
+    assert "LG Display" in seen["user"]
+    assert "Zalo Chatbot" in seen["user"]
+    assert "giờ hạn tủi tuyển dụng" in seen["user"]
+    assert "LG Display" in summary
+
+
+def test_the_summary_prompt_forbids_the_no_information_filler():
+    """The sentence the sheet actually shipped, banned by name.
+
+    "Không có thông tin về dự án ứng viên quan tâm…" reads as the bot failing to
+    read a row whose neighbouring column answers the same question, so the
+    recruiter stops trusting the column.
+    """
+    assert "không có thông tin về" in SUMMARY_SYSTEM_PROMPT.lower()
+    assert "TUYỆT ĐỐI KHÔNG viết câu" in SUMMARY_SYSTEM_PROMPT
+
+
+async def test_summary_input_marks_an_unknown_project_rather_than_inventing_one():
+    seen: dict[str, str] = {}
+
+    async def capture(_system: str, user_prompt: str) -> str:
+        seen["user"] = user_prompt
+        return "Ứng viên hỏi về chính sách xe đưa đón."
+
+    await _candidate_summary(
+        _candidate(project_name=None, candidate_messages=("xe đưa đón thế nào ạ",)),
+        capture,
+    )
+
+    assert "chưa xác định" in seen["user"]
 
 
 # ── project-of-interest precedence (repository helper) ───────────────────────

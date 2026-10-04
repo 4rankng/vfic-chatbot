@@ -28,8 +28,7 @@ remains a registry convenience tag but is never used by `make deploy`.
 | `worker-persistence` | `ghcr.io/4rankng/tinghire-be:latest` | **1** | RQ queue `persistence_low` only. Best-effort lead/memory enrichment; isolated so it cannot delay candidate replies. 512 MB limit. |
 | `worker-ingest` | `ghcr.io/4rankng/tinghire-be:latest` | 1 | RQ queue `ingest` (document ingestion, KB versions, external-source syncs — the slow lane). Mount `vfic_kb_uploads`. |
 | `worker-category` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | RQ queue `category` only: brief-import category-revision activations (5–15s, UI-blocking). Separate worker so a multi-minute document ingest can never delay them — RQ priority orders queues but cannot preempt a running job. 256 MB limit. |
-| `worker-followup` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | RQ queue `followup`. Single replica (low proactive volume). |
-| `worker-maintenance` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | RQ queue `maintenance` (reconcile sweep + outbound dispatch ticks, split from followup by PERF-12). |
+| `worker-maintenance` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | RQ queue `maintenance`: reconcile sweep, outbound dispatch, external source sync, and email digest ticks. The `worker-followup` service and the `followup` queue were removed with the proactive follow-up feature. |
 | `scheduler` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | `rqscheduler`. |
 | `metrics-watch` | `ghcr.io/4rankng/tinghire-be:<git-sha>` | 1 | In-stack ops-endpoint watcher: polls `/health`, `/metrics`, `/health/queue` on both colors and emits single-line JSON alerts to stdout. |
 | `oa-profile-backfill` | active `ghcr.io/4rankng/tinghire-be:<git-sha>` | on demand | Profile-gated maintenance job that fills only missing Zalo OA profile names and avatars. It is not started by ordinary `docker compose up`; deploy starts it after a successful cutover. |
@@ -149,7 +148,7 @@ local lockfile audit is what the gate trusts.
    across colors (they are keyed to `${IMAGE_TAG}`, not to a color):
    - Services that do **not** consume `webhook_high` (the web color,
      `worker-persistence`, `worker-ingest`, `worker-category`,
-     `worker-followup`, `scheduler`, `worker-maintenance`) are recreated
+     `scheduler`, `worker-maintenance`) are recreated
      outright — restarting them cannot strand an inbound turn.
    - The turn workers (`TURN_WORKERS=worker-chatbot`) are recreated **one
      replica at a time** (`rolling_recreate_service`), waiting for a healthy
@@ -188,7 +187,7 @@ local lockfile audit is what the gate trusts.
    - `Caddyfile` routes the public edge to the new `web-<color>:8000` upstream.
    - `docker compose ps` shows 1 `frontend`, 4 `worker-chatbot`, 1 each of
      `worker-persistence`, `worker-ingest`, `worker-category`,
-     `worker-followup`, `scheduler`, and `worker-maintenance` containers
+     `scheduler`, and `worker-maintenance` containers
      running, with health checks healthy when present.
    - `web-<color>` `/health/queue` exposes queue depth, busy/total workers,
      LLM latency, recent LLM invokes, and recent Minimax 429 counters.
@@ -215,12 +214,25 @@ flipped to it, then the legacy single-`web` container is removed.
 ### Rollback (`make rollback`)
 Revives `PREV_COLOR` at `PREV_TAG`, recreates the workers to match, and verifies
 the restored tag, Caddy route, public `/health`, frontend root, exact worker
-counts, and queue health before any state swap. Only after those checks pass does
+counts, and queue health before any state swap. The verified worker set is
+`worker-chatbot`, `worker-persistence`, `worker-ingest`, `worker-category`,
+`scheduler`, `worker-maintenance`, and `metrics-watch` — `worker-followup` is
+not in it, because that service no longer exists and a health gate still
+requiring it would abort every rollback. Only after those checks pass does
 it flip Caddy back (~1s, no rebuild), stop the demoted color, and swap
 ACTIVE↔PREV so rollback is reversible. It first stops any running OA profile
 maintenance container so code from the rejected image cannot continue writing
 after the rollback. If verification fails, rollback aborts before the swap and
 leaves both colors and state files unchanged.
+
+Rolling back across the persona-storage drop is safe in the database direction:
+`0066_drop_persona_storage` is fully reversible and recreates the pre-`0066`
+persona schema on downgrade, so a `make rollback` does not need a schema
+restore. Note the code/deploy pairing, not the schema: rolling back to a pre-`0066`
+image against a downgraded database restores the persona tables *and* the
+persona API, and the manifest's recorded `persona_checksum` — a hash of the new
+text — will not match the older persona body, so the revision must be
+re-validated before it is activation-ready again.
 
 ### Status (`make deploy-status`)
 Prints `ACTIVE_COLOR`, `PREV_COLOR`@`PREV_TAG`, and `docker compose ps`.
@@ -278,9 +290,19 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0065_geo_gazetteer` (3 Oct 2026). This line is grepped by the
+- **HEAD:** `0066_drop_persona_storage` (4 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0065` adds
+  new migration that does not update it blocks the release. `0066` drops
+  persona storage — the `personas`, `persona_versions` and
+  `adapter_persona_assignments` tables plus the
+  `installation_manifest_revisions.persona_version_id` pin — because the persona
+  is now a code constant (`app/prompts/vfic_persona.py`). This is a
+  **non-additive** migration: old code cannot run against the post-`0066`
+  schema, which the blue/green additive assumption does not cover, so the
+  pre-migration `pg_dump` in step 3 is the recovery path (its `downgrade()`
+  also recreates the schema, but the dropped rows are not reconstructed). The
+  manifest's persona pin survives as `persona_checksum` over the deployed
+  persona text rather than a snapshot row. `0065` adds
   `geo_gazetteer`, the human-verified places that short-circuit the whole
   geocoding chain — consulted before any provider call, so a site a recruiter
   has already confirmed costs no API request and cannot drift; seed it with

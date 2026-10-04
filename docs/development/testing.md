@@ -47,7 +47,7 @@ Performance (RAG benchmark)   ← test_rag_benchmark.py
 ### Test Organization (representative files)
 | Area | Example files |
 |---|---|
-| Graph pipeline | `test_graph_router.py`, `test_graph_runner_turn.py`, `test_graph_clients.py`, `test_graph_factories.py`, `test_graph_think_strip.py`, `test_graph_proactive_*.py`, `test_graph_import_guard.py` |
+| Graph pipeline | `test_graph_router.py`, `test_graph_runner_turn.py`, `test_graph_clients.py`, `test_graph_factories.py`, `test_graph_think_strip.py`, `test_graph_import_guard.py` |
 | Decisions / FAQ | `test_graph_decisions.py`, `test_model_tiering.py`, `test_faq_bypass.py` |
 | Knowledge pipeline | `test_knowledge.py`, `test_knowledge_pipeline.py`, `test_knowledge_coercion.py`, `test_knowledge_text_ingestion.py` |
 | Retrieval / RAG | `test_rag_benchmark.py`, `test_retrieval_fusion.py`, `test_retrieval_ann_gate.py`, `test_reranker.py`, `test_semantic_cache.py` |

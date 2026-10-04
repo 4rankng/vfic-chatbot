@@ -1173,7 +1173,7 @@ input[type="time"] {
    topbar and sidebar out of view between routes. On mobile the shell becomes a
    normal flowing document below the 1024px rail breakpoint, so the lock is
    desktop-only — otherwise content taller than the viewport (dashboard,
-   knowledge, settings, personas, projects, profile) is permanently cropped. */
+   knowledge, settings, projects, profile) is permanently cropped. */
 @media (min-width: 1024px) {
   body:has(.workspace-frame),
   body:has(.workspace-frame) #root {

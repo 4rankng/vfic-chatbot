@@ -43,9 +43,21 @@ DIGEST_FIRST_WINDOW = timedelta(days=1)
 
 SUMMARY_SYSTEM_PROMPT = (
     "Bạn là trợ lý tóm tắt hội thoại tuyển dụng. Viết 2-4 câu tiếng Việt tóm tắt "
-    "những gì ỨNG VIÊN đã nói trong hội thoại với chatbot (quan tâm dự án nào, "
-    "kinh nghiệm, mong muốn, câu hỏi của ứng viên). Chỉ dùng thông tin có trong "
-    "hội thoại; không suy đoán; không dùng markdown."
+    "những gì ỨNG VIÊN đã nói trong hội thoại với chatbot: ứng viên hỏi về dự án nào, "
+    "kinh nghiệm, mong muốn, điều kiện công việc và các câu hỏi của ứng viên.\n"
+    "Nguồn thông tin gồm hai phần: (1) phần THÔNG TIN HỘI THOẠI do hệ thống cung cấp "
+    "— kênh liên hệ và dự án ứng viên đang quan tâm, đây là sự thật đã được hệ thống "
+    "xác nhận nên được dùng; (2) các câu ứng viên đã nói.\n"
+    "QUY TẮC BẮT BUỘC:\n"
+    "- TUYỆT ĐỐI KHÔNG viết câu dạng 'không có thông tin về ...', 'chưa có thông tin "
+    "...' hay 'không rõ ...'. Nếu thiếu một mảnh thông tin thì chỉ bỏ qua mảng đó và "
+    "tóm tắt những gì thực sự có.\n"
+    "- Nếu hệ thống cho biết dự án ứng viên đang quan tâm, hãy nêu rõ dự án đó trong "
+    "câu đầu tiên, kể cả khi ứng viên không tự nhắc tên dự án (ví dụ ứng viên chỉ hỏi "
+    "'yêu cầu bằng cấp' thì đó là câu hỏi về dự án đó).\n"
+    "- Chỉ nói ứng viên MUỐN ứng tuyển khi ứng viên đã nói rõ. Câu hỏi tìm hiểu, dự án "
+    "đang được xem và lời mời của chatbot không phải là ý định ứng tuyển.\n"
+    "- Không suy đoán thông tin không có trong nguồn; không dùng markdown."
 )
 
 # Bounded human-readable statuses for the tick log line.
@@ -113,6 +125,15 @@ async def _candidate_summary(
 ) -> str | None:
     """LLM summary of what the candidate said; None on any failure.
 
+    The transcript is the candidate's own words only, so a candidate who never
+    types the project name — the LG Display case, where they say only "yêu cầu
+    bằng cấp" while the bot answers from the focused project — gave the
+    summarizer nothing to name a project, and it produced a row that read
+    "không có thông tin về dự án ứng viên quan tâm..." in the same row whose
+    "Dự án quan tâm" column already said LG-DISPLAY. The conversation's confirmed
+    focus and channel are passed as system-provided facts so the summary and the
+    columns agree.
+
     The extractor callable is INJECTED by the caller (the worker builds it
     from the graph factories): a service must not import the graph layer, and
     without a summarizer the renderer falls back to the candidate's verbatim
@@ -120,11 +141,20 @@ async def _candidate_summary(
     """
     if extractor is None or not candidate.candidate_messages:
         return None
+    context_lines = [f"Kênh liên hệ: {candidate.channel_label or '—'}"]
+    context_lines.append(
+        f"Dự án ứng viên đang quan tâm: {candidate.project_name}"
+        if candidate.project_name
+        else "Dự án ứng viên đang quan tâm: chưa xác định"
+    )
     transcript = "\n".join(f"- {line[:300]}" for line in candidate.candidate_messages)
     try:
         text = await extractor(
             SUMMARY_SYSTEM_PROMPT,
-            f"Hội thoại với chatbot (lời của ứng viên):\n{transcript}",
+            "THÔNG TIN HỘI THOẠI (do hệ thống xác nhận):\n"
+            + "\n".join(f"- {line}" for line in context_lines)
+            + "\n\nLỜI CỦA ỨNG VIÊN:\n"
+            + transcript,
         )
         return _strip_reasoning(text) or None
     except Exception:  # noqa: BLE001 — a summary failure must not block the email

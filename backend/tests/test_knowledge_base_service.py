@@ -128,21 +128,11 @@ async def test_project_attachment_is_disabled_for_project_owned_modes() -> None:
 async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references(
     monkeypatch,
 ) -> None:
-    persona_id = uuid.uuid4()
     kb_id = uuid.uuid4()
     project_id = uuid.uuid4()
     kb = SimpleNamespace(id=kb_id, slug="shared", mode=KnowledgeBaseMode.RAG, project_id=None)
-    persona = SimpleNamespace(
-        id=persona_id,
-        knowledge_base_id=None,
-        name="Old name",
-        slug="old-name",
-    )
     project = SimpleNamespace(id=project_id, knowledge_base_id=None)
-    db = _Db(
-        get_values={("Persona", persona_id): persona},
-        scalars=[project],
-    )
+    db = _Db(get_values={}, scalars=[project])
     db.scalar_values = [kb]
 
     bumps: list[str] = []
@@ -154,22 +144,16 @@ async def test_bootstrap_reuses_existing_rag_kb_and_preserves_live_references(
 
     result = await KnowledgeBaseService(db).bootstrap_legacy(
         LegacyKnowledgeBootstrap(
-            persona_id=persona_id,
             knowledge_base_name="Shared KB",
             knowledge_base_slug="shared",
             project_ids=[project_id],
-            persona_name="Default",
-            persona_slug="default",
         ),
         _actor(),
     )
 
     assert result is kb
-    assert persona.knowledge_base_id == kb_id
     assert project.knowledge_base_id == kb_id
     assert kb.project_id == project_id
-    assert persona.name == "Default"
-    assert persona.slug == "default"
     assert db.commits == 1
     # The attach invalidates the direct-context routing catalog like any
     # project write: one preamble bump, after the commit lands.

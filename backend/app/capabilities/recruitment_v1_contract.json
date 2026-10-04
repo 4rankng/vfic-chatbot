@@ -1,29 +1,53 @@
 {
   "schema_version": 1,
-  "contract_hash": "2a7c602a2e222d14686fca6d86e12da34b0e2ce8ee6b4af32a95af7bd58622d9",
+  "contract_hash": "29aaea6c8508d4da77b8abbb63b14e566ce415fcb29f1313d6232b9da175a06a",
   "pack": {
     "key": "recruitment",
     "version": "1",
     "kernel_abi": "1",
-    "compatible_operational_data": ["recruitment"],
-    "workflow_ids": ["candidate_intake"],
-    "terminology_keys": ["application", "candidate", "conversation", "job", "lead", "organization"],
+    "compatible_operational_data": [
+      "recruitment"
+    ],
+    "workflow_ids": [
+      "candidate_intake"
+    ],
+    "terminology_keys": [
+      "application",
+      "candidate",
+      "conversation",
+      "job",
+      "lead",
+      "organization"
+    ],
     "capabilities": [
       {
         "id": "candidate_intake",
-        "dependencies": ["conversation"],
+        "dependencies": [
+          "conversation"
+        ],
         "authority_class": "capability",
-        "api_routes": ["/api/v1/leads"],
+        "api_routes": [
+          "/api/v1/leads"
+        ],
         "frontend_resources": [],
         "dashboard_owner": false,
-        "conversation_slots": ["actions", "context", "filters", "row"]
+        "conversation_slots": [
+          "actions",
+          "context",
+          "filters",
+          "row"
+        ]
       },
       {
         "id": "channel.zalo",
-        "dependencies": ["conversation"],
+        "dependencies": [
+          "conversation"
+        ],
         "authority_class": "channel",
         "api_routes": [],
-        "frontend_resources": ["settings"],
+        "frontend_resources": [
+          "settings"
+        ],
         "dashboard_owner": false,
         "conversation_slots": []
       },
@@ -31,26 +55,42 @@
         "id": "conversation",
         "dependencies": [],
         "authority_class": "capability",
-        "api_routes": ["/api/v1/conversations"],
-        "frontend_resources": ["conversations"],
+        "api_routes": [
+          "/api/v1/conversations"
+        ],
+        "frontend_resources": [
+          "conversations"
+        ],
         "dashboard_owner": false,
         "conversation_slots": []
       },
       {
         "id": "job_advisory",
-        "dependencies": ["candidate_intake", "knowledge"],
+        "dependencies": [
+          "candidate_intake",
+          "knowledge"
+        ],
         "authority_class": "capability",
-        "api_routes": ["/api/v1/jobs"],
+        "api_routes": [
+          "/api/v1/jobs"
+        ],
         "frontend_resources": [],
         "dashboard_owner": true,
         "conversation_slots": []
       },
       {
         "id": "knowledge",
-        "dependencies": ["conversation"],
+        "dependencies": [
+          "conversation"
+        ],
         "authority_class": "capability",
-        "api_routes": ["/api/v1/knowledge"],
-        "frontend_resources": ["knowledge_sources", "personas", "projects"],
+        "api_routes": [
+          "/api/v1/knowledge"
+        ],
+        "frontend_resources": [
+          "knowledge_sources",
+          "projects"
+        ],
         "dashboard_owner": false,
         "conversation_slots": []
       }

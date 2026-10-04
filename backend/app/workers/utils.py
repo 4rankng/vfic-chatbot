@@ -30,7 +30,6 @@ class EnqueueStatusUnknown(RuntimeError):
 # reference pattern. 0 in settings disables a bound, mirroring
 # chat_queue_max_depth semantics.
 _QUEUE_MAX_DEPTH_SETTINGS_FIELDS = {
-    "followup": "followup_queue_max_depth",
     "maintenance": "maintenance_queue_max_depth",
 }
 

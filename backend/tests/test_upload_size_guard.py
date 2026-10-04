@@ -23,13 +23,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.api import knowledge as knowledge_api
-from app.api import personas as personas_api
 from app.api.auth_dependencies import require_admin
 from app.project_knowledge.infrastructure.api_dependencies import get_project_knowledge_db
 from app.services import ingestion
 from app.services.ingestion import limits
 from app.services.knowledge import KnowledgeService
-from app.services.personas import PersonaService
 from app.shared.infrastructure.db import get_request_db
 
 
@@ -49,7 +47,6 @@ def tiny_upload_ceiling(monkeypatch) -> int:
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(knowledge_api.router, prefix="/api/v1")
-    app.include_router(personas_api.router, prefix="/api/v1")
     app.dependency_overrides[require_admin] = lambda: SimpleNamespace(id=uuid.uuid4())
     app.dependency_overrides[get_project_knowledge_db] = lambda: SimpleNamespace()
     app.dependency_overrides[get_request_db] = lambda: SimpleNamespace()
@@ -72,19 +69,6 @@ def test_knowledge_upload_file_rejects_an_oversized_upload(
 
 
 
-
-
-def test_persona_import_rejects_an_oversized_upload(monkeypatch, tiny_upload_ceiling) -> None:
-    import_persona = AsyncMock()
-    monkeypatch.setattr(PersonaService, "import_persona", import_persona)
-
-    response = _client().post(
-        "/api/v1/knowledge/personas/import",
-        files={"file": ("persona.md", b"x" * (tiny_upload_ceiling + 1), "text/markdown")},
-    )
-
-    assert response.status_code == 413
-    import_persona.assert_not_awaited()
 
 
 def test_an_upload_at_the_ceiling_is_not_rejected_for_size(
@@ -149,7 +133,6 @@ async def test_a_body_exactly_at_the_ceiling_is_read_and_returned(tiny_upload_ce
     "path",
     [
         "/api/v1/knowledge/documents/upload-file",
-        "/api/v1/knowledge/personas/import",
     ],
 )
 def test_the_rejection_detail_is_the_same_on_every_upload_route(path, tiny_upload_ceiling) -> None:

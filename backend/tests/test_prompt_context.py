@@ -11,7 +11,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.graph.direct_context import build_direct_user_text
-from app.graph.proactive import _build_proactive_user_text
 from app.graph.prompt_context import (
     _HISTORY_ELISION_MARKER,
     _HISTORY_TRUNCATION_SUFFIX,
@@ -115,14 +114,13 @@ def test_a_replayed_bot_body_can_no_longer_carry_markup_into_the_prompt():
 
     assert worker.body in worker_out
 
-    # The other two history renderers hold the same line as the agent lane.
+    # The direct-context history renderer holds the same line as the agent lane.
     for rendered in (
         build_direct_user_text(
             current_user_text="câu hỏi hiện tại",
             recent_messages=bot_history,
             history_token_budget=12_000,
         ),
-        _build_proactive_user_text(chat_id="c1", recent_messages=bot_history),
     ):
         assert "Dạ em kiểm tra ngay ạ." in rendered
         assert "invoke" not in rendered and "DSML" not in rendered

@@ -216,7 +216,10 @@ describe("legacy configuration migration oracle", () => {
 describe("backend route contract", () => {
   it("emits the shared backend path for every console resource", async () => {
     const entries = Object.entries(RESOURCE_TABLE);
-    expect(entries.length).toBeGreaterThanOrEqual(8);
+    // Ratchet, mirrored from backend/tests/test_frontend_api_contract.py: the
+    // table may shrink only when a resource is deliberately deleted. Dropped
+    // 8 -> 7 on 2026-10-04 with the persona API, whose routes no longer exist.
+    expect(entries.length).toBeGreaterThanOrEqual(7);
 
     for (const [resource, segment] of entries) {
       const { fetch, lastUrl } = stubList([]);

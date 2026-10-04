@@ -14,7 +14,7 @@ from tests.integration.conftest import IntegrationDatabase
 from tests.integration.test_installation_lifecycle import (
     _revision_body,
     _runtime_ready_registry,
-    _seed_actor_and_persona,
+    _seed_actor_and_workflow_pin,
 )
 
 pytestmark = pytest.mark.integration
@@ -28,10 +28,10 @@ async def test_two_sessions_cannot_advance_the_same_revision_twice(
     registry = _runtime_ready_registry()
     try:
         async with sessions() as setup_session:
-            actor, persona_version = await _seed_actor_and_persona(setup_session)
+            actor, workflow_pin = await _seed_actor_and_workflow_pin(setup_session)
             setup_service = InstallationService(setup_session, registry=registry)
             revision = await setup_service.create_revision(
-                _revision_body(persona_version.id, display_name="Concurrent customer"),
+                _revision_body(workflow_pin, display_name="Concurrent customer"),
                 actor.id,
             )
             await setup_service.validate_revision(revision.id, actor.id)
@@ -62,7 +62,7 @@ async def test_two_sessions_cannot_advance_the_same_revision_twice(
                 text(
                     "TRUNCATE audit_events, installation_state, "
                     "installation_manifest_validations, installation_manifest_revisions, "
-                    "persona_versions, integration_settings, personas, users CASCADE"
+                    "integration_settings, users CASCADE"
                 )
             )
         await engine.dispose()

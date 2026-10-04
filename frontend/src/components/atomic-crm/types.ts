@@ -349,38 +349,6 @@ export const ADAPTER_PROVIDER_LABELS: Record<AdapterProvider, string> = {
   facebook_messenger: "Messenger",
 };
 
-export type AdapterPersonaAssignment = {
-  provider: AdapterProvider;
-  label: string;
-  persona_id: string | null;
-  effective_persona_id: string | null;
-  is_default: boolean;
-};
-
-// An agent persona (free-form markdown). Several stored; one global persona active.
-export type Persona = {
-  id: string;
-  knowledge_base_id?: string | null;
-  name: string;
-  slug: string;
-  body_md: string;
-  followup_rules: PersonaFollowupRules;
-  is_active: boolean;
-  notes?: string | null;
-  created_by?: string | null;
-  created_at: string;
-  updated_at: string;
-  effective_adapter_providers?: AdapterProvider[];
-} & Pick<RaRecord, "id">;
-
-export type PersonaFollowupRule = {
-  enabled: boolean;
-  cadence_hours: number[];
-  eligible_stages: LeadStageValue[];
-};
-
-export type PersonaFollowupRules = Record<LeadScoreValue, PersonaFollowupRule>;
-
 export type DealStage = {
   value: string;
   label: string;
@@ -399,7 +367,7 @@ export interface LabeledValue {
 }
 
 // Lead stages — DB-CHECK canonical values (leads.lead_stage CHECK constraint).
-// Order = recruitment funnel. Consumed by PersonaForm and useDashboardStats.
+// Order = recruitment funnel. Consumed by the leads surfaces and useDashboardStats.
 export const LEAD_STAGES = [
   { value: "NEW", label: "Mới", color: "bg-slate-500" },
   { value: "CONTACTING", label: "Đang liên hệ", color: "bg-info" },
@@ -411,7 +379,7 @@ export type LeadStageValue = (typeof LEAD_STAGES)[number]["value"];
 
 // Lead scores — DB-CHECK canonical values (leads.lead_score CHECK constraint).
 // Categorical (hot / warm / not_interested), NOT a 0-100 numeric despite the
-// legacy column name. Drives the LeadScoreValue type, used by PersonaForm.
+// legacy column name. Drives the LeadScoreValue type used by the lead surfaces.
 export const LEAD_SCORES = [
   { value: "hot", label: "Ưu tiên cao", color: "bg-destructive" },
   { value: "warm", label: "Ưu tiên", color: "bg-warning" },
@@ -422,11 +390,10 @@ export type LeadScoreValue = (typeof LEAD_SCORES)[number]["value"];
 
 // Conversation-channel vocabulary — the provider ids the API puts on a
 // conversation row and the one Vietnamese label per channel. Every surface
-// that names a channel — the inbox adapter selector, the notification rows,
-// the performance adapter matrix and the persona assignment rows — reads this
-// map, so a channel is never labelled two different ways. It lives here (the
-// shared module feature `domain` layers may import) because the persona domain
-// needs it and the architecture test keeps feature domains inward-only.
+// that names a channel — the inbox adapter selector, the notification rows and
+// the performance adapter matrix — reads this map, so a channel is never
+// labelled two different ways. It lives here because several feature domains
+// read it and the architecture test keeps feature domains inward-only.
 export const CONVERSATION_CHANNEL_PROVIDERS = [
   "zalo_bot",
   "zalo_oa",

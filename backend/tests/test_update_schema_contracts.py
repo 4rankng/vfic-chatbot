@@ -7,7 +7,6 @@ from app.schemas.conversation import SendMessageRequest
 from app.schemas.job import JobSearchRequest, JobUpdate
 from app.schemas.knowledge import KnowledgeDocumentUpdate, SearchTestRequest, UploadRequest
 from app.schemas.lead import AssignRequest, FollowUpCreate, LeadUpdate, StageRequest
-from app.schemas.personas import PersonaCreate, PersonaUpdate
 from app.schemas.projects import FeatureUpdate, ProjectCreate, ProjectUpdate
 from app.schemas.user import SelfProfileUpdate, UserCreate, UserUpdate
 
@@ -19,7 +18,6 @@ from app.schemas.user import SelfProfileUpdate, UserCreate, UserUpdate
         (ProjectUpdate, {"id": "8d833c84-1a4a-4ab2-a358-4f8ef1563b7b"}),
         (FeatureUpdate, {"display_priority": 1}),
         (KnowledgeDocumentUpdate, {"status": "PUBLISHED"}),
-        (PersonaUpdate, {"is_active": True}),
         (JobUpdate, {"company_id": "8d833c84-1a4a-4ab2-a358-4f8ef1563b7b"}),
         (UserUpdate, {"password": "not-here"}),
         (SelfProfileUpdate, {"role": "admin"}),
@@ -57,7 +55,6 @@ def test_lead_update_rejects_implausible_candidate_age(age):
         (StageRequest, {"stage": "SKIPPED", "lead_stage": "NEW"}),
         (FollowUpCreate, {"due_at": "2030-01-01T00:00:00Z", "status": "DONE"}),
         (ProjectCreate, {"slug": "lg", "name": "LG", "id": "8d833c84-1a4a-4ab2-a358-4f8ef1563b7b"}),
-        (PersonaCreate, {"name": "Agent", "body_md": "Body", "created_by": "me"}),
         (
             UserCreate,
             {

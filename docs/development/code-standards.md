@@ -141,8 +141,9 @@ surrounding code.
   (5 total: conversations, bot-runs, projects, settings, users).
 - **Hash-based routing** (no browser history router).
 - `RESOURCE_PATH` aliases (in `dataProvider.ts`): `knowledge_sources` →
-  `knowledge/documents`, `projects` → `knowledge/projects`, `personas` →
-  `knowledge/personas`.
+  `knowledge/documents`, `projects` → `knowledge/projects`, `knowledge_bases` →
+  `knowledge-bases`. There is no `personas` resource: the persona is a code
+  constant in `backend/app/prompts/vfic_persona.py`, not stored content.
 - The `<Admin>` component is **vendored** at `components/admin/admin.tsx`, not
   stock react-admin. Mobile/desktop share one `<Admin>` (avoids unmount on
   breakpoint cross).
@@ -251,7 +252,7 @@ directly, but treat changes with the weight of an upstream fork:
 - Coverage: graph (clients, factories, safety), concurrency, LLM semaphore,
   reconcile worker + repository, persistence worker, async runner, scheduler
   registration, lead extraction / chatops, knowledge pipeline / coercion /
-  text ingestion, persona + follow-up rules, product features, project
+  text ingestion, persona constant + voice rules, product features, project
   service, prompts registry, RAG benchmark, schema contracts, webhooks, Zalo
   Bot + OA service, conversation history clear, integration settings.
 - Run (matches the `backend-unit` CI job — no env vars needed):

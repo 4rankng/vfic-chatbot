@@ -181,7 +181,7 @@ TAG="$(docker inspect --format '{{.Config.Image}}' \
   $(docker ps -q --filter "name=vfic-web-$(cat ACTIVE_COLOR)") | sed 's/.*://')"
 echo "recreating at tag=$TAG"
 IMAGE_TAG="$TAG" docker compose up -d --force-recreate web-green \
-  worker-persistence worker-ingest worker-followup worker-maintenance scheduler
+  worker-persistence worker-ingest worker-maintenance scheduler
 # Roll the turn worker so webhook_high keeps a live consumer (see the deploy
 # script). The `sed` sources ONLY the function definitions, stopping at step 1 —
 # it does not run the deploy.

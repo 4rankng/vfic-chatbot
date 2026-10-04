@@ -6,6 +6,5 @@
   "knowledge_sources": "knowledge/documents",
   "knowledge_bases": "knowledge-bases",
   "projects": "knowledge/projects",
-  "personas": "knowledge/personas",
   "users": "users"
 }

@@ -9,25 +9,12 @@ from app.recruitment.application.lead_lookup import (
     LeadRecord,
     UNRESOLVED_LEAD,
 )
-from app.recruitment.domain.proactive import FollowupRulesPolicy
 
 
 class ConversationAdapterProviderResolver(Protocol):
     """Resolve the canonical adapter/provider scope for one conversation."""
 
     def resolve_adapter_provider(self, conversation: Any) -> str: ...
-
-
-class PersonaFollowupRulesResolver(Protocol):
-    """Load the effective follow-up rules for one adapter/provider scope."""
-
-    async def followup_rules_for_provider(self, provider: str) -> FollowupRulesPolicy: ...
-
-
-class PersonaBodyResolver(Protocol):
-    """Resolve the active persona body for one adapter/provider scope."""
-
-    async def active_persona_body(self, provider: str | None = None) -> str | None: ...
 
 
 class LeadContextQueryPort(Protocol):
@@ -49,12 +36,6 @@ class LeadContextQueryPort(Protocol):
     ) -> tuple[str, str]: ...
 
     def instruction(self, question: str) -> str: ...
-
-
-class FollowupEligibilityPort(Protocol):
-    """Final per-conversation recruitment follow-up decision."""
-
-    async def allowed(self, conversation: Any) -> tuple[bool, str]: ...
 
 
 class LeadGenderPort(Protocol):
@@ -107,32 +88,8 @@ class LeadGenderPort(Protocol):
     ) -> bool: ...
 
 
-class ProactiveStatePort(Protocol):
-    """Persistence seam used by graph proactive orchestration."""
-
-    async def refresh(self, conversation: Any) -> None: ...
-
-    async def flush(self) -> None: ...
-
-    async def commit(self) -> None: ...
-
-    async def has_worker_reply_since(
-        self,
-        conversation_id: Any,
-        since: Any,
-    ) -> bool: ...
-
-    async def opt_out_for_silence(self, conversation: Any) -> None: ...
-
-    async def stamp_attempt(self, conversation: Any, attempted_at: Any) -> None: ...
-
-
 __all__ = [
     "ConversationAdapterProviderResolver",
-    "FollowupEligibilityPort",
     "LeadContextQueryPort",
     "LeadGenderPort",
-    "PersonaBodyResolver",
-    "PersonaFollowupRulesResolver",
-    "ProactiveStatePort",
 ]

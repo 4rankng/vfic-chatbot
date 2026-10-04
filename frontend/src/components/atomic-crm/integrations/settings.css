@@ -219,8 +219,7 @@
   padding: 10px 0;
 }
 
-.settings-embedded-resource [data-slot="button"],
-.settings-embedded-resource .persona-studio-command {
+.settings-embedded-resource [data-slot="button"] {
   min-height: var(--settings-action-height);
   height: var(--settings-action-height);
 }
@@ -554,8 +553,7 @@
     font-size: var(--fs-body-sm);
   }
 
-  .settings-embedded-resource [data-slot="button"],
-  .settings-embedded-resource .persona-studio-command {
+  .settings-embedded-resource [data-slot="button"] {
     min-height: var(--settings-touch-target);
     height: var(--settings-touch-target);
   }

@@ -267,18 +267,6 @@ class ConversationService:
             outbox_payload=outbox_payload,
         )
 
-    async def prepare_proactive_message(
-        self,
-        conv: Conversation,
-        *,
-        body: str,
-        channel: str,
-        payload: dict,
-    ) -> Message:
-        return await self.state.prepare_proactive_message(
-            conv, body=body, channel=channel, payload=payload
-        )
-
     # --- cross-part orchestrations (behaviour, not delegation) ---
 
     async def deliver_recruiter_message(

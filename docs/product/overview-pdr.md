@@ -11,10 +11,10 @@
 TingHire is a **Vietnamese recruiting chatbot + recruiter console** that uses
 **Zalo** (the dominant Vietnamese messaging app) as its sole candidate channel.
 A FastAPI service hosts an always-on chatbot that answers candidate questions,
-screens them for open roles, books them into a lead pipeline, and nudges cold
-candidates to reply. Recruiters watch every conversation in a Vietnamese-only
+screens them for open roles, and books them into a lead pipeline. Recruiters
+watch every conversation in a Vietnamese-only
 React Admin console ("miniCRM"), take over when human touch is needed, and
-curate the knowledge base (jobs, bus timetables, FAQs, personas) the bot
+curate the knowledge base (jobs, bus timetables, FAQs) the bot
 reasons over.
 
 The product replaces manual Zalo recruiting — where a single recruiter juggles
@@ -32,10 +32,10 @@ a human.
 | **Lead extraction** | An explicit self-reported name is captured during inbound webhook handling; after each SENT reply, a `persistence_low` job enriches remaining/ambiguous lead fields and memory. |
 | **Lead kanban** | Stages, tags, assignee, follow-up tasks, AI-assisted actions, chatops shortcuts from the lead card. |
 | **Human inbox** | Realtime Socket.IO push, per-conversation rooms, take-over / release / semi-auto / close / reopen, virtualized thread (`virtua`). |
-| **Proactive follow-up** | 6h / 24h / 46h cadence, cap 3, 48h-Zalo-rule-safe (47h margin), Vietnamese opt-out phrase matching. |
+| **Proactive follow-up** | **Removed 2026-10-04.** The bot no longer initiates contact; there is no cadence, per-tick cap, or follow-up worker. Reactive inbound opt-out phrase matching and recruiter follow-up *tasks* are kept — see FR-5. |
 | **Knowledge base (RAG)** | Per-project docs ingested into pgvector halfvec HNSW + exact re-rank; versioned, re-indexable. |
 | **Direct-context sync** | Single-page projects can be refreshed from one public Google Sheet. The sync requires one exact `gid`, supports manual `Xử lý ngay` and daily auto-sync, renders the current FAQ sheet into deterministic Markdown, and preserves the prior page on failure. |
-| **Personas** | Agent voice and follow-up policy — CRUD, activate, import, and optional assignment per messaging adapter. One global default serves every adapter unless that adapter selects another Agent. Projects remain knowledge-only. |
+| **Personas** | The agent voice is a code constant in `backend/app/prompts/vfic_persona.py`, not a stored, admin-editable record. The persona CRUD/import/assignment surface was removed 2026-10-04; there is one persona and every messaging adapter speaks it. Projects remain knowledge-only. |
 | **Reliability** | Reconcile worker sweeps every 60s, recovers lost turns after worker crash (~3-4 min total recovery). Per-chat DB lock owner + optimistic ownership guard prevent stale-run sends. |
 | **Audit** | `bot_runs` resource exposes every bot execution for review. |
 | **Admin integrations** | Zalo / MiniMax / OpenRouter credentials managed in admin UI, encrypted at rest. |
@@ -54,7 +54,7 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
 
 | Role | Vietnamese | Who | Scope |
 |---|---|---|---|
-| `admin` | Quản trị | VFIC tech lead / owner | Full access. Manages users, integration credentials, all projects/personas/knowledge. |
+| `admin` | Quản trị | VFIC tech lead / owner | Full access. Manages users, integration credentials, all projects/knowledge. |
 | `recruiter` | Tuyển dụng | VFIC recruiting staff (default role) | Owns conversations, leads, follow-ups, knowledge curation. Cannot manage users or integration secrets. |
 
 > Auth dependency `require_recruiter` is satisfied by `admin` too — admins
@@ -84,6 +84,26 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
 - **FR-2.3** Tool-loop ceiling `max_llm_calls_per_turn` = 6.
 - **FR-2.4** On LLM 429: one retry with jitter, then a static Vietnamese
   degradation reply (no off-policy content sent).
+- **FR-2.5 Identity and opening.** The agent presents as **Dũng**, a VFIC
+  recruitment consultant, and never as an AI, bot, robot, assistant, or
+  "trợ lý". It never opens a conversation with a self-introduction, and it
+  answers the candidate's actual question in the first sentence. Asked whether
+  it is a bot, it neither confirms nor denies: it gives its name and role, then
+  returns to the open question. Enforced prompt-only by
+  `IDENTITY_AND_OPENING_RULES` in
+  `backend/app/prompts/vfic_persona.py`, which both system-prompt builders
+  (`app/graph/context.py` for the agent lane, `app/graph/direct_context.py` for
+  the direct-context lane) append *after* the persona body. Keeping it a
+  separate constant rather than a paragraph inside the persona is deliberate: a
+  rule that lives only in the body is one lane refactor away from disappearing.
+  Two production problems motivated it — every conversation opened with "Em là
+  trợ lý của Nhân lực VFIC…", and the opening message asked for a mobile number
+  while delivering no information, which reads as a bot harvesting a lead. The
+  phone number is still the one required contact field, but it may only be
+  requested once the conversation has carried real value (a named project, pay,
+  shift, overtime, shuttle, or KTX) or the candidate has said they want to
+  apply — never as the closing line of an empty opening, and never as a whole
+  message.
 
 ### FR-3 Candidate reply delivery
 - **FR-3.1** `ZaloChannelSender` dispatches per-conversation by
@@ -108,10 +128,34 @@ and how to apply. They expect fast, Vietnamese, human-like replies.
 - **FR-4.3** Open `lead_stage` PATCH issue tracked in roadmap (current state
   documented, not fixed here).
 
-### FR-5 Proactive follow-up
-- **FR-5.1** Cadence 6h / 24h / 46h, cap 3 per lead, 47h Zalo window.
-- **FR-5.2** Substring opt-out matching on Vietnamese + English phrases;
-  honored across the next inbound.
+### FR-5 Proactive follow-up — REMOVED
+
+The bot does not initiate contact. Removed end to end on 2026-10-04: the
+6h/24h/46h cadence with cap 3, the 47h Zalo-rule window, the `followup` RQ
+queue and its `worker-followup` service, the proactive graph stage, and the
+per-lead `run_followup_job` fan-out.
+
+- **Why:** a bot that messages a candidate unprompted reads as a lead-scraper,
+  and the Zalo 48h rule meant the nudge had to be tightly fenced. The
+  behaviour created candidate-visible damage that the safety filters could not
+  undo, while the recruiter-side value it was meant to add was already covered
+  by the attention queue and follow-up tasks. Removing it also removes the only
+  lane that executed a full graph turn with no inbound message — the privacy
+  posture of `bot_runs` and outbound-command recording got simpler for the same
+  reason.
+
+- **Kept, and deliberately not treated as follow-up:**
+  - **FR-5.2 (kept)** Substring opt-out phrase matching on Vietnamese + English
+    phrases, matched reactively on inbound in
+    `app/services/conversation/bot_path.py` against `PROACTIVE_OPTOUT_PHRASES`
+    in `app/recruitment/domain/proactive_policy.py`, persisted to
+    `conversation.followup_opted_out`. With nothing proactively pushing, this is
+    a standing do-not-contact flag rather than a queue skip.
+  - **FR-4.2 (kept)** Recruiter follow-up *tasks* — `FollowUpTask`,
+    `/api/v1/leads/{id}/follow-ups`, and the dashboard's `FOLLOWUP_TODAY` /
+    `FOLLOWUP_OVERDUE` attention states. A human creates and completes these.
+    Lead stage, lead score, `followup_count`, `last_followup_at`, and
+    `last_followup_attempt_at` are unchanged.
 
 ### FR-6 Recruiter console
 - **FR-6.1** Vietnamese-only UI; locale pinned to `vi`, fallback catalog

@@ -20,7 +20,6 @@ from app.graph.ports import (
     RuntimePolicyPort,
     TurnDecisionsPort,
 )
-from app.recruitment.application.ports import ProactiveStatePort
 from app.conversation_messaging.application.ports import DeliveryStatusValuesPort
 
 # TYPE_CHECKING avoids pulling asyncpg into the runtime import path; the
@@ -78,11 +77,10 @@ class BotRunState:
 
 
 class TurnOutcome(TypedDict):
-    """Result of a reactive (``run_turn``) or proactive (``run_proactive_turn``) turn.
+    """Result of a reactive (``run_turn``) turn.
 
-    ``outcome`` is always present (sent / suppressed / error / send_failed, with the
-    proactive path prefixing ``proactive:``). ``reply`` and ``reason`` are optional
-    depending on the branch taken.
+    ``outcome`` is always present (sent / suppressed / error / send_failed).
+    ``reply`` and ``reason`` are optional depending on the branch taken.
     """
 
     outcome: str
@@ -131,7 +129,6 @@ class GraphDeps:
     # None → tools run sequentially on the shared ``retrieval`` (tests, legacy).
     make_retrieval: Callable[[], AsyncContextManager[GraphRetrievalPort]] | None = None
     # Proactive follow-up guard: (allowed, reason). None in reactive-only tests.
-    followup_allowed: Callable[[Any], Awaitable[tuple[bool, str]]] | None = None
     # Fire-and-forget candidate extraction after a SENT reply.
     # None in tests -> persistence is skipped.
     persist: Callable[[dict], None] | None = None
@@ -148,8 +145,6 @@ class GraphDeps:
     runtime_policy: RuntimePolicyPort | None = None
     # Resolves the active Agent's standalone KB without exposing retrieval/tools.
     direct_context: DirectContextPort | None = None
-    # Recruitment-owned persistence and history seam for proactive turns.
-    proactive_state: ProactiveStatePort | None = None
     # Persistence enum translation injected by the messaging composition root.
     delivery_statuses: DeliveryStatusValuesPort | None = None
     # Jev turn-decision fan-out (intent, sort direction, pleasantry kind,
@@ -174,9 +169,5 @@ def _now() -> datetime:
 
 
 def _speaker(msg) -> str:
-    """Map ``Message.sender`` to a Vietnamese label.
-
-    Shared by both ``runner.py`` (reactive turns) and ``proactive.py``
-    (proactive nudges) to avoid drift between identical label maps.
-    """
+    """Map ``Message.sender`` to a Vietnamese label."""
     return speaker_label(msg)

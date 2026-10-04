@@ -30,22 +30,17 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.channels.types import ZALO_OA_DEFAULT_ACCOUNT_KEY, oa_user_id
 from app.conversation_messaging.application.ports import (
     ConversationEventsPort,
-    DeliveryResultPort,
-)
-from app.conversation_messaging.domain.ownership import (
-    normalize_lock_owner as _normalize_lock_owner,
 )
 from app.models.conversation import (
     Conversation,
     ConversationMode,
     ConversationStatus,
-    DeliveryStatus,
     Message,
     MessageSender,
 )
 from app.recruitment.domain.proactive_policy import PROACTIVE_OPTOUT_PHRASES
 from app.services.audit_service import record_audit
-from app.services.conversation._shared import affected_rows, utcnow
+from app.services.conversation._shared import utcnow
 from app.services.conversation.bot_outcome import BotOutcomeMixin
 from app.services.conversation.locking import LockingMixin
 from app.services.conversation.reconcile import ReconcileMixin
@@ -83,7 +78,6 @@ class BotConversationState(
         self.db = db
         self.repo = repo
         self.events = events
-
 
     # --- webhook-side primitives (used by US-006 chatbot) ---
 
@@ -161,9 +155,11 @@ class BotConversationState(
             # Backfill a missing Zalo alias on an existing row (defensive).
             if zalo_chat_id_alias and not conv.zalo_chat_id:
                 conv.zalo_chat_id = zalo_chat_id_alias
-            if zalo_channel_alias and (
-                not conv.zalo_channel or conv.zalo_channel == "bot"
-            ) and zalo_channel_alias != "bot":
+            if (
+                zalo_channel_alias
+                and (not conv.zalo_channel or conv.zalo_channel == "bot")
+                and zalo_channel_alias != "bot"
+            ):
                 conv.zalo_channel = zalo_channel_alias
             await self.db.flush()
             return conv
@@ -305,9 +301,7 @@ class BotConversationState(
                     )
                 )
                 if existing is None:  # pragma: no cover - defensive
-                    raise IntegrityError(
-                        "duplicate inbound insert vanished", None, None
-                    )
+                    raise IntegrityError("duplicate inbound insert vanished", None, None)
                 logger.info(
                     "duplicate inbound delivery ignored conversation=%s",
                     conv_id,
@@ -444,141 +438,3 @@ class BotConversationState(
         await self.events.message_created(system_note, conv)
         await self.events.conversation_updated(conv)
         return True
-
-    # --- proactive follow-up ---
-
-    async def record_proactive_outcome(
-        self,
-        conv: Conversation,
-        *,
-        message: str,
-        result: DeliveryResultPort,
-        lock_owner: uuid.UUID | str | None = None,
-        pending_message_id: int | None = None,
-        outbox_channel: str | None = None,
-        outbox_payload: dict | None = None,
-    ) -> Message:
-        """Persist a proactive BOT message (no BotRun). Handles success/failure + cadence.
-
-        On success: increments ``followup_count``, sets ``last_followup_at`` and
-        ``last_outbound_at``, bumps version.  On failure: sets
-        ``last_followup_attempt_at`` only (cadence budget is NOT consumed).
-        Always clears the lock and fires realtime events.
-        """
-        suppressed = bool(getattr(result, "suppressed", False))
-        delivery_status = (
-            DeliveryStatus.SUPPRESSED
-            if suppressed
-            else DeliveryStatus.SENT
-            if result.ok
-            else DeliveryStatus.FAILED
-        )
-        msg = await self.db.get(Message, pending_message_id) if pending_message_id else None
-        if (
-            msg is None
-            or msg.conversation_id != conv.id
-            or msg.sender != MessageSender.BOT
-            or msg.delivery_status not in (DeliveryStatus.PENDING, DeliveryStatus.SENDING)
-        ):
-            msg = Message(
-                conversation_id=conv.id,
-                sender=MessageSender.BOT,
-                body=message,
-                delivery_status=delivery_status,
-                zalo_message_id=result.msg_id,
-                provider_message_id=result.msg_id,
-                external_error=None if result.ok else result.error,
-            )
-            self.db.add(msg)
-        else:
-            msg.body = message
-            msg.delivery_status = delivery_status
-            msg.zalo_message_id = result.msg_id
-            msg.provider_message_id = result.msg_id
-            msg.external_error = None if result.ok else result.error
-        owner = _normalize_lock_owner(lock_owner)
-        if owner is None:
-            conv.bot_locked_until = None
-            conv.bot_lock_owner = None
-            conv.bot_lock_heartbeat_at = None
-        else:
-            clear_res = await self.db.execute(
-                update(Conversation)
-                .where(Conversation.id == conv.id, Conversation.bot_lock_owner == owner)
-                .values(
-                    bot_locked_until=None,
-                    bot_lock_owner=None,
-                    bot_lock_heartbeat_at=None,
-                )
-                .execution_options(synchronize_session=False)
-            )
-            if affected_rows(clear_res) == 1:
-                conv.bot_locked_until = None
-                conv.bot_lock_owner = None
-                conv.bot_lock_heartbeat_at = None
-        if result.ok:
-            conv.last_outbound_at = utcnow()
-            conv.last_followup_at = utcnow()
-            conv.followup_count = (conv.followup_count or 0) + 1
-            conv.version += 1
-            conv.conversation_seq += 1
-        else:
-            conv.last_followup_attempt_at = utcnow()
-        if outbox_channel is not None and outbox_payload is not None and msg.id is not None:
-            from app.models.outbox import OutboxStatus
-            from app.services.outbox_service import enqueue_outbox
-
-            outbox = await enqueue_outbox(
-                self.db,
-                message_id=msg.id,
-                channel=outbox_channel,
-                payload=outbox_payload,
-                status=(
-                    OutboxStatus.SUPPRESSED
-                    if suppressed
-                    else OutboxStatus.SENT
-                    if result.ok
-                    else OutboxStatus.FAILED
-                ),
-                zalo_message_id=result.msg_id,
-                provider_message_id=result.msg_id,
-                last_error=None if result.ok else result.error,
-            )
-            if outbox is not None:
-                msg._delivery_attempts = outbox.attempts
-        await self.db.commit()
-        await self.db.refresh(msg)
-        await self.events.message_created(msg, conv)
-        await self.events.conversation_updated(conv)
-        return msg
-
-    async def prepare_proactive_message(
-        self,
-        conv: Conversation,
-        *,
-        body: str,
-        channel: str,
-        payload: dict,
-    ) -> Message:
-        """Commit a proactive BOT message and command before provider I/O."""
-        from app.services.outbox_service import create_pending_outbox
-
-        msg = Message(
-            conversation_id=conv.id,
-            sender=MessageSender.BOT,
-            body=body,
-            delivery_status=DeliveryStatus.PENDING,
-        )
-        self.db.add(msg)
-        await self.db.flush()
-        await create_pending_outbox(
-            self.db,
-            message_id=msg.id,
-            channel=channel,
-            payload=payload,
-        )
-        await self.db.commit()
-        await self.db.refresh(msg)
-        msg._delivery_attempts = 0
-        await self.events.message_created(msg, conv)
-        return msg

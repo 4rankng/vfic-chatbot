@@ -1,13 +1,14 @@
-"""Runtime system-prompt assembly: provider-scoped persona + active project index.
+"""Runtime system-prompt assembly: the code persona + the active project index.
 
-The persona (the bot's voice + follow-up policy) is resolved from the current
-conversation provider, falling back to the active global persona and then the
-code constant (``AGENT_SYSTEM_PROMPT``). The active project index is appended so the agent
-always knows the catalog + slugs and scopes ``search_knowledge`` to the
-relevant project.
+The persona (the bot's voice) is the code constant ``AGENT_SYSTEM_PROMPT``, built from
+``app.prompts.vfic_persona.DEFAULT_PERSONA_BODY_MD``. There is no database persona: the
+``personas`` table and its service were removed (2026-10-04), so a persona edit is a code
+change and a deploy, and no lane can drift onto a different voice. The active project index
+is appended so the agent always knows the catalog + slugs and scopes ``search_knowledge``
+to the relevant project.
 
-All DB lookups are best-effort: any failure collapses to ``AGENT_SYSTEM_PROMPT`` so a
-persona/index hiccup can never break a chat turn. SQL lives in
+The project index is a DB read and stays best-effort: any failure collapses to the code
+constant plus the runtime rules so an index hiccup can never break a chat turn. SQL lives in
 ``app.services.retrieval.RetrievalRepository``; this module only assembles the prompt.
 """
 
@@ -17,8 +18,7 @@ from app.core.preamble_cache import cached_system_prompt
 from app.graph.ports import GraphRetrievalPort
 from app.graph.prompts import AGENT_SYSTEM_PROMPT
 from app.graph.tingting_guide import TINGTING_RESET_REDIRECT_REPLY
-from app.prompts.vfic_persona import VFIC_HOTLINE
-from app.recruitment.application.ports import PersonaBodyResolver
+from app.prompts.vfic_persona import IDENTITY_AND_OPENING_RULES, VFIC_HOTLINE
 
 _INDEX_HEADER = "\n\n=== DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG ==="
 _RUNTIME_RETRIEVAL_RULES = f"""
@@ -57,58 +57,23 @@ _RECRUITMENT_CONTACT_RULES = """
 - Tôn trọng việc từ chối chia sẻ và từ chối ứng tuyển; không hỏi dồn hay tạo áp lực.
 """.strip()
 
-_STALE_REFUSAL_RULE_MARKERS = (
-    "bảo mật",
-    "riêng tư",
-    "thông tin cá nhân",
-    "người dùng khác",
-    "ứng viên/người dùng khác",
-    "lịch hẹn riêng",
-    "số cá nhân",
-)
-
 # Bump whenever this module's static text (rules, directory instructions) changes
 # in a release: the revision is part of the Redis preamble cache key, so the first
 # turn after deploy re-assembles instead of serving the previous text from the
-# 10-min TTL window. DB-side card/persona writes invalidate independently via the
-# NS_PREAMBLE version bump.
-_PROMPT_TEXT_REVISION = "10"
+# 10-min TTL window. DB-side card/persona writes used to invalidate independently
+# via the NS_PREAMBLE version bump; there is no persona row any more, so this
+# revision is the only lever for persona/rules text.
+_PROMPT_TEXT_REVISION = "11"
 
 
-def _strip_stale_refusal_rules(persona: str) -> str:
-    """Remove stale refusal rules from DB-managed personas."""
-    lines = []
-    for line in (persona or "").splitlines():
-        normalized = line.casefold()
-        if any(marker in normalized for marker in _STALE_REFUSAL_RULE_MARKERS):
-            continue
-        lines.append(line)
-    return "\n".join(lines).strip()
+def resolve_effective_persona() -> str:
+    """The persona body every lane speaks, resolved from code.
 
-
-async def resolve_effective_persona(
-    retrieval: PersonaBodyResolver, *, provider: str | None = None
-) -> str:
-    """The one owner of the effective persona body: fetch, then strip.
-
-    Every lane that needs a persona resolves it here — the agent lane through
-    :func:`build_system_prompt`, the direct-context lane through
-    ``adapters._DirectContextAdapter`` — so a DB persona still carrying the
-    legacy privacy/refusal lines the strip exists to remove cannot make the bot
-    hedge on one lane and answer normally on the other. Any lookup failure
-    collapses to the committed code constant (``AGENT_SYSTEM_PROMPT``), which
-    is this module's best-effort contract.
-
-    Takes :class:`PersonaBodyResolver`, not the full ``GraphRetrievalPort``:
-    the direct-context lane hands in a one-method adapter, and demanding the
-    whole graph read surface for a persona fetch would make that lie.
+    Was the fetch-and-strip owner while a ``personas`` table existed. That table
+    is gone, so there is nothing to await and nothing to strip; the function
+    survives as the named seam the direct-context lane reads through. Sync by
+    design: callers that used to await it stay correct.
     """
-    try:
-        body = await retrieval.active_persona_body(provider=provider)
-        if body and body.strip():
-            return _strip_stale_refusal_rules(body.strip())
-    except Exception:  # noqa: BLE001
-        pass
     return AGENT_SYSTEM_PROMPT
 
 
@@ -162,6 +127,26 @@ async def active_projects_index(retrieval: GraphRetrievalPort) -> str:
     return prompt
 
 
+def _compose_runtime_suffix(index: str) -> str:
+    """Everything appended after the persona body, in one place.
+
+    The order is load-bearing: ``IDENTITY_AND_OPENING_RULES`` goes last so it is
+    the final thing the model reads before it writes a reply, and it overrides the
+    persona's own §1/§5 the way ``_RECRUITMENT_CONTACT_RULES`` already does.
+    """
+    return (
+        index
+        + "\n\n"
+        + _RUNTIME_RETRIEVAL_RULES
+        + "\n\n"
+        + _PRIVATE_CONTEXT_RULES
+        + "\n\n"
+        + _RECRUITMENT_CONTACT_RULES
+        + "\n\n"
+        + IDENTITY_AND_OPENING_RULES
+    )
+
+
 async def build_system_prompt(
     retrieval: GraphRetrievalPort, *, provider: str | None = None
 ) -> tuple[str, bool]:
@@ -169,31 +154,22 @@ async def build_system_prompt(
 
     Returns ``(prompt, cache_hit)``. ``cache_hit`` is True when the prompt came
     from Redis (sub-ms); False when assembled fresh (DB reads) or on any error
-    fallback. Cached in Redis under the ``preamble`` version namespace —
-    persona/project writes bump that namespace so the next turn re-reads, and
-    this module's own static text invalidates through ``_PROMPT_TEXT_REVISION``
+    fallback. Cached in Redis under the ``preamble`` version namespace — project
+    writes bump that namespace so the next turn re-reads, and this module's own
+    static text (persona, rules) invalidates through ``_PROMPT_TEXT_REVISION``
     in the key suffix.
     """
 
     async def _assemble() -> str:
-        persona = await resolve_effective_persona(retrieval, provider=provider)
         index = await active_projects_index(retrieval)
-        return (
-            persona
-            + index
-            + "\n\n"
-            + _RUNTIME_RETRIEVAL_RULES
-            + "\n\n"
-            + _PRIVATE_CONTEXT_RULES
-            + "\n\n"
-            + _RECRUITMENT_CONTACT_RULES
-        )
+        return resolve_effective_persona() + _compose_runtime_suffix(index)
 
     try:
         return await cached_system_prompt(
             _assemble, key_suffix=f"{provider or 'default'}:r{_PROMPT_TEXT_REVISION}"
         )
     except Exception:  # noqa: BLE001
-        return _strip_stale_refusal_rules(
-            AGENT_SYSTEM_PROMPT
-        ) + "\n\n" + _RUNTIME_RETRIEVAL_RULES + "\n\n" + _PRIVATE_CONTEXT_RULES + "\n\n" + _RECRUITMENT_CONTACT_RULES, False
+        # The preamble cache is unavailable, not the persona: serve the same
+        # prompt the cached path would have assembled rather than a second,
+        # drift-prone inline composition.
+        return resolve_effective_persona() + _compose_runtime_suffix(""), False

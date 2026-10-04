@@ -51,7 +51,6 @@ const BASE = "/api/v1";
 const RESOURCE_PATH: Record<string, string> = {
   knowledge_sources: "knowledge/documents",
   projects: "knowledge/projects",
-  personas: "knowledge/personas",
   knowledge_bases: "knowledge-bases",
 };
 

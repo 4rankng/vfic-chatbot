@@ -1,4 +1,4 @@
-"""Provider-neutral persona scope resolution for recruitment policies."""
+"""Provider-neutral conversation identity and lead-key resolution."""
 
 from __future__ import annotations
 

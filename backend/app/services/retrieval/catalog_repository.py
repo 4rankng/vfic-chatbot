@@ -131,10 +131,7 @@ class CatalogRepository:
 
     async def project_id_by_slug(self, slug: str, *, active_only: bool = False) -> uuid.UUID | None:
         """Resolve a project id from its (unique) slug; optionally require ``is_active``."""
-        sql = (
-            "SELECT p.id FROM projects p "
-            "WHERE p.slug = :s AND p.knowledge_base_id IS NOT NULL"
-        )
+        sql = "SELECT p.id FROM projects p WHERE p.slug = :s AND p.knowledge_base_id IS NOT NULL"
         if active_only:
             sql += " AND p.is_active"
         pid = (await self.db.execute(text(sql), {"s": slug})).scalar_one_or_none()
@@ -144,9 +141,7 @@ class CatalogRepository:
             return None
         return pid
 
-    async def load_category_knowledge(
-        self, project_ids: list[str], category_key: str
-    ) -> list[Any]:
+    async def load_category_knowledge(self, project_ids: list[str], category_key: str) -> list[Any]:
         """Rendered whole-category text for the agent's deep-load tool.
 
         One row per (project, category) that has an ACTIVE revision in scope:
@@ -166,9 +161,7 @@ class CatalogRepository:
             "AND (:category = 'all' OR kc.category_key = :category) "
             "ORDER BY p.name, kc.category_key"
         )
-        rows = (
-            await self.db.execute(sql, {"ids": project_ids, "category": category_key})
-        ).all()
+        rows = (await self.db.execute(sql, {"ids": project_ids, "category": category_key})).all()
         rendered: list[Any] = []
         for row in rows:
             try:
@@ -182,9 +175,7 @@ class CatalogRepository:
                     exc_info=True,
                 )
                 continue
-            body = "\n\n".join(
-                unit["content"] for unit in units if unit.get("content")
-            )
+            body = "\n\n".join(unit["content"] for unit in units if unit.get("content"))
             rendered.append(
                 SimpleNamespace(slug=row.slug, category_key=row.category_key, text=body)
             )
@@ -289,12 +280,14 @@ class CatalogRepository:
                     or_(
                         and_(
                             Project.category_authority_started.is_(True),
-                            select(KnowledgeCategory.id).where(
+                            select(KnowledgeCategory.id)
+                            .where(
                                 KnowledgeCategory.project_id == Project.id,
                                 KnowledgeCategory.category_key == "jobs",
                                 KnowledgeCategory.active_revision_id
                                 == Job.source_category_revision_id,
-                            ).exists(),
+                            )
+                            .exists(),
                         ),
                         and_(
                             Project.category_authority_started.is_(False),
@@ -367,9 +360,7 @@ class CatalogRepository:
             card = row.index_card or {}
             roles = _card_items(card.get("roles") or card.get("key_roles"))
             location = " / ".join(_card_items(card.get("location")))
-            salary_min, salary_max = _resolve_direct_salary(
-                card, card_salaries.get(row.id)
-            )
+            salary_min, salary_max = _resolve_direct_salary(card, card_salaries.get(row.id))
             features.append(
                 ProjectFeatures(
                     project_id=str(row.id),
@@ -417,39 +408,10 @@ class CatalogRepository:
             ).all()
         )
 
-    async def active_persona_body(self, provider: str | None = None) -> str | None:
-        """Return the effective persona body for ``provider``, or None."""
-        if provider:
-            return (
-                await self.db.execute(
-                    text(
-                        """
-                        SELECT pe.body_md
-                        FROM personas AS pe
-                        WHERE pe.id = COALESCE(
-                            (
-                                SELECT apa.persona_id
-                                FROM adapter_persona_assignments AS apa
-                                WHERE apa.provider = :provider
-                            ),
-                            (
-                                SELECT active.id
-                                FROM personas AS active
-                                WHERE active.is_active
-                                ORDER BY active.updated_at DESC
-                                LIMIT 1
-                            )
-                        )
-                        """
-                    ),
-                    {"provider": provider},
-                )
-            ).scalar_one_or_none()
         return (
             await self.db.execute(
                 text(
-                    "SELECT body_md FROM personas "
-                    "WHERE is_active ORDER BY updated_at DESC LIMIT 1"
+                    "SELECT body_md FROM personas WHERE is_active ORDER BY updated_at DESC LIMIT 1"
                 )
             )
         ).scalar_one_or_none()

@@ -48,10 +48,6 @@ async def test_direct_knowledge_respects_page_scope_even_with_global_warm_catalo
         AsyncMock(return_value=[public_entry, private_entry]),
     )
     monkeypatch.setattr(
-        "app.services.personas.repository.PersonaRepository.active_persona_body",
-        AsyncMock(return_value="Persona"),
-    )
-    monkeypatch.setattr(
         "app.services.knowledge_base_capacity.ensure_direct_context_fits", AsyncMock(),
     )
     router = adapters._DirectContextAdapter(

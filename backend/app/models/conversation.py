@@ -132,7 +132,12 @@ class Conversation(Base):
     last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_outbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    # --- proactive follow-up state ---
+    # Retired proactive-follow-up bookkeeping. These columns survive the 2026-10-04
+    # removal of the proactive feature and are now read/written by nothing on the
+    # bot path. ``followup_opted_out`` is the exception and is still load-bearing: the
+    # inbound opt-out phrase match and the recruiter stop action both set it, and it
+    # is a user-facing privacy control. The other three are dead weight pending a
+    # column migration — do not add new readers.
     followup_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )

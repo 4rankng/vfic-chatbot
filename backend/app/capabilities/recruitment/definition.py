@@ -12,7 +12,7 @@ CAPABILITIES = (
         "knowledge",
         ("conversation",),
         api_routes=("/api/v1/knowledge",),
-        frontend_resources=("knowledge_sources", "projects", "personas"),
+        frontend_resources=("knowledge_sources", "projects"),
     ),
     CapabilityDefinition(
         "candidate_intake",

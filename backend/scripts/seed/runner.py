@@ -28,7 +28,6 @@ from .leads import (
     remove_trigger_generated_leads,
 )
 from .messages import make_messages_and_bot_runs
-from .personas import make_personas
 from .projects import make_projects
 from .telemetry import seed_performance_metrics
 from .truncate import truncate_all
@@ -57,37 +56,31 @@ def seed() -> None:
         db.flush()
         print(f"✓ {len(projects)} projects")
 
-        # 4. Personas (global; provider-scoped overrides live in adapter_persona_assignments)
-        personas = make_personas(users)
-        db.add_all(personas)
-        db.flush()
-        print(f"✓ {len(personas)} personas")
-
-        # 5. Companies
+        # 4. Companies
         companies = make_companies(projects)
         db.add_all(companies)
         db.flush()
         print(f"✓ {len(companies)} companies")
 
-        # 6. Jobs
+        # 5. Jobs
         jobs = make_jobs(companies)
         db.add_all(jobs)
         db.flush()
         print(f"✓ {len(jobs)} jobs")
 
-        # 7. Worker Feature Catalog
+        # 6. Worker Feature Catalog
         features = make_worker_features()
         db.add_all(features)
         db.flush()
         print(f"✓ {len(features)} worker features")
 
-        # 8. Job Feature Values
+        # 7. Job Feature Values
         jfvs = make_job_feature_values(projects, features)
         db.add_all(jfvs)
         db.flush()
         print(f"✓ {len(jfvs)} job feature values")
 
-        # 9. Conversations (must be before leads — leads.zalo_id FK → conversations.zalo_chat_id)
+        # 8. Conversations (must be before leads — leads.zalo_id FK → conversations.zalo_chat_id)
         #    Each conversation needs its canonical Contact + channel identity (Alembic 0047).
         convos, contacts, identities = make_conversations(users)
         db.add_all(contacts)
