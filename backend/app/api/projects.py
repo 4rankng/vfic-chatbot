@@ -50,10 +50,6 @@ from app.schemas.project_knowledge import (
     CategorySourceOut,
     CategoryTemplateOut,
 )
-from app.schemas.project_single_page_sync import (
-    SinglePageExternalSourceCreate,
-    SinglePageExternalSourceOut,
-)
 from app.services.knowledge.category_contracts import (
     build_project_knowledge_template,
     get_category_definition,
@@ -61,23 +57,9 @@ from app.services.knowledge.category_contracts import (
 )
 from app.services.knowledge.category_service import KnowledgeCategoryService
 from app.services.project import ProjectService
-from app.shared.domain.errors import BadRequestError, ConflictError, RateLimitedError
+from app.shared.domain.errors import ConflictError
 
 router = APIRouter(prefix="/knowledge/projects", tags=["projects"])
-_SINGLE_PAGE_SOURCE_BAD_REQUESTS = {
-    "conflicting_gid",
-    "host_not_allowed",
-    "invalid_gid",
-    "invalid_sheet_id",
-    "invalid_url",
-    "ip_literal_forbidden",
-    "missing_gid",
-    "scheme_not_https",
-    "unsafe_gid",
-    "url_credentials_forbidden",
-}
-
-
 @router.get("", response_model=ProjectListResponse)
 async def list_projects(
     page: int = Query(1, ge=1),
@@ -165,70 +147,6 @@ async def replace_project_single_page(
 ) -> DirectContextFileOut:
     direct_file = await ProjectService(db).replace_single_page(project_id, body, admin)
     return DirectContextFileOut.model_validate(direct_file)
-
-
-@router.get(
-    "/{project_id}/single-page/external-sources",
-    response_model=list[SinglePageExternalSourceOut],
-)
-async def list_project_single_page_external_sources(
-    project_id: uuid.UUID,
-    _admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> list[SinglePageExternalSourceOut]:
-    rows = await ProjectService(db).list_single_page_external_sources(project_id)
-    return [SinglePageExternalSourceOut.model_validate(row) for row in rows]
-
-
-@router.post(
-    "/{project_id}/single-page/external-sources",
-    response_model=SinglePageExternalSourceOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_project_single_page_external_source(
-    project_id: uuid.UUID,
-    body: SinglePageExternalSourceCreate,
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> SinglePageExternalSourceOut:
-    try:
-        row = await ProjectService(db).create_single_page_external_source(project_id, body, admin)
-    except ConflictError as exc:
-        if str(exc) in _SINGLE_PAGE_SOURCE_BAD_REQUESTS:
-            raise BadRequestError(str(exc)) from exc
-        raise
-    return SinglePageExternalSourceOut.model_validate(row)
-
-
-@router.post("/{project_id}/single-page/external-sources/{source_id}/run-now")
-async def run_project_single_page_external_source_now(
-    project_id: uuid.UUID,
-    source_id: uuid.UUID,
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> dict[str, str]:
-    try:
-        job_id = await ProjectService(db).run_single_page_external_source_now(
-            project_id, source_id, admin
-        )
-    except ConflictError as exc:
-        if str(exc) == "run_now_cooldown":
-            raise RateLimitedError("run_now_cooldown") from exc
-        raise
-    return {"job_id": job_id}
-
-
-@router.delete(
-    "/{project_id}/single-page/external-sources/{source_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_project_single_page_external_source(
-    project_id: uuid.UUID,
-    source_id: uuid.UUID,
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> None:
-    await ProjectService(db).delete_single_page_external_source(project_id, source_id, admin)
 
 
 @router.get("/{project_id}/categories", response_model=CategoryCatalogOut)

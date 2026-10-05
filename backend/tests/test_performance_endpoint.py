@@ -101,7 +101,6 @@ _ROUTE_LLM_CALL_LATENCY = "jsonb_array_elements_text"
 _ROUTE_LLM_CALL_COUNT = "llm_calls_per_p50"
 _ROUTE_ADAPTER_BREAKDOWN = "outbound_adapter"
 _ROUTE_QUALITY = "retried_429_count"
-_ROUTE_EXTERNAL_SOURCE_SYNC = "external_source_sync_state"
 
 
 def _percentile_row() -> SimpleNamespace:
@@ -125,10 +124,6 @@ def _standard_routes() -> list[tuple[str, _FakeResult]]:
     ``percentile_cont``).
     """
     return [
-        (
-            _ROUTE_EXTERNAL_SOURCE_SYNC,
-            _FakeResult(one=SimpleNamespace(n=0, last=None)),
-        ),
         (
             _ROUTE_RELIABILITY,
             _FakeResult(one=SimpleNamespace(send_unknown=2, suppressed=5, failed=1)),
@@ -277,19 +272,6 @@ def _install_compute_stubs(monkeypatch, routes=None) -> SimpleNamespace:
         captured["ttl"] = ttl_seconds
 
     monkeypatch.setattr(perf_mod, "cache_set_json", _set)
-    # The external-source-sync tile reads a table the routing session does not
-    # model; stub the reader so the dashboard composition test stays focused on
-    # the latency SQL shapes (the tile has its own contract test).
-    async def _ext_sync(_db, _interval):
-        return {
-            "enabled": False,
-            "auto_sync_count": 0,
-            "last_synced_at_max": None,
-            "success_total": 0,
-            "failure_total": 0,
-        }
-
-    monkeypatch.setattr(perf_mod, "_external_source_sync", _ext_sync)
     return SimpleNamespace(queries=queries, captured=captured)
 
 
@@ -705,8 +687,6 @@ async def test_performance_queries_dispatched_concurrently(monkeypatch):
                 return _FakeResult(
                     one=SimpleNamespace(llm_calls_per_p50=None, llm_calls_per_p95=None, llm_calls_per_p99=None)
                 )
-            if _ROUTE_EXTERNAL_SOURCE_SYNC in sql:
-                return _FakeResult(one=SimpleNamespace(n=0, last=None))
             raise AssertionError(f"unmatched SQL: {sql[:80]}")
 
     class _CM:

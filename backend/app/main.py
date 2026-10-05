@@ -130,38 +130,6 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001
             logger.exception("knowledge recovery scheduler registration failed (non-fatal)")
         try:
-            from app.workers.external_source_sync_worker import (
-                run_external_source_sync_tick,
-            )
-
-            register_unique_cron_tick(
-                maintenance_sched, run_external_source_sync_tick, settings.kb_sync_cron
-            )
-            logger.info(
-                "external source sync tick registered: cron=%s queue=maintenance",
-                settings.kb_sync_cron,
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("external source sync scheduler registration failed (non-fatal)")
-        try:
-            from app.workers.single_page_external_source_sync_worker import (
-                run_single_page_external_source_sync_tick,
-            )
-
-            register_unique_cron_tick(
-                maintenance_sched,
-                run_single_page_external_source_sync_tick,
-                settings.kb_sync_cron,
-            )
-            logger.info(
-                "single-page external source sync tick registered: cron=%s",
-                settings.kb_sync_cron,
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception(
-                "single-page external source sync scheduler registration failed (non-fatal)"
-            )
-        try:
             register_unique_cron_tick(
                 maintenance_sched,
                 run_email_digest_tick,

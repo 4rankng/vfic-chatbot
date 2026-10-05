@@ -54,15 +54,15 @@ EXPECTED_ROUTE_COUNTS = {
     # +3 candidate email digest: GET/PUT /email-digest config + POST test send
     "installation": 8,
     "jobs": 7,
-    "knowledge": 18,  # -7 the legacy KB-version lane (versions CRUD/ingest/publish + canonical format template)
+    "knowledge": 14,  # -7 the legacy KB-version lane; -4 the Google Sheet external-source routes (0067)
     "knowledge_bases": 11,
     "leads": 15,
     "main": 3,
     "performance": 2,
-    # +4 single-page external-source-sync endpoints
+    # -4 single-page external-source-sync endpoints (Google Sheets retired, 0067)
     # +2 project external-API endpoints (get / put)
     # +1 project external-API admin test-call endpoint (post)
-    "projects": 29,  # +1 admin-only GET /{id}/knowledge-export of current saved sources
+    "projects": 25,  # -4 Sheet sync routes; +1 admin-only GET /{id}/knowledge-export
     "users": 10,
     "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
 }
@@ -72,7 +72,7 @@ EXPECTED_ROUTE_COUNTS = {
 # (the admin-editable Google Maps credential behind the distance feature).
 # 0066-era: -11 persona routes (the persona router, its adapter-assignment
 # routes and its versions routes) — persona storage is a code constant now.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "0d38eb2ba2eaa3660da7f26ac9a8d0b83452c4e65d96a5dbe689e5d40ac6cb6a"
+EXPECTED_ROUTE_INVENTORY_SHA256 = "3de6aa80f1d077bc3d104a2c25a5058f9870a00b533971fd41b6024406a92300"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -184,7 +184,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # (get + post inside send_email_via_resend), its two call sites in
     # services/email_digest/service.py (run_digest + send_test_digest), and the
     # admin test-send route in api/integrations.py.
-    "provider_boundary": 100,
+    "provider_boundary": 95,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -224,7 +224,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: a turn that held the per-chat mutex hands the conversation to a newer
     # inbound the ingress guard dropped, via chatbot_worker._handoff_to_newer_inbound
     # -> enqueue_latest_unanswered_worker_message.
-    "queue_producer": 37,  # -3 the legacy KB-version lane enqueue sites
+    "queue_producer": 29,  # -3 legacy KB-version lane; -8 Google Sheet sync producers (0067)
     # -1: the custom provider stopped reading a stored context-window row (the
     # field left the settings UI), so resolve_custom_llm._load's `get` count
     # drops 7→6 at the same site.
@@ -322,7 +322,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # prepare_proactive_message/record_proactive_outcome write path) and
 # -2 queue_producer (the removed followup tick and its enqueue),
 # -1 provider_boundary (the proactive send). Digest recomputed.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "e80dfbf56264f3a1dc46aef732aff9b0df4f63684867a51790322b282eaa8fc1"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "be6d9ea505cd5824f90ecf5950043f28232f318493111851e3ed4af7263a6608"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

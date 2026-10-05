@@ -11,8 +11,6 @@ from typing import Protocol
 class ProjectKnowledgeJobKind(StrEnum):
     DOCUMENT_INGEST = "document_ingest"
     CATEGORY_REVISION = "category_revision"
-    EXTERNAL_SOURCE_SYNC = "external_source_sync"
-    SINGLE_PAGE_SOURCE_SYNC = "single_page_source_sync"
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,34 +52,6 @@ class ProjectKnowledgeJobs:
         if receipt is None:
             raise RuntimeError("category revision enqueue failed")
         return receipt
-
-    def sync_external_source(
-        self,
-        state_id: uuid.UUID,
-        *,
-        job_id: str | None = None,
-    ) -> str | None:
-        return self._port.enqueue(
-            ProjectKnowledgeJobRequest(
-                ProjectKnowledgeJobKind.EXTERNAL_SOURCE_SYNC,
-                state_id,
-                requested_job_id=job_id,
-            )
-        )
-
-    def sync_single_page_source(
-        self,
-        state_id: uuid.UUID,
-        *,
-        job_id: str | None = None,
-    ) -> str | None:
-        return self._port.enqueue(
-            ProjectKnowledgeJobRequest(
-                ProjectKnowledgeJobKind.SINGLE_PAGE_SOURCE_SYNC,
-                state_id,
-                requested_job_id=job_id,
-            )
-        )
 
 
 @dataclass(frozen=True, slots=True)

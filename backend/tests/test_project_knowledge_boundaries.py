@@ -245,28 +245,6 @@ def test_project_knowledge_jobs_required_receipt_operations_reject_no_receipt(
         getattr(jobs, method_name)(_AGG_ID)
 
 
-@pytest.mark.parametrize(
-    ("method_name", "kind"),
-    [
-        ("sync_external_source", ProjectKnowledgeJobKind.EXTERNAL_SOURCE_SYNC),
-        ("sync_single_page_source", ProjectKnowledgeJobKind.SINGLE_PAGE_SOURCE_SYNC),
-    ],
-)
-@pytest.mark.parametrize("receipt", [None, "source-sync-receipt"])
-def test_project_knowledge_jobs_source_sync_preserves_optional_receipt_and_job_id(
-    method_name: str,
-    kind: ProjectKnowledgeJobKind,
-    receipt: str | None,
-) -> None:
-    port = _RecordingJobPort(receipt)
-    jobs = ProjectKnowledgeJobs(port)
-
-    assert getattr(jobs, method_name)(_AGG_ID, job_id="requested-id") == receipt
-    assert port.requests == [
-        ProjectKnowledgeJobRequest(kind, _AGG_ID, requested_job_id="requested-id")
-    ]
-
-
 _WORKER_FACADES = {
     ProjectKnowledgeJobKind.DOCUMENT_INGEST: (
         "app.workers.ingest_worker",
@@ -275,14 +253,6 @@ _WORKER_FACADES = {
     ProjectKnowledgeJobKind.CATEGORY_REVISION: (
         "app.workers.category_worker",
         "enqueue_category_revision",
-    ),
-    ProjectKnowledgeJobKind.EXTERNAL_SOURCE_SYNC: (
-        "app.workers.external_source_sync_worker",
-        "enqueue_one_shot",
-    ),
-    ProjectKnowledgeJobKind.SINGLE_PAGE_SOURCE_SYNC: (
-        "app.workers.single_page_external_source_sync_worker",
-        "enqueue_one_shot",
     ),
 }
 
@@ -322,16 +292,7 @@ def test_rq_adapter_delegates_to_the_exact_existing_worker_facade(
 
     receipt = RqProjectKnowledgeJobAdapter().enqueue(request)
 
-    expected_kwargs = (
-        {"job_id": requested_job_id}
-        if kind
-        in {
-            ProjectKnowledgeJobKind.EXTERNAL_SOURCE_SYNC,
-            ProjectKnowledgeJobKind.SINGLE_PAGE_SOURCE_SYNC,
-        }
-        else {}
-    )
-    assert calls == [(kind, (_AGG_ID,), expected_kwargs)]
+    assert calls == [(kind, (_AGG_ID,), {})]
     expected_receipt = None if kind is ProjectKnowledgeJobKind.DOCUMENT_INGEST else "worker-receipt"
     assert receipt == expected_receipt
 

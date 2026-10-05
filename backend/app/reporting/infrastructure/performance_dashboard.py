@@ -7,7 +7,7 @@ Live tiles reuse the ``/health/queue`` snapshot via ``collect_queue_health``. Ad
 Latency strategy (migration 0033 + concurrent reads + Redis cache):
 - The nine time-windowed reads (``_percentiles``, ``_llm_call_percentiles``,
   ``_lane_outcome_counts``, ``_adapter_breakdown``, ``_slow_turns``, ``_trend``,
-  ``_reliability``, ``_quality``, ``_external_source_sync``) run concurrently via
+  ``_reliability``, ``_quality``) run concurrently via
   ``asyncio.gather``, each on its own ``AsyncSession`` (a single session is not
   safe for concurrent use). Pool ``pool_size=10`` still has headroom for 9 reads.
 - The assembled payload is cached in Redis for 30 s (``_CACHE_TTL_SECONDS``),
@@ -182,7 +182,6 @@ async def _compute(interval: timedelta, window: str) -> dict:
         trend,
         reliability,
         quality,
-        external_source_sync,
     ) = await asyncio.gather(
         asyncio.to_thread(collect_queue_health),
         _with_session(_percentiles, interval),
@@ -193,7 +192,6 @@ async def _compute(interval: timedelta, window: str) -> dict:
         _with_session(_trend, interval),
         _with_session(_reliability, interval),
         _with_session(_quality, interval),
-        _with_session(_external_source_sync, interval),
     )
     percentiles.update(llm_call_pct)
     return {
@@ -207,49 +205,7 @@ async def _compute(interval: timedelta, window: str) -> dict:
         "trend": trend,
         "reliability": reliability,
         "quality": quality,
-        "external_source_sync": external_source_sync,
     }
-
-
-async def _external_source_sync(db: AsyncSession, _interval: timedelta) -> dict:
-    """External knowledge-source sync tile: configured rows + last sync + counters.
-
-    Surfaced as a JSON field (no chart in v1). Counters are bumped by the worker
-    via the sync Redis client and read here via the async client — same Redis DB.
-    """
-    from app.core.redis import get_redis
-
-    # Guard the table read the same way the Redis reads below are guarded: a
-    # missing/partial migration (this project has a history of alembic deploy
-    # blockers) must never take down the whole performance dashboard.
-    try:
-        row = (
-            await db.execute(
-                text(
-                    "SELECT COUNT(*) AS n, MAX(last_synced_at) AS last "
-                    "FROM external_source_sync_state WHERE auto_sync_enabled = true"
-                )
-            )
-        ).one_or_none()
-        auto_sync_count = int(row.n or 0) if row else 0
-        last_synced_at_max = row.last.isoformat() if row and row.last else None
-    except Exception:  # noqa: BLE001 — table/query must never break the dashboard
-        auto_sync_count = 0
-        last_synced_at_max = None
-    redis = get_redis()
-    try:
-        success = await redis.get("external_source_sync_success_total")
-        failure = await redis.get("external_source_sync_failure_total")
-    except Exception:  # noqa: BLE001 — Redis must never break the dashboard
-        success = failure = None
-    return {
-        "auto_sync_count": auto_sync_count,
-        "last_synced_at_max": last_synced_at_max,
-        "success_total": int(success) if success else 0,
-        "failure_total": int(failure) if failure else 0,
-    }
-
-
 _T = TypeVar("_T")
 
 

@@ -46,8 +46,8 @@ def register_unique_cron_tick(scheduler, func, cron_string: str) -> None:
     mid-day web-container restart no longer pushes the next run out by a full
     interval. ``cron_string`` is a 5-field cron expression evaluated in UTC
     (rq-scheduler parses with python-crontab); e.g. ``"0 20 * * *"`` = 03:00
-    ICT daily. UTC depends on the container TZ being unset/UTC (see
-    ``settings.kb_sync_cron`` docstring for the caveat).
+    ICT daily. UTC depends on the container TZ being unset/UTC — re-express
+    the cron in local time or pin TZ=UTC if the container ever sets one.
     """
     func_name = f"{func.__module__}.{func.__name__}"
     # Best-effort cleanup of prior duplicates; failure must not block (re)register.

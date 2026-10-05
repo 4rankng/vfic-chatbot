@@ -25,8 +25,6 @@ from app.api.provider_dependencies import get_embedder
 from app.project_knowledge.infrastructure.api_dependencies import get_project_knowledge_db
 from app.project_knowledge.domain.legacy_job_references import strip_legacy_job_reference_source
 from app.schemas.knowledge import (
-    ExternalSourceCreate,
-    ExternalSourceSyncStateOut,
     KnowledgeChunkListResponse,
     KnowledgeChunkOut,
     KnowledgeDocumentUpdate,
@@ -44,12 +42,10 @@ from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeServic
 from app.services.knowledge.canonical import (
     CanonicalValidationError,
 )
-from app.services.knowledge.external_source_admin import KnowledgeExternalSourceAdminService
 from app.shared.domain.errors import (
     BadRequestError,
     ConflictError,
     NotFoundError,
-    RateLimitedError,
     ValidationError,
 )
 from app.shared.infrastructure.rate_limits import enforce_rag_test_rate_limit
@@ -340,89 +336,3 @@ async def record_audit_safe(
         db, action=action, actor_id=actor_id, target_type="knowledge_document", target_id=target_id
     )
     await db.commit()
-
-
-# --- External knowledge-source sync (public Google Sheet → category revision) ---
-#
-# Public link is a sibling of file upload: admins paste a Google Sheet URL, pick
-# a target category, and either import once (POST enqueues an immediate one-shot
-# sync) or enable daily auto-sync (the rq-scheduler tick polls each row). The
-# worker does the SSRF-hardened fetch + parse + hash-skip + stage; these
-# endpoints only manage the row + enqueue.
-
-@router.get(
-    "/projects/{project_id}/external-sources",
-    response_model=list[ExternalSourceSyncStateOut],
-)
-async def list_external_sources(
-    project_id: uuid.UUID,
-    _admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> list[ExternalSourceSyncStateOut]:
-    rows = await KnowledgeExternalSourceAdminService(db).list_sources(project_id)
-    return [ExternalSourceSyncStateOut.model_validate(row) for row in rows]
-
-
-@router.post(
-    "/projects/{project_id}/external-sources",
-    response_model=ExternalSourceSyncStateOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_external_source(
-    project_id: uuid.UUID,
-    body: ExternalSourceCreate,
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> ExternalSourceSyncStateOut:
-    try:
-        row = await KnowledgeExternalSourceAdminService(db).create_source(project_id, body, admin)
-    except ConflictError as exc:
-        detail = str(exc)
-        if detail == "external_source_already_exists":
-            raise ConflictError(detail) from exc
-        raise BadRequestError(detail) from exc
-    return ExternalSourceSyncStateOut.model_validate(row)
-
-
-@router.post(
-    "/projects/{project_id}/external-sources/{source_id}/run-now",
-)
-async def run_external_source_now(
-    project_id: uuid.UUID,
-    source_id: uuid.UUID,
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> dict:
-    """Trigger an immediate sync (admin edited the sheet, wants the bot updated now).
-
-    Redis 5-minute cooldown per source (Finding 14); unique-per-click job_id so a
-    retry after a fix within the same day actually runs (Finding 9).
-    """
-    try:
-        job_id = await KnowledgeExternalSourceAdminService(db).run_now(project_id, source_id, admin)
-    except Exception as exc:
-        if str(exc) == "run_now_cooldown":
-            raise RateLimitedError("run_now_cooldown") from exc
-        if str(exc) == "external_source_not_found":
-            raise NotFoundError("external_source_not_found") from exc
-        raise
-    return {"job_id": job_id}
-
-
-@router.delete(
-    "/projects/{project_id}/external-sources/{source_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_external_source(
-    project_id: uuid.UUID,
-    source_id: uuid.UUID,
-    admin: Any = Depends(require_admin),
-    db: AsyncSession = Depends(get_project_knowledge_db),
-) -> None:
-    """Remove a sync config. Published FAQ chunks survive (no FK on last_revision_id)."""
-    try:
-        await KnowledgeExternalSourceAdminService(db).delete_source(project_id, source_id, admin)
-    except Exception as exc:
-        if str(exc) == "external_source_not_found":
-            raise NotFoundError("external_source_not_found") from exc
-        raise

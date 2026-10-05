@@ -36,20 +36,6 @@ class RqProjectKnowledgeJobAdapter:
                 from app.workers.category_worker import enqueue_category_revision
 
                 return enqueue_category_revision(aggregate_id)
-            if request.kind is ProjectKnowledgeJobKind.EXTERNAL_SOURCE_SYNC:
-                from app.workers.external_source_sync_worker import enqueue_one_shot
-
-                return enqueue_one_shot(
-                    aggregate_id,
-                    job_id=request.requested_job_id,
-                )
-            if request.kind is ProjectKnowledgeJobKind.SINGLE_PAGE_SOURCE_SYNC:
-                from app.workers.single_page_external_source_sync_worker import enqueue_one_shot
-
-                return enqueue_one_shot(
-                    aggregate_id,
-                    job_id=request.requested_job_id,
-                )
         except Exception as exc:
             from app.workers.utils import EnqueueStatusUnknown
 

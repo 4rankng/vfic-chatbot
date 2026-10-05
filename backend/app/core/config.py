@@ -441,51 +441,19 @@ class Settings(BaseSettings):
     reconcile_grace_seconds: int = 120  # min age before a msg is considered stuck
     reconcile_max_age_seconds: int = 86400  # 24h cap
     reconcile_batch_size: int = 50  # per-tick candidate cap
-    # External knowledge-source sync (public Google Sheet → category revision /
-    # single-page direct-context file) has no global kill switch: per-link
-    # auto_sync_enabled on each *_sync_state row is the sole control. The daily
-    # re-ingest cadence is pinned to a wall-clock time via `kb_sync_cron` below
-    # so a web-container restart mid-day no longer pushes the next sync out by
-    # 24h. Job-timeout/retry remain code constants in the worker modules.
-    # Cron expression in UTC, evaluated by rq-scheduler. Default
-    # `0 20 * * *` = 03:00 ICT (UTC+7, no DST) — middle of the 2–5 AM low-traffic
-    # window. Override per-env to shift the time-of-day. NOTE: "UTC" assumes the
-    # container TZ is unset/UTC (the default for python:3.12-slim and our
-    # Dockerfile does not override it). If ops ever sets TZ=Asia/Ho_Chi_Minh on
-    # the container, this expression would silently shift by 7h — re-express the
-    # cron in local time or pin ENV TZ=UTC in that case.
-    kb_sync_cron: str = "0 20 * * *"
-
-    @field_validator("kb_sync_cron")
-    @classmethod
-    def _validate_kb_sync_cron(cls, value: str) -> str:
-        # Fail fast at startup on a malformed env value rather than silently
-        # mis-firing (or never firing) at the first scheduled tick. rq-scheduler
-        # parses with python-crontab (not croniter) — validate with the same
-        # parser so accepted/rejected strings match the scheduler exactly.
-        from crontab import CronTab
-
-        try:
-            CronTab(value)
-        except (ValueError, KeyError) as exc:
-            raise ValueError(
-                f"kb_sync_cron must be a valid cron expression (got {value!r})"
-            ) from exc
-        return value
-
     # Candidate email digest: the send cadence (daily/weekly) and the send hour
     # are ADMIN-EDITABLE at runtime (integration_settings rows), so the tick
     # fires hourly and self-checks due-ness — a mid-day frequency flip takes
     # effect without re-registering the scheduler job. This env only pins the
-    # hourly check itself; "8 * * * *" = :08 past every hour UTC. Same TZ caveat
-    # as kb_sync_cron: container TZ must stay UTC.
+    # hourly check itself; "8 * * * *" = :08 past every hour UTC. The container
+    # TZ must stay UTC for the expression to mean what it says.
     email_digest_tick_cron: str = "8 * * * *"
 
     @field_validator("email_digest_tick_cron")
     @classmethod
     def _validate_email_digest_tick_cron(cls, value: str) -> str:
-        # Same parser as kb_sync_cron so accepted/rejected strings match what
-        # rq-scheduler will actually run.
+        # python-crontab is the parser rq-scheduler itself uses, so
+        # accepted/rejected strings match what the scheduler will run.
         from crontab import CronTab
 
         try:
