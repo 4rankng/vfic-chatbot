@@ -49,6 +49,18 @@ class ZaloChannelSender:
         if not chat_id or not text:
             return SendResult(ok=False, error="outbound payload is missing chat_id or text")
         if channel == "zalo_oa":
+            media_url = str(payload.get("media_url") or "")
+            if media_url:
+                # OA media template: one image + caption through the same CS
+                # endpoint, quoting the triggering inbound message like the
+                # text path does.
+                return await self._oa.send_media(
+                    oa_user_id(chat_id),
+                    text=text,
+                    media_url=media_url,
+                    media_type=str(payload.get("media_type") or "image"),
+                    quote_message_id=str(payload.get("quote_message_id") or ""),
+                )
             return await self._oa.send_message(
                 oa_user_id(chat_id),
                 text,

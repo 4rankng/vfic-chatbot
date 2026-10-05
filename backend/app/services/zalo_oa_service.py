@@ -342,12 +342,16 @@ class ZaloOASender:
         text: str,
         media_url: str,
         media_type: str = "image",
+        quote_message_id: str | None = None,
     ) -> SendResult:
         """Send an OA consultation message with one media attachment.
 
         Zalo's CS media template supports a single media element. The current
         chatbot primarily sends text, but this helper gives recruiter/admin
         workflows a documented OA-native shape for image/GIF responses.
+
+        ``quote_message_id`` mirrors the text CS reply: when the tenant's OA
+        sends require quoting, the media send carries the same field.
         """
         text = text.strip()
         media_url = media_url.strip()
@@ -361,24 +365,25 @@ class ZaloOASender:
         if media_type not in {"image", "gif"}:
             return SendResult(ok=False, error="media_type must be image or gif")
 
-        body = {
-            "recipient": {"user_id": chat_id},
-            "message": {
-                "text": text,
-                "attachment": {
-                    "type": "template",
-                    "payload": {
-                        "template_type": "media",
-                        "elements": [
-                            {
-                                "media_type": media_type,
-                                "url": media_url,
-                            }
-                        ],
-                    },
+        message: dict[str, Any] = {
+            "text": text,
+            "attachment": {
+                "type": "template",
+                "payload": {
+                    "template_type": "media",
+                    "elements": [
+                        {
+                            "media_type": media_type,
+                            "url": media_url,
+                        }
+                    ],
                 },
             },
         }
+        quote = (quote_message_id or "").strip()
+        if quote:
+            message["quote_message_id"] = quote
+        body = {"recipient": {"user_id": chat_id}, "message": message}
         return self._send_result(await self._post_with_refresh("/v3.0/oa/message/cs", body))
 
     async def send_raw_message(self, chat_id: str, message: dict[str, Any]) -> SendResult:

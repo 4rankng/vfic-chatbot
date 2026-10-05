@@ -197,7 +197,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # fields with one dict `.get` inside the provider-transport Zalo module.
     # None of the three is a new egress site: the HTTP call is pywebpush's, from
     # app/services/push/service.py.
-    "provider_boundary": 98,
+    # +1 TingTing guide image: the outbox media payload routes send_payload to
+    # the OA CS media template — one new `send_media` provider call in
+    # app/services/zalo_sender.py, same Zalo OA transport as the text path
+    # (no new provider, no new egress host).
+    "provider_boundary": 99,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -335,7 +339,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # prepare_proactive_message/record_proactive_outcome write path) and
 # -2 queue_producer (the removed followup tick and its enqueue),
 # -1 provider_boundary (the proactive send). Digest recomputed.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "ac17e07aba3e2d591daada8708a123bcd70de433e085a1ee726809cfb4c44417"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "45741b9c52b0922279e11101f2150c23f80115425113ccd8db1e0dd3efe921cd"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

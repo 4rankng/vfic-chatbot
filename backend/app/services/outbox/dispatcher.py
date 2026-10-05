@@ -352,6 +352,12 @@ async def _try_neutral_dispatch(
     if provider is None:
         return None  # unmapped channel → legacy path
 
+    if candidate.payload.get("media_url"):
+        # Media payloads are ZaloChannelSender-shaped (OA CS media template):
+        # the registry builds text commands only, so a media payload routed
+        # here would silently lose its attachment. The legacy path owns media.
+        return None
+
     if provider == ct.PROVIDER_FACEBOOK_MESSENGER:
         # Messenger: resolve the active Page config + account_key from the
         # conversation's channel identity. The Page token is decrypted

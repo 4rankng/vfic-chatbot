@@ -206,6 +206,49 @@ async def test_oa_sender_send_media_uses_cs_media_template(
     }
 
 
+async def test_oa_sender_send_media_includes_quote_when_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The media CS send quotes the triggering inbound message like text does.
+
+    The tenant's OA text sends require quote_message_id; a media reply on the
+    same OA must carry the same field instead of an unquoted push.
+    """
+    captured: dict[str, Any] = {}
+
+    class _FakeResp:
+        def json(self) -> dict[str, Any]:
+            return {"error": 0, "data": {"message_id": "oa-media-q"}}
+
+    class _FakeClient:
+        async def post(self, url: str, *, json=None, headers=None, **kw):
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            return _FakeResp()
+
+    register_fake_client("zalo_oa", _FakeClient())
+    sender = ZaloOASender(
+        settings=Settings(app_env="development", zalo_bot_request_timeout=5),
+        access_token="oa-token",
+    )
+
+    result = await sender.send_media(
+        "user-1",
+        text="Ảnh hướng dẫn",
+        media_url="https://example.com/guide.png",
+        media_type="image",
+        quote_message_id="msg-inbound-9",
+    )
+
+    assert result.ok is True
+    assert result.msg_id == "oa-media-q"
+    assert captured["json"]["message"]["quote_message_id"] == "msg-inbound-9"
+    assert captured["json"]["message"]["attachment"]["payload"]["elements"][0]["url"] == (
+        "https://example.com/guide.png"
+    )
+
+
 async def test_oa_sender_send_buttons_builds_button_template_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

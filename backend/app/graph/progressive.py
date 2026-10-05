@@ -31,6 +31,7 @@ from typing import Any, NamedTuple
 
 from app.graph import absence_guard
 from app.graph.dispatch import (
+    _account_key_for_conversation,
     _build_outbox_payload,
     _cancel_status_task,
     _channel_for_conversation,
@@ -434,7 +435,10 @@ async def _await_first_bubble(
             reply=bubble_text,
             outbox_channel=_channel_for_conversation(conv),
             outbox_payload=_build_outbox_payload(
-                recipient_id, bubble_text, state.reply_to_message_id
+                recipient_id,
+                bubble_text,
+                state.reply_to_message_id,
+                account_key=_account_key_for_conversation(conv),
             ),
         )
         _stamp_db(timings, "claim_send", db_t0)

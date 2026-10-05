@@ -527,6 +527,80 @@ async def test_try_neutral_dispatch_routes_oa_with_stripped_recipient():
     assert result.provider_message_id == "oa-mid"
 
 
+async def test_try_neutral_dispatch_declines_media_payloads():
+    """Media outbox payloads fall back to the legacy ZaloChannelSender path.
+
+    The neutral registry builds text commands only; a media payload routed
+    through it would keep the caption but silently lose the attachment, so the
+    neutral path declines it and the legacy OA media send owns the dispatch.
+    """
+    from app.services.outbox_service import DispatchCandidate, _try_neutral_dispatch
+
+    candidate = DispatchCandidate(
+        outbox_id=1,
+        message_id=10,
+        channel="zalo_oa",
+        payload={
+            "chat_id": "oa:tingting:user-9",
+            "text": "caption",
+            "media_url": "https://bot.tingting.vip/tingting/tu-cham-cong.png",
+            "media_type": "image",
+            "quote_message_id": "inb-1",
+        },
+    )
+    result = await _try_neutral_dispatch(None, candidate, None, None, None, None)
+    assert result is None
+
+
+async def test_facade_send_payload_media_routes_to_oa_send_media():
+    """A media outbox payload upgrades the OA send to the CS media template.
+
+    The caption and quote ride along; only the media fields turn the text send
+    into a media send, addressed to the stripped user id.
+    """
+    from types import SimpleNamespace
+
+    from app.services.zalo_bot_service import SendResult
+    from app.services.zalo_sender import ZaloChannelSender
+
+    class _StubOA:
+        def __init__(self) -> None:
+            self.media_calls: list[tuple] = []
+
+        async def send_media(
+            self, chat_id, *, text, media_url, media_type="image", quote_message_id=""
+        ):
+            self.media_calls.append((chat_id, text, media_url, media_type, quote_message_id))
+            return SendResult(ok=True, msg_id="oa-media-1")
+
+        async def send_message(self, *args, **kwargs):
+            raise AssertionError("media payload must not take the text send path")
+
+    oa = _StubOA()
+    facade = SimpleNamespace(_oa=oa)
+    result = await ZaloChannelSender.send_payload(
+        facade,
+        "zalo_oa",
+        {
+            "chat_id": "oa:tingting:user-9",
+            "text": "Dạ anh/chị mở ứng dụng TingTing…",
+            "media_url": "https://bot.tingting.vip/tingting/tu-cham-cong.png",
+            "media_type": "image",
+            "quote_message_id": "inb-1",
+        },
+    )
+    assert result.ok
+    assert oa.media_calls == [
+        (
+            "user-9",
+            "Dạ anh/chị mở ứng dụng TingTing…",
+            "https://bot.tingting.vip/tingting/tu-cham-cong.png",
+            "image",
+            "inb-1",
+        )
+    ]
+
+
 def test_provider_for_outbox_channel_includes_facebook_messenger():
     """Phase 6: the Messenger adapter is now registered for outbound dispatch,
     so facebook_messenger maps to its provider id (not None). Unknown channels

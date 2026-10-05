@@ -25,6 +25,7 @@ from contextlib import suppress
 from inspect import iscoroutinefunction
 from typing import Any
 
+from app.channels.types import TINGTING_OA_ACCOUNT_KEY
 from app.conversation_messaging.domain.delivery import DeliveryState
 from app.graph.chat_status import native_status_heartbeat
 from app.graph.ports import (
@@ -42,6 +43,10 @@ from app.graph.think_strip import (
     contains_tool_protocol,
     strip_markdown_decorations,
     strip_provider_artifacts,
+)
+from app.graph.tingting_guide import (
+    TINGTING_SELF_CHECKIN_IMAGE_URL,
+    TINGTING_SELF_CHECKIN_REPLY,
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
 from app.recruitment.domain.provider import (
@@ -80,6 +85,17 @@ def _channel_for_conversation(conv) -> str:
 def _recipient_for_conversation(conv) -> str | None:
     """Return the immutable provider recipient used by the outbound command."""
     return recipient_from_conversation(conv)
+
+
+def _account_key_for_conversation(conv) -> str | None:
+    """Return the channel account the conversation belongs to, when known.
+
+    Legacy rows may carry no channel identity; ``None`` simply means no
+    account-scoped rule (the media rules in ``_build_outbox_payload``) matches.
+    """
+    identity = getattr(conv, "channel_identity", None)
+    key = getattr(identity, "account_key", None)
+    return str(key) if key else None
 
 
 def _finalize_user_visible_reply(
@@ -123,17 +139,29 @@ def _finalize_user_visible_reply(
 
 
 def _build_outbox_payload(
-    chat_id: str | None, text: str, quote_message_id: str | None
+    chat_id: str | None,
+    text: str,
+    quote_message_id: str | None,
+    *,
+    account_key: str | None = None,
 ) -> dict:
     """Build the provider send payload recorded in the outbox.
 
     Captures the exact body sent to the provider so a re-dispatch (from the sweep) can
     reconstruct the call without re-running the turn. ``quote_message_id`` is
     the OA CS-reply field (None on the Bot channel).
+
+    ``account_key`` scopes the media rules: on the TingTing support OA a reply
+    that quotes the fixed self-check-in caption verbatim carries the guide
+    image in the same provider payload, so any re-dispatch sends the same
+    attachment without re-running the turn.
     """
     payload: dict = {"chat_id": chat_id, "text": text}
     if quote_message_id:
         payload["quote_message_id"] = quote_message_id
+    if account_key == TINGTING_OA_ACCOUNT_KEY and text == TINGTING_SELF_CHECKIN_REPLY:
+        payload["media_url"] = TINGTING_SELF_CHECKIN_IMAGE_URL
+        payload["media_type"] = "image"
     return payload
 
 
@@ -253,7 +281,10 @@ async def _claim_and_dispatch(
         reply=candidate,
         outbox_channel=_channel_for_conversation(conv),
         outbox_payload=_build_outbox_payload(
-            recipient_id, candidate, state.reply_to_message_id
+            recipient_id,
+            candidate,
+            state.reply_to_message_id,
+            account_key=_account_key_for_conversation(conv),
         ),
     )
     _stamp_db(timings, "claim_send", db_t0)
@@ -345,7 +376,10 @@ async def _record_dispatched_outcome(
         outcome_metadata=faq_metadata,
         outbox_channel=_channel_for_conversation(conv),
         outbox_payload=_build_outbox_payload(
-            recipient_id, candidate, state.reply_to_message_id
+            recipient_id,
+            candidate,
+            state.reply_to_message_id,
+            account_key=_account_key_for_conversation(conv),
         ),
     )
     _stamp_db(timings, "record_bot_outcome", db_t0)

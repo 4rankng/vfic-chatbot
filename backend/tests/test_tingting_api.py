@@ -21,6 +21,8 @@ from app.graph.tingting_guide import (
     TINGTING_FIELDS_ASK,
     TINGTING_INTENT_REDIRECT_REPLY,
     TINGTING_RESOLVED_CLOSER_REPLY,
+    TINGTING_SELF_CHECKIN_IMAGE_URL,
+    TINGTING_SELF_CHECKIN_REPLY,
     TINGTING_WAGE_WAIT_REPLY,
     tingting_api_guide,
     tingting_api_prompt_block,
@@ -538,6 +540,31 @@ def test_payday_question_gets_the_wage_wait_reply_not_the_handoff() -> None:
     for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
         assert "Hỏi về phúc lợi" in prompt
         assert "KHÔNG dùng câu trả lời chờ dữ liệu tiền công" in prompt
+
+
+def test_self_checkin_question_gets_the_fixed_media_caption() -> None:
+    """Operator rule (2026-10-05): "Tự chấm công như thế nào?" gets caption + image.
+
+    Both prompt sections quote the fixed caption verbatim; the send layer
+    attaches the repo-hosted app-home screenshot when a TingTing OA reply
+    matches it exactly, so the prompt owns only the words. Like the payday
+    rule, the media rule sits before the out-of-scope catch-all.
+    """
+    for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
+        assert TINGTING_SELF_CHECKIN_REPLY in prompt
+        assert "tự chấm công như thế nào" in prompt
+        assert "ảnh màn hình chính" in prompt
+        assert "KHÔNG trả lời dòng hotline" in prompt
+    # the guide image is repo-hosted at the production frontend root — the
+    # send layer's asset, never a third-party host.
+    assert TINGTING_SELF_CHECKIN_IMAGE_URL == "https://bot.tingting.vip/tingting/tu-cham-cong.png"
+    # the escalation reply is reserved for the can't-help cases; the media
+    # caption is a real answer and never carries it.
+    assert TINGTING_HOTLINE_REPLY not in TINGTING_SELF_CHECKIN_REPLY
+    # precedence: the media rule sits before the out-of-scope catch-all.
+    assert TINGTING_SUPPORT_PERSONA.index(TINGTING_SELF_CHECKIN_REPLY) < TINGTING_SUPPORT_PERSONA.index(
+        "MỌI việc khác"
+    )
 
 
 def test_login_trouble_after_resolution_re_engages_the_reset_flow() -> None:

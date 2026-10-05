@@ -4974,3 +4974,47 @@ async def test_unsupported_native_status_providers_only_send_the_actual_answer(m
     assert outcome["outcome"] == "sent"
     status.assert_not_called()
     assert len(svc.dispatched) == 1
+
+
+def test_outbox_payload_attaches_media_for_tingting_self_checkin_caption():
+    """The fixed self-check-in media reply is captured in the outbox payload.
+
+    Only the exact approved caption on the TingTing OA account upgrades to the
+    media payload — a paraphrase stays text, and the same sentence on any other
+    account stays text — so a sweep re-dispatch resends the same attachment
+    without re-running the turn.
+    """
+    from app.channels.types import TINGTING_OA_ACCOUNT_KEY
+    from app.graph.dispatch import _account_key_for_conversation, _build_outbox_payload
+    from app.graph.tingting_guide import (
+        TINGTING_SELF_CHECKIN_IMAGE_URL,
+        TINGTING_SELF_CHECKIN_REPLY,
+    )
+
+    class _Identity:
+        account_key = TINGTING_OA_ACCOUNT_KEY
+
+    class _Conv:
+        channel_identity = _Identity()
+
+    payload = _build_outbox_payload(
+        "oa:tingting:user-1",
+        TINGTING_SELF_CHECKIN_REPLY,
+        "msg-inbound-1",
+        account_key=_account_key_for_conversation(_Conv()),
+    )
+    assert payload["media_url"] == TINGTING_SELF_CHECKIN_IMAGE_URL
+    assert payload["media_type"] == "image"
+    assert payload["quote_message_id"] == "msg-inbound-1"
+
+    paraphrase = _build_outbox_payload(
+        "oa:tingting:user-1",
+        "Mở app bấm tự chấm công nhé ạ",
+        "m",
+        account_key=TINGTING_OA_ACCOUNT_KEY,
+    )
+    assert "media_url" not in paraphrase
+    other_account = _build_outbox_payload(
+        "u", TINGTING_SELF_CHECKIN_REPLY, "m", account_key="other-oa"
+    )
+    assert "media_url" not in other_account
