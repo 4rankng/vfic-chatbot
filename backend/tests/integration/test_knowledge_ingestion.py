@@ -66,39 +66,52 @@ def _units_payload(*contents):
     }
 
 
+# What FEATURE_SOURCE actually states, keyed by catalog criterion. Extraction
+# (KnowledgePipeline.extract_product_features) asks ONE criterion per call, so a
+# fake that answers every call with the same payload would report a value for
+# every criterion and never exercise the "chưa ghi rõ" branch.
+_STATED_FEATURES = {
+    "take_home_income": {
+        "feature_key": "take_home_income",
+        "value_text": "10–13 triệu/tháng",
+        "value_json": {
+            "min": 10000000,
+            "max": 13000000,
+            "currency": "VND",
+            "period": "month",
+        },
+        "is_highlight": True,
+        "strength_score": 0.9,
+        "evidence_text": "thu nhập 10-13 triệu",
+    },
+    "pay_frequency": {
+        "feature_key": "pay_frequency",
+        "value_text": "Trả lương theo tuần",
+        "is_highlight": True,
+        "strength_score": 0.95,
+        "evidence_text": "Trả lương theo tuần",
+    },
+    "commute_support": {
+        "feature_key": "commute_support",
+        "value_text": "Có xe đưa đón Thái Bình",
+        "is_highlight": False,
+        "strength_score": 0.7,
+        "evidence_text": "Có xe đưa đón Thái Bình",
+    },
+}
+
+
 def _features_payload():
-    """LLM returns 3 features; the other 13 catalog features become is_missing=true."""
-    return {
-        "features": [
-            {
-                "feature_key": "take_home_income",
-                "value_text": "10–13 triệu/tháng",
-                "value_json": {
-                    "min": 10000000,
-                    "max": 13000000,
-                    "currency": "VND",
-                    "period": "month",
-                },
-                "is_highlight": True,
-                "strength_score": 0.9,
-                "evidence_text": "thu nhập 10-13 triệu",
-            },
-            {
-                "feature_key": "pay_frequency",
-                "value_text": "Trả lương theo tuần",
-                "is_highlight": True,
-                "strength_score": 0.95,
-                "evidence_text": "Trả lương theo tuần",
-            },
-            {
-                "feature_key": "commute_support",
-                "value_text": "Có xe đưa đón Thái Bình",
-                "is_highlight": False,
-                "strength_score": 0.7,
-                "evidence_text": "Có xe đưa đón Thái Bình",
-            },
-        ]
-    }
+    """Every stated feature in one payload (callers that answer in one shot)."""
+    return {"features": list(_STATED_FEATURES.values())}
+
+
+def _feature_reply_for(system: str) -> dict:
+    """Answer one criterion prompt: its stated value, or an explicit missing row."""
+    for key, feature in _STATED_FEATURES.items():
+        if key in system:
+            return {"features": [feature]}
+    return {"features": [{"is_missing": True, "value_text": ""}]}
 
 
 async def _seed_project(db) -> Project:
@@ -343,7 +356,7 @@ async def test_extract_writes_one_row_per_active_catalog_feature(integration_ses
     )
 
     async def llm_json(system, user):
-        return json.dumps(_features_payload())
+        return json.dumps(_feature_reply_for(system))
 
     await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).extract_product_features(
         doc, []
@@ -408,7 +421,7 @@ async def test_extract_syncs_project_highlights(integration_session):
     doc = await _make_doc(integration_session, FEATURE_SOURCE, project_id=proj.id)
 
     async def llm_json(system, user):
-        return json.dumps(_features_payload())
+        return json.dumps(_feature_reply_for(system))
 
     await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).extract_product_features(
         doc, []
@@ -459,7 +472,17 @@ async def test_pipeline_run_survives_bad_extraction(integration_session):
     await integration_session.refresh(doc)
 
     assert doc.status == KnowledgeStatus.PUBLISHED  # ingest NOT blocked
-    assert (await _count_features(integration_session, proj.id)).scalar() == 0  # nothing written
+    # An uncoercible reply invents nothing: every active criterion is recorded as
+    # not stated (one row per feature — the same contract as a successful run).
+    assert (
+        await integration_session.execute(
+            text(
+                "SELECT count(*) FROM job_feature_values "
+                "WHERE project_id = :p AND is_missing = false"
+            ),
+            {"p": str(proj.id)},
+        )
+    ).scalar() == 0
 
 
 # ----------------------------------------------------------------- agent tool
@@ -647,7 +670,7 @@ async def test_document_ingest_never_overwrites_projection_owned_cards(
     async def llm_json(system, user):
         prompts_seen.append(system)
         if "feature_key" in system:
-            return json.dumps(_features_payload())
+            return json.dumps(_feature_reply_for(system))
         return json.dumps(_units_payload("LG Display tuyển công nhân sản xuất."))
 
     await KnowledgePipeline(integration_session, _FakeEmbedder(), llm_json).run(doc)
