@@ -1,30 +1,27 @@
 import { useQuery } from "@tanstack/react-query";
 
 import {
-  type PerfAdapterBreakdown,
-  type PerfLive,
+  type PerfConversion,
   type PerfMetrics,
-  type PerfReliability,
-  type PerfSlowTurn,
+  type PerfResponseTime,
   type PerfTrendBucket,
-  type StagePercentiles,
+  type PerfWindow,
 } from "../reporting/domain/contracts";
 import { getPerformanceMetrics } from "../reporting/reportingService";
 
-// Fetches the per-stage turn-latency bundle from /admin/performance (admin-only).
-// Mirrors the useDashboardStats pattern: one TanStack useQuery over apiJson.
+// Fetches the two-metric bundle (response time + phone-capture conversion) from
+// /admin/performance (admin-only). Mirrors the useDashboardStats pattern: one
+// TanStack useQuery over apiJson.
 
 export type {
-  PerfAdapterBreakdown,
-  PerfLive,
+  PerfConversion,
   PerfMetrics,
-  PerfReliability,
-  PerfSlowTurn,
+  PerfResponseTime,
   PerfTrendBucket,
-  StagePercentiles,
+  PerfWindow,
 };
 
-export const usePerformanceStats = (window = "24h") =>
+export const usePerformanceStats = (window: PerfWindow = "7d") =>
   useQuery<PerfMetrics>({
     queryKey: ["performance-metrics", window],
     queryFn: () => getPerformanceMetrics<PerfMetrics>(window),

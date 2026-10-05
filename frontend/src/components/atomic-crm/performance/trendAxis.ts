@@ -1,10 +1,3 @@
-import type { PerfTrendBucket } from "./usePerformanceStats";
-
-export type TrendAxisTick = {
-  index: number;
-  label: string;
-};
-
 const timeFormatter = new Intl.DateTimeFormat("vi-VN", {
   hour: "2-digit",
   minute: "2-digit",
@@ -19,6 +12,12 @@ const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
 });
 
+/**
+ * Formats one trend bucket's timestamp for the plot axis, tooltip and the
+ * accessible data table. `null` (a bucket the backend could not stamp) reads
+ * "Chưa có"; a string the runtime cannot parse is echoed back rather than
+ * turned into "Invalid Date".
+ */
 export const formatTrendBucket = (
   bucket: string | null,
   includeDate = false,
@@ -29,22 +28,4 @@ export const formatTrendBucket = (
   if (Number.isNaN(date.getTime())) return bucket;
 
   return (includeDate ? dateTimeFormatter : timeFormatter).format(date);
-};
-
-export const getTrendAxisTicks = (
-  trend: PerfTrendBucket[],
-  includeDate = false,
-  maxTicks = 5,
-): TrendAxisTick[] => {
-  if (trend.length === 0) return [];
-
-  const tickCount = Math.min(maxTicks, trend.length);
-  const indices = Array.from({ length: tickCount }, (_, tick) =>
-    Math.round((tick * (trend.length - 1)) / (tickCount - 1 || 1)),
-  );
-
-  return indices.map((index) => ({
-    index,
-    label: formatTrendBucket(trend[index]?.bucket ?? null, includeDate),
-  }));
 };

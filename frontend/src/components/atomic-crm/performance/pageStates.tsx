@@ -1,20 +1,19 @@
 import { useNavigate } from "react-router-dom";
 import { useTranslate } from "ra-core";
-import { AlertCircle, BarChart03, ClockRefresh } from "@untitledui/icons";
+import { AlertCircle, ClockRefresh } from "@untitledui/icons";
 
 import { LoadingIndicator } from "@/components/application/loading-indicator/loading-indicator";
 import { Button } from "@/components/base/buttons/button";
-import { EmptyState } from "../../kit";
+import { EmptyState } from "../kit";
 
 /**
- * The dashboard's three load states, on Untitled UI anatomy.
+ * The dashboard's two load states, on Untitled UI anatomy.
  *
  * Loading is the library's `LoadingIndicator` inside a `role="status"` region —
- * the console has no loading primitive of its own. The error and no-activity
- * states are the shared kit `EmptyState`, the same frame every other console
- * screen routes its empty and failed states through (see
- * `conversations/presentation/ConversationList`), so the icon frame, the type
- * scale and the action placement move together.
+ * the console has no loading primitive of its own. The error state is the shared
+ * kit `EmptyState`, the same frame every other console screen routes its failed
+ * state through (see `conversations/presentation/ConversationList`), so the icon
+ * frame, the type scale and the action placement move together.
  */
 export const PerformanceLoading = () => (
   <div
@@ -57,15 +56,3 @@ export const PerformanceError = ({ onRetry }: { onRetry: () => void }) => {
     </div>
   );
 };
-
-export const PerformanceNoActivity = ({
-  windowLabel,
-}: {
-  windowLabel: string;
-}) => (
-  <EmptyState
-    icon={<BarChart03 className="size-6" aria-hidden="true" />}
-    title={`Chưa có lượt xử lý trong ${windowLabel}`}
-    description="Trạng thái trực tiếp vẫn hiển thị phía trên."
-  />
-);

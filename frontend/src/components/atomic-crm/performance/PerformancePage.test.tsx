@@ -1,279 +1,99 @@
-import { describe, expect, it } from "vitest";
-import { render } from "vitest-browser-react";
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, render } from "vitest-browser-react";
 
-import { formatMetricDuration } from "../reporting/domain/performanceDiagnostics";
-import type { PerfMetrics, PerfSlowTurn } from "./usePerformanceStats";
 import { PerformanceMetrics } from "./PerformancePage";
-import { formatTrendBucket } from "./trendAxis";
-import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
+import type { PerfMetrics } from "./usePerformanceStats";
 
-const emptyMetrics: PerfMetrics = {
-  window: "24h",
-  live: {
-    queue_depth: 0,
-    busy_workers: 0,
-    total_workers: 2,
-    llm_avg_latency_ms: 0,
-    llm_invokes_last_2m: 0,
-    minimax_429s_last_1m: 0,
+const metrics: PerfMetrics = {
+  window: "7d",
+  response_time: {
+    p50_ms: 1500,
+    p95_ms: 3200,
+    trend: [
+      {
+        bucket: "2026-07-12T08:00:00+07:00",
+        p50_ms: 1500,
+        p95_ms: 3200,
+        turns: 12,
+      },
+    ],
   },
-  percentiles: {},
-  by_lane: {},
-  by_outcome: {},
-  by_adapter: [],
-  slow_turns: [],
-  trend: [],
-  reliability: {
-    send_unknown_count: 0,
-    suppressed_count: 0,
-    failed_count: 0,
-  },
+  conversion: { rate_pct: 25.0, with_phone: 3, candidate_chats: 12 },
 };
 
-const slowTurn: PerfSlowTurn = {
-  id: 42,
-  conversation_id: "conversation-42",
-  started_at: "2026-07-23T10:00:00Z",
-  outcome: "SENT",
-  lane: "agent",
-  intent: "recruitment",
-  llm_queue_ms: 100,
-  llm_model_ms: 2_400,
-  llm_backoff_ms: 0,
-  llm_calls: 1,
-  llm_call_ms: [2_400],
-  tool_calls: 1,
-  tool_ms: 200,
-  tool_breakdown: null,
-  prompt_tokens: 1_000,
-  completion_tokens: 200,
-  cached_tokens: 0,
-  retried_429: false,
-  degraded: false,
-  prefetch_hit: true,
-  pipeline_ms: 3_000,
-  total_ms: 3_200,
-  queue_depth: 0,
-  outbound_adapter: "zalo_oa",
-  outbound_prepare_ms: 20,
-  outbound_provider_ms: 180,
-  outbound_provider_attempts: 1,
-  outbound_retry_count: 0,
-  outbound_retry_ms: 0,
-  outbound_refresh_count: 0,
-  outbound_refresh_ms: 0,
-  outbound_chunk_count: 1,
-  outbound_result: "SENT",
-  db_ms: 80,
-  db_breakdown: null,
-  faq_bypass_ms: 0,
-  model_tier: "fast",
-  system_prompt_cache_hit: true,
-  dark_time_ms: 120,
-};
-
-const populatedMetrics: PerfMetrics = {
-  ...emptyMetrics,
-  percentiles: {
-    end_to_end: { p50: 2_800, p95: 3_200, p99: 3_400 },
-    llm_model: { p50: 2_000, p95: 2_400, p99: 2_500 },
-  },
-  by_lane: { agent: 1 },
-  by_outcome: { SENT: 1 },
-  by_adapter: [
-    {
-      adapter: "zalo_oa",
-      turns: 1,
-      sent: 1,
-      unsent: 0,
-      provider_p50_ms: 180,
-      provider_p95_ms: 180,
-      end_to_end_p50_ms: 3_200,
-      end_to_end_p95_ms: 3_200,
-      retry_count: 0,
-      refresh_count: 0,
-    },
-  ],
-  slow_turns: [slowTurn],
-  trend: [
-    {
-      bucket: "2026-07-23T10:00:00Z",
-      p95_ms: 3_200,
-      p50_ms: 2_800,
-      turns: 1,
-      errors: 0,
-    },
-  ],
-};
-
-const manySlowTurns = Array.from({ length: 10 }, (_, index) => ({
-  ...slowTurn,
-  id: index + 1,
-  conversation_id: `conversation-${index + 1}`,
-}));
+afterEach(async () => {
+  await cleanup();
+});
 
 describe("PerformanceMetrics", () => {
-  it("opens related slow turns without replacing the hash-router location", async () => {
+  it("shows the response time and the phone-capture rate", async () => {
     const screen = await render(
-      <TestMessages>
+      <div style={{ width: "900px", height: "400px" }}>
+        <PerformanceMetrics data={metrics} />
+      </div>,
+    );
+
+    await expect
+      .element(screen.getByRole("heading", { name: "Thời gian phản hồi" }))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("heading", { name: "Tỷ lệ thu được số điện thoại" }),
+      )
+      .toBeVisible();
+
+    // p95 in seconds (Vietnamese decimal comma), p50 on the sub-line.
+    await expect.element(screen.getByText("3,2 giây")).toBeVisible();
+    await expect.element(screen.getByText("p50 1,5 giây")).toBeVisible();
+    // The rate and the two raw counters that produced it.
+    await expect.element(screen.getByText("25%")).toBeVisible();
+    await expect
+      .element(screen.getByText("3 / 12 cuộc trò chuyện"))
+      .toBeVisible();
+    // The Tailwind utility layer is not emitted in this project, so the bar has
+    // no painted height; pin the value it carries instead (`ProgressBarBase`).
+    expect(
+      screen.container
+        .querySelector(".performance-conversion-meter")
+        ?.getAttribute("aria-valuenow"),
+    ).toBe("25");
+
+    const trendRows = screen.container.querySelectorAll(
+      ".performance-trend-data tbody tr",
+    );
+    expect(trendRows).toHaveLength(1);
+    expect(trendRows[0]?.textContent).toBe("08:003,21,512");
+  });
+
+  it("reports an unknown rate and no conversations instead of a zero bar", async () => {
+    const screen = await render(
+      <div style={{ width: "900px", height: "400px" }}>
         <PerformanceMetrics
           data={{
-            ...populatedMetrics,
-            percentiles: {
-              ...populatedMetrics.percentiles,
-              end_to_end: { p50: 10_000, p95: 15_000, p99: 20_000 },
-            },
+            ...metrics,
+            response_time: { p50_ms: null, p95_ms: null, trend: [] },
+            conversion: { rate_pct: null, with_phone: 0, candidate_chats: 0 },
           }}
         />
-      </TestMessages>,
-    );
-    const before = window.location.hash;
-    await screen
-      .getByRole("button", {
-        name: "Xem lượt liên quan đến Độ trễ p95 vượt mục tiêu",
-      })
-      .click();
-    expect(window.location.hash).toBe(before);
-    expect(document.activeElement?.id).toBe("slow-turns");
-  });
-
-  it("replaces repeated empty panels with one concise low-data state", async () => {
-    const screen = await render(
-      <TestMessages>
-        <PerformanceMetrics data={emptyMetrics} />
-      </TestMessages>,
+      </div>,
     );
 
-    await expect
-      .element(
-        screen.getByRole("heading", {
-          name: "Chưa có lượt xử lý trong 24 giờ",
-        }),
-      )
-      .toBeVisible();
+    // Both headline numbers are unknown, not zero.
     expect(
-      screen.container.querySelectorAll(".performance-metric"),
-    ).toHaveLength(6);
-    expect(
-      screen.container.querySelector(".performance-primary-grid"),
-    ).toBeNull();
-    expect(screen.container.querySelector(".performance-details")).toBeNull();
-    expect(screen.container.textContent).not.toContain(
-      "Chưa có dữ liệu xu hướng",
-    );
-    expect(screen.container.textContent).not.toContain(
-      "Chưa có dữ liệu theo kênh",
-    );
-  });
-
-  it("keeps deep diagnostics collapsed until the operator asks for them", async () => {
-    const screen = await render(
-      <TestMessages>
-        <PerformanceMetrics data={populatedMetrics} />
-      </TestMessages>,
-    );
-    const details = screen.container.querySelector<HTMLDetailsElement>(
-      ".performance-details",
-    );
-
+      Array.from(
+        screen.container.querySelectorAll(".performance-metric-value"),
+      ).map((value) => value.textContent),
+    ).toEqual(["—", "—"]);
     await expect
       .element(
-        screen.getByRole("heading", {
-          name: "Xu hướng độ trễ ứng viên chờ",
-        }),
+        screen.getByText(
+          "Chưa có cuộc trò chuyện nào từ ứng viên trong khoảng thời gian này.",
+        ),
       )
       .toBeVisible();
     await expect
-      .element(screen.getByRole("heading", { name: /Lượt cần xem/ }))
+      .element(screen.getByText("Chưa có dữ liệu trong khoảng thời gian này."))
       .toBeVisible();
-    expect(details?.open).toBe(false);
-    expect(details?.querySelector(".tt-card")).toBeNull();
-
-    await screen.getByText("Phân tích chi tiết", { exact: true }).click();
-
-    expect(details?.open).toBe(true);
-    await expect
-      .element(
-        screen.getByRole("heading", {
-          name: "Chẩn đoán độ trễ",
-        }),
-      )
-      .toBeVisible();
-    await expect
-      .element(
-        screen.getByRole("heading", {
-          name: "So sánh kênh giao gửi",
-        }),
-      )
-      .toBeVisible();
-  });
-
-  it("keeps the slow-turn list short until more rows are requested", async () => {
-    const screen = await render(
-      <TestMessages>
-        <PerformanceMetrics
-          data={{
-            ...populatedMetrics,
-            by_outcome: { SENT: manySlowTurns.length },
-            slow_turns: manySlowTurns,
-          }}
-        />
-      </TestMessages>,
-    );
-
-    expect(
-      screen.container.querySelectorAll(
-        ".performance-slow-turns tbody > tr:not(.performance-detail-row)",
-      ),
-    ).toHaveLength(8);
-
-    await screen
-      .getByRole("button", { name: "Xem thêm 2 lượt", exact: true })
-      .click();
-
-    await expect
-      .poll(
-        () =>
-          screen.container.querySelectorAll(
-            ".performance-slow-turns tbody > tr:not(.performance-detail-row)",
-          ).length,
-      )
-      .toBe(10);
-    await expect
-      .element(screen.getByRole("button", { name: "Thu gọn", exact: true }))
-      .toBeVisible();
-  });
-
-  it("publishes bucket-level trend data to assistive technology", async () => {
-    const screen = await render(
-      <TestMessages>
-        <PerformanceMetrics data={populatedMetrics} />
-      </TestMessages>,
-    );
-
-    const trendTable = screen.getByRole("table", {
-      name: "Dữ liệu xu hướng độ trễ ứng viên chờ",
-    });
-    const formattedBucket = formatTrendBucket(
-      populatedMetrics.trend[0]?.bucket ?? null,
-      true,
-    );
-    const formattedP95 = formatMetricDuration(
-      populatedMetrics.trend[0]?.p95_ms ?? null,
-    );
-
-    await expect.element(trendTable).toBeInTheDocument();
-    await expect
-      .element(trendTable.getByText(formattedBucket, { exact: true }))
-      .toBeInTheDocument();
-    await expect
-      .element(trendTable.getByText(formattedP95, { exact: true }))
-      .toBeInTheDocument();
-    await expect
-      .element(trendTable.getByText("1 lượt", { exact: false }))
-      .toBeInTheDocument();
-    await expect
-      .element(trendTable.getByText("0 lỗi", { exact: false }))
-      .toBeInTheDocument();
+    expect(screen.container.querySelector('[role="progressbar"]')).toBeNull();
   });
 });

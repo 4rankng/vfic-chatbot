@@ -23,13 +23,7 @@
 }
 
 .performance-header,
-.performance-header-actions,
-.performance-section-heading,
-.performance-metric-heading,
-.performance-supporting article > div,
-.performance-chart-note,
-.performance-legend,
-.performance-turn-cards article > div {
+.performance-header-actions {
   display: flex;
   align-items: center;
 }
@@ -43,8 +37,7 @@
 }
 
 .performance-header h1,
-.performance-panel h2,
-.performance-supporting h2 {
+.performance-panel h2 {
   margin: 0;
   color: var(--foreground);
 }
@@ -58,11 +51,7 @@
 /* The kicker is not a muted paragraph: excluding it here lets the rule below
    own its colour without an `!important` escalation (FE-19: same sheet). */
 .performance-header p,
-.performance-panel p,
-.performance-metric p,
-.performance-metric small,
-.performance-supporting p,
-.performance-row-detail p {
+.performance-panel p {
   color: var(--muted-foreground);
 }
 
@@ -73,82 +62,6 @@
 .performance-header-actions {
   flex-wrap: wrap;
   gap: 0.375rem;
-}
-
-/* Health verdict band: one strip answering "is the bot OK" — tone lives in the
-   badge and the left accent; everything else stays quiet. */
-.performance-band {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem 1.5rem;
-  padding: 0.9rem 1.1rem;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--primary);
-  border-radius: 12px;
-  background: var(--card);
-}
-.performance-band.is-warning {
-  border-left-color: var(--warning);
-}
-.performance-band.is-danger {
-  border-left-color: var(--danger);
-}
-.performance-band.is-success {
-  border-left-color: var(--success);
-}
-.performance-band-verdict {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  min-width: 0;
-}
-.performance-band-verdict p {
-  margin: 0;
-  color: var(--muted-foreground);
-  font-size: var(--fs-body-sm);
-}
-.performance-band-metric {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.3rem 0.75rem;
-}
-.performance-band-metric p {
-  margin: 0;
-  color: var(--muted-foreground);
-  font-size: var(--fs-meta);
-}
-.performance-band-metric strong {
-  color: var(--foreground);
-  font-size: var(--fs-metric);
-  line-height: var(--lh-tight);
-  font-variant-numeric: tabular-nums;
-}
-.performance-band-metric small {
-  color: var(--muted-foreground);
-  font-size: var(--fs-meta);
-}
-
-/* Worker saturation meter (Untitled UI ProgressBarBase, slimmed). */
-.performance-metric .performance-metric-meter {
-  margin-top: 0.5rem;
-  height: 4px;
-  border-radius: 999px;
-}
-.performance-metric .performance-metric-meter-fill {
-  background-color: var(--workspace-action);
-}
-.performance-metric .performance-metric-meter-fill.is-success {
-  background-color: var(--workspace-success);
-}
-.performance-metric .performance-metric-meter-fill.is-warning {
-  background-color: var(--workspace-warning);
-}
-.performance-metric .performance-metric-meter-fill.is-danger {
-  background-color: var(--workspace-danger);
 }
 
 .performance-page .performance-window-switcher {
@@ -168,14 +81,6 @@
   line-height: 18px;
 }
 
-.performance-expand,
-.performance-signal-list button,
-.performance-turn-cards button {
-  border: 0;
-  background: transparent;
-  color: var(--muted-foreground);
-}
-
 /* The refresh action is the library's own Button; the sheet only pins its
    height to the console's control scale. */
 .performance-refresh {
@@ -186,22 +91,11 @@
 .performance-refresh:disabled {
   cursor: wait;
 }
-.performance-expand:focus-visible,
-.performance-turn-cards button:focus-visible,
-.performance-signal-list button:focus-visible {
+.performance-refresh:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-@media (max-width: 767px) {
-  .performance-page .performance-refresh,
-  .performance-page .performance-expand,
-  .performance-page .performance-signal-list li > button,
-  .performance-page .performance-turn-cards button {
-    height: 44px;
-    max-height: none;
-  }
-}
 .is-spinning {
   animation: performance-spin 900ms linear infinite;
 }
@@ -216,265 +110,39 @@
   }
 }
 
-.performance-metrics {
+.performance-panel {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--card);
-}
-
-.performance-panel,
-.performance-supporting article {
+  gap: 0.8rem;
+  padding: 1rem;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   background: var(--card);
 }
 
-.performance-metric {
-  min-width: 0;
-  padding: 1.1rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+.performance-panel h2 {
+  font-size: var(--fs-nav);
 }
-.performance-metric + .performance-metric {
-  border-left: 1px solid var(--border);
-}
-/* Tone bar: the turn cards are the only surface that keeps one — the KPI tiles
-   carry their tone in the number's colour, and a `display: none` metric rule
-   left the three colour declarations below painting nothing. */
-.performance-turn-cards article::before {
-  position: absolute;
-  top: -1px;
-  left: 50%;
-  width: 2.5rem;
-  height: 3px;
-  border-radius: 999px;
-  content: "";
-  transform: translateX(-50%);
-}
-.performance-metric-heading {
-  gap: 0.35rem;
-}
-.performance-metric-heading svg {
-  width: 1rem;
-  height: 1rem;
-  color: var(--muted-foreground);
-}
-.performance-metric p,
-.performance-metric small {
+
+.performance-panel-sub {
   margin: 0;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-body-sm);
 }
-.performance-metric strong {
-  display: block;
-  margin: 0.45rem 0 0.25rem;
-  font-size: var(--fs-metric);
+
+.performance-metric-value {
+  margin: 0;
+  color: var(--foreground);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: var(--fw-bold);
   line-height: var(--lh-tight);
   font-variant-numeric: tabular-nums;
 }
-.performance-metric.is-warning strong {
-  color: var(--warning);
-}
-.performance-metric.is-danger strong {
-  color: var(--danger);
+
+.performance-conversion-meter {
+  max-width: 24rem;
 }
 
-.performance-primary-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(20rem, 1fr);
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--card);
-}
-.performance-primary-grid > .performance-panel {
-  min-width: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.performance-primary-grid > .performance-attention-panel {
-  border-left: 1px solid var(--border);
-}
-.performance-panel {
-  display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
-}
-.performance-panel h2,
-.performance-supporting h2 {
-  font-size: var(--fs-nav);
-}
-.performance-section-heading {
-  justify-content: space-between;
-  gap: 1rem;
-}
-.performance-section-heading p {
-  margin: 0.3rem 0 0;
-  font-size: var(--fs-body-sm);
-}
-.performance-section-heading h2 span {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.25rem;
-  min-height: 1.25rem;
-  margin-left: 0.3rem;
-  border-radius: 999px;
-  background: var(--muted);
-  color: var(--muted-foreground);
-  font-size: var(--fs-caption);
-  vertical-align: 0.1em;
-}
-
-.performance-legend {
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  color: var(--muted-foreground);
-  font-size: var(--fs-meta);
-}
-.performance-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-.performance-legend i {
-  display: inline-block;
-  width: 1rem;
-  height: 0.15rem;
-  background: var(--primary);
-}
-.performance-legend i.is-target {
-  height: 0;
-  border-top: 2px dashed var(--danger);
-  background: transparent;
-}
-.performance-legend i.is-tone {
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 0.12rem;
-  background: var(--primary);
-}
-.performance-legend i.is-tone.is-success {
-  background: var(--success);
-}
-.performance-legend i.is-tone.is-warning {
-  background: var(--warning);
-}
-
-.performance-trend {
-  position: relative;
-  display: flex;
-  align-items: end;
-  gap: 1px;
-  height: 12rem;
-  padding: 0.7rem 0.5rem 0.4rem;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 0.55rem;
-  background:
-    linear-gradient(
-      to bottom,
-      transparent calc(25% - 0.5px),
-      var(--border) calc(25% - 0.5px),
-      var(--border) calc(25% + 0.5px),
-      transparent calc(25% + 0.5px)
-    ),
-    linear-gradient(
-      to bottom,
-      transparent calc(50% - 0.5px),
-      var(--border) calc(50% - 0.5px),
-      var(--border) calc(50% + 0.5px),
-      transparent calc(50% + 0.5px)
-    ),
-    linear-gradient(
-      to bottom,
-      transparent calc(75% - 0.5px),
-      var(--border) calc(75% - 0.5px),
-      var(--border) calc(75% + 0.5px),
-      transparent calc(75% + 0.5px)
-    ),
-    var(--muted);
-}
-.performance-trend::before {
-  display: none;
-}
-.performance-target-line {
-  position: absolute;
-  z-index: 3;
-  right: 0;
-  left: 0;
-  border-top: 1px dashed var(--danger);
-  pointer-events: none;
-}
-.performance-target-label {
-  position: absolute;
-  z-index: 3;
-  top: 0.25rem;
-  left: 0.4rem;
-  padding: 0.1rem 0.35rem;
-  border-radius: 0.25rem;
-  color: var(--danger);
-  background: var(--card);
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-semibold);
-  pointer-events: none;
-}
-.performance-trend-bar {
-  position: relative;
-  z-index: 2;
-  flex: 1;
-  min-width: 2px;
-  padding: 0;
-  border: 0;
-  border-radius: 0.12rem 0.12rem 0 0;
-  background: var(--primary);
-  cursor: default;
-}
-.performance-trend-bar:hover {
-  opacity: 0.72;
-}
-.performance-trend-bar.is-error {
-  background: var(--danger);
-}
-.performance-trend-bar.is-warning {
-  background: var(--warning);
-}
-.performance-trend-bar.is-success {
-  background: var(--success);
-}
-.performance-trend-axis {
-  position: relative;
-  height: 1rem;
-  color: var(--muted-foreground);
-  font-size: var(--fs-caption);
-  font-variant-numeric: tabular-nums;
-}
-.performance-trend-axis span {
-  position: absolute;
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-.performance-trend-axis .is-first {
-  transform: none;
-}
-.performance-trend-axis .is-last {
-  transform: translateX(-100%);
-}
-.performance-chart-note {
-  gap: 0.3rem;
-  margin: 0;
-  font-size: var(--fs-meta);
-}
-.performance-chart-note svg {
-  width: 1rem;
-  height: 1rem;
-  color: var(--warning);
+.performance-chart {
+  height: 280px;
 }
 
 /* The bucket-level data table for assistive tech: kept clipped by this sheet
@@ -490,401 +158,6 @@
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
-}
-
-/* Bucket tooltip: one React-rendered card, positioned over the hovered bar
-   and never intercepting the pointer itself. */
-.performance-tooltip {
-  position: absolute;
-  z-index: 5;
-  transform: translateX(-50%);
-  display: grid;
-  gap: 0.15rem;
-  padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  box-shadow: 0 4px 12px rgb(23 32 51 / 10%);
-  pointer-events: none;
-  white-space: nowrap;
-}
-.performance-tooltip strong {
-  color: var(--foreground);
-  font-size: var(--fs-body-sm);
-  font-variant-numeric: tabular-nums;
-}
-.performance-tooltip span {
-  color: var(--muted-foreground);
-  font-size: var(--fs-meta);
-}
-
-/* Quiet seconds scale at the left edge of the plot. */
-.performance-trend-scale {
-  position: absolute;
-  z-index: 1;
-  left: 0.35rem;
-  transform: translateY(-50%);
-  color: var(--muted-foreground);
-  font-size: var(--fs-caption);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Tone-chipped signal icons — the chip colour repeats the row tone so the
-   queue reads at a glance; the glyphs stay decorative. */
-.performance-signal-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--primary) 8%, transparent);
-  color: var(--primary);
-}
-.performance-signal-list li.is-danger .performance-signal-icon {
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
-  color: var(--danger);
-}
-.performance-signal-list li.is-warning .performance-signal-icon {
-  background: color-mix(in srgb, var(--warning) 12%, transparent);
-  color: var(--warning);
-}
-.performance-signal-list li.is-success .performance-signal-icon {
-  background: color-mix(in srgb, var(--success) 10%, transparent);
-  color: var(--success);
-}
-
-/* Quiet severity marker for table rows. */
-.performance-severity {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--foreground);
-  font-size: var(--fs-meta);
-  font-weight: var(--fw-semibold);
-  white-space: nowrap;
-}
-.performance-severity i {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 999px;
-  background: var(--workspace-ink-muted);
-}
-.performance-severity.is-danger i {
-  background: var(--danger);
-}
-.performance-severity.is-warning i {
-  background: var(--warning);
-}
-
-.performance-signal-list {
-  display: grid;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.performance-signal-list li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.75rem 0;
-  border-top: 1px solid var(--border);
-}
-.performance-signal-list li:first-child {
-  border-top: 0;
-}
-.performance-signal-list > li > svg {
-  width: 1rem;
-  height: 1rem;
-}
-.performance-signal-list li.is-danger > svg {
-  color: var(--danger);
-}
-.performance-signal-list li.is-warning > svg {
-  color: var(--warning);
-}
-.performance-signal-list li.is-success > svg {
-  color: var(--success);
-}
-.performance-signal-list li.is-success {
-  grid-template-columns: auto minmax(0, 1fr);
-}
-.performance-signal-list strong,
-.performance-signal-list small {
-  display: block;
-}
-.performance-signal-list strong {
-  font-size: var(--fs-body-sm);
-}
-.performance-signal-list small {
-  margin-top: 0.15rem;
-  color: var(--muted-foreground);
-  font-size: var(--fs-meta);
-  line-height: 1.35;
-}
-.performance-signal-list b {
-  font-size: var(--fs-meta);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.performance-signal-list button {
-  display: inline-flex;
-  min-width: 2.5rem;
-  min-height: 2.5rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0.2rem;
-  border-radius: 0.35rem;
-}
-.performance-signal-list button:hover {
-  color: var(--primary);
-  background: var(--muted);
-}
-.performance-signal-list button svg {
-  width: 1rem;
-  height: 1rem;
-}
-
-.performance-table-wrap {
-  overflow-x: auto;
-}
-.performance-table-wrap:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 3px;
-}
-.performance-table-wrap table {
-  width: 100%;
-  min-width: 48rem;
-  border-collapse: collapse;
-  font-size: var(--fs-meta);
-}
-.performance-table-wrap th,
-.performance-table-wrap td {
-  padding: 0.55rem 0.6rem;
-  border-top: 1px solid var(--border);
-  text-align: left;
-  white-space: nowrap;
-}
-.performance-table-wrap thead th {
-  border-top: 0;
-  color: var(--muted-foreground);
-  font-weight: 650;
-}
-.performance-table-wrap td:first-child {
-  white-space: normal;
-}
-.performance-table-wrap td > small {
-  display: block;
-  margin-top: 0.2rem;
-  color: var(--muted-foreground);
-  font-size: var(--fs-caption);
-}
-.performance-group-row th {
-  padding: 0.5rem 0.6rem;
-  color: var(--muted-foreground);
-  background: var(--muted);
-  font-size: var(--fs-caption);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.performance-matrix td:nth-child(n + 2):not(:last-child) {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.performance-matrix td b {
-  color: var(--foreground);
-}
-
-/* Every performance table renders headless-of-band: the shell's tinted
-   `thead` (src/index.css) reads as a stripe across a borderless report panel,
-   which is why the slow-turns table reset it. One reset here, not three. */
-.performance-table-wrap thead {
-  background: transparent;
-}
-
-.performance-slow-turns thead {
-  background: transparent;
-}
-.performance-slow-turns thead tr {
-  background: transparent;
-}
-.performance-slow-turns thead th {
-  position: static;
-  border-bottom: 1px solid var(--border);
-  color: var(--muted-foreground);
-  background: transparent;
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.015em;
-}
-.performance-slow-turns table tr:not(.performance-detail-row):hover,
-.performance-slow-turns table tr.is-open {
-  background: var(--muted);
-}
-.performance-slow-turns td:nth-child(3),
-.performance-slow-turns td:nth-child(4) {
-  font-variant-numeric: tabular-nums;
-}
-.performance-expand {
-  display: grid;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border: 0;
-  border-radius: 999px;
-}
-.performance-expand:hover {
-  color: var(--primary);
-  background: var(--muted);
-}
-.performance-show-more {
-  justify-self: center;
-  min-height: 2.75rem;
-}
-.performance-show-more svg {
-  transition: transform 180ms ease;
-}
-.performance-show-more svg.is-open {
-  transform: rotate(180deg);
-}
-.performance-detail-row td {
-  padding: 0.7rem 0.6rem;
-  background: color-mix(in srgb, var(--primary) 4%, var(--card));
-}
-.performance-row-detail {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.85rem;
-}
-.performance-row-detail strong {
-  display: block;
-  margin-bottom: 0.3rem;
-  color: var(--muted-foreground);
-  font-size: var(--fs-caption);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.performance-row-detail p {
-  margin: 0.2rem 0 0;
-  font-size: var(--fs-meta);
-  line-height: 1.4;
-}
-.performance-row-detail code {
-  overflow-wrap: anywhere;
-  font-size: var(--fs-caption);
-}
-.performance-turn-cards,
-.performance-mobile-diagnostics {
-  display: none;
-}
-
-.performance-supporting {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: 0.7rem;
-}
-.performance-supporting article {
-  padding: 0.9rem;
-}
-.performance-supporting article > div {
-  gap: 0.35rem;
-}
-.performance-supporting article > div > svg {
-  width: 1rem;
-  height: 1rem;
-  color: var(--primary);
-}
-.performance-supporting strong {
-  display: block;
-  margin: 0.6rem 0 0.2rem;
-  font-size: var(--fs-metric);
-  font-variant-numeric: tabular-nums;
-}
-.performance-supporting p {
-  margin: 0;
-  font-size: var(--fs-meta);
-  line-height: 1.4;
-}
-.performance-supporting ul {
-  display: grid;
-  gap: 0.35rem;
-  margin: 0.65rem 0 0;
-  padding: 0;
-  list-style: none;
-}
-.performance-supporting li {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: var(--fs-meta);
-}
-.performance-supporting li span {
-  color: var(--muted-foreground);
-}
-.performance-supporting li b {
-  font-variant-numeric: tabular-nums;
-}
-
-.performance-details {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--card);
-}
-.performance-details > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  min-height: 3.5rem;
-  padding: 16px 20px;
-  cursor: pointer;
-  list-style: none;
-}
-.performance-details > summary::-webkit-details-marker {
-  display: none;
-}
-.performance-details > summary span,
-.performance-details > summary strong,
-.performance-details > summary small {
-  display: block;
-}
-.performance-details > summary strong {
-  font-size: var(--fs-nav);
-}
-.performance-details > summary small {
-  margin-top: 0.15rem;
-  color: var(--muted-foreground);
-  font-size: var(--fs-meta);
-}
-.performance-details > summary > svg {
-  width: 1rem;
-  height: 1rem;
-  color: var(--muted-foreground);
-  transition: transform 180ms ease;
-}
-.performance-details[open] > summary > svg {
-  transform: rotate(180deg);
-}
-.performance-details > summary:hover {
-  color: var(--primary);
-}
-.performance-details > summary:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-.performance-details-content > .performance-panel {
-  gap: 0.75rem;
-  padding: 20px;
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0;
-  background: transparent;
-}
-.performance-details-content > .performance-supporting {
-  margin: 0;
-  border-top: 1px solid var(--border);
 }
 
 .performance-empty {
@@ -904,27 +177,21 @@
   line-height: 1.5;
 }
 
-@media (max-width: 1100px) {
-  .performance-metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@media (max-width: 767px) {
+  /* The period control scrolls inside its own strip: five labelled segments
+     cannot fit a phone width, and a horizontal scroller is what the mobile
+     geometry check exempts (the page itself must not scroll sideways). */
+  .performance-page .performance-window-switcher {
+    max-width: 100%;
+    overflow-x: auto;
   }
-  .performance-metric:nth-child(3n + 1) {
-    border-left: 0;
-  }
-  .performance-metric:nth-child(n + 4) {
-    border-top: 1px solid var(--border);
-  }
-  .performance-primary-grid {
-    grid-template-columns: 1fr;
-  }
-  .performance-primary-grid > .performance-attention-panel {
-    border-top: 1px solid var(--border);
-    border-left: 0;
-  }
-  .performance-row-detail {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  .performance-page .performance-window-option,
+  .performance-page .performance-refresh {
+    min-height: 44px;
   }
 }
+
 @media (max-width: 720px) {
   .performance-page {
     height: auto;
@@ -934,447 +201,34 @@
   }
 
   .performance-header {
-    align-items: start;
     flex-direction: column;
+    align-items: start;
     gap: 12px;
-    padding-bottom: 12px;
-  }
-
-  .performance-header h1 {
-    font-size: var(--fs-page-title);
-    font-weight: 700;
-    line-height: 28px;
-  }
-
-  .performance-header > div > p:last-child {
-    margin-top: 4px;
-    font-size: var(--fs-body-sm);
-    font-weight: 400;
-    line-height: 18px;
   }
 
   .performance-header-actions {
-    display: flex;
-    flex-wrap: wrap;
     width: 100%;
+    flex-wrap: wrap;
     gap: 6px;
-  }
-
-  .performance-band {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 12px 14px;
   }
 
   .performance-refresh {
-    flex: 0 0 auto;
     margin-inline-start: auto;
-    min-height: 44px;
-    justify-content: center;
-    white-space: nowrap;
   }
 
-  .performance-metrics {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0;
-  }
-
-  .performance-metric {
-    min-width: 0;
-    padding: 10px;
-  }
-
-  .performance-metric:nth-child(odd) {
-    border-left: 0;
-  }
-
-  .performance-metric:nth-child(even) {
-    border-left: 1px solid var(--border);
-  }
-
-  .performance-metric:nth-child(n + 3) {
-    border-top: 1px solid var(--border);
-  }
-
-  .performance-metric-heading {
-    gap: 4px;
-  }
-
-  .performance-metric strong {
-    margin: 6px 0 2px;
-  }
-
-  .performance-metric p,
-  .performance-metric small {
-    font-size: var(--fs-caption);
-    font-weight: 400;
-    line-height: 16px;
-  }
-
-  .performance-primary-grid {
-    gap: 0;
-  }
-
+  /* One panel per row: `minmax(0, …)` keeps the chart from forcing the panel
+     wider than the viewport. */
   .performance-panel {
-    gap: 10px;
-    border-radius: 12px;
-    padding: 12px;
-    box-shadow: 0 1px 4px rgb(10 37 64 / 4%);
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .performance-panel h2,
-  .performance-supporting h2 {
-    font-size: var(--fs-nav);
-    font-weight: 700;
-    line-height: 20px;
-  }
-
-  .performance-section-heading {
-    align-items: start;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .performance-section-heading p {
-    margin-top: 2px;
-    font-size: var(--fs-body-sm);
-    font-weight: 400;
-    line-height: 18px;
-  }
-
-  .performance-trend {
-    height: 152px;
-    border-radius: 8px;
-  }
-
-  .performance-legend {
-    gap: 6px;
-    font-size: var(--fs-caption);
-    font-weight: 400;
-  }
-
-  .performance-signal-list li {
-    grid-template-columns: 20px minmax(0, 1fr) 44px;
-    gap: 8px;
-    padding: 12px 0;
-  }
-
-  .performance-signal-list li.is-success {
-    grid-template-columns: 20px minmax(0, 1fr);
-  }
-
-  .performance-signal-list b {
-    grid-column: 2;
-    text-align: left;
-  }
-
-  .performance-signal-list li > button {
-    grid-column: 3;
-    grid-row: 1 / 3;
-    min-width: 44px;
-    min-height: 44px;
-    align-self: start;
-  }
-
-  .performance-signal-list strong {
-    font-size: var(--fs-body-lg);
-    font-weight: 600;
-    line-height: 20px;
-  }
-
-  .performance-signal-list small {
-    font-size: var(--fs-body);
-    font-weight: 500;
-    line-height: 20px;
-  }
-
-  .performance-matrix .performance-table-wrap,
-  .performance-slow-turns .performance-table-wrap {
-    display: none;
-  }
-
-  .performance-mobile-diagnostics {
-    display: grid;
-    gap: 8px;
-  }
-
-  .performance-diagnostic-group {
-    overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-    border-radius: 12px;
-  }
-
-  .performance-diagnostic-group > button,
-  .performance-mobile-turn-details button {
-    width: 100%;
-    min-height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    border: 0;
-    background: transparent;
-    color: var(--foreground);
-    padding: 12px;
-    font-size: var(--fs-body-lg);
-    font-weight: 600;
-    text-align: left;
-  }
-
-  .performance-diagnostic-group > button svg,
-  .performance-mobile-turn-details button svg {
-    width: 16px;
-    height: 16px;
-    transition: transform 180ms ease;
-  }
-
-  .performance-diagnostic-group > button[aria-expanded="true"] svg,
-  .performance-mobile-turn-details button[aria-expanded="true"] svg {
-    transform: rotate(180deg);
-  }
-
-  .performance-diagnostic-rows {
-    display: grid;
-    border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  }
-
-  .performance-diagnostic-rows > div {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px 12px;
-    padding: 12px;
-  }
-
-  .performance-diagnostic-rows > div + div {
-    border-top: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
-  }
-
-  .performance-diagnostic-rows span {
-    font-size: var(--fs-body);
-    font-weight: 600;
-    line-height: 20px;
-  }
-
-  .performance-diagnostic-rows strong {
-    font-size: var(--fs-body-lg);
-    font-weight: 700;
-    line-height: 20px;
-  }
-
-  .performance-diagnostic-rows small {
-    grid-column: 1 / -1;
-    color: var(--muted-foreground);
-    font-size: var(--fs-meta);
-    font-weight: 500;
-    line-height: 16px;
-  }
-
-  .performance-turn-cards {
-    display: grid;
-    gap: 0;
-  }
-
-  .performance-page > .performance-slow-turns {
-    padding: 12px 2px;
-    border: 0;
-    border-block: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .performance-turn-cards article {
-    position: relative;
-    display: grid;
-    gap: 8px;
-    overflow: hidden;
-    border: 0;
-    border-radius: 0;
-    padding: 14px 2px 14px 12px;
-    background: transparent;
-  }
-
-  .performance-turn-cards article + article {
-    border-top: 1px solid var(--border);
-  }
-
-  .performance-turn-cards article::before {
-    top: 14px;
-    bottom: 14px;
-    left: 0;
-    width: 2px;
-    height: auto;
-    border-radius: 999px;
-    transform: none;
-  }
-
-  .performance-turn-cards article.is-danger::before {
-    background: var(--danger);
-  }
-  .performance-turn-cards article.is-warning::before {
-    background: var(--warning);
-  }
-  .performance-turn-cards article.is-neutral::before {
-    background: var(--primary);
-  }
-  .performance-turn-cards article > div {
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .performance-turn-cards time {
-    color: var(--muted-foreground);
-    font-size: var(--fs-meta);
-    font-weight: 500;
-  }
-  .performance-turn-cards strong {
-    font-size: var(--fs-section-title);
-    font-weight: 700;
-    line-height: 24px;
-  }
-  .performance-turn-cards p {
-    margin: 0;
-    font-size: var(--fs-body);
-    font-weight: 500;
-    line-height: 20px;
-  }
-  .performance-turn-cards > article > button {
-    min-height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: space-between;
-    border: 0;
-    background: transparent;
-    color: var(--primary);
-    padding: 4px 0;
-    font-size: var(--fs-body);
-    font-weight: 600;
-    text-align: left;
-  }
-  .performance-turn-cards > article > button svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .performance-mobile-turn-details {
-    display: grid;
-    border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  }
-
-  .performance-mobile-turn-details section + section {
-    border-top: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
-  }
-
-  .performance-mobile-turn-details p {
-    margin: 0;
-    border-top: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
-    color: var(--muted-foreground);
-    padding: 0 12px 12px;
-    font-size: var(--fs-meta);
-    font-weight: 500;
-    line-height: 16px;
-    overflow-wrap: anywhere;
-  }
-
-  .performance-supporting {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .performance-supporting article {
-    border-radius: 12px;
-    padding: 16px;
-  }
-
-  .performance-details {
-    border-top: 1px solid var(--border);
-  }
-
-  .performance-details > summary {
-    min-height: 48px;
-    padding-inline: 16px;
-  }
-
-  .performance-details-content > .performance-panel {
-    padding: 16px;
-  }
-
-  .performance-details-content > .performance-supporting {
-    gap: 0;
-  }
-
-  .performance-details-content > .performance-supporting article {
-    padding: 16px 2px;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
-  .performance-details-content > .performance-supporting article + article {
-    border-top: 1px solid var(--border);
+  .performance-chart {
+    height: 200px;
   }
 }
 
 @media (max-width: 420px) {
   .performance-refresh-prefix {
     display: none;
-  }
-}
-
-/* Keep the six KPI tiles and the primary chart/attention comparison bounded.
-   Diagnostic sections below them form one continuous report with dividers,
-   avoiding a stack of visually equal cards. */
-@media (min-width: 721px) {
-  .performance-page {
-    gap: 0;
-    padding: 24px 28px 48px;
-  }
-
-  .performance-header {
-    margin-bottom: 16px;
-  }
-
-  .performance-metrics {
-    margin-bottom: 16px;
-  }
-
-  .performance-primary-grid {
-    margin-bottom: 4px;
-  }
-
-  .performance-page > .performance-panel {
-    gap: 12px;
-    padding: 22px 0;
-    border: 0;
-    border-top: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .performance-page > .performance-slow-turns {
-    border-bottom: 1px solid var(--border);
-  }
-
-  .performance-page > .performance-panel .performance-section-heading {
-    padding-inline: 2px;
-  }
-
-  .performance-supporting {
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-    gap: 0;
-    margin-top: 4px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .performance-supporting article {
-    padding: 20px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .performance-supporting article + article {
-    border-left: 1px solid var(--border);
   }
 }

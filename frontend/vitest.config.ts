@@ -36,12 +36,13 @@ export default defineConfig({
           functions: 80,
           lines: 80,
         },
-        "src/components/atomic-crm/performance/PerformanceTrendChart.tsx": {
-          statements: 80,
-          branches: 80,
-          functions: 80,
-          lines: 80,
-        },
+        "src/components/atomic-crm/performance/PerformanceResponseTimeChart.tsx":
+          {
+            statements: 80,
+            branches: 80,
+            functions: 80,
+            lines: 80,
+          },
       },
     },
     projects: [

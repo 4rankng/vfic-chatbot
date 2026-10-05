@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import type { PerfMetrics } from "./usePerformanceStats";
+import type { PerfMetrics, PerfWindow } from "./usePerformanceStats";
 const usePerformanceStatsMock = vi.hoisted(() => vi.fn());
 const navigateMock = vi.hoisted(() => vi.fn());
 
@@ -17,27 +17,28 @@ import { PerformancePage } from "./PerformancePage";
 import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
 
 const metrics: PerfMetrics = {
-  window: "24h",
-  live: {
-    queue_depth: 0,
-    busy_workers: 0,
-    total_workers: 2,
-    llm_avg_latency_ms: 0,
-    llm_invokes_last_2m: 0,
-    minimax_429s_last_1m: 0,
+  window: "7d",
+  response_time: {
+    p50_ms: 1500,
+    p95_ms: 3200,
+    trend: [
+      {
+        bucket: "2026-07-12T08:00:00+07:00",
+        p50_ms: 1500,
+        p95_ms: 3200,
+        turns: 12,
+      },
+    ],
   },
-  percentiles: {},
-  by_lane: {},
-  by_outcome: {},
-  by_adapter: [],
-  slow_turns: [],
-  trend: [],
-  reliability: {
-    send_unknown_count: 0,
-    suppressed_count: 0,
-    failed_count: 0,
-  },
+  conversion: { rate_pct: 25.0, with_phone: 3, candidate_chats: 12 },
 };
+
+const renderPage = () =>
+  render(
+    <TestMessages>
+      <PerformancePage />
+    </TestMessages>,
+  );
 
 describe("PerformancePage wrapper states", () => {
   beforeEach(() => {
@@ -49,16 +50,13 @@ describe("PerformancePage wrapper states", () => {
     usePerformanceStatsMock.mockReturnValue({
       data: undefined,
       isPending: true,
+      isFetching: true,
       isError: false,
       refetch: vi.fn(),
       dataUpdatedAt: 0,
     });
 
-    const screen = await render(
-      <TestMessages>
-        <PerformancePage />
-      </TestMessages>,
-    );
+    const screen = await renderPage();
 
     await expect
       .element(screen.getByRole("heading", { name: "Hiệu suất chatbot" }))
@@ -78,16 +76,13 @@ describe("PerformancePage wrapper states", () => {
     usePerformanceStatsMock.mockReturnValue({
       data: undefined,
       isPending: false,
+      isFetching: false,
       isError: true,
       refetch,
       dataUpdatedAt: 0,
     });
 
-    const screen = await render(
-      <TestMessages>
-        <PerformancePage />
-      </TestMessages>,
-    );
+    const screen = await renderPage();
 
     await expect
       .element(
@@ -104,61 +99,6 @@ describe("PerformancePage wrapper states", () => {
     expect(navigateMock).toHaveBeenCalledWith("/");
   });
 
-  it("refreshes and switches windows when data is available", async () => {
-    const refetch = vi.fn();
-    usePerformanceStatsMock.mockImplementation((windowKey: string) => ({
-      data: { ...metrics, window: windowKey as PerfMetrics["window"] },
-      isPending: false,
-      isError: false,
-      refetch,
-      dataUpdatedAt: Date.parse("2026-07-26T20:00:00+08:00"),
-    }));
-
-    const screen = await render(
-      <TestMessages>
-        <PerformancePage />
-      </TestMessages>,
-    );
-
-    await expect
-      .element(screen.getByRole("button", { name: /Cập nhật lúc/ }))
-      .toBeVisible();
-    await expect
-      .element(
-        screen.getByRole("heading", {
-          name: "Chưa có lượt xử lý trong 24 giờ",
-        }),
-      )
-      .toBeVisible();
-
-    await screen.getByRole("radio", { name: "7 ngày" }).click();
-    await expect
-      .poll(() => usePerformanceStatsMock.mock.calls.at(-1)?.[0])
-      .toBe("7d");
-    // The switcher is one segmented control: exactly the clicked window is
-    // marked selected, and the stats hook was re-requested for it.
-    const segments = Array.from(
-      screen.container.querySelectorAll<HTMLButtonElement>(
-        '[aria-label="Khoảng thời gian"] button',
-      ),
-    );
-    expect(
-      segments
-        .filter((segment) => segment.hasAttribute("data-selected"))
-        .map((segment) => segment.textContent),
-    ).toEqual(["7 ngày"]);
-    await expect
-      .element(
-        screen.getByRole("heading", {
-          name: "Chưa có lượt xử lý trong 7 ngày",
-        }),
-      )
-      .toBeVisible();
-
-    await screen.getByRole("button", { name: /Cập nhật lúc/ }).click();
-    expect(refetch).toHaveBeenCalledTimes(1);
-  });
-
   it("keeps known metrics visible when a background refresh fails", async () => {
     usePerformanceStatsMock.mockReturnValue({
       data: metrics,
@@ -168,15 +108,12 @@ describe("PerformancePage wrapper states", () => {
       refetch: vi.fn(),
       dataUpdatedAt: Date.parse("2026-07-26T20:00:00+08:00"),
     });
-    const screen = await render(
-      <TestMessages>
-        <PerformancePage />
-      </TestMessages>,
-    );
+
+    const screen = await renderPage();
 
     await expect.element(screen.getByRole("alert")).toBeVisible();
     await expect
-      .element(screen.getByRole("region", { name: "Tình trạng hệ thống" }))
+      .element(screen.getByRole("heading", { name: "Thời gian phản hồi" }))
       .toBeVisible();
     await expect
       .element(
@@ -185,6 +122,49 @@ describe("PerformancePage wrapper states", () => {
         }),
       )
       .not.toBeInTheDocument();
+  });
+
+  it("re-requests the stats for each of the five periods", async () => {
+    const refetch = vi.fn();
+    usePerformanceStatsMock.mockImplementation((window: PerfWindow) => ({
+      data: { ...metrics, window },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      refetch,
+      dataUpdatedAt: Date.parse("2026-07-26T20:00:00+08:00"),
+    }));
+
+    const screen = await renderPage();
+
+    await expect
+      .element(screen.getByRole("button", { name: /Cập nhật lúc/ }))
+      .toBeVisible();
+
+    const periods = [
+      ["1 ngày", "1d"],
+      ["7 ngày", "7d"],
+      ["1 tháng", "1m"],
+      ["3 tháng", "3m"],
+      ["6 tháng", "6m"],
+    ] as const;
+
+    for (const [label, key] of periods) {
+      await screen.getByRole("radio", { name: label }).click();
+      await expect
+        .poll(() => usePerformanceStatsMock.mock.calls.at(-1)?.[0])
+        .toBe(key);
+      // One segmented control: exactly the clicked period is marked selected.
+      const selected = Array.from(
+        screen.container.querySelectorAll<HTMLButtonElement>(
+          '[aria-label="Khoảng thời gian"] button[data-selected]',
+        ),
+      );
+      expect(selected.map((segment) => segment.textContent)).toEqual([label]);
+    }
+
+    await screen.getByRole("button", { name: /Cập nhật lúc/ }).click();
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it("prevents overlapping refresh requests while metrics are fetching", async () => {
@@ -197,11 +177,9 @@ describe("PerformancePage wrapper states", () => {
       refetch,
       dataUpdatedAt: Date.parse("2026-07-26T20:00:00+08:00"),
     });
-    const screen = await render(
-      <TestMessages>
-        <PerformancePage />
-      </TestMessages>,
-    );
+
+    const screen = await renderPage();
+
     await expect
       .element(screen.getByRole("button", { name: /Cập nhật lúc/ }))
       .toBeDisabled();
