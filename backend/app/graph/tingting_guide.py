@@ -88,6 +88,15 @@ TINGTING_INTENT_REDIRECT_REPLY = (
 # verbatim by the support rules below.
 TINGTING_RESOLVED_CLOSER_REPLY = "Dạ không có gì ạ, em luôn đây khi anh/chị cần hỗ trợ 😊"
 
+# Payday questions ("Hôm nay có lương không?" and similar) get one fixed answer
+# (operator rule 2026-10-05): the wage data is sent by VFIC, so the honest answer
+# is that this OA is waiting for it too. The question is answered in-chat — it is
+# NOT an out-of-scope handoff — and nothing is promised: no in-chat follow-up.
+# The rules below quote this reply verbatim and sit BEFORE the out-of-scope
+# catch-all, which used to swallow payday questions and escalate them to the
+# hotline.
+TINGTING_WAGE_WAIT_REPLY = "Hiện tại bên em cũng đang chờ VFIC gửi dữ liệu tiền công ạ."
+
 # The support OA's persona is code, not tenant content: this channel is not a
 # recruitment channel, and the persona.md it used to inherit introduced the
 # model as a VFIC recruiting assistant with a "get the phone number" mission.
@@ -139,7 +148,13 @@ liệt kê "các chức năng em có thể hỗ trợ".
   được hỏi MỘT LẦN mà người dùng chỉ đáp lại cảm ơn, "ok", "rồi", "ô kê" hay tin nhắn không đọc
   được ý thay vì nói nhu cầu: trả lời ĐÚNG NGUYÊN VĂN một dòng:
   «{TINGTING_RESOLVED_CLOSER_REPLY}» và dừng — KHÔNG hỏi lại lần thứ hai.
-- MỌI việc khác (tuyển dụng, việc làm, lương, phúc lợi, lịch xe, nghỉ việc, hỏi thông tin của
+- Hỏi có lương không ("Hôm nay có lương không?", "lương đã về chưa"): trả lời ĐÚNG NGUYÊN VĂN
+  một dòng, không thêm bớt chữ, không Markdown, không emoji:
+  «{TINGTING_WAGE_WAIT_REPLY}» — KHÔNG trả lời dòng hotline, không hẹn ai sẽ nhắn lại.
+- Hỏi về phúc lợi (bảo hiểm, phụ cấp, thưởng, chế độ đãi ngộ): KHÔNG trả lời nội dung, không
+  đoán, KHÔNG dùng câu trả lời chờ dữ liệu tiền công ở trên — trả lời đúng dòng
+  «{tingting_hotline_reply(hotline)}».
+- MỌI việc khác (tuyển dụng, việc làm, mức lương/phúc lợi, lịch xe, nghỉ việc, hỏi thông tin của
   nhân viên khác, hoặc yêu cầu rõ ràng về một chủ đề khác không phải đặt lại mật khẩu): trả lời
   ĐÚNG NGUYÊN VĂN một dòng, không thêm bớt chữ, không Markdown, không emoji:
   «{tingting_hotline_reply(hotline)}»
@@ -190,6 +205,12 @@ Trạng thái hội thoại:
   «{TINGTING_INTENT_REDIRECT_REPLY}».
   Đếm trong lịch sử số lần ĐÃ hỏi câu xác nhận: tối đa 3 LẦN; đã hỏi đủ 3 lần mà vẫn không rõ
   nhu cầu thì trả lời đúng dòng «{tingting_hotline_reply(hotline)}» và không làm gì thêm.
+- Hỏi có lương không ("Hôm nay có lương không?", "lương đã về chưa"): trả lời ĐÚNG NGUYÊN VĂN
+  một dòng: «{TINGTING_WAGE_WAIT_REPLY}» — không thêm bớt chữ, không Markdown, không emoji,
+  KHÔNG trả lời dòng hotline, không hẹn ai sẽ nhắn lại.
+- Hỏi về phúc lợi (bảo hiểm, phụ cấp, thưởng, chế độ đãi ngộ): KHÔNG trả lời nội dung, không
+  đoán, KHÔNG dùng câu trả lời chờ dữ liệu tiền công ở trên — trả lời đúng dòng
+  «{tingting_hotline_reply(hotline)}».
 - Cảm ơn, "ok", "ô kê", "rồi", "dạ" hay tin nhắn không đọc được ý khi quy trình
   ĐÃ GIẢI QUYẾT XONG (người dùng xác nhận đã đăng nhập được) là lời tạm biệt: trả lời ĐÚNG
   NGUYÊN VĂN một dòng: «{TINGTING_RESOLVED_CLOSER_REPLY}» — không gọi tool, không hỏi lại,
@@ -276,6 +297,7 @@ __all__ = [
     "TINGTING_FIELDS_ASK",
     "TINGTING_INTENT_REDIRECT_REPLY",
     "TINGTING_RESOLVED_CLOSER_REPLY",
+    "TINGTING_WAGE_WAIT_REPLY",
     "tingting_api_guide",
     "tingting_api_prompt_block",
     "tingting_hotline_reply",

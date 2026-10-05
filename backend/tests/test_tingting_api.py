@@ -21,6 +21,7 @@ from app.graph.tingting_guide import (
     TINGTING_FIELDS_ASK,
     TINGTING_INTENT_REDIRECT_REPLY,
     TINGTING_RESOLVED_CLOSER_REPLY,
+    TINGTING_WAGE_WAIT_REPLY,
     tingting_api_guide,
     tingting_api_prompt_block,
     tingting_hotline_reply,
@@ -499,6 +500,44 @@ def test_resolved_conversation_gets_the_closer_not_another_pitch() -> None:
     # the escalation reply is reserved for the can't-help cases: a closer
     # carrying it verbatim would read as an escalation on a polite goodbye.
     assert TINGTING_HOTLINE_REPLY not in TINGTING_RESOLVED_CLOSER_REPLY
+
+
+def test_payday_question_gets_the_wage_wait_reply_not_the_handoff() -> None:
+    """Operator rule (2026-10-05): "Hôm nay có lương không?" gets the waiting line.
+
+    Payday questions used to fall into the out-of-scope catch-all and be
+    answered with the hotline escalation. The operator approved one fixed
+    waiting-for-VFIC-data reply instead: both prompt sections must quote it
+    verbatim, keep the trigger phrasings, and the payday rule sits before the
+    catch-all so the question is answered in-chat, not handed off.
+    """
+    for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
+        assert TINGTING_WAGE_WAIT_REPLY in prompt
+        assert "Hôm nay có lương không" in prompt
+        assert "lương đã về chưa" in prompt
+        assert "KHÔNG trả lời dòng hotline" in prompt
+        assert "không hẹn ai sẽ nhắn lại" in prompt
+    # the escalation reply is reserved for the can't-help cases: a fixed payday
+    # reply carrying it verbatim would read as an escalation on a real answer.
+    assert TINGTING_HOTLINE_REPLY not in TINGTING_WAGE_WAIT_REPLY
+    # precedence: in the persona the payday rule sits before the out-of-scope
+    # catch-all so the wage answer wins over the hotline handoff.
+    assert TINGTING_SUPPORT_PERSONA.index(TINGTING_WAGE_WAIT_REPLY) < TINGTING_SUPPORT_PERSONA.index(
+        "MỌI việc khác"
+    )
+    # a *mức lương* (salary-level) question stays out of scope — only the payday
+    # question is answered in-chat.
+    assert "mức lương/phúc lợi" in TINGTING_SUPPORT_PERSONA
+    # the owner narrowed the trigger (2026-10-05): payday-timing and benefits
+    # questions stay out of scope — only the pay-status question is answered.
+    assert "bao giờ nhận lương" not in TINGTING_SUPPORT_PERSONA
+    assert "bao giờ nhận lương" not in TINGTING_API_GUIDE
+    # the TingTing OA never answers benefits questions (owner, 2026-10-05):
+    # both sections route them to the hotline reply and forbid reusing the
+    # waiting line for them.
+    for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
+        assert "Hỏi về phúc lợi" in prompt
+        assert "KHÔNG dùng câu trả lời chờ dữ liệu tiền công" in prompt
 
 
 def test_login_trouble_after_resolution_re_engages_the_reset_flow() -> None:
