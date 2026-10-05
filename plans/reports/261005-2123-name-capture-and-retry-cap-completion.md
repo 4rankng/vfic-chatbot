@@ -69,6 +69,19 @@ time in production, and a dry run over two days showed 5 false positives
   FAILED BOT replies to that inbound from the messages themselves and gives up
   after two, incrementing `reconcile_failed_send_exhausted_total`. A newer
   candidate message starts a fresh count.
+- `reconcile_worker.py`: `_is_terminal_send_failure` — a FAILED row whose
+  `external_error` names a dead credential ("Access token has expired", "Invalid
+  refresh token", …) is never retried at all (counter
+  `reconcile_terminal_send_skipped_total` + one warning per tick naming the
+  action). Verified in production: the 45 failed sends in 24 h are all
+  `zalo_oa` account `tingting` with `Access token has expired`, and all 4
+  `worker-chatbot` replicas log `zalo OA token refresh rejected by provider
+  (error=-14014, Invalid refresh token.)` — the stored `zalo_oa_*_token:tingting`
+  pair was last written 2026-09-28 13:47, before `zalo_oa_secret_key` was
+  re-saved on 2026-09-30 11:28, which invalidates the refresh tokens minted under
+  the old secret. The recruitment OA (`default:zalo_oa`) and Messenger are
+  healthy. **Remedy is operator-side: re-authorize the TingTing OA**; no code
+  path can mint a refresh token.
 
 ## Production repair (executed)
 

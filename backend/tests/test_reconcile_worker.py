@@ -590,6 +590,60 @@ async def test_delivery_failure_stops_after_two_attempts(mock_session_cls, mock_
 
 @patch(_PATCH_ENQUEUE, return_value=True)
 @patch(_PATCH_SESSION)
+async def test_dead_channel_credential_is_never_retried(mock_session_cls, mock_enqueue):
+    """An expired access token is not a transient blip.
+
+    Production: the TingTing OA's refresh token was refused with -14014, so every
+    send came back "Access token has expired". Retrying re-generates the same
+    undeliverable reply — the candidate sees a wall of identical failed bubbles
+    and a full LLM turn is spent per tick. No retry can deliver it; the operator
+    must re-authorize the channel.
+    """
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    failed_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    failed_bot_msg.created_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+    failed_bot_msg.external_error = "chunk 1/1 failed: Access token has expired"
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=failed_bot_msg)
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_not_called()
+    mock_redis.incrby.assert_any_call("reconcile_terminal_send_skipped_total", 1)
+    assert conv.bot_locked_until is None
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_transient_send_failure_keeps_its_retry(mock_session_cls, mock_enqueue):
+    """A provider blip (not a dead credential) still earns its recovery turn."""
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    failed_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    failed_bot_msg.created_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+    failed_bot_msg.external_error = "chunk 1/1 failed: 500 Internal Server Error"
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=failed_bot_msg)
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_called_once()
+    mock_redis.incrby.assert_any_call("reconcile_failed_send_total", 1)
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
 async def test_recent_pending_is_still_recovered_fast(mock_session_cls, mock_enqueue):
     """Lost-turn recovery keeps its ~60s cadence; the backoff is only for FAILED."""
     mock_redis = _mock_redis()

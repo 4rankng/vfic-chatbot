@@ -39,6 +39,7 @@ _RECONCILE_UNANSWERED_INBOUND = "reconcile_unanswered_inbound_total"
 _RECONCILE_SUPERSEDED_INBOUND = "reconcile_superseded_inbound_total"
 _RECONCILE_FAILED_SEND = "reconcile_failed_send_total"
 _RECONCILE_FAILED_SEND_EXHAUSTED = "reconcile_failed_send_exhausted_total"
+_RECONCILE_TERMINAL_SEND_SKIPPED = "reconcile_terminal_send_skipped_total"
 _RECONCILE_SKIPPED_LOCKED = "reconcile_skipped_locked_total"
 _RECONCILE_ENQUEUE_FAILED = "reconcile_enqueue_failed_total"
 _RECONCILE_UNKNOWN_SEND = "reconcile_unknown_send_outcome"
@@ -101,6 +102,29 @@ _FAILED_SEND_RETRY_BACKOFF_SECONDS = 900
 # Two attempts is the cap: the original turn plus one recovery turn. After that
 # the conversation waits for a recruiter (the console shows the failed bubbles).
 _FAILED_SEND_MAX_ATTEMPTS = 2
+
+# Provider errors that no retry can fix: the channel's credential is dead, so the
+# next attempt fails exactly the same way. The live case: the Zalo OA refresh
+# token was refused with ``-14014 Invalid refresh token`` (the app secret was
+# re-issued), so every send on that OA came back "Access token has expired" and
+# the sweep kept re-generating the same undeliverable reply. Retrying such a
+# conversation burns a full LLM turn and adds another failed bubble to the
+# candidate's thread; the operator has to re-authorize the channel instead.
+# Matched case-insensitively against ``messages.external_error``.
+_TERMINAL_SEND_ERROR_MARKERS = (
+    "access token has expired",
+    "invalid access token",
+    "refresh token has expired",
+    "invalid refresh token",
+)
+
+
+def _is_terminal_send_failure(message) -> bool:  # noqa: ANN001 (Message ORM row)
+    """Whether the recorded send failure is a dead-credential error, not a blip."""
+    text = str(getattr(message, "external_error", "") or "").strip().lower()
+    if not text:
+        return False
+    return any(marker in text for marker in _TERMINAL_SEND_ERROR_MARKERS)
 
 
 def _within_failed_send_backoff(newest, *, now: datetime) -> bool:
@@ -215,6 +239,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     stale_locks_broken = 0
     failed_send_backoff = 0
     failed_send_exhausted = 0
+    terminal_send_skipped = 0
     partial_delivery_skipped = 0
 
     for conv in candidates:
@@ -330,6 +355,14 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                             partial_delivery_skipped += 1
                             await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                             continue
+                        if _is_terminal_send_failure(newest):
+                            # The channel credential itself is dead (expired OA
+                            # access token, refused refresh token). A recovery
+                            # turn cannot deliver anything; it only adds another
+                            # failed bubble the candidate can see.
+                            terminal_send_skipped += 1
+                            await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
+                            continue
                         reason = "failed_send"
                     elif newest.delivery_status.name == "SEND_UNKNOWN":
                         # Ambiguous send (transport timeout after Zalo may have
@@ -443,6 +476,8 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
         pipe.incrby(_RECONCILE_FAILED_SEND, failed_send)
     if failed_send_exhausted:
         pipe.incrby(_RECONCILE_FAILED_SEND_EXHAUSTED, failed_send_exhausted)
+    if terminal_send_skipped:
+        pipe.incrby(_RECONCILE_TERMINAL_SEND_SKIPPED, terminal_send_skipped)
     if skipped_locked:
         pipe.incrby(_RECONCILE_SKIPPED_LOCKED, skipped_locked)
     if enqueue_failed:
@@ -459,11 +494,20 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     logger.info(
         "reconcile tick complete: %d candidates scanned, %d re-enqueued, %d "
         "delivery-failure retries deferred, %d delivery-failure retries given up, "
-        "%d send_unknown skipped, %d partial deliveries skipped",
+        "%d dead-credential sends skipped, %d send_unknown skipped, "
+        "%d partial deliveries skipped",
         len(candidates),
         re_enqueued,
         failed_send_backoff,
         failed_send_exhausted,
+        terminal_send_skipped,
         send_unknown_skipped,
         partial_delivery_skipped,
     )
+    if terminal_send_skipped:
+        logger.warning(
+            "reconcile: %d conversations have an undeliverable reply because the "
+            "channel credential is dead (expired access token / refused refresh "
+            "token); re-authorize the channel — no retry can deliver these",
+            terminal_send_skipped,
+        )
