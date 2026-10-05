@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.channel_account import ChannelAccount, ChannelAccountProject
@@ -96,14 +96,20 @@ async def collect_new_candidates(
     the employee-support OA account ("tingting") is never a recruitment
     candidate, so its leads never reach the digest regardless of what other
     channels the operator runs.
+
+    The cap orders phone-having leads first: the Excel is the payload and the
+    service drops phoneless rows anyway, so a busy window (the Messenger stub
+    trigger creates one lead per conversation) must never crowd a reachable
+    candidate out of the ``MAX_CANDIDATES_PER_DIGEST`` slice.
     """
+    _has_phone = func.btrim(func.coalesce(Lead.phone, "")) != ""
     lead_rows = (
         (
             await db.scalars(
                 select(Lead)
                 .where(Lead.created_at >= window_start, Lead.created_at < window_end)
                 .where(support_leads_condition())
-                .order_by(Lead.created_at.asc())
+                .order_by(_has_phone.desc(), Lead.created_at.asc())
             )
         )
         .all()
@@ -222,7 +228,10 @@ async def collect_new_candidates(
             )
 
     candidates: list[DigestCandidate] = []
-    for lead in lead_rows[:MAX_CANDIDATES_PER_DIGEST]:
+    # Present the capped slice chronologically even though the cap itself
+    # selected phone-first.
+    selected = sorted(lead_rows[:MAX_CANDIDATES_PER_DIGEST], key=lambda lead: lead.created_at)
+    for lead in selected:
         ident = identity_by_contact.get(lead.contact_id)
         conv = latest_conversation.get(lead.contact_id)
         messages = messages_by_conversation.get(conv.id, []) if conv is not None else []
