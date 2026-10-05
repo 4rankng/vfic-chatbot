@@ -56,16 +56,19 @@ const projects: Project[] = [
   },
 ];
 
-// The state badge is the first badge in each row's badge group; the second is
-// the knowledge-mode badge. Scoped here because "Đã nạp" also appears as the
-// readiness fact label in every row.
-const stateBadgeLabels = (container: HTMLElement): string[] =>
+// Every card leads its badge group with the availability badge (Đang bật /
+// Đã tắt); the ingest badge follows when the payload carries ingest_state,
+// and the knowledge-mode badge closes the group.
+const badgeLabels = (container: HTMLElement): string[][] =>
   Array.from(container.querySelectorAll(".project-accordion-badges")).map(
-    (badges) => badges.firstElementChild?.textContent?.trim() ?? "",
+    (badges) =>
+      Array.from(badges.children).map(
+        (badge) => badge.textContent?.trim() ?? "",
+      ),
   );
 
 describe("ProjectAccordionList", () => {
-  it("labels each project from the payload's ingest_state", async () => {
+  it("labels each project's availability from is_active, ingest state beside it", async () => {
     const screen = await render(
       <ProjectAccordionList
         projects={projects}
@@ -76,16 +79,20 @@ describe("ProjectAccordionList", () => {
       />,
     );
 
-    // rag-project ships `ingest_state: "ready"`; single-project is a legacy
-    // payload without the field and falls back to its draft state.
-    expect(stateBadgeLabels(screen.container)).toEqual(["Đã nạp", "Bản nháp"]);
-    await expect.element(screen.getByText("Bản nháp")).toBeVisible();
-    // The old binary labels must not resurface anywhere in the list.
+    // rag-project is active with ready ingest; single-project is inactive
+    // and ships no ingest_state, so it carries no ingest badge at all.
+    expect(badgeLabels(screen.container)).toEqual([
+      ["Đang bật", "Đã nạp", "Theo danh mục"],
+      ["Đã tắt", "Một trang"],
+    ]);
+    await expect.element(screen.getByText("Đã tắt")).toBeVisible();
+    // The retired conflated labels must not resurface anywhere in the list.
     expect(screen.container.textContent).not.toContain("Đang hoạt động");
-    expect(screen.container.textContent).not.toContain("Tắt");
+    expect(screen.container.textContent).not.toContain("Bản nháp");
+    expect(screen.container.textContent).not.toContain("Đang tuyển dụng");
   });
 
-  it("maps every ingest_state to its ruled label, ingest_state winning over is_active", async () => {
+  it("maps every ingest_state to its ruled label, independent of availability", async () => {
     const screen = await render(
       <ProjectAccordionList
         projects={[
@@ -129,17 +136,17 @@ describe("ProjectAccordionList", () => {
       />,
     );
 
-    expect(stateBadgeLabels(screen.container)).toEqual([
-      "Đang nạp",
-      "Lỗi nạp",
-      "Đã nạp",
-      "Bản nháp",
+    expect(badgeLabels(screen.container)).toEqual([
+      ["Đang bật", "Đang nạp", "Theo danh mục"],
+      ["Đã tắt", "Lỗi nạp", "Theo danh mục"],
+      ["Đang bật", "Đã nạp", "Theo danh mục"],
+      ["Đã tắt", "Một trang"],
     ]);
     await expect.element(screen.getByText("Đang nạp")).toBeVisible();
     await expect.element(screen.getByText("Lỗi nạp")).toBeVisible();
   });
 
-  it("falls back to is_active when ingest_state is missing or null", async () => {
+  it("shows no ingest badge when the payload says nothing about ingest", async () => {
     const legacyActive: Project = {
       id: "legacy-active",
       name: "Dự án cũ đang bật",
@@ -161,9 +168,9 @@ describe("ProjectAccordionList", () => {
       />,
     );
 
-    expect(stateBadgeLabels(screen.container)).toEqual([
-      "Đang tuyển dụng",
-      "Bản nháp",
+    expect(badgeLabels(screen.container)).toEqual([
+      ["Đang bật", "Theo danh mục"],
+      ["Đã tắt", "Một trang"],
     ]);
   });
 
@@ -177,7 +184,9 @@ describe("ProjectAccordionList", () => {
         onDeleted={vi.fn()}
       />,
     );
-    expect(stateBadgeLabels(screen.container)).toEqual(["Đang tuyển dụng"]);
+    expect(badgeLabels(screen.container)).toEqual([
+      ["Đang bật", "Chưa nạp", "Theo danh mục"],
+    ]);
   });
 
   it("shows one-page readiness without applying the RAG feature score", async () => {

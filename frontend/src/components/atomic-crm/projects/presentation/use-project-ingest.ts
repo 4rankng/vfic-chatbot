@@ -58,6 +58,8 @@ export type IngestState =
       items: readonly IngestItemState[];
       /** The current category outlived the soft poll budget; still working. */
       slow?: boolean;
+      /** Checkpointed brief-extraction counts while the plan is still unknown. */
+      sections?: Readonly<{ completed: number; total: number }>;
     }>
   | Readonly<{
       phase: "failed";
@@ -298,6 +300,17 @@ export const useProjectIngest = (): ProjectIngest => {
                     const current = training?.current ?? null;
                     currentCategory = current;
                     activated.splice(0, activated.length, ...completed);
+                    // The backend leaves the extraction checkpoint in the
+                    // metadata after the plan lands, so the section counts
+                    // are only meaningful before any category is planned.
+                    const sections =
+                      planned.length === 0 &&
+                      typeof training?.source_sections_total === "number"
+                        ? {
+                            completed: training.source_sections_completed ?? 0,
+                            total: training.source_sections_total,
+                          }
+                        : undefined;
                     if (
                       document.status === "FAILED" ||
                       document.status === "ARCHIVED" ||
@@ -340,6 +353,7 @@ export const useProjectIngest = (): ProjectIngest => {
                       total:
                         planned.length || completed.length + (current ? 1 : 0),
                       slow: tries >= SOFT_POLL_ATTEMPTS,
+                      ...(sections ? { sections } : {}),
                       items: [
                         ...new Set([
                           ...planned,

@@ -48,6 +48,9 @@ export type ProjectTrainingDocument = Readonly<{
     completed: readonly ProjectKnowledgeCategory[];
     /** Categories extracted from this source by the backend worker. */
     planned?: readonly ProjectKnowledgeCategory[];
+    /** Checkpointed brief-extraction counts; stale once categories train. */
+    source_sections_total?: number;
+    source_sections_completed?: number;
     error: string | null;
     /** Reviewed shadow categories still await an explicit authority cutover. */
     requires_cutover?: boolean;

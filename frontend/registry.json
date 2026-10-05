@@ -207,6 +207,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/presentation/ingest-timeline.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/presentation/WorkspaceCommandBar.tsx",
           "type": "registry:component"
         },
@@ -216,6 +220,10 @@
         },
         {
           "path": "src/components/atomic-crm/projects/presentation/ProjectBriefImport.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/projects/presentation/IngestTimeline.tsx",
           "type": "registry:component"
         },
         {

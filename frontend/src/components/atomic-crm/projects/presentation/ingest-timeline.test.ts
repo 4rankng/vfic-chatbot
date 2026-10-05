@@ -95,10 +95,10 @@ describe("buildIngestTimeline", () => {
       ingest: {
         phase: "running",
         current: "jobs",
-        activated: ["overview"],
+        activated: ["requirements"],
         total: 3,
         items: [
-          { key: "overview", status: "active" },
+          { key: "requirements", status: "active" },
           { key: "jobs", status: "processing" },
           { key: "compensation", status: "queued" },
         ],
@@ -118,7 +118,7 @@ describe("buildIngestTimeline", () => {
       hasBrief: true,
       ingest: {
         phase: "done",
-        activated: ["overview", "jobs"] as ProjectKnowledgeCategory[],
+        activated: ["requirements", "jobs"] as ProjectKnowledgeCategory[],
         requiresCutover: true,
       },
     });
@@ -139,7 +139,7 @@ describe("buildIngestTimeline", () => {
         phase: "failed",
         failed: "jobs",
         message: "nội dung không hợp lệ",
-        activated: ["overview"],
+        activated: ["requirements"],
       },
     });
     expect(timeline.classify[0]).toBe("failed");

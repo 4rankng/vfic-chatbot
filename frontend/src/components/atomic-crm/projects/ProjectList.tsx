@@ -307,13 +307,27 @@ export const ProjectDirectoryFilters = ({
   </section>
 );
 
-// Four-state project badge driven by the list payload's `ingest_state`.
-const projectStateBadge = (
+// Availability badge — the state recruiters scan for: is the bot offering
+// this project to candidates right now. Always rendered, first in the group.
+const projectActiveBadge = (
   project: Project,
-): {
-  label: string;
-  className: string;
-} => {
+): { label: string; className: string } =>
+  project.is_active
+    ? {
+        label: "Đang bật",
+        className:
+          "tt-badge-success tt-badge-soft border-transparent text-success",
+      }
+    : {
+        label: "Đã tắt",
+        className: "border-border bg-muted/40 text-muted-foreground",
+      };
+
+// Ingest badge driven by the list payload's `ingest_state`; null when the
+// payload says nothing about ingest — availability has its own badge.
+const projectIngestBadge = (
+  project: Project,
+): { label: string; className: string } | null => {
   switch (project.ingest_state) {
     case "ingesting":
       return {
@@ -328,15 +342,10 @@ const projectStateBadge = (
       };
     case "ready":
       if (project.knowledge_document_count === 0) {
-        return project.is_active
-          ? {
-              label: "Đang tuyển dụng",
-              className: "border-border bg-muted/40 text-muted-foreground",
-            }
-          : {
-              label: "Bản nháp",
-              className: "border-border bg-muted/40 text-muted-foreground",
-            };
+        return {
+          label: "Chưa nạp",
+          className: "border-border bg-muted/40 text-muted-foreground",
+        };
       }
       return {
         label: "Đã nạp",
@@ -344,16 +353,7 @@ const projectStateBadge = (
           "tt-badge-success tt-badge-soft border-transparent text-success",
       };
     default:
-      // Availability alone does not prove that the knowledge was trained.
-      return project.is_active
-        ? {
-            label: "Đang tuyển dụng",
-            className: "border-border bg-muted/40 text-muted-foreground",
-          }
-        : {
-            label: "Bản nháp",
-            className: "border-border bg-muted/40 text-muted-foreground",
-          };
+      return null;
   }
 };
 
@@ -381,7 +381,8 @@ export const ProjectAccordionList = ({
       {projects.map((project) => {
         const projectId = String(project.id);
         const readinessText = projectReadinessLabel(project);
-        const stateBadge = projectStateBadge(project);
+        const activeBadge = projectActiveBadge(project);
+        const ingestBadge = projectIngestBadge(project);
 
         return (
           <AccordionItem
@@ -402,10 +403,19 @@ export const ProjectAccordionList = ({
                     </span>
                   </div>
                   <div className="project-accordion-badges">
-                    {/* Status label comes from the list payload's `ingest_state` field (types.ts). */}
-                    <Badge variant="outline" className={stateBadge.className}>
-                      {stateBadge.label}
+                    {/* Availability leads: the enabled/disabled state the
+                        recruiter scans for; ingest follows when known. */}
+                    <Badge variant="outline" className={activeBadge.className}>
+                      {activeBadge.label}
                     </Badge>
+                    {ingestBadge && (
+                      <Badge
+                        variant="outline"
+                        className={ingestBadge.className}
+                      >
+                        {ingestBadge.label}
+                      </Badge>
+                    )}
                     <Badge variant="outline">
                       {projectKnowledgeModeLabel(project.knowledge_mode)}
                     </Badge>

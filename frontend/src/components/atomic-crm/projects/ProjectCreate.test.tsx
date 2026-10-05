@@ -554,8 +554,8 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
         project_training: {
           status: "PROCESSING",
           current: "jobs",
-          completed: ["overview"],
-          planned: ["overview", "jobs"],
+          completed: ["requirements"],
+          planned: ["requirements", "jobs"],
           error: null,
         },
       })
@@ -566,7 +566,7 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
         project_training: {
           status: "COMPLETED",
           current: null,
-          completed: ["overview", "jobs"],
+          completed: ["requirements", "jobs"],
           error: null,
         },
       });
@@ -576,7 +576,7 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     // Mid-chain: the category loop is on jobs, everything before it is done.
     await expect
       .element(screen.getByText("Đang nạp «Vị trí tuyển dụng» (2/2)…"))
-      .toBeVisible({ timeout: 10000 });
+      .toBeVisible();
     const timeline = screen.container.querySelector<HTMLOListElement>(
       'ol[aria-label="Tiến độ nạp kiến thức"]',
     );
@@ -589,7 +589,7 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
     // The final poll confirms both categories; the timeline reports finish.
     await expect
       .element(screen.getByText("Đã nạp 2 danh mục kiến thức."))
-      .toBeVisible({ timeout: 10000 });
+      .toBeVisible();
   }, 30000);
 
   it("keeps a name-only file as a draft without claiming searchable knowledge", async () => {

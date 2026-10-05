@@ -1413,6 +1413,44 @@ describe("ProjectKnowledgePanel", () => {
     expect(mocks.cutoverProjectKnowledgeCategories).not.toHaveBeenCalled();
   }, 30000);
 
+  it("shows checkpointed extraction progress before the category plan lands", async () => {
+    mocks.getProjectTrainingDocument.mockImplementation(async () => ({
+      id: "training-document",
+      status: "PROCESSING",
+      error: null,
+      project_training: {
+        status: "PROCESSING",
+        current: null,
+        completed: [],
+        planned: [],
+        source_sections_total: 9,
+        source_sections_completed: 4,
+        error: null,
+      },
+    }));
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    const input =
+      screen.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    dropBrief(input, REUPLOAD_BRIEF, "phieu-dang-phan-loai.md");
+    await expect
+      .element(screen.getByText("Đang phân loại nội dung tệp (4/9 đoạn)…"))
+      .toBeVisible();
+  }, 30000);
+
+  it("keeps the import menu inside the Untitled UI token scope", async () => {
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    const trigger = screen.getByRole("button", { name: "Nhập", exact: true });
+    expect(trigger.element().closest(".uu-scope")).not.toBeNull();
+    await trigger.click();
+    const item = screen.getByRole("menuitem", { name: "Từ tệp văn bản…" });
+    await expect.element(item).toBeVisible();
+    expect(item.element().closest(".uu-scope")).not.toBeNull();
+  });
+
   it("cuts a migrated single-page project over exactly once after the chain lands", async () => {
     mocks.getProjectSinglePage.mockRejectedValue(
       new ApiError(404, "Chưa có dữ liệu"),

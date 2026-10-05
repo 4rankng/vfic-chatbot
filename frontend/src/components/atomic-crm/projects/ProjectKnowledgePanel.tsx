@@ -275,12 +275,25 @@ const BriefIngestSection = ({
       </div>
       {state.phase === "running" ? (
         <>
-          <p role="status" className="text-helper text-foreground">
-            {state.current
-              ? `Đang nạp «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (${state.items.findIndex((item) => item.key === state.current) + 1}/${state.total})…`
-              : "Đang phân loại nội dung tệp…"}
+          <p
+            role="status"
+            className="text-helper text-foreground flex items-center gap-2"
+          >
+            <Loading01
+              className="size-4 shrink-0 animate-spin text-primary"
+              aria-hidden="true"
+            />
+            <span>
+              {state.current
+                ? `Đang nạp «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (${state.items.findIndex((item) => item.key === state.current) + 1}/${state.total})…`
+                : state.sections
+                  ? `Đang phân loại nội dung tệp (${state.sections.completed}/${state.sections.total} đoạn)…`
+                  : "Đang phân loại nội dung tệp…"}
+            </span>
           </p>
-          <IngestProgressBoard items={state.items} slow={state.slow} />
+          {state.items.length > 0 ? (
+            <IngestProgressBoard items={state.items} slow={state.slow} />
+          ) : null}
         </>
       ) : null}
       {state.phase === "done" ? (
@@ -669,10 +682,19 @@ const KnowledgeImportMenu = ({
   onTemplate: () => void;
 }) => (
   <Dropdown.Root>
-    <Button type="button" color="primary" size="sm" iconTrailing={ChevronDown}>
+    <Button
+      type="button"
+      color="primary"
+      size="sm"
+      className="uu-scope"
+      iconTrailing={ChevronDown}
+    >
       Nhập
     </Button>
-    <Dropdown.Popover>
+    {/* The popover portals to document.body, so it carries its own scope:
+        unscoped, `bg-primary` resolves to the console's action fill and the
+        menu text becomes unreadable on it. */}
+    <Dropdown.Popover className="uu-scope">
       <Dropdown.Menu
         onAction={(key) => (key === "file" ? onPickFile() : onTemplate())}
       >
@@ -705,12 +727,25 @@ const RagIngestStrip = ({ ingest }: { ingest: BriefFileIngest }) => {
       />
       {state.phase === "running" ? (
         <>
-          <p role="status" className="text-helper text-foreground">
-            {state.current
-              ? `Đang nạp «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (${state.items.findIndex((item) => item.key === state.current) + 1}/${state.total})…`
-              : "Đang phân loại nội dung tệp…"}
+          <p
+            role="status"
+            className="text-helper text-foreground flex items-center gap-2"
+          >
+            <Loading01
+              className="size-4 shrink-0 animate-spin text-primary"
+              aria-hidden="true"
+            />
+            <span>
+              {state.current
+                ? `Đang nạp «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (${state.items.findIndex((item) => item.key === state.current) + 1}/${state.total})…`
+                : state.sections
+                  ? `Đang phân loại nội dung tệp (${state.sections.completed}/${state.sections.total} đoạn)…`
+                  : "Đang phân loại nội dung tệp…"}
+            </span>
           </p>
-          <IngestProgressBoard items={state.items} slow={state.slow} />
+          {state.items.length > 0 ? (
+            <IngestProgressBoard items={state.items} slow={state.slow} />
+          ) : null}
         </>
       ) : null}
       {state.phase === "done" ? (
