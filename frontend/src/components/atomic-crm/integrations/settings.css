@@ -622,7 +622,12 @@
 /* Facebook Messenger: Tailkit a-c-form-layouts-03, a-c-form-elements-10/16,
    a-c-card-headings-02, and a-c-form-actions-03 adapted to the console theme. */
 
-.settings-messenger-group-content {
+/* The workspace ancestor puts this at (0,2,0): the base `.settings-group-content`
+   template in `inbox/features.css` has the same specificity as a bare class
+   override, so whichever sheet lands later in the bundle would win — which is
+   exactly how the auto-fit columns once collapsed the credentials form into
+   280px tracks. Keep the compound selector. */
+.settings-workspace-content .settings-messenger-group-content {
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   padding: 14px 0 16px;

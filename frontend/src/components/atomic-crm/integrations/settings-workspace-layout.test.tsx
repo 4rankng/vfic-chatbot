@@ -618,4 +618,51 @@ describe("settings action sizing", () => {
     // A rounded chip here read as a pill badge in the middle of a form row.
     expect(styles.borderRadius).toBe("0px");
   });
+
+  it("keeps the messenger group content single-column against the base auto-fit template", async () => {
+    await page.viewport(desktop, 900);
+
+    const screen = await render(
+      console(
+        <section
+          className="settings-group settings-messenger-group"
+          aria-label="Ứng dụng Meta"
+        >
+          <div className="settings-group-content settings-messenger-group-content">
+            <fieldset className="settings-messenger-credentials-grid">
+              <div className="settings-field">
+                <span>App ID</span>
+              </div>
+              <div className="settings-field">
+                <span>App Secret</span>
+              </div>
+            </fieldset>
+          </div>
+        </section>,
+      ),
+    );
+
+    const content = screen.container.querySelector<HTMLElement>(
+      ".settings-messenger-group-content",
+    )!;
+    // `inbox/features.css` declares `.settings-group-content` as an auto-fit
+    // multi-column grid at the same specificity; the messenger override must
+    // beat it by specificity, not by bundle order, or the credentials form
+    // collapses into ~280px tracks (seen live on production). The resolved
+    // value serializes used tracks, so one track = one full-width column.
+    const tracks = getComputedStyle(content)
+      .gridTemplateColumns.split(" ")
+      .filter(Boolean);
+    expect(tracks).toHaveLength(1);
+
+    const panel = screen.container.querySelector<HTMLElement>(
+      ".settings-section-panel",
+    )!;
+    const grid = screen.container.querySelector<HTMLElement>(
+      ".settings-messenger-credentials-grid",
+    )!;
+    expect(grid.getBoundingClientRect().width).toBeGreaterThan(
+      panel.getBoundingClientRect().width * 0.8,
+    );
+  });
 });
