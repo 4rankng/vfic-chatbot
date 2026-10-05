@@ -42,7 +42,7 @@ request first loaded the account.
 An email uniqueness conflict remains a conflict response after transaction
 rollback, rather than attempting an implicit async reload of expired attributes.
 
-## Routes (14 route groups)
+## Routes (13 route groups)
 
 The application registers the API routers in `backend/app/main.py` under
 `API_V1_PREFIX = "/api/v1"`; realtime and webhook groups keep their root paths.
@@ -53,12 +53,11 @@ The application registers the API routers in `backend/app/main.py` under
 | `users` | `/api/v1/users` | `users` | JWT (self); `require_admin` (CRUD) | User management |
 | `conversations` | `/api/v1/conversations` | `conversations` | JWT; `require_admin` (history clear) | Inbox, messages, takeover, release |
 | `leads` | `/api/v1/leads` | `leads` | JWT | Lead CRM pipeline |
-| `bot_runs` | `/api/v1/bot_runs` | `bot_runs` | JWT (read-only) | Bot turn audit log |
 | `knowledge` | `/api/v1/knowledge` | `knowledge` | `require_admin` | KB documents, chunks, versions |
 | `projects` | `/api/v1/knowledge/projects` | `projects` | `require_recruiter` (list/get); `require_admin` (create/delete) | Product/project knowledge CRUD, direct-context sync, FAQ, features |
 | `jobs` | `/api/v1/jobs` | `jobs` | JWT (list/get); `require_admin` (create/update) | Job postings |
 | `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics + recruiter attention queue |
-| `performance` | `/api/v1/admin/performance` | `performance` | `require_admin` | Performance observability |
+| `performance` | `/api/v1/admin/performance` | `performance` | `require_admin` | Response-time p50/p95 + trend and phone-capture conversion |
 | `integrations` | `/api/v1/admin/integrations` | `integrations` | `require_admin` | Integration settings (Zalo, Messenger, LLM, email digest) |
 | `installation` | `/api/v1/installation`, `/api/v1/admin/installation` | `installation` | Public-safe runtime projection; `require_admin` for lifecycle administration | Immutable installation revision lifecycle |
 | `realtime` | `/realtime` | — | JWT via `?token=` or Bearer | Legacy SSE endpoint |
@@ -122,20 +121,6 @@ reconfirmation restores the canonical field. Delayed candidate extraction
 cannot undo newer phone evidence. Ordinary absent/null extractor values retain
 the existing merge behavior; recruiter profile edits keep the version contract
 above.
-
-## Bot-run audit detail
-
-The audit log keeps one fact sheet per bot run. Administrators read it; recruiters
-receive `403`.
-
-| Method and path | Result |
-|---|---|
-| `GET /api/v1/bot_runs` | Paged run list: outcome, proposed reply, timing |
-| `GET /api/v1/bot_runs/{run_id}` | One run's facts: conversation, start/end, outcome |
-
-Provider-returned reasoning and tool selections are not recorded or exposed: the
-decision trace (and the per-conversation trace summaries that fed it) was removed
-on 2026-10-02, so a run carries no thinking log and nothing to retain or expire.
 
 ## Installation lifecycle and Settings configuration
 

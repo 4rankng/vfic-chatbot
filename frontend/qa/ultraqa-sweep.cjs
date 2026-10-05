@@ -16,7 +16,6 @@ const ROUTES = [
   // Resource routes
   { id: "dashboard", hash: "/" },
   { id: "conversations", hash: "/conversations" },
-  { id: "bot_runs", hash: "/bot_runs" },
   { id: "knowledge_sources", hash: "/knowledge_sources" },
   { id: "projects", hash: "/projects" },
   { id: "personas", hash: "/personas" },

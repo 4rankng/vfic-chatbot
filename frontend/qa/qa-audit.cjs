@@ -77,7 +77,6 @@ const fs = require("fs");
     "/pipeline",
     "/dashboard",
     "/knowledge_sources",
-    "/bot_runs",
     "/users",
     "/settings",
     "/profile",

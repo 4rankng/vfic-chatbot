@@ -32,6 +32,7 @@
         "react-hotkeys-hook@^5.3.3",
         "react-router@^7.17.0",
         "react-router-dom@^7.17.0",
+        "recharts@^3.10.1",
         "socket.io-client@^4.8.3",
         "virtua@^0.49.2",
         "zod@^4.1.12",
@@ -88,14 +89,6 @@
         },
         {
           "path": "src/components/atomic-crm/reporting/infrastructure/reportingApi.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/reporting/domain/performanceDiagnostics.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/reporting/domain/dashboardMetrics.ts",
           "type": "registry:component"
         },
         {
@@ -291,55 +284,19 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/performance/PerformanceTrendChart.tsx",
+          "path": "src/components/atomic-crm/performance/performanceFormat.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/performance/pageStates.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/performance/PerformanceResponseTimeChart.tsx",
           "type": "registry:component"
         },
         {
           "path": "src/components/atomic-crm/performance/PerformancePage.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/signals.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/primitives.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/pageStates.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/supportingStats/SupportingStats.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/stageMatrix/StageMatrix.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/stageMatrix/MobileDiagnostics.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/slowestTurns/TurnDetail.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/slowestTurns/SlowestTurns.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/slowestTurns/MobileTurnCard.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/attentionQueue/AttentionQueue.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/performance/presentation/adapterComparison/AdapterComparison.tsx",
           "type": "registry:component"
         },
         {
@@ -831,26 +788,6 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/automation/index.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/automation/botRunQueries.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/automation/botRunMeta.ts",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/automation/BotRunShow.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "src/components/atomic-crm/automation/BotRunList.tsx",
-          "type": "registry:component"
-        },
-        {
           "path": "src/hooks/use-breakpoint.ts",
           "type": "registry:hook"
         },
@@ -960,10 +897,6 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/inbox/base.css",
-          "type": "registry:style"
-        },
-        {
-          "path": "src/components/atomic-crm/automation/bot-runs.css",
           "type": "registry:style"
         },
         {

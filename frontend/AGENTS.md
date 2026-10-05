@@ -77,7 +77,6 @@ from contributions in `capabilities/kernel/` and `capabilities/recruitment/`;
 | Resource | Module | Purpose |
 |---|---|---|
 | `conversations` | `atomic-crm/conversations/` | Zalo chat inbox + thread |
-| `bot_runs` | `atomic-crm/automation/` | Bot execution audit trail (read-only) |
 | `projects` | `atomic-crm/projects/` | Recruitment project knowledge |
 | `settings` | `atomic-crm/integrations/` | Channel integration settings |
 | `users` | `atomic-crm/users/` | Admin user provisioning |
@@ -99,7 +98,6 @@ src/
 │   ├── admin/              # shadcn-admin-kit framework code (mutable dependency, vendored)
 │   ├── ui/                 # Shadcn UI primitives (mutable dependency)
 │   └── atomic-crm/         # The VFIC app
-│       ├── automation/     # bot_runs
 │       ├── capabilities/   # static runtime contributions and compilation
 │       ├── conversations/  # domain/application/infrastructure/presentation
 │       ├── dashboard/      # recruiter/admin dashboard

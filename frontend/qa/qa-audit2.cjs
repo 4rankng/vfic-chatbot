@@ -51,7 +51,6 @@ const { chromium } = require("playwright");
     "/conversations",
     "/leads",
     "/knowledge_sources",
-    "/bot_runs",
     "/users",
     "/profile",
   ];

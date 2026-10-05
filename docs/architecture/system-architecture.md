@@ -594,8 +594,8 @@ guessed.
 A `BotRun` row records one reactive turn: conversation, timing and outcome. It carries no
 provider-returned reasoning or tool selection — the admin-only decision trace (and its 30-day
 retention tick) was removed on 2026-10-02, so nothing about a run's thinking is stored, exposed or
-retained. The audit list and one run's fact sheet remain at `GET /api/v1/bot_runs` and
-`GET /api/v1/bot_runs/{run_id}`.
+retained. The console's bot-run log screen and its `GET /api/v1/bot_runs` endpoints were retired;
+the table itself stays because the performance dashboard reads it for response-time percentiles.
 
 ---
 
@@ -1256,7 +1256,7 @@ which hands off to a human rather than queuing a later turn.
 | `GET /health` | none | `{"status":"ok","env":...}` |
 | `GET /metrics` | none (internal) | RQ queue depths (4 queues), worker count, 7 reconcile canary counters. |
 | `GET /health/queue` | none (internal) | Chat-path: queue depth, LLM latency (`_RKEY_INVOKE_MS`), 429s (`_RKEY_429`), fallback count, busy/total workers. |
-| `GET /api/v1/admin/performance` | admin | Per-stage p50/p95/p99, adapter comparison, true webhook-to-send latency, route intent, model/tool-call counts, and slow turns. |
+| `GET /api/v1/admin/performance` | admin | End-to-end response-time p50/p95 plus a bucketed trend (window-scaled), and the candidate-phone conversion rate over the same window. |
 
 No external APM (no Sentry/Datadog). Structured JSON logs to stdout with
 `request_id` correlation via ContextVar + `RequestIdMiddleware`.

@@ -131,7 +131,6 @@ the canonical map; visit each on desktop **and** mobile (390×844) per run.
 | `#/` | — (dashboard) | `dashboard/Dashboard.tsx` | Cards render live values; no overflow; mobile stacks |
 | `#/conversations` | `conversations` | `conversations/ConversationList.tsx` | Switch between the exclusive Zalo Chatbot/Zalo OA icon scopes; URL contains `channel_provider`; adapter badges and selected caption match scoped attention counts; search/queue/reason filters never mix adapters; a nonzero `Tin nhắn` badge opens `?needs_attention=true` and lists only open Human-mode conversations with an unanswered candidate message; Bot/Semi-auto rows stay out until transitioned to Human; mode menu (Human/Semi-auto/Chatbot); composer disabled in chatbot mode |
 | `#/conversations/:id` | show | `conversations/ConversationShow.tsx` | Thread loads; context panel; takeover toggle; send (QA conv only) |
-| `#/bot_runs` | `bot_runs` (read-only audit) | `automation/BotRunList.tsx` | Run cards: outcome, preview, timing; detail view |
 | `#/projects` | `projects` | `projects/ProjectList.tsx` | CRUD cycle on a `QA-*` project; delete confirmation names target |
 | `#/users` | `users` (admin only) | `users/UserList.tsx` | List/sort/badges; create/edit/delete on `QA-*` user |
 | `#/settings` | `settings` | `integrations/ZaloIntegrationPage.tsx` | Zalo OA config form renders; Messenger section renders on desktop/mobile; secrets masked |
@@ -140,7 +139,7 @@ the canonical map; visit each on desktop **and** mobile (390×844) per run.
 
 | Route | Component | QA focus |
 |-------|-----------|----------|
-| `#/hieu-suat` | `performance/PerformancePage.tsx` | **Admin-only** — recruiter role redirects to `/`. Empty states render. |
+| `#/hieu-suat` | `performance/PerformancePage.tsx` | **Admin-only** — recruiter role redirects to `/`. Two panels: response time (p95 seconds + trend chart) and phone-capture conversion; period switcher covers 1 ngày / 7 ngày / 1 tháng / 3 tháng / 6 tháng. |
 | `#/profile` | `settings/ProfilePage.tsx` | Save button disabled until dirty; restore original after |
 | `#/forgot-password` | `login/ForgotPasswordPage.tsx` | 2-step OTP flow; no account-existence leak in messages |
 | `#/login` | `login/LoginPage.tsx` | Email/password render; password toggle; invalid-creds toast; SSO hidden unless `VITE_GOOGLE_WORKPLACE_DOMAIN` set |
@@ -401,7 +400,7 @@ slipped into the wrong chunk.
 
 ### 6.4 Long-list virtualization
 
-`conversations` and `bot_runs` are virtualized with `virtua` (`VList` — see
+`conversations` is virtualized with `virtua` (`VList` — see
 `ChatThread.tsx`). Verify in dev by loading the list and checking the
 DOM node count stays roughly constant while scrolling — if thousands of row
 nodes mount, virtualization is broken.

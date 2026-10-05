@@ -507,7 +507,7 @@ a value left in a stale `.env` is simply ignored.
 | `GET /health` | none | `{"status":"ok","env":...}` |
 | `GET /metrics` | none (internal) | RQ queue depths (4 queues), worker count, 7 reconcile canary counters. |
 | `GET /health/queue` | none (internal) | Chat-path: queue depth, LLM latency (`_RKEY_INVOKE_MS`), 429 rate (`_RKEY_429`), fallback count, busy/total workers. |
-| `GET /api/v1/admin/performance` | admin | Stage percentiles, webhook-to-send SLO, intent and LLM/tool-call diagnostics, slow turns. |
+| `GET /api/v1/admin/performance` | admin | Response-time p50/p95 + bucketed trend and candidate-phone conversion rate. |
 
 Verify after deploy:
 ```bash

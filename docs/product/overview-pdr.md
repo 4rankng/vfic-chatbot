@@ -37,7 +37,7 @@ a human.
 | **Direct-context sync** | **Removed 2026-10-05.** The Google Sheet refresh of the single page — its console surface, routes, workers, daily tick, and sync-state tables (migration 0067) — is gone. The single page itself is editor-fed only. |
 | **Personas** | The agent voice is a code constant in `backend/app/prompts/vfic_persona.py`, not a stored, admin-editable record. The persona CRUD/import/assignment surface was removed 2026-10-04; there is one persona and every messaging adapter speaks it. Projects remain knowledge-only. |
 | **Reliability** | Reconcile worker sweeps every 60s, recovers lost turns after worker crash (~3-4 min total recovery). Per-chat DB lock owner + optimistic ownership guard prevent stale-run sends. |
-| **Audit** | `bot_runs` resource exposes every bot execution for review. |
+| **Audit** | Every bot execution is recorded in the `bot_runs` table, read for response-time percentiles; the console's bot-run log screen was retired 2026-10-05. |
 | **Admin integrations** | Zalo / MiniMax / OpenRouter credentials managed in admin UI, encrypted at rest. |
 
 ---
