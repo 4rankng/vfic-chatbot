@@ -82,6 +82,7 @@ def _mock_db_for_process(
     worker_msg: Message | None = None,
     latest_msg: Message | None = None,
     lock_acquired: bool = True,
+    failed_send_attempts: int | None = None,
 ) -> AsyncMock:
     """Mock db session for per-candidate processing."""
     db = AsyncMock()
@@ -91,6 +92,9 @@ def _mock_db_for_process(
     execute_result = MagicMock()
     execute_result.rowcount = 1 if lock_acquired else 0
     db.execute = AsyncMock(return_value=execute_result)
+    if failed_send_attempts is not None:
+        # ``_failed_send_attempts`` counts refused replies through db.scalar.
+        db.scalar = AsyncMock(return_value=failed_send_attempts)
 
     def _scalar_result(value: Message | None) -> MagicMock:
         result = MagicMock()
@@ -527,6 +531,61 @@ async def test_recent_delivery_failure_is_deferred(mock_session_cls, mock_enqueu
 
     mock_enqueue.assert_not_called()
     assert conv.bot_locked_until is None  # lock released for the next tick
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_delivery_failure_is_retried_once(mock_session_cls, mock_enqueue):
+    """One refused reply still earns one recovery turn — that is the retry's job."""
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    failed_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    failed_bot_msg.created_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(
+        conv, worker_msg, latest_msg=failed_bot_msg, failed_send_attempts=1
+    )
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_called_once()
+    mock_redis.incrby.assert_any_call("reconcile_failed_send_total", 1)
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_delivery_failure_stops_after_two_attempts(mock_session_cls, mock_enqueue):
+    """Two refused replies end the retry loop for that inbound.
+
+    The retry itself writes the next FAILED row, so without a cap an
+    undeliverable conversation is a permanent candidate — production re-answered
+    the same inbound every ~16 minutes for hours, leaving the candidate a thread
+    of identical undeliverable bubbles.
+    """
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    failed_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    failed_bot_msg.created_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(
+        conv, worker_msg, latest_msg=failed_bot_msg, failed_send_attempts=2
+    )
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_not_called()
+    mock_redis.incrby.assert_any_call("reconcile_failed_send_exhausted_total", 1)
+    assert conv.bot_locked_until is None  # lock released; a new inbound retries
 
 
 @patch(_PATCH_ENQUEUE, return_value=True)

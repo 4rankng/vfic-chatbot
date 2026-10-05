@@ -38,6 +38,7 @@ _RECONCILE_STALE_PENDING = "reconcile_stale_pending_total"
 _RECONCILE_UNANSWERED_INBOUND = "reconcile_unanswered_inbound_total"
 _RECONCILE_SUPERSEDED_INBOUND = "reconcile_superseded_inbound_total"
 _RECONCILE_FAILED_SEND = "reconcile_failed_send_total"
+_RECONCILE_FAILED_SEND_EXHAUSTED = "reconcile_failed_send_exhausted_total"
 _RECONCILE_SKIPPED_LOCKED = "reconcile_skipped_locked_total"
 _RECONCILE_ENQUEUE_FAILED = "reconcile_enqueue_failed_total"
 _RECONCILE_UNKNOWN_SEND = "reconcile_unknown_send_outcome"
@@ -92,6 +93,15 @@ def _delivered_a_provider_message(message) -> bool:  # noqa: ANN001 (Message ORM
 # recovery (WORKER/PENDING/SENDING newest) keeps its fast ~60s cadence.
 _FAILED_SEND_RETRY_BACKOFF_SECONDS = 900
 
+# A backoff alone cannot stop a failure that is not transient: the retry writes
+# the NEXT failed row, so the conversation becomes a candidate again forever,
+# only slower. Production carried threads that re-answered the same inbound with
+# the same undeliverable reply every ~16 minutes for hours — a candidate-visible
+# spam loop, since the provider refusal is retried, not the candidate's patience.
+# Two attempts is the cap: the original turn plus one recovery turn. After that
+# the conversation waits for a recruiter (the console shows the failed bubbles).
+_FAILED_SEND_MAX_ATTEMPTS = 2
+
 
 def _within_failed_send_backoff(newest, *, now: datetime) -> bool:
     """Whether *newest* is a BOT delivery failure younger than the retry backoff."""
@@ -101,6 +111,30 @@ def _within_failed_send_backoff(newest, *, now: datetime) -> bool:
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=timezone.utc)
     return (now - created_at).total_seconds() < _FAILED_SEND_RETRY_BACKOFF_SECONDS
+
+
+async def _failed_send_attempts(db, conversation_id, *, since: datetime) -> int:  # noqa: ANN001
+    """How many BOT replies to this inbound the provider has already refused.
+
+    Counted from the messages themselves rather than a marker: a marker would
+    live in Redis (lost on flush) while the failed bubbles are exactly what the
+    console shows the recruiter, so the cap and the visible state agree.
+    """
+    from sqlalchemy import func, select
+
+    from app.models.conversation import DeliveryStatus, Message, MessageSender
+
+    statement = (
+        select(func.count())
+        .select_from(Message)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.sender == MessageSender.BOT,
+            Message.delivery_status == DeliveryStatus.FAILED,
+            Message.created_at >= since,
+        )
+    )
+    return int((await db.scalar(statement)) or 0)
 
 
 def enqueue_reconcile_tick_now() -> bool:
@@ -180,6 +214,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     send_unknown_skipped = 0
     stale_locks_broken = 0
     failed_send_backoff = 0
+    failed_send_exhausted = 0
     partial_delivery_skipped = 0
 
     for conv in candidates:
@@ -315,6 +350,22 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     failed_send_backoff += 1
                     continue
 
+                if reason == "failed_send" and (
+                    await _failed_send_attempts(
+                        db, conv_fresh.id, since=msg.created_at if msg else now
+                    )
+                    >= _FAILED_SEND_MAX_ATTEMPTS
+                ):
+                    # Two replies have already been refused for this inbound. The
+                    # provider is not going to accept a third, and each retry
+                    # leaves another failed bubble in the thread. Stop: the
+                    # conversation stays visible to a recruiter with its failed
+                    # replies, and a candidate who writes again starts a fresh
+                    # attempt counter (their new inbound is a newer ``since``).
+                    await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
+                    failed_send_exhausted += 1
+                    continue
+
                 if not user_text:
                     # No inbound text to reply to — release and skip.
                     await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
@@ -390,6 +441,8 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
         pipe.incrby(_RECONCILE_SUPERSEDED_INBOUND, superseded_inbound)
     if failed_send:
         pipe.incrby(_RECONCILE_FAILED_SEND, failed_send)
+    if failed_send_exhausted:
+        pipe.incrby(_RECONCILE_FAILED_SEND_EXHAUSTED, failed_send_exhausted)
     if skipped_locked:
         pipe.incrby(_RECONCILE_SKIPPED_LOCKED, skipped_locked)
     if enqueue_failed:
@@ -405,11 +458,12 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
     pipe.execute()
     logger.info(
         "reconcile tick complete: %d candidates scanned, %d re-enqueued, %d "
-        "delivery-failure retries deferred, %d send_unknown skipped, "
-        "%d partial deliveries skipped",
+        "delivery-failure retries deferred, %d delivery-failure retries given up, "
+        "%d send_unknown skipped, %d partial deliveries skipped",
         len(candidates),
         re_enqueued,
         failed_send_backoff,
+        failed_send_exhausted,
         send_unknown_skipped,
         partial_delivery_skipped,
     )
