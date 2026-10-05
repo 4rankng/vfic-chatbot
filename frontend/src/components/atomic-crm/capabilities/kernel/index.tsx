@@ -4,14 +4,12 @@ import {
   Gauge,
   Home,
   MessageCircle,
-  ScrollText,
   Settings,
   Users,
 } from "lucide-react";
 
 import users from "../../users";
 import conversations from "../../conversations";
-import automation from "../../automation";
 import projects from "../../projects";
 import integrations from "../../integrations";
 import type {
@@ -73,15 +71,6 @@ const navigation: readonly CompiledDestination[] = [
     isActive: (path) =>
       pathStartsWith("/settings")(path) ||
       pathStartsWith("/zalo_integrations")(path),
-  },
-  {
-    id: "bot_runs",
-    label: "Nhật ký bot",
-    to: "/bot_runs",
-    Icon: ScrollText,
-    roles: ["admin"],
-    section: "system",
-    isActive: pathStartsWith("/bot_runs"),
   },
   {
     id: "performance",
@@ -146,14 +135,6 @@ const resourceContributions = {
       id: "kernel.resource.conversations",
       name: "conversations",
       props: conversations,
-    },
-  },
-  "kernel.resource.bot-runs": {
-    kind: "resource" as const,
-    resource: {
-      id: "kernel.resource.bot-runs",
-      name: "bot_runs",
-      props: automation,
     },
   },
   "kernel.resource.projects": {

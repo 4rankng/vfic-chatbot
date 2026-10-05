@@ -682,7 +682,6 @@ test.describe("current recruitment workspace baseline", () => {
       ["/projects/create", "Tạo dự án"],
       ["/users", "Tài khoản"],
       ["/users/create", "Tạo tài khoản"],
-      ["/bot_runs", "Lần chạy bot"],
       ["/settings", "Zalo"],
       ["/profile", "Hồ sơ cá nhân"],
       ["/hieu-suat", "Hiệu suất chatbot"],
@@ -705,11 +704,6 @@ test.describe("current recruitment workspace baseline", () => {
         await expect(
           page.getByRole("status", { name: /^Đang tải/ }),
         ).toHaveCount(0);
-        if (route === "/bot_runs") {
-          await expect(
-            page.getByRole("button", { name: /^Xem lần chạy #/ }).first(),
-          ).toBeVisible();
-        }
         await expect
           .poll(
             () =>

@@ -48,10 +48,6 @@ describe("kernel navigation contract", () => {
     expect(navigation("users").isActive("/profile")).toBe(false);
     expect(navigation("users").isActive("/settings")).toBe(false);
 
-    expect(navigation("bot_runs").isActive("/bot_runs")).toBe(true);
-    expect(navigation("bot_runs").isActive("/bot_runs/42")).toBe(true);
-    expect(navigation("bot_runs").isActive("/settings")).toBe(false);
-
     // The profile screen lives in the account menu, not in the sidebar.
     expect(contributions["kernel.navigation.account"]).toBeUndefined();
   });
@@ -62,7 +58,6 @@ describe("kernel navigation contract", () => {
     expect(navigation("projects").section).toBe("operations");
     expect(navigation("users").section).toBe("team");
     expect(navigation("settings").section).toBe("system");
-    expect(navigation("bot_runs").section).toBe("system");
     expect(navigation("performance").section).toBe("system");
   });
 
@@ -127,10 +122,6 @@ describe("kernel navigation contract", () => {
     expect(contributions["kernel.resource.conversations"]).toMatchObject({
       kind: "resource",
       resource: { name: "conversations" },
-    });
-    expect(contributions["kernel.resource.bot-runs"]).toMatchObject({
-      kind: "resource",
-      resource: { name: "bot_runs" },
     });
     expect(contributions["kernel.resource.settings"]).toMatchObject({
       kind: "resource",

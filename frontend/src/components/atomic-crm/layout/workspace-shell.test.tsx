@@ -59,7 +59,6 @@ const ADMIN_DESTINATIONS: readonly (readonly [string, string])[] = [
   ["Dự án", "#/projects"],
   ["Người dùng", "#/users"],
   ["Cài đặt", "#/settings"],
-  ["Nhật ký bot", "#/bot_runs"],
   ["Hiệu suất", "#/hieu-suat"],
 ];
 

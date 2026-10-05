@@ -78,7 +78,6 @@ const ADMIN_NAV_HREFS = [
   "#/projects",
   "#/users",
   "#/settings",
-  "#/bot_runs",
   "#/hieu-suat",
 ];
 
@@ -88,7 +87,6 @@ const ADMIN_DESTINATION_LABELS = [
   "Dự án",
   "Người dùng",
   "Cài đặt",
-  "Nhật ký bot",
   "Hiệu suất",
 ];
 

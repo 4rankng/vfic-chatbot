@@ -10,7 +10,6 @@ import {
   refreshOnce,
   setTokens,
 } from "@/lib/apiClient";
-import { clearActiveBotRunQueries } from "../../root/reset-runtime-state";
 
 // JWT auth provider (replaces Supabase Auth).
 //
@@ -65,18 +64,6 @@ const clearIdentity = (): void => {
   storage()?.removeItem(IDENTITY_KEY);
 };
 
-/**
- * Drops cached bot-run queries on login/logout so one session cannot read
- * another's. The import is static, not dynamic: a runtime import of a module
- * that is already in the bundle statically cannot split it, so it only bought
- * an extra promise per login. Safe to hoist because
- * `reset-runtime-state` has no static path back to `providers/rest/*`, so this
- * edge cannot close an import cycle.
- */
-const clearSensitiveQueryState = async (): Promise<void> => {
-  clearActiveBotRunQueries();
-};
-
 export const getAuthProvider = (
   availableResources: ReadonlySet<string> = new Set(),
 ): AuthProvider => {
@@ -91,7 +78,6 @@ export const getAuthProvider = (
       if (!loginEmail || !password) {
         throw new Error("Email và mật khẩu là bắt buộc");
       }
-      await clearSensitiveQueryState();
       const tokens = await apiJson<TokenResponse>("/api/v1/auth/login", {
         method: "POST",
         body: { email: loginEmail, password },
@@ -101,7 +87,6 @@ export const getAuthProvider = (
     },
 
     logout: async () => {
-      await clearSensitiveQueryState();
       try {
         // Server-side logout: the backend bumps the user's token_version, which
         // invalidates the access token in flight AND the 14-day refresh token —
@@ -136,7 +121,6 @@ export const getAuthProvider = (
           if (await refreshOnce()) {
             return; // refreshed successfully
           }
-          await clearSensitiveQueryState();
           clearTokens();
           clearIdentity();
           throw new Error("Token expired");
@@ -152,7 +136,6 @@ export const getAuthProvider = (
       // 401 means the refresh failed too — force re-login. 403/409 etc. are
       // caller-handled (denied action / conflict), not session failures.
       if (error instanceof ApiError && error.status === 401) {
-        await clearSensitiveQueryState();
         clearTokens();
         clearIdentity();
         throw error;

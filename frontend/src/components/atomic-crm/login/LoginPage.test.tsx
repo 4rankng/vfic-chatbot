@@ -205,7 +205,7 @@ describe("LoginPage", () => {
     // library's English-labelled eye is suppressed on the field wrapper with
     // `[&>button]:hidden`; that suppression is a Tailwind utility, and this
     // vitest project deliberately does not emit the utility/`@theme` layer (see
-    // the lane notes in performance-trend-layers.test.tsx), so it is only
+    // the probe note in workspace-control-ink.test.tsx), so it is only
     // observable in the app and e2e lanes — not asserted here.
   });
 

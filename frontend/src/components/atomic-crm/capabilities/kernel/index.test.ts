@@ -118,12 +118,6 @@ describe("kernel capability routes", () => {
         roles: ["admin"],
       },
       {
-        id: "bot_runs",
-        to: "/bot_runs",
-        section: "system",
-        roles: ["admin"],
-      },
-      {
         id: "performance",
         to: "/hieu-suat",
         section: "system",

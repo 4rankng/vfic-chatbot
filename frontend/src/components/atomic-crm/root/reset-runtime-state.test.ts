@@ -90,20 +90,6 @@ describe("runtime generation reset", () => {
     expect(useMessageStore.getState().conversations.size).toBe(0);
     expect(realtime.closeRealtimeSocket).toHaveBeenCalledOnce();
   });
-
-  it("removes cached bot-run data during an explicit runtime reset", async () => {
-    const bundle = await ensureRuntimeGeneration(1);
-    bundle.queryClient.setQueryData(["bot-runs", "admin-1", "run", 71], {
-      id: 71,
-      outcome: "sent",
-    });
-
-    await resetActiveRuntimeState();
-
-    expect(
-      bundle.queryClient.getQueryData(["bot-runs", "admin-1", "run", 71]),
-    ).toBeUndefined();
-  });
 });
 
 describe("runtime QueryClient network and retention policy", () => {

@@ -30,7 +30,6 @@ import type {
 } from "../../conversations/application/conversation-operations";
 import type { EditableConversationMode } from "../../conversations/domain/conversation-mode";
 import { httpHumanReplyAdapter } from "../../conversations/infrastructure/http-human-reply-adapter";
-import type { BotRunDetail } from "../../types";
 
 // REST dataProvider (replaces ra-supabase-core / PostgREST).
 //
@@ -77,11 +76,6 @@ const normalize = <RecordType extends ApiRecord>(
 ): RecordType => {
   if (resource === "conversations" && typeof record.mode === "string") {
     return { ...record, mode: record.mode.toLowerCase() };
-  }
-  // bot_runs.outcome arrives uppercase from the backend enum; the CRM's
-  // outcomeMeta table is keyed lowercase (sent/suppressed/error).
-  if (resource === "bot_runs" && typeof record.outcome === "string") {
-    return { ...record, outcome: record.outcome.toLowerCase() };
   }
   return record;
 };
@@ -256,13 +250,11 @@ const restProvider = {
   },
 } satisfies DataProvider;
 
-// The VFIC-specific surface of the provider — conversation mutations, the
-// bot-run detail and admin user provisioning — which react-admin's own verbs
-// don't cover. Declared explicitly so the contract is readable here instead of
-// being inferred from the factory's object literal.
+// The VFIC-specific surface of the provider — conversation mutations and admin
+// user provisioning — which react-admin's own verbs don't cover. Declared
+// explicitly so the contract is readable here instead of being inferred from
+// the factory's object literal.
 export interface CrmDataProviderMethods {
-  /** Facts of a single bot run: conversation, timing and outcome. */
-  getBotRunDetail(runId: number): Promise<BotRunDetail>;
   /** Recruiter reply. Ownership is established by the Bearer JWT, not a body id. */
   sendHumanReply(conversationId: string, message: string): Promise<void>;
   retryHumanReply(conversationId: string, messageId: string): Promise<void>;
@@ -302,13 +294,6 @@ export type CrmDataProvider = DataProvider &
 
 const getDataProviderWithCustomMethods = (): CrmDataProvider => ({
   ...restProvider,
-
-  async getBotRunDetail(runId: number): Promise<BotRunDetail> {
-    const response = await apiJson<BotRunDetail>(
-      `${BASE}/bot_runs/${encodeURIComponent(String(runId))}`,
-    );
-    return normalize("bot_runs", response);
-  },
 
   // Recruiter reply: ownership is established by the Bearer JWT (the backend
   // verifies the caller owns the conversation and mode=HUMAN). The body carries

@@ -2,13 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   apiJson: vi.fn(),
-  clearActiveBotRunQueries: vi.fn(),
   clearTokens: vi.fn(),
   closeRealtimeSocket: vi.fn(),
-}));
-
-vi.mock("../../root/reset-runtime-state", () => ({
-  clearActiveBotRunQueries: mocks.clearActiveBotRunQueries,
 }));
 
 vi.mock("../realtime/realtime-socket", () => ({
@@ -82,19 +77,5 @@ describe("authProvider server-side logout", () => {
     expect(mocks.clearTokens).toHaveBeenCalledOnce();
     expect(mocks.closeRealtimeSocket).toHaveBeenCalledOnce();
     expect(window.localStorage.getItem(IDENTITY_KEY)).toBeNull();
-  });
-
-  it("clears sensitive trace queries before the server call", async () => {
-    const order: string[] = [];
-    mocks.clearActiveBotRunQueries.mockImplementation(() =>
-      order.push("clearTraceQueries"),
-    );
-    mocks.apiJson.mockImplementation(async () => {
-      order.push("logout");
-    });
-
-    await getAuthProvider().logout?.({});
-
-    expect(order).toEqual(["clearTraceQueries", "logout"]);
   });
 });

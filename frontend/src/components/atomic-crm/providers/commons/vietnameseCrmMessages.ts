@@ -34,10 +34,6 @@ export const vietnameseCrmMessages = {
         error: "Gửi tin nhắn thất bại.",
       },
     },
-    bot_runs: {
-      name: "Lần chạy bot |||| Lần chạy bot",
-      forcedCaseName: "Lần chạy bot",
-    },
     projects: {
       name: "Dự án |||| Dự án",
       forcedCaseName: "Dự án",

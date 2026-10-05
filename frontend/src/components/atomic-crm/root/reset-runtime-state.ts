@@ -11,7 +11,6 @@ import {
   bindConversationRuntimeEpoch,
   resetConversationRuntimeState,
 } from "../conversations/reset-runtime";
-import { clearBotRunQueries } from "../automation/botRunQueries";
 
 const LEGACY_ADAPTER_KEYS = [
   "vfic:chatops:saved-views:v1",
@@ -35,10 +34,6 @@ bindConversationRuntimeEpoch({
 });
 export const getActiveRuntimeBundle = (): RuntimeGenerationBundle | null =>
   activeBundle;
-
-export const clearActiveBotRunQueries = (): void => {
-  if (activeBundle) clearBotRunQueries(activeBundle.queryClient);
-};
 
 export const createRuntimeQueryClient = (): QueryClient =>
   new QueryClient({
@@ -80,7 +75,6 @@ export const resetActiveRuntimeState = async (): Promise<void> => {
   resetConversationRuntimeState();
 
   if (previous) {
-    clearBotRunQueries(previous.queryClient);
     await previous.queryClient.cancelQueries();
     previous.queryClient.getMutationCache().clear();
     previous.queryClient.clear();

@@ -1,7 +1,8 @@
 """Latency SLO definitions + rollup (Tech-Lead Directive §1).
 
 The codebase ALREADY captures rich per-turn stage timings in
-``BotRun.stage_timings`` and rolls them up via ``app.api.performance._percentiles``.
+``BotRun.stage_timings`` and rolls them up with ``percentile_cont`` in
+``app.reporting.infrastructure.performance_dashboard``.
 This module wraps that data in the directive's named-SLO contract:
 
 - 7 SLOs with target + actual p50/p95 + green/amber/red status.
@@ -209,9 +210,9 @@ async def compute_slos(
 ) -> list[SloResult]:
     """Compute all 7 SLOs over ``interval``. ``db`` is a short-lived session.
 
-    Reuses the same ``percentile_cont``-over-``stage_timings`` pattern as
-    ``app.api.performance._percentiles`` but with lane filters and the SLO
-    target/status layer on top.
+    Reuses the same ``percentile_cont``-over-``stage_timings`` pattern as the
+    performance dashboard but with lane filters and the SLO target/status layer
+    on top.
     """
     out: list[SloResult] = []
 

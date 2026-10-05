@@ -17,7 +17,6 @@ const contributions: Readonly<Record<string, ExecutableContribution>> =
 
 const RESOURCE_IDS = [
   "kernel.resource.conversations",
-  "kernel.resource.bot-runs",
   "kernel.resource.projects",
   "kernel.resource.settings",
   "kernel.resource.users",
@@ -37,7 +36,6 @@ const NAVIGATION_IDS = [
   "kernel.navigation.projects",
   "kernel.navigation.users",
   "kernel.navigation.settings",
-  "kernel.navigation.bot_runs",
   "kernel.navigation.performance",
 ] as const;
 

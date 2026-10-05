@@ -13,7 +13,6 @@ describe("static recruitment runtime", () => {
     expect(runtime.packKey).toBe("recruitment");
     expect(runtime.resources.map(({ name }) => name)).toEqual([
       "conversations",
-      "bot_runs",
       "projects",
       "settings",
       "users",
@@ -68,12 +67,6 @@ describe("static recruitment runtime", () => {
         section: "system",
       },
       {
-        id: "bot_runs",
-        to: "/bot_runs",
-        roles: ["admin"],
-        section: "system",
-      },
-      {
         id: "performance",
         to: "/hieu-suat",
         roles: ["admin"],
@@ -95,7 +88,6 @@ describe("static recruitment runtime", () => {
     expect(navigationById.get("settings")?.isActive("/zalo_integrations")).toBe(
       true,
     );
-    expect(navigationById.get("bot_runs")?.isActive("/bot_runs/1")).toBe(true);
     expect(
       navigationById.get("performance")?.isActive("/hieu-suat/weekly"),
     ).toBe(true);

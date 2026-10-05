@@ -183,29 +183,6 @@ export type Message = {
   created_at: string;
 } & Pick<RaRecord, "id">;
 
-// A single bot execution against a conversation. `outcome` is the takeover
-// race-guard verdict: sent (delivered to Zalo), suppressed (a recruiter took
-// over mid-run — version mismatch), or error. Read-only ops data.
-export type BotRunOutcome = "sent" | "suppressed" | "error";
-
-export type BotRun = {
-  id: number;
-  conversation_id: string;
-  started_at: string;
-  ended_at: string | null;
-  version_at_start: number;
-  proposed_reply: string | null;
-  outcome: BotRunOutcome;
-} & Pick<RaRecord, "id">;
-
-export type BotRunDetail = {
-  id: number;
-  conversation_id: string;
-  started_at: string;
-  ended_at: string | null;
-  outcome: BotRunOutcome;
-};
-
 // Knowledge document (per-project RAG doc). Mirrors the backend
 // KnowledgeDocumentOut shape served at /api/v1/knowledge/documents. `stage` is the
 // fine-grained training-pipeline progress (UPLOADED -> ... -> PUBLISHED/APPROVED);

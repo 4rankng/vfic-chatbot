@@ -176,32 +176,6 @@ describe("restProvider custom conversation actions", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
-
-  it("loads one bot-run detail and normalizes its outcome", async () => {
-    let url = "";
-    globalThis.fetch = vi.fn(
-      async (input: RequestInfo | URL): Promise<Response> => {
-        url = typeof input === "string" ? input : (input as URL).toString();
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            id: 71,
-            conversation_id: "conversation-1",
-            started_at: "2026-07-18T10:00:00Z",
-            ended_at: null,
-            outcome: "SUPPRESSED",
-          }),
-        } as unknown as Response;
-      },
-    ) as unknown as typeof globalThis.fetch;
-
-    const response = await provider.getBotRunDetail(71);
-
-    expect(url).toContain("/api/v1/bot_runs/71");
-    expect(response.outcome).toBe("suppressed");
-    expect(response.conversation_id).toBe("conversation-1");
-  });
 });
 
 describe("legacy configuration migration oracle", () => {
@@ -219,7 +193,8 @@ describe("backend route contract", () => {
     // Ratchet, mirrored from backend/tests/test_frontend_api_contract.py: the
     // table may shrink only when a resource is deliberately deleted. Dropped
     // 8 -> 7 on 2026-10-04 with the persona API, whose routes no longer exist.
-    expect(entries.length).toBeGreaterThanOrEqual(7);
+    // Dropped 7 -> 6 on removal of the bot-run log screen.
+    expect(entries.length).toBeGreaterThanOrEqual(6);
 
     for (const [resource, segment] of entries) {
       const { fetch, lastUrl } = stubList([]);

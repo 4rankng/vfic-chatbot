@@ -20,7 +20,6 @@ ROUTE_MODULE_CLASSIFICATION = {
     "users": "auth_setup",
     "conversations": "active_kernel",
     "leads": "capability.recruitment",
-    "bot_runs": "active_kernel",
     "knowledge": "capability.knowledge",
     "knowledge_bases": "capability.knowledge",
     "projects": "capability.recruitment",
@@ -40,7 +39,6 @@ EXPECTED_ROUTE_COUNTS = {
     # Endpoint-level snapshot: adding a decorator inside an existing module must
     # fail this gate and force an explicit authority-classification review.
     "auth": 7,  # +1 server-side logout (SEC-03)
-    "bot_runs": 2,
     "conversations": 19,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
     # +1 GET /by-contact-ids — batch contact→conversations lookup (max 200),
     # viewer-scoped, behind the dashboard candidate-card consolidation.
@@ -72,7 +70,9 @@ EXPECTED_ROUTE_COUNTS = {
 # (the admin-editable Google Maps credential behind the distance feature).
 # 0066-era: -11 persona routes (the persona router, its adapter-assignment
 # routes and its versions routes) — persona storage is a code constant now.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "3de6aa80f1d077bc3d104a2c25a5058f9870a00b533971fd41b6024406a92300"
+# 2026-era: -2 bot_runs routes (list + detail) — the Nhật ký bot log screen was
+# removed; the BotRun telemetry table stays (the performance dashboard reads it).
+EXPECTED_ROUTE_INVENTORY_SHA256 = "bbeedcb51204e067273603491ac4df6acdc9c83c861e629112465b283e91c071"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

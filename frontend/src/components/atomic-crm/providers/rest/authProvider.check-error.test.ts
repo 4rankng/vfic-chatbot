@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  clearActiveBotRunQueries: vi.fn(),
   clearTokens: vi.fn(),
   closeRealtimeSocket: vi.fn(),
-}));
-
-vi.mock("../../root/reset-runtime-state", () => ({
-  clearActiveBotRunQueries: mocks.clearActiveBotRunQueries,
 }));
 
 vi.mock("../realtime/realtime-socket", () => ({
@@ -41,33 +36,19 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe("authProvider cached bot-run privacy", () => {
-  it("clears cached bot-run queries before logout completes", async () => {
-    window.localStorage.setItem(
-      "RaStore.auth.identity",
-      JSON.stringify({ id: "admin-1", role: "admin" }),
-    );
-
-    await getAuthProvider().logout?.({});
-
-    expect(mocks.clearActiveBotRunQueries).toHaveBeenCalledOnce();
-    expect(mocks.clearTokens).toHaveBeenCalledOnce();
-    expect(window.localStorage.getItem("RaStore.auth.identity")).toBeNull();
-    expect(mocks.closeRealtimeSocket).toHaveBeenCalledOnce();
-  });
-
-  it("clears cached bot-run queries after a terminal 401 but not a 403", async () => {
+describe("authProvider terminal auth errors", () => {
+  it("clears local state on a terminal 401 but leaves 403 to the caller", async () => {
     const provider = getAuthProvider();
 
     await expect(
       provider.checkError?.(new ApiError(401, "expired")),
     ).rejects.toMatchObject({ status: 401 });
-    expect(mocks.clearActiveBotRunQueries).toHaveBeenCalledOnce();
+    expect(mocks.clearTokens).toHaveBeenCalledOnce();
 
     vi.clearAllMocks();
     await expect(
       provider.checkError?.(new ApiError(403, "forbidden")),
     ).resolves.toBeUndefined();
-    expect(mocks.clearActiveBotRunQueries).not.toHaveBeenCalled();
+    expect(mocks.clearTokens).not.toHaveBeenCalled();
   });
 });

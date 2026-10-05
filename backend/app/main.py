@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse
 
 from app.api import (
     auth,
-    bot_runs,
     conversations,
     dashboard,
     integrations,
@@ -176,7 +175,6 @@ app.include_router(auth.router, prefix=API_V1_PREFIX)
 app.include_router(users.router, prefix=API_V1_PREFIX)
 app.include_router(conversations.router, prefix=API_V1_PREFIX)
 app.include_router(leads.router, prefix=API_V1_PREFIX)
-app.include_router(bot_runs.router, prefix=API_V1_PREFIX)
 app.include_router(knowledge.router, prefix=API_V1_PREFIX)
 app.include_router(knowledge_bases.router, prefix=API_V1_PREFIX)
 app.include_router(projects.router, prefix=API_V1_PREFIX)

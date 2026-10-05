@@ -32,8 +32,9 @@ def test_every_console_resource_path_is_a_real_backend_get_route():
     table = _load_table()
     # Ratchet, same shape as the CSS scoping test: it may go down only when a
     # resource is deliberately removed. Dropped 8 -> 7 on 2026-10-04 with the
-    # persona API, whose routes no longer exist.
-    assert len(table) >= 7, "the shared resource-path table must not silently shrink"
+    # persona API, whose routes no longer exist. Dropped 7 -> 6 on removal of
+    # the bot-run log screen.
+    assert len(table) >= 6, "the shared resource-path table must not silently shrink"
 
     for resource, segment in sorted(table.items()):
         url = f"/api/v1/{segment}"

@@ -33,14 +33,11 @@ from sqlalchemy.dialects import postgresql
 import app.api.installation_dependencies as installation_dependencies
 import app.services.presence as presence
 from app.api.auth_dependencies import get_current_user
-from app.api.bot_runs import router as bot_runs_router
 from app.api.leads import router as leads_router
-from app.conversation_messaging.domain.statuses import BotRunOutcome
 from app.core.errors import register_domain_exception_handlers
 from app.models.lead import FollowUpTask, Lead, LeadEvent
 from app.models.user import Role
 from app.recruitment.domain.statuses import FollowupStatus, LeadStage
-from app.schemas.bot_run import BotRunDetailOut
 from app.services.lead import LeadService
 from app.services.lead.repository import LeadRepository
 from app.shared.domain.errors import BadRequestError
@@ -402,110 +399,3 @@ async def test_assign_proceeds_for_an_enabled_user():
 
     assert await service.assign(lead, OTHER_ID, actor=_viewer(Role.admin)) is lead
     db.execute.assert_awaited()
-
-
-# --- the bot-run list projection ---------------------------------------------
-
-_bot_runs_app = FastAPI()
-register_domain_exception_handlers(_bot_runs_app)
-_bot_runs_app.include_router(bot_runs_router, prefix="/api/v1")
-
-_DRAFT = "Dạ em gửi anh thông tin việc làm"
-
-
-class _FakeBotRunService:
-    def __init__(self, _db) -> None:
-        pass
-
-    async def list(self, **_kwargs):
-        return [
-            SimpleNamespace(
-                id=42,
-                conversation_id=OTHER_ID,
-                started_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
-                ended_at=None,
-                version_at_start=3,
-                proposed_reply=_DRAFT,
-                outcome=BotRunOutcome.SENT,
-            )
-        ], 1
-
-    async def get_run_detail(self, run_id):
-        if run_id != 42:
-            return None
-        return BotRunDetailOut(
-            id=42,
-            conversation_id=OTHER_ID,
-            started_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
-            ended_at=None,
-            outcome=BotRunOutcome.SENT,
-        )
-
-
-@pytest.fixture()
-def bot_runs_client(monkeypatch):
-    monkeypatch.setattr("app.api.bot_runs.BotRunService", _FakeBotRunService)
-
-    def _build(user):
-        async def override_user():
-            return user
-
-        async def override_db():
-            yield AsyncMock()
-
-        _bot_runs_app.dependency_overrides[get_current_user] = override_user
-        _bot_runs_app.dependency_overrides[get_request_db] = override_db
-        return httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=_bot_runs_app), base_url="http://testserver"
-        )
-
-    yield _build
-    _bot_runs_app.dependency_overrides.clear()
-
-
-@pytest.mark.asyncio
-async def test_bot_run_list_keeps_the_draft_for_an_admin(bot_runs_client):
-    async with bot_runs_client(_viewer(Role.admin)) as http:
-        response = await http.get("/api/v1/bot_runs")
-
-    assert response.status_code == 200
-    row = response.json()["data"][0]
-    assert row["proposed_reply"] == _DRAFT
-
-
-@pytest.mark.asyncio
-async def test_bot_run_list_drops_the_draft_for_a_recruiter(bot_runs_client):
-    """A recruiter may not be able to open the run's conversation, so the
-    draft — which can quote it — is not echoed. The field stays in the payload."""
-    async with bot_runs_client(_viewer(Role.recruiter)) as http:
-        response = await http.get("/api/v1/bot_runs")
-
-    assert response.status_code == 200
-    row = response.json()["data"][0]
-    assert row["proposed_reply"] is None
-    assert row["id"] == 42
-    assert row["outcome"] == "SENT"
-    assert response.json()["total"] == 1
-
-
-@pytest.mark.asyncio
-async def test_bot_run_detail_returns_only_the_fact_fields_for_an_admin(bot_runs_client):
-    """The detail endpoint is the audit row's facts — no execution summary."""
-    async with bot_runs_client(_viewer(Role.admin)) as http:
-        response = await http.get("/api/v1/bot_runs/42")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert set(body) == {"id", "conversation_id", "started_at", "ended_at", "outcome"}
-    assert body["id"] == 42
-    assert body["conversation_id"] == str(OTHER_ID)
-    assert body["ended_at"] is None
-    assert body["outcome"] == "SENT"
-
-
-@pytest.mark.asyncio
-async def test_bot_run_detail_is_admin_only(bot_runs_client):
-    async with bot_runs_client(_viewer(Role.recruiter)) as http:
-        response = await http.get("/api/v1/bot_runs/42")
-
-    assert response.status_code == 403
