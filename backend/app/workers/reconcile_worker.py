@@ -161,6 +161,43 @@ async def _failed_send_attempts(db, conversation_id, *, since: datetime) -> int:
     return int((await db.scalar(statement)) or 0)
 
 
+async def _alert_stuck_conversation(db, conv, *, reason: str, attempts: int) -> None:  # noqa: ANN001
+    """Push the operator alert for a thread whose reply cannot be delivered.
+
+    Two shapes, both silent without this: the channel credential is dead
+    (nothing delivers until it is re-authorized), or the provider refused the
+    same reply twice and the sweep has given up. Deduped per conversation and
+    reason, so a thread that stays broken does not push on every tick.
+    Best-effort: the sweep must finish its lock bookkeeping even if the push
+    fails.
+    """
+    from app.services.push import notify_admins
+
+    if reason == "terminal_send":
+        title = "Kênh gửi tin đã hết hiệu lực"
+        body = (
+            "Không gửi được tin vì access token của kênh đã hết hạn. "
+            "Hãy cấp lại quyền cho OA trong Cài đặt → Zalo OA."
+        )
+    else:
+        title = "Không gửi được tin nhắn cho ứng viên"
+        body = (
+            f"Đã thử gửi {attempts} lần và đều bị nhà cung cấp từ chối. "
+            "Mở hội thoại để kiểm tra và nhắn thủ công."
+        )
+    try:
+        await notify_admins(
+            db,
+            title=title,
+            body=body,
+            url=f"/conversations?id={conv.id}",
+            tag=f"conversation-{conv.id}",
+            dedupe_key=f"reconcile-stuck:{conv.id}:{reason}",
+        )
+    except Exception:  # noqa: BLE001 — an alert must not break the sweep
+        logger.warning("reconcile push alert failed conversation=%s", conv.id, exc_info=True)
+
+
 def enqueue_reconcile_tick_now() -> bool:
     """One-shot helper: enqueue a reconcile tick onto the ``maintenance`` queue.
     Useful for ops manual-trigger + tests. Must match the queue the scheduler
@@ -361,6 +398,9 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                             # turn cannot deliver anything; it only adds another
                             # failed bubble the candidate can see.
                             terminal_send_skipped += 1
+                            await _alert_stuck_conversation(
+                                db, conv_fresh, reason="terminal_send", attempts=0
+                            )
                             await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                             continue
                         reason = "failed_send"
@@ -397,6 +437,9 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     # attempt counter (their new inbound is a newer ``since``).
                     await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                     failed_send_exhausted += 1
+                    await _alert_stuck_conversation(
+                        db, conv_fresh, reason="failed_send_exhausted", attempts=_FAILED_SEND_MAX_ATTEMPTS
+                    )
                     continue
 
                 if not user_text:

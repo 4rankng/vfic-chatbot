@@ -20,6 +20,7 @@ from app.api import (
     knowledge,
     knowledge_bases,
     leads,
+    notifications,
     performance,
     projects,
     users,
@@ -181,6 +182,7 @@ app.include_router(projects.router, prefix=API_V1_PREFIX)
 app.include_router(jobs.router, prefix=API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=API_V1_PREFIX)
 app.include_router(performance.router, prefix=API_V1_PREFIX)
+app.include_router(notifications.router, prefix=API_V1_PREFIX)
 app.include_router(integrations.router, prefix=API_V1_PREFIX)
 app.include_router(installation.router, prefix=API_V1_PREFIX)
 app.include_router(webhooks.router)

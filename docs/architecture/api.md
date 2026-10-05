@@ -42,7 +42,7 @@ request first loaded the account.
 An email uniqueness conflict remains a conflict response after transaction
 rollback, rather than attempting an implicit async reload of expired attributes.
 
-## Routes (13 route groups)
+## Routes (14 route groups)
 
 The application registers the API routers in `backend/app/main.py` under
 `API_V1_PREFIX = "/api/v1"`; realtime and webhook groups keep their root paths.
@@ -58,6 +58,7 @@ The application registers the API routers in `backend/app/main.py` under
 | `jobs` | `/api/v1/jobs` | `jobs` | JWT (list/get); `require_admin` (create/update) | Job postings |
 | `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics + recruiter attention queue |
 | `performance` | `/api/v1/admin/performance` | `performance` | `require_admin` | Response-time p50/p95 + trend and phone-capture conversion |
+| `notifications` | `/api/v1/notifications` | `notifications` | JWT | Web Push subscription handles (VAPID key, subscribe, unsubscribe, self-test); alerts are sent server-side |
 | `integrations` | `/api/v1/admin/integrations` | `integrations` | `require_admin` | Integration settings (Zalo, Messenger, LLM, email digest) |
 | `installation` | `/api/v1/installation`, `/api/v1/admin/installation` | `installation` | Public-safe runtime projection; `require_admin` for lifecycle administration | Immutable installation revision lifecycle |
 | `realtime` | `/realtime` | — | JWT via `?token=` or Bearer | Legacy SSE endpoint |

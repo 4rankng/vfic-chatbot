@@ -59,6 +59,11 @@ export default defineConfig({
         ],
         cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB
+        // The push/notificationclick handlers live in public/push-sw.js and are
+        // pulled into the generated worker. Without them a push event has no
+        // listener and the browser drops the message silently (and Chrome
+        // revokes the subscription after the quota of silent pushes).
+        importScripts: ["push-sw.js"],
       },
       manifest: false, // Use existing manifest.json from public/
     }),

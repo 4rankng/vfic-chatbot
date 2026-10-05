@@ -288,6 +288,34 @@ class ZaloSettingsMixin:
 
         return int(cast(CursorResult[Any], result).rowcount or 0)
 
+    async def _alert_refresh_rejected(self, account_key: str | None, data: object) -> None:
+        """Push the one alert that matters when an OA credential dies.
+
+        A refused refresh token is silent and terminal: every send on that OA
+        keeps failing with "Access token has expired" and only an operator can
+        re-authorize the channel. Deduped per account (see ``notify_admins``), so
+        a refresh attempted on every turn does not become a push per turn.
+        Best-effort: an alert must never break the refresh path it reports on.
+        """
+        try:
+            from app.services.push import notify_admins
+
+            error_name = data.get("error_name") if isinstance(data, dict) else None
+            await notify_admins(
+                self.db,
+                title="Zalo OA cần cấp lại quyền",
+                body=(
+                    f"Refresh token của OA '{account_key or 'mặc định'}' bị Zalo từ chối"
+                    f" ({error_name or 'không rõ lý do'}). Không thể gửi tin nhắn trên OA này"
+                    " cho tới khi cấp lại quyền trong Cài đặt → Zalo OA."
+                ),
+                url="/settings",
+                tag=f"zalo-oa-token-{account_key or 'default'}",
+                dedupe_key=f"zalo-oa-refresh:{account_key or 'default'}",
+            )
+        except Exception:  # noqa: BLE001 — an alert must not break token refresh
+            logger.warning("zalo OA refresh alert push failed", exc_info=True)
+
     async def refresh_oa_access_token(self, account_key: str | None = None) -> str | None:
         """Refresh one OA account's access_token from its stored refresh_token.
 
@@ -388,6 +416,7 @@ class ZaloSettingsMixin:
                     f"error_name={data.get('error_name') if isinstance(data, dict) else '-'}, "
                     f"error_description={data.get('error_description') if isinstance(data, dict) else '-'})"
                 )
+                await self._alert_refresh_rejected(account_key, data)
                 return None
 
             new_access = str(data["access_token"])

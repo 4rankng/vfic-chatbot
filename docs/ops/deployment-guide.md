@@ -290,9 +290,13 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0067_drop_external_source_sync` (5 Oct 2026). This line is grepped by the
+- **HEAD:** `0068_push_subscriptions` (5 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0067` drops the two
+  new migration that does not update it blocks the release. `0068` adds the
+  `push_subscriptions` table behind the console's Web Push alerts (one row per
+  browser that enabled them) — **additive**: a new table with no existing row
+  touched, so blue and green run against either schema, and `downgrade()` drops
+  it (a subscription is re-created by the console toggle). `0067` drops the two
   retired Google Sheet sync-state tables (`external_source_sync_state`,
   `single_page_external_source_sync_state`) — **non-additive**: the dropped rows
   are not reconstructed, so the pre-migration `pg_dump` in step 3 is the
@@ -412,6 +416,12 @@ Sourced from `backend/.env.example` (committed template) and
 | `RESEND_API_KEY` | Transactional email (password reset). |
 | `INTEGRATION_SETTINGS_ENCRYPTION_KEY` | Server-side key for admin-managed integration secrets at rest. Required outside dev. |
 | `VFIC_BOOTSTRAP_ADMIN_EMAIL` / `VFIC_BOOTSTRAP_ADMIN_PASSWORD` | First-deploy admin bootstrap. |
+
+### Web Push (VAPID)
+| Name | Purpose |
+|---|---|
+| `VAPID_PRIVATE_KEY` / `VAPID_PUBLIC_KEY` | Raw base64url P-256 pair that signs the console's push messages; the browser subscribes with the public half. Generated automatically (`scripts/generate_vapid_keys.py` runs on the deploy machine and `scripts/prod-env.sh` appends the pair when missing, including on a `.env` that predates the feature; `make db` does the same locally). **Rotating the pair invalidates every stored subscription** — they re-subscribe from the bell panel. Blank disables push: the two alert triggers then only log. |
+| `VAPID_SUBJECT` | JWT `sub` claim contact (`mailto:ops@tingting.vip`). |
 
 ### Zalo
 | Name | Purpose |

@@ -11,6 +11,7 @@ import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { conversationChannelLabel } from "../../types";
 import { formatElapsed } from "../../dashboard/attentionDashboard";
 import { useNeedsAttention, type NeedsAttentionRow } from "./useNeedsAttention";
+import { PushNotificationsToggle } from "../../notifications/PushNotificationsToggle";
 
 const INBOX_DESTINATION = "/conversations?needs_attention=true";
 
@@ -163,7 +164,7 @@ export const NotificationsMenu = ({ count }: NotificationsMenuProps) => {
             )}
           </div>
 
-          <div className="border-t border-secondary px-4 py-2.5">
+          <div className="flex items-center justify-between gap-3 border-t border-secondary px-4 py-2.5">
             <Link
               to={INBOX_DESTINATION}
               onClick={() => setOpen(false)}
@@ -171,6 +172,7 @@ export const NotificationsMenu = ({ count }: NotificationsMenuProps) => {
             >
               Xem tất cả trong Hộp thư
             </Link>
+            <PushNotificationsToggle />
           </div>
         </Dialog>
       </Dropdown.Popover>

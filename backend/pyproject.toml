@@ -47,6 +47,7 @@ dependencies = [
     # Gemini embeddings + LLM probe only (`from google import genai`). No Drive
     # API client and no OAuth flow library are imported anywhere in backend/.
     "google-genai>=0.3,<3.0",
+    "pywebpush>=2.5.0",
 ]
 
 [project.optional-dependencies]

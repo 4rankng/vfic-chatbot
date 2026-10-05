@@ -300,6 +300,18 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/notifications/usePushNotifications.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/notifications/pushNotifications.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/notifications/PushNotificationsToggle.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/misc/Markdown.tsx",
           "type": "registry:component"
         },

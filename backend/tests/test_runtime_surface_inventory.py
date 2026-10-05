@@ -20,6 +20,7 @@ ROUTE_MODULE_CLASSIFICATION = {
     "users": "auth_setup",
     "conversations": "active_kernel",
     "leads": "capability.recruitment",
+    "notifications": "active_kernel",
     "knowledge": "capability.knowledge",
     "knowledge_bases": "capability.knowledge",
     "projects": "capability.recruitment",
@@ -56,6 +57,7 @@ EXPECTED_ROUTE_COUNTS = {
     "knowledge_bases": 11,
     "leads": 15,
     "main": 3,
+    "notifications": 4,  # GET vapid-public-key, POST/DELETE subscriptions, POST test
     "performance": 2,
     # -4 single-page external-source-sync endpoints (Google Sheets retired, 0067)
     # +2 project external-API endpoints (get / put)
@@ -72,7 +74,10 @@ EXPECTED_ROUTE_COUNTS = {
 # routes and its versions routes) — persona storage is a code constant now.
 # 2026-era: -2 bot_runs routes (list + detail) — the Nhật ký bot log screen was
 # removed; the BotRun telemetry table stays (the performance dashboard reads it).
-EXPECTED_ROUTE_INVENTORY_SHA256 = "bbeedcb51204e067273603491ac4df6acdc9c83c861e629112465b283e91c071"
+# +4 notifications routes (VAPID key, subscribe, unsubscribe, self-test) — the
+# Web Push handles behind the console's alert toggle; the alerts themselves are
+# server-side (services/push), so no route carries them.
+EXPECTED_ROUTE_INVENTORY_SHA256 = "531542931c970f76315ffe4240043974cee25c4e579f909d7ccc4b9f39e909ef"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -184,7 +189,13 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # (get + post inside send_email_via_resend), its two call sites in
     # services/email_digest/service.py (run_digest + send_test_digest), and the
     # admin test-send route in api/integrations.py.
-    "provider_boundary": 95,
+    # +3 Web Push: the alert fan-out names its own delivery call `send_to_users`
+    # (counted by the `send_` prefix at notify_admins, the notifications API and
+    # the push service), and the OA refresh alert reads the provider's error
+    # fields with one dict `.get` inside the provider-transport Zalo module.
+    # None of the three is a new egress site: the HTTP call is pywebpush's, from
+    # app/services/push/service.py.
+    "provider_boundary": 98,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -322,7 +333,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # prepare_proactive_message/record_proactive_outcome write path) and
 # -2 queue_producer (the removed followup tick and its enqueue),
 # -1 provider_boundary (the proactive send). Digest recomputed.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "be6d9ea505cd5824f90ecf5950043f28232f318493111851e3ed4af7263a6608"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "ac17e07aba3e2d591daada8708a123bcd70de433e085a1ee726809cfb4c44417"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

@@ -41,6 +41,11 @@ db:
 		sed -e 's#@postgres:#@localhost:5443:#g' -e 's#redis://redis:6379#redis://localhost:6382#g' .env.example > .env; \
 		echo "==> Created backend/.env from .env.example (localhost dev URLs). Set API keys to exercise the bot."; \
 	fi
+	@if ! grep -qE '^VAPID_PRIVATE_KEY=.+' .env; then \
+		$(PY) -m scripts.generate_vapid_keys >> .env 2>/dev/null \
+			&& echo "==> Added VAPID keys to .env (push alerts enabled in dev)." \
+			|| echo "  (VAPID keys skipped — ensure backend/.venv exists)"; \
+	fi
 	@echo "==> Applying Alembic baseline (idempotent)..."
 	@$(PY) -m scripts.widen_alembic_version || echo "  (widen skipped — ensure backend/.venv exists: pip install -e .[dev])"
 	@$(PY) -m alembic upgrade head || echo "  (alembic skipped — ensure backend/.venv exists: pip install -e .[dev])"
@@ -124,7 +129,7 @@ deploy:
 	$(SCP) docker-compose.yml Caddyfile.template root@$(PROD_SERVER):$(PROD_DIR)/
 	$(SCP) scripts/bg_deploy.sh scripts/bg_rollback.sh scripts/flip_caddy.sh ../scripts/ops-alerts.sh root@$(PROD_SERVER):$(PROD_DIR)/scripts/
 	@echo "==> Generating $(PROD_DIR)/.env if missing (infra secrets filled, API keys blank)..."
-	$(SSH) root@$(PROD_SERVER) 'bash -s' < scripts/prod-env.sh
+	$(SSH) root@$(PROD_SERVER) "VAPID_ENV=\"$$($(PY) -m scripts.generate_vapid_keys)\" bash -s" < scripts/prod-env.sh
 	@echo "==> Creating bootstrap admin (idempotent)..."
 	-$(SSH) root@$(PROD_SERVER) 'cd $(PROD_DIR) && IMAGE_TAG=$(IMAGE_TAG) docker compose run --rm web-blue python -m scripts.create_admin --only-if-no-admins --email "$$(grep "^VFIC_BOOTSTRAP_ADMIN_EMAIL=" .env | cut -d= -f2-)" --password "$$(grep "^VFIC_BOOTSTRAP_ADMIN_PASSWORD=" .env | cut -d= -f2-)" --full-name "VFIC Admin" --role admin'
 	@echo "==> Running blue/green deploy (smoke-gated Caddy flip)..."
