@@ -290,9 +290,13 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0066_drop_persona_storage` (4 Oct 2026). This line is grepped by the
+- **HEAD:** `0067_drop_external_source_sync` (5 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0066` drops
+  new migration that does not update it blocks the release. `0067` drops the two
+  retired Google Sheet sync-state tables (`external_source_sync_state`,
+  `single_page_external_source_sync_state`) — **non-additive**: the dropped rows
+  are not reconstructed, so the pre-migration `pg_dump` in step 3 is the
+  recovery path (`downgrade()` recreates both tables empty). `0066` drops
   persona storage — the `personas`, `persona_versions` and
   `adapter_persona_assignments` tables plus the
   `installation_manifest_revisions.persona_version_id` pin — because the persona
