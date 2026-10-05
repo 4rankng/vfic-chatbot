@@ -191,6 +191,8 @@ async def test_webhook_ack_guards_run_through_state_and_the_inbound_read_through
     svc.state.run_start_guard = MagicMock(side_effect=_guard)
     svc.state.acquire_lock = AsyncMock(side_effect=_acquire_lock)
     svc.repo.last_messages = AsyncMock(return_value=[])
+    # Not a redelivery of an already-answered inbound: the turn must proceed.
+    svc.repo.inbound_is_answered = AsyncMock(return_value=False)
     db = MagicMock()
     db.refresh = AsyncMock()
 
