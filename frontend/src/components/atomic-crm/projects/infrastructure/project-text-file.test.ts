@@ -55,11 +55,24 @@ describe("project text file preview", () => {
     expect(() => assertProjectTextFile(new File([], "empty.txt"))).toThrow(
       "chưa có nội dung",
     );
-    expect(() => assertProjectTextFile(new File(["x"], "office.docx"))).toThrow(
-      "tệp văn bản",
+    expect(() => assertProjectTextFile(new File(["x"], "office.xlsx"))).toThrow(
+      "tệp Word",
+    );
+    expect(() => assertProjectTextFile(new File(["x"], "legacy.doc"))).toThrow(
+      "tệp Word",
     );
     expect(() => assertProjectTextFile(new File(["x"], "legacy.yaml"))).toThrow(
-      "tệp văn bản",
+      "tệp Word",
     );
+  });
+
+  it("accepts DOCX as a knowledge source and skips its browser preview", async () => {
+    // The backend parses the DOCX OOXML container itself; the browser only
+    // hands over the original bytes, so the empty string body here is fine.
+    const docx = new File(["PK\x03\x04 placeholder"], "tuyen-dung.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    expect(() => assertProjectTextFile(docx)).not.toThrow();
+    expect(await readProjectBriefPreview(docx)).toBeNull();
   });
 });

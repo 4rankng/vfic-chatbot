@@ -946,7 +946,7 @@ describe("ProjectKnowledgePanel", () => {
     confirm.mockRestore();
   }, 30000);
 
-  it("rejects a non-text file with the text-file message, before any read", async () => {
+  it("rejects a binary file with the text-file message, before any read", async () => {
     const screen = await renderPanel(
       <ProjectKnowledgePanel project={project} editable />,
     );
@@ -954,8 +954,8 @@ describe("ProjectKnowledgePanel", () => {
     const input =
       screen.container.querySelector<HTMLInputElement>('input[type="file"]');
     if (!input) throw new Error("the panel renders no brief input");
-    const file = new File(["binary payload"], "phieu-brief.docx", {
-      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    const file = new File(["binary payload"], "phieu-brief.pdf", {
+      type: "application/pdf",
     });
     const transfer = new DataTransfer();
     transfer.items.add(file);
@@ -963,7 +963,11 @@ describe("ProjectKnowledgePanel", () => {
     input.dispatchEvent(new Event("change", { bubbles: true }));
 
     await expect
-      .element(screen.getByText("Chỉ chấp nhận tệp văn bản."))
+      .element(
+        screen.getByText(
+          "Chỉ chấp nhận tệp văn bản (.txt, .md, .csv, .json…) hoặc tệp Word (.docx).",
+        ),
+      )
       .toBeVisible();
     // The guard fires before any read: no parse, no chain, no document upload.
     expect(mocks.replaceProjectKnowledgeCategory).not.toHaveBeenCalled();

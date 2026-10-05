@@ -107,8 +107,9 @@ export const ProjectBriefImport = ({
         />
       </div>
       <p className="text-helper text-muted-foreground">
-        Một tệp văn bản, tối đa 20 MB. Không cần theo mẫu. Hệ thống phân loại
-        nội dung vào 12 danh mục. Kiểm tra kết quả trước khi bật tuyển dụng.
+        Một tệp văn bản (.txt, .md, .csv…) hoặc tệp Word (.docx), tối đa 20 MB.
+        Không cần theo mẫu. Hệ thống phân loại nội dung vào 12 danh mục. Kiểm
+        tra kết quả trước khi bật tuyển dụng.
       </p>
       {error ? (
         <p role="alert" className="text-helper text-destructive">

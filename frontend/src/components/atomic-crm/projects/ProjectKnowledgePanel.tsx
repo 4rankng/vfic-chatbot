@@ -239,7 +239,8 @@ const BriefIngestSection = ({
         <div>
           <p className="text-body font-semibold">Cập nhật kiến thức từ tệp</p>
           <p className="text-helper text-muted-foreground">
-            Một tệp văn bản, tối đa 20 MB. Không cần theo mẫu.
+            Một tệp văn bản (.txt, .md, .csv…) hoặc tệp Word (.docx), tối đa 20
+            MB. Không cần theo mẫu.
           </p>
         </div>
         {/*

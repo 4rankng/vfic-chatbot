@@ -648,10 +648,6 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
   it.each([
     ["bieu-mau.pdf", "application/pdf"],
     ["logo.png", "image/png"],
-    [
-      "phieu.docx",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ],
   ])(
     "rejects the non-text %s with the text-file message, before any read",
     async (filename, type) => {
@@ -660,10 +656,28 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
 
       await expect
         .element(screen.getByRole("alert"))
-        .toHaveTextContent("Chỉ chấp nhận tệp văn bản.");
+        .toHaveTextContent(
+          "Chỉ chấp nhận tệp văn bản (.txt, .md, .csv, .json…) hoặc tệp Word (.docx).",
+        );
       expect(mocks.create).not.toHaveBeenCalled();
     },
   );
+
+  it("hands a .docx pick to the backend instead of rejecting it client-side", async () => {
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(
+      screen,
+      "not a brief",
+      "phieu.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+
+    // DOCX is a supported knowledge source: the guard no longer blocks it,
+    // so the flow reaches the (mocked) backend chain and fails there on the
+    // brief content, never with the text-file message.
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    expect(mocks.create.mock.calls[0][1].data.name).toBeTruthy();
+  });
 
   it("uploads the original brief file as a project knowledge document", async () => {
     const screen = await render(<ProjectCreate />);
