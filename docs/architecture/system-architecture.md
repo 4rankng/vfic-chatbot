@@ -30,7 +30,7 @@ Compose at `/opt/vfic`, Caddy edge.
 │   Lifespan registers rq-scheduler ticks (queue: maintenance):        │
 │     - run_reconcile_tick            (60s)    via register_unique_tick│
 │     - run_outbound_dispatch_tick    (60s)                             │
-│     - external source sync + single-page sync + email digest (cron)  │
+│     - email digest (cron)                                            │
 └───────┬──────────────┬───────────────────────────────────┬───────────┘
         │              │                                   │
         │   enqueue    │  resolve admin-managed creds      │ Socket.IO
@@ -732,7 +732,7 @@ load_conversation_state -> typing -> direct_context?
 | `recovery` | `worker-chatbot` (×4, priority 2) | 60s (`chat_turn_job_timeout`) | 40 jobs | Recovered turns re-enqueued by the reconcile sweep; consumed only when `webhook_high` is empty. |
 | `persistence_low` | `worker-persistence` (×1) | — | — | One post-SENT LLM extraction for lead fields, memory facts, and contact intent; high-confidence non-candidate/spam/testing results switch future turns to HUMAN. Isolated from the interactive queue. |
 | `ingest` | `worker-ingest` | 3600s (`INGEST_JOB_TIMEOUT_SECONDS`) | — | KB digestion / reindex / bus rebuild. |
-| `maintenance` | `worker-maintenance` (×1) | — | 20 jobs | Reconcile sweep, outbound dispatch, external source sync, and email digest ticks. The `followup` queue and its worker were removed. |
+| `maintenance` | `worker-maintenance` (×1) | — | 20 jobs | Reconcile sweep, outbound dispatch, and email digest ticks. The `followup` queue and its worker were removed. |
 
 - Container entrypoint: `app/workers/run_worker.py` → calls
   `Worker.clean_registries()` on startup (requeues stuck jobs). It preloads the
@@ -743,8 +743,9 @@ load_conversation_state -> typing -> direct_context?
 - rq-scheduler runs in its own container; the FastAPI lifespan also registers
   unique ticks via `register_unique_tick` (queue `maintenance`):
   `run_reconcile_tick` (60s) and `run_outbound_dispatch_tick` (60s), plus
-  external source sync, single-page source sync, and email digest as cron ticks.
-  The proactive follow-up tick and the `followup` queue were removed.
+  email digest as a cron tick. The proactive follow-up tick and the
+  `followup` queue were removed; the Google Sheet sync ticks were removed
+  with the feature (2026-10-05).
 
 ### 4.1 Composition roots and runtime lifetimes
 
@@ -959,13 +960,8 @@ be shared by another Project.
 - `DIRECT_CONTEXT` stores one replacement-only file and makes a tool-free LLM
   call with the complete page plus bounded recent conversation history. The raw
   page and deterministic normalized text stay side by side in the database.
-  An additive `single_page_external_source_sync_state` row can point at one
-  public Google Sheet. The sync worker resolves one exact `gid` from the URL,
-  renders the FAQ sheet into deterministic Markdown, and replaces the page
-  atomically on success. Manual `Xử lý ngay` syncs and the daily scheduler tick
-  both enqueue the same worker path; failures record status on the source row
-  and preserve the prior page. The daily tick is cron-pinned via `KB_SYNC_CRON`
-  (default `0 20 * * *` UTC = 03:00 ICT).
+  (The additive Google Sheet sync row and its worker were removed on
+  2026-10-05 — migration 0067 dropped the sync-state tables.)
 - `RAG` owns twelve `knowledge_categories`. Immutable
   `knowledge_category_revisions` preserve raw category Markdown, normalized payloads, a
   deterministic checksum, and recovery metadata (`processing_token`,

@@ -34,7 +34,7 @@ a human.
 | **Human inbox** | Realtime Socket.IO push, per-conversation rooms, take-over / release / semi-auto / close / reopen, virtualized thread (`virtua`). |
 | **Proactive follow-up** | **Removed 2026-10-04.** The bot no longer initiates contact; there is no cadence, per-tick cap, or follow-up worker. Reactive inbound opt-out phrase matching and recruiter follow-up *tasks* are kept — see FR-5. |
 | **Knowledge base (RAG)** | Per-project docs ingested into pgvector halfvec HNSW + exact re-rank; versioned, re-indexable. |
-| **Direct-context sync** | Single-page projects can be refreshed from one public Google Sheet. The sync requires one exact `gid`, supports manual `Xử lý ngay` and daily auto-sync, renders the current FAQ sheet into deterministic Markdown, and preserves the prior page on failure. |
+| **Direct-context sync** | **Removed 2026-10-05.** The Google Sheet refresh of the single page — its console surface, routes, workers, daily tick, and sync-state tables (migration 0067) — is gone. The single page itself is editor-fed only. |
 | **Personas** | The agent voice is a code constant in `backend/app/prompts/vfic_persona.py`, not a stored, admin-editable record. The persona CRUD/import/assignment surface was removed 2026-10-04; there is one persona and every messaging adapter speaks it. Projects remain knowledge-only. |
 | **Reliability** | Reconcile worker sweeps every 60s, recovers lost turns after worker crash (~3-4 min total recovery). Per-chat DB lock owner + optimistic ownership guard prevent stale-run sends. |
 | **Audit** | `bot_runs` resource exposes every bot execution for review. |
@@ -175,8 +175,7 @@ per-lead `run_followup_job` fan-out.
 - **FR-7.2** Retrieval: HNSW candidate generation (default 200) → exact
   vector re-rank → return top-k.
 - **FR-7.3** Versioned documents; re-index on content change.
-- **FR-7.4** (console surface retired 2026-10-05; backend chain kept for rows
-  created earlier) Direct-context projects may attach one public Google Sheet
+- **FR-7.4** (removed 2026-10-05 — console, backend, and storage) Direct-context projects used to attach one public Google Sheet
   sync row. The sync resolves one exact `gid` from the pasted URL, accepts the
   current four-column FAQ sheet shape, and updates the page atomically on
   success.
