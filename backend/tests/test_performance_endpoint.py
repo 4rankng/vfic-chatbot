@@ -1,33 +1,37 @@
 """Unit tests for the /admin/performance endpoint + the worker preamble-timings helper.
 
 No DB / Redis: the endpoint's SQL is exercised against a fake session factory
-factory whose sessions return canned Row-like objects (routed by SQL content so
-the test is insensitive to ``asyncio.gather`` scheduling order), and
-``collect_queue_health`` + the cache primitives are stubbed. Pins the response
-shape the Hiệu suất panel consumes, the concurrent dispatch of the reads, and the
-cache hit/miss/fall-through behaviour.
+whose sessions return canned Row-like objects (routed by SQL content so the test
+is insensitive to ``asyncio.gather`` scheduling order), and the cache primitives
+are stubbed. Pins the two-metric response shape the Hiệu suất panel consumes,
+the concurrent dispatch of the reads, the per-window trend bucket binding, and
+the cache hit/miss/fall-through behaviour.
 """
 
 from __future__ import annotations
 
 import asyncio
-import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from app.api.performance import performance
+from app.api.auth_dependencies import require_admin
+from app.api.performance import performance, router
 from app.reporting.infrastructure import performance_dashboard as perf_mod
-
-CONV_ID = "00000000-0000-0000-0000-0000000000aa"
 
 
 class _FakeResult:
     def __init__(self, *, one=None, all_rows=None) -> None:
         self._one = one
         self._all = all_rows or []
+
+    def one(self):
+        assert self._one is not None, "fake result had no single row"
+        return self._one
 
     def one_or_none(self):
         return self._one
@@ -39,10 +43,10 @@ class _FakeResult:
 class _RoutingSession:
     """Fake AsyncSession that dispatches ``execute(sql)`` by SQL content.
 
-    Order-independent: each of the 5 dashboard helpers issues one query with a
-    distinct SQL shape, so routing by keyword makes the test insensitive to
+    Order-independent: each dashboard helper issues one query with a distinct SQL
+    shape, so routing by keyword makes the test insensitive to
     ``asyncio.gather`` scheduling order (the per-read sessions may execute in any
-    sequence). Records every issued statement in ``self.queries`` for assertions.
+    sequence). Records every issued statement + bound params for assertions.
     """
 
     def __init__(self, routes: list[tuple[str, _FakeResult]], queries: list[str]):
@@ -51,7 +55,7 @@ class _RoutingSession:
 
     async def execute(self, stmt, params=None):
         sql = str(stmt)
-        self.queries.append(sql)
+        self.queries.append((sql, params))
         for needle, result in self._routes:
             if needle in sql:
                 return result
@@ -72,13 +76,13 @@ class _FakeSessionCM:
 
 
 def _make_session_factory(routes: list[tuple[str, _FakeResult]]):
-    """Return a no-arg factory + a shared ``queries`` list.
+    """Return a no-arg factory + a shared query log.
 
     Each call yields a fresh session backed by the same route table and sharing
-    one ``queries`` list, mirroring the real session factory where each
-    ``async with`` gets its own session but the pool is shared.
+    one log, mirroring the real session factory where each ``async with`` gets
+    its own session but the pool is shared.
     """
-    queries: list[str] = []
+    queries: list[tuple[str, Any]] = []
 
     def factory():
         return _FakeSessionCM(_RoutingSession(routes, queries))
@@ -86,178 +90,57 @@ def _make_session_factory(routes: list[tuple[str, _FakeResult]]):
     return factory, queries
 
 
-# Route keywords — each matches exactly one helper's SQL.
-# NOTE: the trend SQL also contains "percentile_cont" (for its p95/p50 buckets),
-# so _ROUTE_TREND must be checked before _ROUTE_PERCENTILES in the routes list
-# (see _standard_routes + the empty-window routes). Otherwise the trend query
-# would incorrectly match the percentiles route. The same applies to the two
-# llm_call percentile queries (both contain percentile_cont).
-_ROUTE_PERCENTILES = "percentile_cont"
-_ROUTE_LANE_OUTCOME = "GROUP BY 1, 2"
-_ROUTE_SLOW_TURNS = "LIMIT 20"
+# Route keywords — each matches exactly one helper's SQL, listed in match order.
+# NOTE: the trend SQL also contains "percentile_cont" (for its p50/p95 buckets),
+# so _ROUTE_TREND must precede _ROUTE_PERCENTILES. The conversion CTE name
+# ("candidate_chats") appears only in the conversion query, so its route goes
+# first of all.
+_ROUTE_CONVERSION = "candidate_chats"
 _ROUTE_TREND = "to_timestamp"
-_ROUTE_RELIABILITY = "messages m"
-_ROUTE_LLM_CALL_LATENCY = "jsonb_array_elements_text"
-_ROUTE_LLM_CALL_COUNT = "llm_calls_per_p50"
-_ROUTE_ADAPTER_BREAKDOWN = "outbound_adapter"
-_ROUTE_QUALITY = "retried_429_count"
-
-
-def _percentile_row() -> SimpleNamespace:
-    attrs: dict = {}
-    for key in perf_mod._STAGE_KEYS:
-        for p in ("p50", "p95", "p99"):
-            # Give llm_model distinct values to assert the reshape; others default.
-            attrs[f"{key}_{p}"] = {"llm_model": {"p50": 100, "p95": 500, "p99": 900}}.get(
-                key, {}
-            ).get(p, 10 if p == "p50" else 50 if p == "p95" else 90)
-    return SimpleNamespace(**attrs)
+_ROUTE_PERCENTILES = "percentile_cont"
 
 
 def _standard_routes() -> list[tuple[str, _FakeResult]]:
-    """Canned results for the five dashboard reads.
-
-    Order matters: routes are matched in list order, so the most-specific
-    keywords come first. In particular ``_percentiles`` and ``_trend`` both
-    contain ``percentile_cont``, so ``_trend`` (matched on ``to_timestamp``)
-    must precede ``_percentiles`` (matched on the now-leftover
-    ``percentile_cont``).
-    """
+    """Canned results for the three dashboard reads."""
     return [
         (
-            _ROUTE_RELIABILITY,
-            _FakeResult(one=SimpleNamespace(send_unknown=2, suppressed=5, failed=1)),
+            _ROUTE_CONVERSION,
+            _FakeResult(one=SimpleNamespace(candidate_chats=12, with_phone=3)),
         ),
         (
             _ROUTE_TREND,
             _FakeResult(
                 all_rows=[
                     SimpleNamespace(
-                        bucket=datetime(2026, 7, 9, 11, 40, tzinfo=timezone.utc),
-                        p95_ms=3000.0,
+                        bucket=datetime(2026, 7, 9, 11, 30, tzinfo=timezone.utc),
                         p50_ms=1500.0,
+                        p95_ms=3000.0,
                         turns=10,
-                        errors=1,
-                    ),
-                ]
-            ),
-        ),
-        (
-            _ROUTE_SLOW_TURNS,
-            _FakeResult(
-                all_rows=[
-                    SimpleNamespace(
-                        id=1,
-                        conversation_id=uuid.UUID(CONV_ID),
-                        started_at=datetime(2026, 7, 9, 11, 42, 48, tzinfo=timezone.utc),
-                        outcome="SENT",
-                        stage_timings={
-                            "lane": "agent",
-                            "intent": "timetable",
-                            "llm_queue_ms": 300,
-                            "llm_model_ms": 4500,
-                            "llm_calls": 1,
-                            "llm_call_ms": [4500],
-                            "tool_calls": 0,
-                            "tool_breakdown": {},
-                            "prompt_tokens": 1200,
-                            "completion_tokens": 80,
-                            "cached_tokens": 0,
-                            "prefetch_hit": True,
-                            "total_ms": 5000,
-                            "preamble_ms": 1000,
-                            "webhook_to_pickup_ms": 100,
-                            "queue_depth": 1,
-                            "db_ms": 150,
-                            "db_breakdown": {"claim_send": 90, "record_bot_outcome": 60},
-                            "model_tier": "primary",
-                            "system_prompt_cache_hit": True,
-                        },
-                    ),
-                ]
-            ),
-        ),
-        (
-            _ROUTE_LANE_OUTCOME,
-            _FakeResult(
-                all_rows=[
-                    SimpleNamespace(lane="agent", outcome="SENT", n=5),
-                    SimpleNamespace(lane="agent", outcome="SENT", n=3),
-                ]
-            ),
-        ),
-        (
-            _ROUTE_QUALITY,
-            _FakeResult(
-                one=SimpleNamespace(
-                    degraded_count=1,
-                    retried_429_count=2,
-                    prompt_cache_hits=6,
-                    prompt_cache_known=8,
-                    prompt_tokens_total=9600,
-                    completion_tokens_total=640,
-                    cached_tokens_total=1200,
-                )
-            ),
-        ),
-        (
-            _ROUTE_ADAPTER_BREAKDOWN,
-            _FakeResult(
-                all_rows=[
-                    SimpleNamespace(
-                        adapter="zalo_bot",
-                        turns=4,
-                        sent=4,
-                        unsent=0,
-                        provider_p50_ms=80,
-                        provider_p95_ms=140,
-                        end_to_end_p50_ms=8000,
-                        end_to_end_p95_ms=11000,
-                        retry_count=0,
-                        refresh_count=0,
                     ),
                     SimpleNamespace(
-                        adapter="zalo_oa",
-                        turns=3,
-                        sent=2,
-                        unsent=1,
-                        provider_p50_ms=180,
-                        provider_p95_ms=350,
-                        end_to_end_p50_ms=11000,
-                        end_to_end_p95_ms=14000,
-                        retry_count=1,
-                        refresh_count=1,
+                        bucket=datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc),
+                        p50_ms=1200.0,
+                        p95_ms=2600.0,
+                        turns=6,
                     ),
                 ]
             ),
         ),
         (
-            _ROUTE_LLM_CALL_LATENCY,
-            _FakeResult(
-                one=SimpleNamespace(
-                    llm_call_per_p50=4000, llm_call_per_p95=7000, llm_call_per_p99=9000
-                )
-            ),
+            _ROUTE_PERCENTILES,
+            _FakeResult(one=SimpleNamespace(p50_ms=1400.0, p95_ms=2900.0)),
         ),
-        (
-            _ROUTE_LLM_CALL_COUNT,
-            _FakeResult(
-                one=SimpleNamespace(llm_calls_per_p50=1, llm_calls_per_p95=2, llm_calls_per_p99=3)
-            ),
-        ),
-        (_ROUTE_PERCENTILES, _FakeResult(one=_percentile_row())),
     ]
 
 
 def _install_compute_stubs(monkeypatch, routes=None) -> SimpleNamespace:
-    """Patch the session factory + queue health + force cache miss.
+    """Patch the session factory + force a cache miss.
 
-    Returns a namespace with ``.queries`` (issued SQL strings) and ``.captured``
-    (what ``cache_set_json`` was called with) for assertions.
+    Returns a namespace with ``.queries`` (issued SQL + params) and
+    ``.captured`` (what ``cache_set_json`` was called with) for assertions.
     """
     factory, queries = _make_session_factory(routes if routes is not None else _standard_routes())
     monkeypatch.setattr(perf_mod, "open_background_session", factory)
-    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     # Force cache miss so _compute runs.
     async def _miss(_key):
@@ -278,224 +161,88 @@ def _install_compute_stubs(monkeypatch, routes=None) -> SimpleNamespace:
 @pytest.mark.asyncio
 async def test_performance_bundle_shape(monkeypatch):
     stubs = _install_compute_stubs(monkeypatch)
-    queries = stubs.queries
 
-    out = await performance("24h", _admin=SimpleNamespace())
+    out = await performance("7d", _admin=SimpleNamespace())
 
-    assert out["window"] == "24h"
-    assert out["live"] == {"queue_depth": 0}
-    # percentiles reshaped per stage; llm_model p95 surfaced distinctly
-    assert out["percentiles"]["llm_model"] == {"p50": 100, "p95": 500, "p99": 900}
-    assert out["percentiles"]["send"]["p50"] == 10
-    # Per-LLM-call latency (unnested llm_call_ms) + call-count distribution.
-    # Distinct from llm_model, which ACCUMULATES across the agent loop; these
-    # answer "is one model call slow?" (llm_call_per) and "how many calls per
-    # turn?" (llm_calls_per) — together they decompose llm_model into its two
-    # factors (per-call latency × call count).
-    assert out["percentiles"]["llm_call_per"] == {"p50": 4000, "p95": 7000, "p99": 9000}
-    assert out["percentiles"]["llm_calls_per"] == {"p50": 1, "p95": 2, "p99": 3}
-    # counts aggregated by lane and by outcome
-    assert out["by_lane"] == {"agent": 8}
-    assert out["by_outcome"] == {"SENT": 8}
-    assert out["by_adapter"] == [
+    # Key order is the wire contract the frontend maps.
+    assert list(out.keys()) == ["window", "response_time", "conversion"]
+    assert out["window"] == "7d"
+    rt = out["response_time"]
+    assert rt["p50_ms"] == 1400
+    assert rt["p95_ms"] == 2900
+    assert [row for row in rt["trend"]] == [
         {
-            "adapter": "zalo_bot",
-            "turns": 4,
-            "sent": 4,
-            "unsent": 0,
-            "provider_p50_ms": 80,
-            "provider_p95_ms": 140,
-            "end_to_end_p50_ms": 8000,
-            "end_to_end_p95_ms": 11000,
-            "retry_count": 0,
-            "refresh_count": 0,
+            "bucket": "2026-07-09T11:30:00+00:00",
+            "p50_ms": 1500,
+            "p95_ms": 3000,
+            "turns": 10,
         },
         {
-            "adapter": "zalo_oa",
-            "turns": 3,
-            "sent": 2,
-            "unsent": 1,
-            "provider_p50_ms": 180,
-            "provider_p95_ms": 350,
-            "end_to_end_p50_ms": 11000,
-            "end_to_end_p95_ms": 14000,
-            "retry_count": 1,
-            "refresh_count": 1,
+            "bucket": "2026-07-09T12:00:00+00:00",
+            "p50_ms": 1200,
+            "p95_ms": 2600,
+            "turns": 6,
         },
     ]
-    # slow turn row mapped to the panel's columns
-    slow = out["slow_turns"][0]
-    assert slow["total_ms"] == 6100
-    assert slow["pipeline_ms"] == 5000
-    assert slow["llm_queue_ms"] == 300
-    assert slow["llm_model_ms"] == 4500
-    assert slow["llm_calls"] == 1
-    assert slow["llm_call_ms"] == [4500]
-    assert slow["tool_calls"] == 0
-    assert slow["tool_breakdown"] == {}
-    assert slow["prompt_tokens"] == 1200
-    assert slow["completion_tokens"] == 80
-    assert slow["cached_tokens"] == 0
-    assert slow["retried_429"] is None
-    assert slow["degraded"] is False
-    assert slow["prefetch_hit"] is True
-    assert slow["intent"] == "timetable"
-    assert slow["lane"] == "agent"
-    assert slow["conversation_id"] == CONV_ID
-    assert slow["started_at"].startswith("2026-07-09T11:42:48")
-    # DB path attribution (Proposal 1): db_ms + per-call breakdown surfaced.
-    assert slow["db_ms"] == 150
-    assert slow["db_breakdown"] == {"claim_send": 90, "record_bot_outcome": 60}
-    # Model tier + cache hit (Proposal 3).
-    assert slow["model_tier"] == "primary"
-    assert slow["system_prompt_cache_hit"] is True
-    # Dark time (Proposal 1): total_ms (5000) minus measured stages
-    # (llm_queue 300 + llm_model 4500 + db 150) = 50ms unaccounted.
-    assert slow["dark_time_ms"] == 50
-    assert "end_to_end" in out["percentiles"]
-    assert "llm" not in out["percentiles"]
-    assert "safety" not in out["percentiles"]  # stale stage removed
-    # New stages in the percentile chart.
-    assert "db" in out["percentiles"]
-    assert "outbound_prepare" in out["percentiles"]
-    assert "outbound_provider" in out["percentiles"]
-    # trend bucket mapped from the trend SQL result
-    assert len(out["trend"]) == 1
-    t = out["trend"][0]
-    assert t["p95_ms"] == 3000
-    assert t["p50_ms"] == 1500
-    assert t["turns"] == 10
-    assert t["errors"] == 1
-    # Nine distinct SQL statements issued: stage percentiles, LLM detail,
-    # lane/outcome, adapter comparison, slow turns, trend, reliability, and
-    # turn-quality/token aggregates.
-    assert len(queries) == 9
-    # reliability section: SEND_UNKNOWN + suppressed + failed counts.
-    assert out["reliability"]["send_unknown_count"] == 2
-    assert out["reliability"]["suppressed_count"] == 5
-    assert out["reliability"]["failed_count"] == 1
-    # quality section: degraded/429 counters, prompt-cache hit rate, token sums.
-    assert out["quality"] == {
-        "degraded_count": 1,
-        "retried_429_count": 2,
-        "prompt_cache_hit_rate": 75.0,
-        "prompt_tokens_total": 9600,
-        "completion_tokens_total": 640,
-        "cached_tokens_total": 1200,
-    }
-    quality_query = next(query for query in queries if _ROUTE_QUALITY in query)
-    # The legacy throttle key counts as degraded so historical rows keep
-    # contributing after the flag rename.
-    assert "(stage_timings->>'throttle')::bool" in quality_query
-    reliability_query = next(query for query in queries if _ROUTE_RELIABILITY in query)
-    # This query must run before migration 0030 adds SEND_UNKNOWN to the enum.
-    # Casting to text makes the dashboard deploy-safe during a rolling migration.
-    assert "m.delivery_status::text = 'SEND_UNKNOWN'" in reliability_query
-    # Phase 4: cache was written with the expected key + TTL.
-    captured = stubs.captured
-    assert captured["key"] == "perf:dashboard:24h"
-    assert captured["ttl"] == 30
-    assert captured["value"] == out
+    assert "errors" not in rt["trend"][0]
+    assert out["conversion"] == {"candidate_chats": 12, "with_phone": 3, "rate_pct": 25.0}
+
+    # Three reads, one statement each.
+    assert len(stubs.queries) == 3
+    # Cache written under the window-scoped key with the frontend-matching TTL.
+    assert stubs.captured["key"] == "perf:dashboard:7d"
+    assert stubs.captured["ttl"] == 30
+    assert stubs.captured["value"] == out
+    # The conversion query filters disavowed evidence and stays inside the window.
+    conversion_query = next(q for q, _ in stubs.queries if _ROUTE_CONVERSION in q)
+    assert "'candidate_phone_evidence'" in conversion_query
+    assert "COALESCE((le.payload->>'disavowed')::bool, false) = false" in conversion_query
 
 
 @pytest.mark.asyncio
-async def test_llm_call_latency_sql_casts_call_ms_to_numeric(monkeypatch):
-    """Regression for production 500: percentile_cont over jsonb_array_elements_text.
-
-    ``jsonb_array_elements_text`` returns ``text``, but ``percentile_cont`` needs a
-    numeric sort expression. Without an explicit cast Postgres rejects the function
-    overload with ``function percentile_cont(numeric, text) does not exist`` (HTTP
-    500 on every cache miss). The fake-session harness can't catch this because it
-    routes by SQL keyword and never asks Postgres to compile the statement — so pin
-    the SQL shape directly: the emitted statement must cast ``call_ms`` to numeric.
-    """
-    stubs = _install_compute_stubs(monkeypatch)
-    await performance("24h", _admin=SimpleNamespace())
-
-    latency_query = next(q for q in stubs.queries if _ROUTE_LLM_CALL_LATENCY in q)
-    # Every percentile_cont in this query must ORDER BY call_ms::int (or ::numeric).
-    # The buggy form was `ORDER BY call_ms` — bare text, rejected by Postgres.
-    assert "ORDER BY call_ms::int" in latency_query, latency_query
-    assert "ORDER BY call_ms)" not in latency_query, latency_query
-
-
-@pytest.mark.asyncio
-async def test_performance_empty_window_returns_nulls(monkeypatch):
-    """No instrumented turns in the window -> null percentiles, empty aggregates."""
+async def test_performance_conversion_rate_is_none_without_candidate_chats(monkeypatch):
+    """Zero candidate chats -> rate is unknown (None), counters are still zero."""
     routes = [
-        (
-            _ROUTE_LLM_CALL_LATENCY,
-            _FakeResult(one=None),
-        ),  # no llm_call_ms rows -> one_or_none() returns None
-        (
-            _ROUTE_LLM_CALL_COUNT,
-            _FakeResult(one=None),
-        ),  # no llm_calls rows -> one_or_none() returns None
-        (
-            _ROUTE_PERCENTILES,
-            _FakeResult(one=_percentile_row()),
-        ),  # percentile_cont over no rows -> all NULL
-        (_ROUTE_LANE_OUTCOME, _FakeResult(all_rows=[])),
-        (_ROUTE_SLOW_TURNS, _FakeResult(all_rows=[])),
-        (_ROUTE_TREND, _FakeResult(all_rows=[])),  # trend: no buckets
-        (
-            _ROUTE_RELIABILITY,
-            _FakeResult(one=SimpleNamespace(send_unknown=0, suppressed=0, failed=0)),
-        ),
-        (
-            _ROUTE_QUALITY,
-            _FakeResult(
-                one=SimpleNamespace(
-                    degraded_count=0,
-                    retried_429_count=0,
-                    prompt_cache_hits=0,
-                    prompt_cache_known=0,
-                    prompt_tokens_total=0,
-                    completion_tokens_total=0,
-                    cached_tokens_total=0,
-                )
-            ),
-        ),
+        (_ROUTE_CONVERSION, _FakeResult(one=SimpleNamespace(candidate_chats=0, with_phone=0))),
+        (_ROUTE_TREND, _FakeResult(all_rows=[])),
+        (_ROUTE_PERCENTILES, _FakeResult(one=None)),
     ]
     _install_compute_stubs(monkeypatch, routes=routes)
 
-    out = await performance("1h", _admin=SimpleNamespace())
-    assert out["window"] == "1h"
-    assert out["by_lane"] == {}
-    assert out["by_outcome"] == {}
-    assert out["slow_turns"] == []
-    assert out["trend"] == []
-    assert out["reliability"] == {"send_unknown_count": 0, "suppressed_count": 0, "failed_count": 0}
-    # No turns -> the cache rate is None (unknown), counters are zero.
-    assert out["quality"]["degraded_count"] == 0
-    assert out["quality"]["retried_429_count"] == 0
-    assert out["quality"]["prompt_cache_hit_rate"] is None
-    assert out["quality"]["prompt_tokens_total"] == 0
-    # _percentile_row had real ints, so just confirm shape keys exist for every stage
-    # (the llm_call extras are merged in separately — asserted just below).
-    assert set(perf_mod._STAGE_KEYS).issubset(out["percentiles"])
-    # llm_call extras return null percentiles when there are no turns.
-    assert out["percentiles"]["llm_call_per"] == {"p50": None, "p95": None, "p99": None}
-    assert out["percentiles"]["llm_calls_per"] == {"p50": None, "p95": None, "p99": None}
+    out = await performance("1d", _admin=SimpleNamespace())
+
+    assert out["conversion"] == {"candidate_chats": 0, "with_phone": 0, "rate_pct": None}
+    assert out["response_time"]["p50_ms"] is None
+    assert out["response_time"]["p95_ms"] is None
+    assert out["response_time"]["trend"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("window", "bucket_seconds"),
+    [("1d", 1800), ("7d", 10800), ("1m", 86400), ("3m", 86400), ("6m", 604800)],
+)
+async def test_performance_trend_bucket_follows_window(monkeypatch, window, bucket_seconds):
+    """Each window binds its own bucket size so long windows stay a few dozen points."""
+    stubs = _install_compute_stubs(monkeypatch)
+
+    await performance(window, _admin=SimpleNamespace())
+
+    trend_params = next(params for q, params in stubs.queries if _ROUTE_TREND in q)
+    assert trend_params["bucket"] == bucket_seconds
 
 
 @pytest.mark.asyncio
 async def test_performance_cache_hit_short_circuits(monkeypatch):
     """Cache hit returns the cached payload and skips all DB queries."""
     cached_payload = {
-        "window": "24h",
-        "live": {"queue_depth": 0},
-        "percentiles": {},
-        "by_lane": {},
-        "by_outcome": {},
-        "slow_turns": [],
-        "trend": [],
-        "reliability": {"send_unknown_count": 0, "suppressed_count": 0, "failed_count": 0},
+        "window": "7d",
+        "response_time": {"p50_ms": 1, "p95_ms": 2, "trend": []},
+        "conversion": {"candidate_chats": 0, "with_phone": 0, "rate_pct": None},
     }
     factory, queries = _make_session_factory(_standard_routes())
     # Even though the factory is installed, a cache hit should never touch it.
     monkeypatch.setattr(perf_mod, "open_background_session", factory)
-    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     async def _hit(_key):
         return cached_payload
@@ -509,7 +256,7 @@ async def test_performance_cache_hit_short_circuits(monkeypatch):
 
     monkeypatch.setattr(perf_mod, "cache_set_json", _set)
 
-    out = await performance("24h", _admin=SimpleNamespace())
+    out = await performance("7d", _admin=SimpleNamespace())
 
     assert out is cached_payload
     assert queries == []  # no DB read ran on the hit path
@@ -523,26 +270,14 @@ async def test_performance_cache_hit_preserves_key_order(monkeypatch):
     The frontend maps positions, so a reordered dict would silently break the
     panel. Pins the exact insertion order produced by ``_compute``.
     """
-    expected_keys = [
-        "window",
-        "live",
-        "percentiles",
-        "by_lane",
-        "by_outcome",
-        "slow_turns",
-        "trend",
-        "reliability",
-    ]
+    expected_keys = ["window", "response_time", "conversion"]
     cached_payload = {
-        k: {} if not isinstance(k, str) or k in ("slow_turns", "trend") else None
-        for k in expected_keys
+        "window": "7d",
+        "response_time": {"p50_ms": 1, "p95_ms": 2, "trend": []},
+        "conversion": {"candidate_chats": 0, "with_phone": 0, "rate_pct": None},
     }
-    cached_payload["window"] = "24h"
-    cached_payload["slow_turns"] = []
-    cached_payload["trend"] = []
     factory, queries = _make_session_factory(_standard_routes())
     monkeypatch.setattr(perf_mod, "open_background_session", factory)
-    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     async def _hit(_key):
         return cached_payload
@@ -554,22 +289,10 @@ async def test_performance_cache_hit_preserves_key_order(monkeypatch):
 
     monkeypatch.setattr(perf_mod, "cache_set_json", _set)
 
-    out = await performance("24h", _admin=SimpleNamespace())
+    out = await performance("7d", _admin=SimpleNamespace())
 
     assert list(out.keys()) == expected_keys
     assert queries == []
-
-
-@pytest.mark.asyncio
-async def test_performance_cache_miss_populates_cache(monkeypatch):
-    """Cache miss computes the payload and writes it under the window-scoped key."""
-    stubs = _install_compute_stubs(monkeypatch)
-
-    out = await performance("7d", _admin=SimpleNamespace())
-    captured = stubs.captured
-    assert captured["key"] == "perf:dashboard:7d"
-    assert captured["ttl"] == 30
-    assert captured["value"] == out
 
 
 @pytest.mark.asyncio
@@ -582,7 +305,6 @@ async def test_performance_cache_failure_falls_through(monkeypatch):
     """
     factory, _ = _make_session_factory(_standard_routes())
     monkeypatch.setattr(perf_mod, "open_background_session", factory)
-    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     async def _raises(_key):
         raise RuntimeError("redis down")
@@ -594,44 +316,17 @@ async def test_performance_cache_failure_falls_through(monkeypatch):
 
     monkeypatch.setattr(perf_mod, "cache_set_json", _noop)
 
-    out = await performance("24h", _admin=SimpleNamespace())
+    out = await performance("7d", _admin=SimpleNamespace())
+
     # Compute path ran and produced a well-formed payload.
-    assert out["window"] == "24h"
-    assert out["live"] == {"queue_depth": 0}
-    assert out["percentiles"]["llm_model"]["p95"] == 500
-    assert out["reliability"]["send_unknown_count"] == 2
-
-
-@pytest.mark.asyncio
-async def test_performance_cache_hit_serves_falsy_value(monkeypatch):
-    """A cached falsy-but-not-None value (e.g. ``{}``) is served, not recomputed.
-
-    Pins the handler's ``if cached is not None`` check against a future
-    regression to ``if cached`` (which would silently recompute on empty payloads).
-    """
-    factory, queries = _make_session_factory(_standard_routes())
-    monkeypatch.setattr(perf_mod, "open_background_session", factory)
-    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
-
-    async def _hit(_key):
-        return {}  # falsy but not None
-
-    monkeypatch.setattr(perf_mod, "cache_get_json", _hit)
-
-    async def _set(_key, _value, ttl_seconds):
-        return None
-
-    monkeypatch.setattr(perf_mod, "cache_set_json", _set)
-
-    out = await performance("24h", _admin=SimpleNamespace())
-
-    assert out == {}  # the falsy cached value was served verbatim
-    assert queries == []  # compute did not run
+    assert out["window"] == "7d"
+    assert out["response_time"]["p95_ms"] == 2900
+    assert out["conversion"]["rate_pct"] == 25.0
 
 
 @pytest.mark.asyncio
 async def test_performance_queries_dispatched_concurrently(monkeypatch):
-    """The five DB reads run concurrently via asyncio.gather, not sequentially.
+    """The three DB reads run concurrently via asyncio.gather, not sequentially.
 
     Proves overlap: each read holds an in-flight slot for a short sleep; if the
     reads were sequential the max concurrency would be 1, but gather makes it ≥ 2.
@@ -649,44 +344,13 @@ async def test_performance_queries_dispatched_concurrently(monkeypatch):
                 await asyncio.sleep(0)
             finally:
                 inflight -= 1
-            # Route by SQL content so the payload still assembles correctly.
             sql = str(stmt)
-            if _ROUTE_PERCENTILES in sql:
-                return _FakeResult(one=_percentile_row())
-            if _ROUTE_LANE_OUTCOME in sql:
-                return _FakeResult(
-                    all_rows=[
-                        SimpleNamespace(lane="agent", outcome="SENT", n=1),
-                    ]
-                )
-            if _ROUTE_SLOW_TURNS in sql:
-                return _FakeResult(all_rows=[])
+            if _ROUTE_CONVERSION in sql:
+                return _FakeResult(one=SimpleNamespace(candidate_chats=0, with_phone=0))
             if _ROUTE_TREND in sql:
                 return _FakeResult(all_rows=[])
-            if _ROUTE_RELIABILITY in sql:
-                return _FakeResult(one=SimpleNamespace(send_unknown=0, suppressed=0, failed=0))
-            if _ROUTE_QUALITY in sql:
-                return _FakeResult(
-                    one=SimpleNamespace(
-                        degraded_count=0,
-                        retried_429_count=0,
-                        prompt_cache_hits=0,
-                        prompt_cache_known=0,
-                        prompt_tokens_total=0,
-                        completion_tokens_total=0,
-                        cached_tokens_total=0,
-                    )
-                )
-            if _ROUTE_ADAPTER_BREAKDOWN in sql:
-                return _FakeResult(all_rows=[])
-            if _ROUTE_LLM_CALL_LATENCY in sql:
-                return _FakeResult(
-                    one=SimpleNamespace(llm_call_per_p50=None, llm_call_per_p95=None, llm_call_per_p99=None)
-                )
-            if _ROUTE_LLM_CALL_COUNT in sql:
-                return _FakeResult(
-                    one=SimpleNamespace(llm_calls_per_p50=None, llm_calls_per_p95=None, llm_calls_per_p99=None)
-                )
+            if _ROUTE_PERCENTILES in sql:
+                return _FakeResult(one=SimpleNamespace(p50_ms=None, p95_ms=None))
             raise AssertionError(f"unmatched SQL: {sql[:80]}")
 
     class _CM:
@@ -700,7 +364,6 @@ async def test_performance_queries_dispatched_concurrently(monkeypatch):
         return _CM()
 
     monkeypatch.setattr(perf_mod, "open_background_session", factory)
-    monkeypatch.setattr(perf_mod, "collect_queue_health", lambda: {"queue_depth": 0})
 
     async def _miss(_key):
         return None
@@ -712,10 +375,32 @@ async def test_performance_queries_dispatched_concurrently(monkeypatch):
 
     monkeypatch.setattr(perf_mod, "cache_set_json", _set)
 
-    await performance("24h", _admin=SimpleNamespace())
+    await performance("7d", _admin=SimpleNamespace())
 
     # gather ran ≥ 2 reads in flight simultaneously — sequential would be 1.
     assert max_inflight >= 2, f"reads were not concurrent (max_inflight={max_inflight})"
+
+
+def test_performance_route_rejects_retired_window(monkeypatch):
+    """``1h`` is no longer a dashboard window; the route rejects it before the handler.
+
+    Also pins the accepted set to exactly the five period buttons the page renders.
+    """
+
+    async def _fake_dashboard(window: str) -> dict:
+        return {"window": window}
+
+    monkeypatch.setattr("app.api.performance.performance_dashboard", _fake_dashboard)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_admin] = lambda: SimpleNamespace(id="admin")
+
+    with TestClient(app) as client:
+        assert client.get("/admin/performance", params={"window": "1h"}).status_code == 422
+        for window in ("1d", "7d", "1m", "3m", "6m"):
+            resp = client.get("/admin/performance", params={"window": window})
+            assert resp.status_code == 200, window
+            assert resp.json() == {"window": window}
 
 
 def test_worker_preamble_timings_slices_enqueue_and_preamble():
