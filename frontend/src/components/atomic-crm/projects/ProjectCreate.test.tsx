@@ -545,6 +545,53 @@ describe("ProjectCreate — nạp ngay khi chọn tệp", () => {
       .toBeVisible();
   }, 20000);
 
+  it("reports each pipeline checkpoint on the timeline while the chain runs", async () => {
+    mocks.trainingDoc
+      .mockResolvedValueOnce({
+        id: "training-document",
+        status: "PROCESSING",
+        error: null,
+        project_training: {
+          status: "PROCESSING",
+          current: "jobs",
+          completed: ["overview"],
+          planned: ["overview", "jobs"],
+          error: null,
+        },
+      })
+      .mockResolvedValue({
+        id: "training-document",
+        status: "PUBLISHED",
+        error: null,
+        project_training: {
+          status: "COMPLETED",
+          current: null,
+          completed: ["overview", "jobs"],
+          error: null,
+        },
+      });
+    const screen = await render(<ProjectCreate />);
+    uploadBrief(screen);
+
+    // Mid-chain: the category loop is on jobs, everything before it is done.
+    await expect
+      .element(screen.getByText("Đang nạp «Vị trí tuyển dụng» (2/2)…"))
+      .toBeVisible({ timeout: 10000 });
+    const timeline = screen.container.querySelector<HTMLOListElement>(
+      'ol[aria-label="Tiến độ nạp kiến thức"]',
+    );
+    if (!timeline) throw new Error("the timeline is not rendered");
+    expect(timeline.textContent).toContain("Đọc tệp");
+    expect(timeline.textContent).toContain("Tạo bản nháp dự án");
+    expect(timeline.textContent).toContain("Phân tích nội dung tệp");
+    expect(timeline.textContent).toContain("Phân loại vào 12 danh mục");
+
+    // The final poll confirms both categories; the timeline reports finish.
+    await expect
+      .element(screen.getByText("Đã nạp 2 danh mục kiến thức."))
+      .toBeVisible({ timeout: 10000 });
+  }, 30000);
+
   it("keeps a name-only file as a draft without claiming searchable knowledge", async () => {
     const screen = await render(<ProjectCreate />);
     uploadBrief(screen, "Tên dự án: Dự án trống\n");

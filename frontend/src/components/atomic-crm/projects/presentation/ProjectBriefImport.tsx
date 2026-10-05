@@ -22,6 +22,8 @@ type Props = {
   filename: string;
   /** True while the parent is creating the draft and running the pipeline. */
   busy?: boolean;
+  /** Reports the browser read so the parent's progress timeline covers it. */
+  onReadingChange?: (reading: boolean) => void;
 };
 
 /**
@@ -39,6 +41,7 @@ export const ProjectBriefImport = ({
   brief,
   filename,
   busy = false,
+  onReadingChange,
 }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
@@ -48,6 +51,7 @@ export const ProjectBriefImport = ({
     if (!file) return;
     setError("");
     setReading(true);
+    onReadingChange?.(true);
     try {
       const text = await readProjectBriefPreview(file);
       // Preview can be empty/unsupported; the original file still goes to the
@@ -58,6 +62,7 @@ export const ProjectBriefImport = ({
       setError((readError as Error).message);
     } finally {
       setReading(false);
+      onReadingChange?.(false);
       // Allow re-picking the same file after an edit.
       if (inputRef.current) inputRef.current.value = "";
     }

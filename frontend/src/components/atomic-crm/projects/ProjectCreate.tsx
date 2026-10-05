@@ -18,7 +18,8 @@ import {
 import type { ProjectBrief } from "./domain/project-brief-ingest";
 import { buildJobsMarkdown } from "./domain/project-knowledge-markdown";
 import { slugifyVietnamese } from "./domain/vietnamese-slug";
-import { IngestProgressBoard } from "./presentation/IngestProgressBoard";
+import { IngestTimeline } from "./presentation/IngestTimeline";
+import { buildIngestTimeline } from "./presentation/ingest-timeline";
 import { ProjectBriefImport } from "./presentation/ProjectBriefImport";
 import { useProjectIngest } from "./presentation/use-project-ingest";
 import { ProjectWorkspaceShell } from "./ProjectWorkspaceShell";
@@ -75,6 +76,10 @@ const ProjectCreateForm = () => {
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [sourceReady, setSourceReady] = useState(false);
+  /** The strip is reading the pick in the browser; the timeline's first checkpoint. */
+  const [readingFile, setReadingFile] = useState(false);
+  /** Draft creation itself failed; the ingest chain never started. */
+  const [draftFailed, setDraftFailed] = useState(false);
 
   // The slug is derived, never typed: a hand-typed one contradicts the name it
   // is supposed to identify, and the brief's own slug loses to the name the
@@ -101,6 +106,7 @@ const ProjectCreateForm = () => {
     setBrief(parsed);
     setSourceReady(false);
     setBriefFilename(filename);
+    setDraftFailed(false);
     // Replace prior automatic suggestions, while retaining explicit edits.
     // A new free-form source must not replay the previous file's roles/aliases.
     if (!aliases.trim() || aliases === brief?.aliases.join(", "))
@@ -139,6 +145,7 @@ const ProjectCreateForm = () => {
       const result = await ingest(id, [], file);
       setSourceReady(result.ok && !result.requiresCutover);
     } catch (error) {
+      setDraftFailed(true);
       notify((error as Error).message, { type: "error" });
     } finally {
       setCreatingDraft(false);
@@ -233,10 +240,26 @@ const ProjectCreateForm = () => {
             brief={brief}
             filename={briefFilename}
             busy={creatingDraft || ingesting}
+            onReadingChange={setReadingFile}
             onImported={(parsed, filename, file) =>
               void onImported(parsed, filename, file)
             }
           />
+          {readingFile ||
+          creatingDraft ||
+          draftFailed ||
+          state.phase !== "idle" ? (
+            <IngestTimeline
+              checkpoints={buildIngestTimeline({
+                readingFile,
+                creatingDraft,
+                draftFailed,
+                draftId,
+                hasBrief: brief !== null,
+                ingest: state,
+              })}
+            />
+          ) : null}
           {brief ? <CarriedSummary brief={brief} /> : null}
         </section>
 
@@ -310,16 +333,6 @@ const ProjectCreateForm = () => {
         </section>
 
         <div className="project-create-feedback">
-          {state.phase === "running" ? (
-            <>
-              <p role="status" className="text-helper text-foreground">
-                {state.current
-                  ? `Đang nạp «${PROJECT_KNOWLEDGE_CATEGORY_LABELS[state.current]}» (${state.items.findIndex((item) => item.key === state.current) + 1}/${state.total})…`
-                  : "Đang phân loại nội dung tệp…"}
-              </p>
-              <IngestProgressBoard items={state.items} slow={state.slow} />
-            </>
-          ) : null}
           {state.phase === "done" ? (
             <p role="status" className="text-helper text-foreground">
               {state.requiresCutover
