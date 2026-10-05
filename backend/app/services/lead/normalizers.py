@@ -144,6 +144,26 @@ _BARE_NAME_REJECT = frozenset(
     }
 )
 
+# Function words that can never appear inside a *bare* name reply. The
+# whole-string set above only catches a reply that IS one of these; these are
+# checked per word so "Đúng r em" and "CTY mình ở đâu" are rejected too. Name
+# particles ("thị", "văn") and given names that collide with verbs ("Dũng",
+# "Mai") are deliberately absent.
+_BARE_NAME_FUNCTION_WORDS = frozenset(
+    {
+        "em", "e", "toi", "minh", "anh", "chi", "ban", "chung", "ong", "ba", "co",
+        "chu", "bac", "chau", "con", "vo", "chong", "cua", "cho", "voi", "va", "o",
+        "duoc", "roi", "nay", "kia", "cung", "can", "nhung", "cai", "giup", "lam",
+        "hoi", "tra", "loi", "ho", "so", "cty", "cong", "ty",
+    }
+)
+
+# Interrogatives: a bare reply carrying one of these is the candidate's question,
+# not their name ("Hồ sơ cần những cái gì", "CTY mình ở đâu").
+_BARE_NAME_QUESTION_WORDS = frozenset(
+    {"gi", "dau", "nao", "sao", "ai", "bao", "nhieu", "khi"}
+)
+
 # Trailing sentence-ending particles / fillers to trim off a bare name reply
 # ("Dũng ạ", "Dũng nhé", "Dũng nè") before validation.
 _TRAILING_PARTICLE_RE = re.compile(
@@ -214,6 +234,14 @@ def _bare_name_when_asked(text: str) -> str | None:
     "does this look like a name at all" rather than "is this definitely a name".
     Guards against greetings, affirmations/negations, numbers, questions, and
     over-long replies so "hi" / "không" / "0987..." are never stored as names.
+
+    Two further guards exist because a name question is also the moment a
+    candidate asks their own question or answers a different one: any pronoun or
+    function word disqualifies the reply ("Đúng r em", "CTY mình ở đâu"), and a
+    multi-word reply must additionally look like a full name — a common family
+    name in first (Vietnamese) or last (Western) position. That rejects a
+    location or a stray phrase ("Gần chùa cao linh", "fhaj bjnh") without
+    needing a model.
     """
     candidate = _pick(text)
     if not candidate or len(candidate) > 100:
@@ -232,6 +260,18 @@ def _bare_name_when_asked(text: str) -> str | None:
         return None
     key = re.sub(r"\s+", " ", normalize_vietnamese_text(candidate)).strip()
     if not key or key in _BARE_NAME_REJECT:
+        return None
+    deaccented = key.split()
+    if any(
+        word in _BARE_NAME_FUNCTION_WORDS or word in _BARE_NAME_QUESTION_WORDS
+        for word in deaccented
+    ):
+        return None
+    # A single token has no structure to check and is the common case ("Dũng",
+    # "Giang"); anything longer must read as a full name. ``high_confidence_
+    # profile_name`` wants title case, and candidates type lowercase, so the
+    # probe is title-cased while the stored value keeps the candidate's words.
+    if len(deaccented) > 1 and not high_confidence_profile_name(candidate.title()):
         return None
     return candidate
 

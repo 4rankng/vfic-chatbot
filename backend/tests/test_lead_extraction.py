@@ -8,6 +8,8 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
+import uuid
+
 import pytest
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -376,7 +378,7 @@ class TestCandidateExtractionService:
     async def test_persists_explicit_name_without_waiting_for_llm_extraction(self, monkeypatch):
         saved: list[dict] = []
 
-        async def save_name(_db, lead_patch):
+        async def save_name(_db, lead_patch, *, contact_id=None):
             saved.append(lead_patch)
             return 1
 
@@ -403,7 +405,7 @@ class TestCandidateExtractionService:
         inbound path so the next turn uses it instead of the Zalo profile name."""
         saved: list[dict] = []
 
-        async def save_name(_db, lead_patch):
+        async def save_name(_db, lead_patch, *, contact_id=None):
             saved.append(lead_patch)
             return 1
 
@@ -439,6 +441,42 @@ class TestCandidateExtractionService:
 
         assert saved_name is None
         upsert.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_persists_bare_name_for_a_contact_keyed_conversation(self, monkeypatch):
+        """A Messenger thread has no ``zalo_chat_id``.
+
+        Its lead is contact-keyed, so the inbound write must reach it through the
+        contact — a ``zalo_id``-keyed patch cannot address that row (and the
+        insert path would violate ``leads_zalo_id_fkey``).
+        """
+        saved: list[tuple[dict, str | None]] = []
+
+        async def save_name(_db, lead_patch, *, contact_id=None):
+            saved.append((lead_patch, contact_id))
+            return 1
+
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "upsert_lead",
+            staticmethod(save_name),
+        )
+
+        saved_name = await CandidateExtractionService.persist_explicit_name(
+            _session(),
+            "29678353618419609",
+            "Bùi thị hòa",
+            prev_bot_message="Chị cho em biết thêm chị tên gì để em ghi vào hồ sơ ạ?",
+            conversation=SimpleNamespace(
+                contact_id=uuid.UUID("33e6dc6a-16b9-4731-8daa-5b7dab6cac19"),
+                zalo_chat_id=None,
+            ),
+        )
+
+        assert saved_name == "Bùi thị hòa"
+        assert len(saved) == 1
+        assert saved[0][0]["name"] == "Bùi thị hòa"
+        assert saved[0][1] == "33e6dc6a-16b9-4731-8daa-5b7dab6cac19"
 
     @pytest.mark.asyncio
     async def test_extracts_lead_patch_and_memory_facts_from_one_llm_call(self):

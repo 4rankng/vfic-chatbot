@@ -200,14 +200,7 @@ class ZaloWebhookService:
                 if len((norm.user_text or "").strip()) <= 30:
                     try:
                         _recent = await repo.last_messages(conv, limit=5)
-                        prev_bot_message = next(
-                            (
-                                m.body
-                                for m in reversed(_recent)
-                                if getattr(m, "sender", None) == "BOT"
-                            ),
-                            None,
-                        )
+                        prev_bot_message = _previous_bot_message(_recent)
                     except Exception:
                         prev_bot_message = None
 
@@ -216,6 +209,7 @@ class ZaloWebhookService:
                     norm.zalo_chat_id,
                     norm.user_text,
                     prev_bot_message=prev_bot_message,
+                    conversation=conv,
                 )
             except Exception as exc:
                 # The inbound message is already durable. Do not turn a CRM-profile
@@ -465,3 +459,18 @@ def _oa_sender_name(payload: dict) -> str:
     if not isinstance(sender, dict):
         return ""
     return str(sender.get("name") or sender.get("display_name") or "")
+
+
+def _previous_bot_message(messages) -> str | None:
+    """The bot turn that immediately preceded this inbound.
+
+    ``ConversationRepository.last_messages`` returns newest-first, so the FIRST
+    bot row in the list is the immediate predecessor. Iterating the list in
+    reverse selected the oldest bot turn in the window instead, which is how a
+    bare name reply ("Bùi thị hòa") missed its own name request — and why the
+    deterministic name capture never wrote a name for those turns.
+    """
+    return next(
+        (m.body for m in messages if getattr(m, "sender", None) == "BOT"),
+        None,
+    )

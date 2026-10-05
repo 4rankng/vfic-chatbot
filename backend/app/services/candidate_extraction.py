@@ -105,6 +105,8 @@ class CandidateExtractionService:
         user_text: str,
         *,
         prev_bot_message: str | None = None,
+        conversation: Conversation | None = None,
+        contact_id: str | None = None,
     ) -> str | None:
         """Persist an unambiguous self-introduced name on the inbound path.
 
@@ -116,15 +118,35 @@ class CandidateExtractionService:
         asked for the name, a bare reply ("Dũng") is captured here so the next
         turn personalises correctly instead of reverting to the Zalo profile
         name.
+
+        The write goes through the same provider-neutral lead key the deferred
+        path uses: a Zalo/OA conversation is keyed by its chat id, every other
+        provider (Messenger today) by its contact. Passing the chat id alone
+        made a Messenger name resolve to a patch this method could not persist
+        (``leads.zalo_id`` is a Zalo-only compatibility alias), so the name was
+        silently dropped on every Messenger thread.
         """
+        lead_key = (
+            lead_key_for_conversation(conversation)
+            if conversation is not None
+            else lead_key_for_chat(chat_id, contact_id=contact_id)
+        )
+        if not lead_key.is_writable:
+            return None
         resolved = _candidate_extraction_use_cases().resolve_explicit_name(
-            chat_id=chat_id,
+            # The patch only needs a non-empty key to be built; the contact-keyed
+            # write ignores its ``zalo_id`` and the INSERT stores NULL there.
+            chat_id=lead_key.zalo_id or lead_key.contact_id or chat_id,
             user_text=user_text,
             prev_bot_message=prev_bot_message,
         )
         if resolved is None:
             return None
-        await CandidateExtractionService.upsert_lead(db, resolved.lead_patch)
+        await CandidateExtractionService.upsert_lead(
+            db,
+            resolved.lead_patch,
+            contact_id=None if lead_key.is_zalo_keyed else lead_key.contact_id,
+        )
         return resolved.value
 
     @staticmethod
