@@ -43,8 +43,6 @@ from app.services.knowledge.canonical import (
     CanonicalValidationError,
 )
 from app.shared.domain.errors import (
-    BadRequestError,
-    ConflictError,
     NotFoundError,
     ValidationError,
 )
