@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from app.services.chat_status import fire_preparation_chat_status
 from app.services.conversation.events import ConversationEventBus
 from app.services.conversation.repository import ConversationRepository
 from app.services.conversation.scheduler import enqueue_latest_unanswered_worker_message
@@ -297,6 +298,12 @@ class ConversationService:
                 raise DeliveryEligibilityError(
                     "Không thể gửi tin Zalo vì chưa có tin nhắn của ứng viên để phản hồi."
                 )
+        # Native Zalo chat status while the app prepares this message: one
+        # temporary "typing" pulse before the prepare/dispatch window opens.
+        # Bot channel only — OA and Messenger carry no typing operation.
+        await fire_preparation_chat_status(
+            self.db, channel=channel, recipient_id=recipient_id
+        )
         msg, outbox_id = await self.state.prepare_recruiter_message(
             conv,
             recruiter,
@@ -324,8 +331,19 @@ class ConversationService:
     ) -> tuple[Message | None, bool]:
         """Retry one known failed recruiter message without creating a new row."""
         from app.models.conversation import Message
+        from app.recruitment.domain.provider import (
+            provider_from_conversation,
+            recipient_from_conversation,
+        )
         from app.services.outbox_service import dispatch_outbox
 
+        # Same preparation window as a fresh reply: the candidate sees the
+        # temporary Zalo status before the re-armed command reaches the wire.
+        await fire_preparation_chat_status(
+            self.db,
+            channel=provider_from_conversation(conv),
+            recipient_id=recipient_from_conversation(conv),
+        )
         outbox_id = await self.state.retry_recruiter_message(conv, message_id=message_id)
         if outbox_id is None:
             return None, False

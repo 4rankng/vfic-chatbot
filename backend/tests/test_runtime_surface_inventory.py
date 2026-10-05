@@ -201,7 +201,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # the OA CS media template — one new `send_media` provider call in
     # app/services/zalo_sender.py, same Zalo OA transport as the text path
     # (no new provider, no new egress host).
-    "provider_boundary": 99,
+    # 2026-10-05: +1 — the recruiter preparation chat status: one direct
+    # `send_typing` call in app/services/chat_status.py (counted by the
+    # `send_` prefix), routed through the existing Zalo Bot adapter's
+    # `sendChatAction`. No existing row moved: dropping exactly that row from
+    # the post-change scan reproduces the prior digest byte-for-byte.
+    "provider_boundary": 100,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -339,7 +344,9 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # prepare_proactive_message/record_proactive_outcome write path) and
 # -2 queue_producer (the removed followup tick and its enqueue),
 # -1 provider_boundary (the proactive send). Digest recomputed.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "45741b9c52b0922279e11101f2150c23f80115425113ccd8db1e0dd3efe921cd"
+# 2026-10-05: +1 provider_boundary (the chat_status preparation pulse above);
+# digest recomputed from the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "a6e0a0e3af2d45cbc126194ef69f995f25f77d88d95c86ee53e5c984d3dfb7d2"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

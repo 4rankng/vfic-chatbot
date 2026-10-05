@@ -711,7 +711,12 @@ load_conversation_state -> typing -> direct_context?
   heartbeat settings above three seconds remain accepted but use the
   three-second cap. Transient failures retry on later pulses. Handoff, answer
   delivery, suppression, terminal errors, and cancellation drain the task
-  before continuing. Zalo OA has no typing operation in its current adapter.
+  before continuing. A recruiter reply (fresh or retried) has no turn-long
+  window, so `services/chat_status.py` fires the same status once at
+  preparation entry — bounded at two seconds and swallowed on any failure, so
+  it can never block the send it precedes. Zalo OA has no typing operation in
+  its current adapter, and Facebook Messenger has none either; both skip the
+  pulse before any config is resolved.
   The [Zalo Bot API](https://bot.zapps.me/docs/apis/sendChatAction/) defines
   this temporary chat status; it creates no candidate message or lead content.
 - **Retrieval scope and provenance:** explicit empty project scopes return no
