@@ -76,8 +76,10 @@ EXPECTED_ROUTE_COUNTS = {
 # removed; the BotRun telemetry table stays (the performance dashboard reads it).
 # +4 notifications routes (VAPID key, subscribe, unsubscribe, self-test) — the
 # Web Push handles behind the console's alert toggle; the alerts themselves are
-# server-side (services/push), so no route carries them.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "531542931c970f76315ffe4240043974cee25c4e579f909d7ccc4b9f39e909ef"
+# server-side (services/push), so no route carries them. The key handler reads
+# `get_vapid_public_key` (renamed from `vapid_public_key` when the router became
+# transport-only: config/ORM access moved into the service).
+EXPECTED_ROUTE_INVENTORY_SHA256 = "a6b7b4505afd487e41285cfb1b4b0816196ca58e0e5f52f0d4df91e6428c7c11"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

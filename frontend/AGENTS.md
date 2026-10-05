@@ -106,6 +106,7 @@ src/
 │       ├── login/          # auth page
 │       ├── projects/       # projects resource
 │       ├── providers/      # REST/auth/i18n/realtime adapters
+│       ├── notifications/  # Web Push subscribe/test + the bell toggle
 │       ├── reporting/      # reporting ports, domain logic, HTTP adapter
 │       ├── root/           # <CRM> runtime renderer
 │       ├── settings/       # settings + profile pages

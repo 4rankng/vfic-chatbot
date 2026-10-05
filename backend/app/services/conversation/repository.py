@@ -373,6 +373,42 @@ class ConversationRepository(ReconcileQueriesMixin):
             )
         ).first()
 
+    async def inbound_is_answered(
+        self, conv: Conversation, *, provider_message_id: str
+    ) -> bool:
+        """Whether an inbound message already has a delivered answer.
+
+        A channel may redeliver the same inbound (Zalo retries its webhook; the
+        ingress is idempotent on the provider id, so the redelivery persists
+        nothing) — but the redelivery still enqueues a turn, and a turn that runs
+        after the first one finished sends the candidate a SECOND copy of the same
+        reply. Production 2026-10-05: one "Có lương chưa" produced two identical
+        OA replies 35 s apart, from two turns both quoting the same inbound.
+
+        Only a TERMINAL status counts as an answer: a PENDING placeholder belongs
+        to an in-flight turn (its own lock still holds), and a FAILED reply never
+        reached the candidate, so neither may suppress the turn that recovers it.
+        """
+        inbound_at = await self.db.scalar(
+            select(Message.created_at).where(
+                Message.conversation_id == conv.id,
+                Message.provider_message_id == provider_message_id,
+            )
+        )
+        if inbound_at is None:
+            return False
+        answered = await self.db.scalar(
+            select(Message.id)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.sender == MessageSender.BOT,
+                Message.delivery_status.in_(SUPERSEDED_OUTCOME_STATUSES),
+                Message.created_at >= inbound_at,
+            )
+            .limit(1)
+        )
+        return answered is not None
+
     async def latest_worker_message(self, conv: Conversation) -> Message | None:
         """Return the latest inbound Zalo message for a conversation.
 

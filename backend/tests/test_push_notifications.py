@@ -164,8 +164,8 @@ def _api_client(
 
 @pytest.mark.asyncio
 async def test_vapid_key_route_reports_whether_push_is_configured(monkeypatch):
+    # The route reads both values through the push service, which owns the config.
     stub = _settings()
-    monkeypatch.setattr("app.api.notifications.get_settings", lambda: stub)
     monkeypatch.setattr(push, "get_settings", lambda: stub)
 
     async with _api_client(monkeypatch) as http:

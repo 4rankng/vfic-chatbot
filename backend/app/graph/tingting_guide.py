@@ -97,6 +97,18 @@ TINGTING_RESOLVED_CLOSER_REPLY = "Dạ không có gì ạ, em luôn đây khi an
 # hotline.
 TINGTING_WAGE_WAIT_REPLY = "Hiện tại bên em cũng đang chờ VFIC gửi dữ liệu tiền công ạ."
 
+# Self-check-in questions ("Tự chấm công như thế nào?" and similar) get one
+# fixed caption (operator rule 2026-10-05): the app home screen already carries
+# the entry points, so the reply quotes the caption and the send layer attaches
+# this image to the same message. The image is repo-hosted under the production
+# frontend root so Zalo can fetch the URL at send time; the caption must read
+# complete on its own in case the attachment ever degrades to text-only.
+TINGTING_SELF_CHECKIN_IMAGE_URL = "https://bot.tingting.vip/tingting/tu-cham-cong.png"
+TINGTING_SELF_CHECKIN_REPLY = (
+    'Dạ anh/chị mở ứng dụng TingTing, ở màn hình chính bấm "Tư vấn ngay" '
+    'hoặc "Nhóm hỗ trợ" để tự chấm công nhé ạ.'
+)
+
 # The support OA's persona is code, not tenant content: this channel is not a
 # recruitment channel, and the persona.md it used to inherit introduced the
 # model as a VFIC recruiting assistant with a "get the phone number" mission.
@@ -154,6 +166,10 @@ liệt kê "các chức năng em có thể hỗ trợ".
 - Hỏi về phúc lợi (bảo hiểm, phụ cấp, thưởng, chế độ đãi ngộ): KHÔNG trả lời nội dung, không
   đoán, KHÔNG dùng câu trả lời chờ dữ liệu tiền công ở trên — trả lời đúng dòng
   «{tingting_hotline_reply(hotline)}».
+- Hỏi cách tự chấm công trên app ("tự chấm công như thế nào", "chấm công sao", "cách tự chấm
+  công"): trả lời ĐÚNG NGUYÊN VĂN một dòng: «{TINGTING_SELF_CHECKIN_REPLY}» — hệ thống tự đính
+  kèm ảnh màn hình chính ứng dụng; không thêm bớt chữ, không Markdown, không emoji, KHÔNG trả
+  lời dòng hotline.
 - MỌI việc khác (tuyển dụng, việc làm, mức lương/phúc lợi, lịch xe, nghỉ việc, hỏi thông tin của
   nhân viên khác, hoặc yêu cầu rõ ràng về một chủ đề khác không phải đặt lại mật khẩu): trả lời
   ĐÚNG NGUYÊN VĂN một dòng, không thêm bớt chữ, không Markdown, không emoji:
@@ -211,6 +227,10 @@ Trạng thái hội thoại:
 - Hỏi về phúc lợi (bảo hiểm, phụ cấp, thưởng, chế độ đãi ngộ): KHÔNG trả lời nội dung, không
   đoán, KHÔNG dùng câu trả lời chờ dữ liệu tiền công ở trên — trả lời đúng dòng
   «{tingting_hotline_reply(hotline)}».
+- Hỏi cách tự chấm công trên app ("tự chấm công như thế nào", "chấm công sao", "cách tự chấm
+  công"): trả lời ĐÚNG NGUYÊN VĂN một dòng: «{TINGTING_SELF_CHECKIN_REPLY}» — hệ thống tự đính
+  kèm ảnh màn hình chính ứng dụng; không thêm bớt chữ, không Markdown, không emoji, KHÔNG trả
+  lời dòng hotline.
 - Cảm ơn, "ok", "ô kê", "rồi", "dạ" hay tin nhắn không đọc được ý khi quy trình
   ĐÃ GIẢI QUYẾT XONG (người dùng xác nhận đã đăng nhập được) là lời tạm biệt: trả lời ĐÚNG
   NGUYÊN VĂN một dòng: «{TINGTING_RESOLVED_CLOSER_REPLY}» — không gọi tool, không hỏi lại,
@@ -297,6 +317,8 @@ __all__ = [
     "TINGTING_FIELDS_ASK",
     "TINGTING_INTENT_REDIRECT_REPLY",
     "TINGTING_RESOLVED_CLOSER_REPLY",
+    "TINGTING_SELF_CHECKIN_IMAGE_URL",
+    "TINGTING_SELF_CHECKIN_REPLY",
     "TINGTING_WAGE_WAIT_REPLY",
     "tingting_api_guide",
     "tingting_api_prompt_block",

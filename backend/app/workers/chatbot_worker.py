@@ -216,6 +216,28 @@ def _inbound_provider_id(message) -> str:
     )
 
 
+async def _inbound_already_answered(svc, state) -> bool:  # noqa: ANN001 (service port)
+    """Whether the inbound this turn answers already has a delivered reply.
+
+    The channel may redeliver an inbound; the ingress is idempotent on the
+    provider id but still enqueues, so two turns can exist for one message and the
+    candidate sees the same reply twice. Best-effort: a read failure lets the turn
+    run (answering twice is bad, never answering is worse).
+    """
+    try:
+        conv = await svc.repo.get(uuid.UUID(state.conversation_id))
+        if conv is None:
+            return False
+        return await svc.repo.inbound_is_answered(
+            conv, provider_message_id=state.reply_to_message_id
+        )
+    except Exception:  # noqa: BLE001 — a guard read must not kill the turn
+        logger.warning(
+            "duplicate-turn guard read failed conversation=%s", state.conversation_id
+        )
+        return False
+
+
 async def _handoff_to_newer_inbound(state) -> None:
     """Give a message that arrived mid-turn the turn the ingress guard refused it.
 
@@ -508,6 +530,19 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
             deps.preamble_status_task = bridge_task
             started_at = _now()
             try:
+                if state.reply_to_message_id and await _inbound_already_answered(deps.conversation, state):
+                    # Two deliveries of the same inbound can both enqueue before
+                    # either replies (the per-chat mutex serializes them, it does
+                    # not dedupe them). The first turn answered it; this one would
+                    # send the candidate a second copy of the same reply, so it
+                    # stands down instead of spending an LLM turn.
+                    logger.info(
+                        "duplicate turn skipped: inbound already answered conversation=%s inbound=%s",
+                        state.conversation_id,
+                        state.reply_to_message_id,
+                    )
+                    await _handoff_to_newer_inbound(state)
+                    return
                 await run_turn(state, deps)
             except LLMThrottled as exc:
                 # Every provider failed (quota/rate-limit/concurrency gate). The

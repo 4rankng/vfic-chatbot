@@ -177,6 +177,20 @@ class ZaloWebhookService:
         if conv.mode == ConversationMode.HUMAN:
             return {"status": "starved_human_mode", "conversation_id": str(conv.id)}
 
+        # A channel redelivery of an inbound that already has a delivered answer
+        # must not produce a second turn: `record_inbound` above is idempotent on
+        # the provider id, so the redelivery persists nothing and used to fall
+        # straight through to the enqueue below — the candidate got the same reply
+        # twice (production 2026-10-05, 35 s apart). A redelivery of a message
+        # whose first attempt died before answering finds no terminal reply here
+        # and still gets its turn, which is why this check is on the answer and
+        # not on "did we insert".
+        if norm.msg_id and await repo.inbound_is_answered(conv, provider_message_id=norm.msg_id):
+            logger.info(
+                "duplicate inbound already answered conversation=%s", conv.id
+            )
+            return {"status": "already_answered", "conversation_id": str(conv.id)}
+
         # An explicit introduction ("mình tên …") is deterministic data, not
         # something that should wait behind the best-effort LLM extraction job.
         # The later job still enriches the rest of the candidate profile.

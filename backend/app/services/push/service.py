@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -54,6 +55,70 @@ def push_enabled() -> bool:
     """Whether the VAPID pair is configured (blank keys disable the channel)."""
     settings = get_settings()
     return bool(settings.vapid_public_key and settings.vapid_private_key)
+
+
+def vapid_public_key() -> str:
+    """The application server key browsers must subscribe with (public by design)."""
+    return get_settings().vapid_public_key
+
+
+async def save_subscription(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    endpoint: str,
+    p256dh: str,
+    auth: str,
+    user_agent: str | None,
+) -> None:
+    """Store (or refresh) one browser's subscription for a user.
+
+    Upsert on ``endpoint``: the same browser re-subscribing rotates its keys, and
+    a device that switched accounts must move to the new owner rather than leave a
+    row pointing at the previous user. Lives here (not in the router) so the API
+    layer never touches the ORM — the architecture gate rejects that edge.
+    """
+    statement = pg_insert(PushSubscription).values(
+        user_id=user_id,
+        endpoint=endpoint,
+        p256dh=p256dh,
+        auth=auth,
+        user_agent=user_agent,
+    )
+    await db.execute(
+        statement.on_conflict_do_update(
+            index_elements=[PushSubscription.endpoint],
+            set_={
+                "user_id": statement.excluded.user_id,
+                "p256dh": statement.excluded.p256dh,
+                "auth": statement.excluded.auth,
+                "user_agent": statement.excluded.user_agent,
+                "failure_count": 0,
+            },
+        )
+    )
+    await db.commit()
+
+
+async def delete_subscription(db: AsyncSession, *, user_id: uuid.UUID, endpoint: str) -> None:
+    """Forget one browser's subscription. Scoped to the caller: an endpoint that
+    belongs to another user is not theirs to delete, and the browser unsubscribes
+    locally either way."""
+    await db.execute(
+        delete(PushSubscription).where(
+            PushSubscription.endpoint == endpoint,
+            PushSubscription.user_id == user_id,
+        )
+    )
+    await db.commit()
+
+
+async def user_subscription_count(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """How many browsers this user has registered (the self-test's precondition)."""
+    ids = await db.scalars(
+        select(PushSubscription.id).where(PushSubscription.user_id == user_id)
+    )
+    return len(list(ids))
 
 
 async def alert_once(dedupe_key: str, *, ttl_seconds: int = DEFAULT_DEDUPE_SECONDS) -> bool:
