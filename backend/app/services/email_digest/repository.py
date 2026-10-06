@@ -90,26 +90,58 @@ async def collect_new_candidates(
     window_start: datetime,
     window_end: datetime,
 ) -> list[DigestCandidate]:
-    """Leads created inside the window, TingTing-OA contacts excluded.
+    """Leads whose candidate messaged the bot inside the window, phone required.
+
+    Inclusion (operator rule 2026-10-06) has exactly two conditions: the
+    candidate's LATEST message to the bot falls inside the window, and the
+    lead carries a mobile number. The window therefore tracks CONVERSATION
+    ACTIVITY rather than ``Lead.created_at`` — a candidate who first touched
+    days ago but messaged yesterday is in, while a lead stubbed yesterday that
+    never typed is out. Keying on lead creation was what emptied the digest:
+    the conversation trigger creates a lead per conversation immediately, so
+    "created in the window" said nothing about whether anyone actually talked.
+
+    Phone is a hard filter in the query: the Excel is the payload and the
+    service drops phoneless rows anyway, so a busy window (the Messenger stub
+    trigger) must never let phoneless rows consume the
+    ``MAX_CANDIDATES_PER_DIGEST`` slice.
 
     The exclusion is the established ``support_leads_condition()`` predicate —
     the employee-support OA account ("tingting") is never a recruitment
     candidate, so its leads never reach the digest regardless of what other
     channels the operator runs.
-
-    The cap orders phone-having leads first: the Excel is the payload and the
-    service drops phoneless rows anyway, so a busy window (the Messenger stub
-    trigger creates one lead per conversation) must never crowd a reachable
-    candidate out of the ``MAX_CANDIDATES_PER_DIGEST`` slice.
     """
     _has_phone = func.btrim(func.coalesce(Lead.phone, "")) != ""
+    # The candidate's latest message per contact — the timestamp that decides
+    # window membership. Computed over the whole history, then bounded, so a
+    # contact who messaged inside the window AND later (only possible when a
+    # caller passes a window_end in the past) is judged on their newest word.
+    latest_candidate_message = (
+        select(
+            Conversation.contact_id.label("contact_id"),
+            func.max(Message.created_at).label("last_message_at"),
+        )
+        .join(Message, Message.conversation_id == Conversation.id)
+        .where(Message.sender == MessageSender.WORKER)
+        .group_by(Conversation.contact_id)
+        .subquery()
+    )
     lead_rows = (
         (
             await db.scalars(
                 select(Lead)
-                .where(Lead.created_at >= window_start, Lead.created_at < window_end)
+                .join(
+                    latest_candidate_message,
+                    latest_candidate_message.c.contact_id == Lead.contact_id,
+                )
+                .where(
+                    latest_candidate_message.c.last_message_at >= window_start,
+                    latest_candidate_message.c.last_message_at < window_end,
+                )
+                .where(_has_phone)
                 .where(support_leads_condition())
-                .order_by(_has_phone.desc(), Lead.created_at.asc())
+                .order_by(latest_candidate_message.c.last_message_at.asc())
+                .limit(MAX_CANDIDATES_PER_DIGEST)
             )
         )
         .all()
@@ -228,9 +260,9 @@ async def collect_new_candidates(
             )
 
     candidates: list[DigestCandidate] = []
-    # Present the capped slice chronologically even though the cap itself
-    # selected phone-first.
-    selected = sorted(lead_rows[:MAX_CANDIDATES_PER_DIGEST], key=lambda lead: lead.created_at)
+    # The query already capped the slice and ordered it by each candidate's
+    # latest message, so presentation follows conversation activity.
+    selected = lead_rows
     for lead in selected:
         ident = identity_by_contact.get(lead.contact_id)
         conv = latest_conversation.get(lead.contact_id)
