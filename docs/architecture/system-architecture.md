@@ -548,6 +548,83 @@ admits the bot again on the next inbound — no manual release required.
 | (missing) | **First-message resilience (2026-09-28 outage):** a webhook failure AFTER `record_inbound` commits (a realtime serialization `MissingGreenlet` on a just-created conversation) left the message durable but never enqueued; Zalo's redeliveries then hit `uq_messages_conv_provider_message` and 500'd forever. Three guards now close the loop: the conversation create-path eagerly loads `contact`/`channel_identity` for event serialization, `record_inbound` inserts with `ON CONFLICT DO NOTHING` against the partial unique index (a redelivery past the dedup window returns the durable row and re-drives it toward lock+enqueue), and the post-commit event fan-out is failure-armored — a realtime hiccup can no longer turn a persisted message into a 500. |
 | (missing) | The outbound dispatcher recovers PENDING commands (~60s). Retryable failures may be explicitly retried from the same recruiter bubble; terminal `SEND_UNKNOWN` is never resent, including a stale SENDING command after a worker crash. |
 
+### 2.4 Candidate source attribution (first touch)
+
+`conversations.attribution` (Alembic 0069, nullable JSONB) records how the
+candidate entered. It is written by the inbound path on the first touch that
+carries a source and projected read-only as `attribution` on the recruiter
+conversation API:
+
+| Encoding | What arrives | Record |
+|---|---|---|
+| Zalo prefill link `https://zalo.me/<oa>?text=%23<CODE>` | the campaign's post code at the front of the first message (`services/webhook.py::_post_link_attribution`, Bot and OA) | `{"kind": "post_link", "post_code": "BV1026"}` |
+| Messenger `message.referral` (Click-to-Messenger ad) | Meta's `ad_id` + `ads_context_data.post_id` on the first message (`channels/providers/facebook_messenger.py::attribution_from_referral`) | `{"kind": "referral", "post_code", "ad_id", "post_id", "referral_source"}` |
+| Messenger `postback.referral` (Get Started / m.me / QR) | our `ref` + `source`, arriving **before** the candidate types — stamped by `webhook_delivery.apply_messenger_referral` because there is no message to carry the write | same shape, usually `post_code` + `referral_source` only |
+
+Rules: a Zalo code must be the **leading** `#TOKEN`, 2–20 ASCII
+alphanumerics/`-`/`_` **with at least one digit** (that rejects `#1`, `#viec`
+and every hashtag carrying diacritics), and it is recorded but **never
+stripped** — the turn sees the candidate's exact text. First touch wins
+(`services/conversation/_shared.py::merge_attribution`): a later touch only
+fills keys the record is still missing, which is how the Get Started postback's
+`post_code` is completed by the ad's `ad_id`/`post_id` on the first message.
+Meta needs the Page subscribed to `messaging_referrals` **and** `messages` to
+deliver that ad referral, so `facebook_oauth.subscribe_app_to_page` now sends
+`messages,messaging_postbacks,messaging_referrals`; a Page connected before
+this change must be disconnected and reconnected once (or re-subscribed from
+the App Dashboard) or Meta omits `message.referral` silently.
+
+Zalo OA carries **no** ad/post id in its webhook payload — `user_send_text` is
+`{app_id, sender, recipient, event_name, message{text,msg_id}, timestamp}` and
+the OA doc corpus has no `ref`/`ad_id`/`post_id`/`campaign_id` (verified
+2026-10-06). Per-ad attribution on Zalo therefore comes only from Zalo Ads
+**form** leads (`GET openapi.zalo.me/v2.0/oa/form/get` → `adId`, `leadId`), a
+separate polling path outside chat.
+
+### 2.5 Project interest — which dự án a candidate is interested in
+
+`lead_events` rows with `event_type = "project_interest"` (no migration — the
+payload column already exists) record every project a candidate has engaged
+with, once per (lead, project), oldest first, each tagged with the `source`
+that found it:
+
+| `source` | Signal | Where it is captured |
+|---|---|---|
+| `post_link` | the `ref` of a Messenger m.me / Click-to-Messenger ad matched against the project catalog — case-insensitive `projects.slug` or any `projects.aliases` entry — stored as `attribution.project_id` | `conversation_messaging/infrastructure/ingress.py` at inbound, before the candidate types (Messenger only for now) |
+| `chat_focus` | the project the conversation's turn focus points at (`conversations.focused_project_id`) | channel-neutral: identical on Zalo and Messenger |
+
+| Seam | When it fires | Why it exists |
+|---|---|---|
+| `conversation/bot_outcome.py` | after every recorded turn outcome | the conversation trigger (Alembic 0047) creates the lead row together with the conversation, so the signal is attached from the first turn on |
+| `candidate_extraction.py` | when the extraction job runs | backstop for a turn whose outcome never ran (crash / reconcile) — idempotent, so it is normally a no-op |
+
+Both call `services/lead/interest.py::record_conversation_project_interest`,
+which derives the signals from the conversation, resolves the lead with the
+same key rule as extraction (Zalo → `zalo_id`, Messenger → `contact_id`),
+skips pairs already recorded, commits in its **own** transaction and swallows
+every failure — interest is a hint, never a reason to fail the outcome row or
+the extraction job.
+
+The code→project mapping is a **convention**: marketing puts the project slug
+in the campaign link — Messenger `https://m.me/<page>?ref=<slug>` (also the
+`ref` on a Click-to-Messenger ad's destination) — and the code is matched
+case-insensitively. An unmatched code still stores `post_code` (§2.4); it just
+resolves to no project. Zalo's link→project resolution is deliberately **not
+wired yet** (Messenger first): its capture already exists, so enabling it is
+one resolve call in `services/webhook.py`, and a Zalo code must additionally
+carry a digit (§2.4), which makes it an *alias* of the project (`lgd26`).
+
+Read surface: `GET /api/v1/leads/{id}/project-interests` returns the list
+(`ProjectInterestOut`) with the project's **current** slug/name resolved live,
+so a renamed project never reports a stale name and a deleted one drops out.
+The row is also shown in the conversation context panel ("Dự án quan tâm"),
+and the raw events are visible on the existing `GET /leads/{id}/events`.
+
+Free-text "muốn ứng tuyển" statements remain candidate extraction's business:
+they are recorded in `lead.notes` under its own strict evidence rule
+("đang tìm hiểu" ≠ "muốn ứng tuyển") and are deliberately not merged into
+`project_interest`.
+
 ### Durable outbound delivery states
 
 The message delivery state and its one-to-one outbox command advance together:

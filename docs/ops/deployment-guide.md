@@ -290,9 +290,15 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0068_push_subscriptions` (5 Oct 2026). This line is grepped by the
+- **HEAD:** `0069_conversation_attribution` (6 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0068` adds the
+  new migration that does not update it blocks the release. `0069` adds the
+  nullable `conversations.attribution` JSONB — the candidate's first-touch
+  source (a Zalo prefill post code, a Messenger ad/post id) written by the
+  inbound path and read-only on the conversation API — **additive**: a new
+  column no existing row carries, so blue and green run against either schema,
+  and `downgrade()` drops it (only the first inbound of a new conversation
+  writes it again). `0068` adds the
   `push_subscriptions` table behind the console's Web Push alerts (one row per
   browser that enabled them) — **additive**: a new table with no existing row
   touched, so blue and green run against either schema, and `downgrade()` drops
