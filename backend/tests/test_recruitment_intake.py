@@ -13,7 +13,11 @@ from app.recruitment.domain.intake import (
 )
 from app.services.candidate_extraction import CandidateExtractionService
 from app.services.lead.normalizers import extract_self_reported_name, lead_profile_text, normalize_phone
-from app.services.lead.probing import lead_collection_instruction, lead_collection_question
+from app.services.lead.probing import (
+    ASKABLE_FIELDS,
+    lead_collection_instruction,
+    lead_collection_question,
+)
 
 
 @pytest.mark.parametrize("value", ["0987654321", "+84 987 654 321", "84 987 654 321", "SĐT: 098.765.4321"])
@@ -189,6 +193,35 @@ def test_names_are_recommended_information_never_fabricated():
     assert not has_full_name("0987654321")
     assert "bắt buộc duy nhất" in lead_collection_instruction(question="phone")
     assert "năm sinh tùy chọn" in lead_collection_instruction(question="phone")
+
+
+def test_collection_instruction_demands_a_paraphrase_not_a_canned_sentence():
+    """The ask is the model's wording, never a fixed sentence from the code.
+
+    2026-10-04 prod review: the old fixed ask read as a demand and a
+    candidate pushed back. The instruction now carries WHAT is missing plus
+    style anchors explicitly marked as examples to rephrase.
+    """
+    instruction = lead_collection_instruction(question="phone")
+
+    assert "Tự diễn đạt" in instruction
+    assert "KHÔNG dùng nguyên văn" in instruction
+    assert "một cách diễn đạt mới" in instruction
+    assert "VÍ DỤ CÁCH DIỄN ĐẠT" in instruction
+    assert "chuyên viên tuyển dụng liên hệ hướng dẫn" in instruction
+    # The requirement still reaches the prompt through the same plumbing.
+    assert "  → phone" in instruction
+    # …and the retired blunt sentence must never come back.
+    assert "để em tiện liên hệ nhé" not in instruction
+
+
+def test_askable_fields_describe_a_requirement_not_an_utterance():
+    for field, descriptor in ASKABLE_FIELDS:
+        assert field
+        # No pre-built sentence: no direct address, no sentence-final particles.
+        assert not descriptor.startswith(("Anh/chị", "Chị ", "Anh "))
+        assert not descriptor.rstrip().endswith(("nhé", "nhé ạ", "ạ.", "ơi"))
+        assert "bắt buộc duy nhất" in descriptor or field != "phone"
 
 
 @pytest.mark.parametrize("text", ["Rorze có xe không?", "tôi không muốn ứng tuyển Rorze", "tìm việc", "muốn làm gì?"])

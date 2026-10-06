@@ -14,26 +14,47 @@ from app.recruitment.domain.intake import (
 
 
 def lead_collection_instruction(*, question: str) -> str:
+    """Brief the agent on WHAT is still missing — it decides HOW to ask.
+
+    ``question`` is the requirement from :data:`ASKABLE_FIELDS`, not a
+    sentence to repeat: examples below are style anchors the model must
+    rephrase (2026-10-04 prod review — the old fixed wording read as a
+    demand and a candidate pushed back). The cooldown that decides WHETHER
+    to ask at all lives in :func:`lead_collection_question`.
+    """
     return (
         "THU THẬP THÔNG TIN ỨNG VIÊN (nhẹ nhàng, tự nhiên):\n"
-        "- Làm theo hướng dẫn thu thập dưới đây và LỒNG GHÉP vào cuối câu trả lời:\n"
+        "- Thông tin còn thiếu ở lượt này:\n"
         f"  → {question}\n"
-        "- TUYỆT ĐỐI không gửi câu hỏi thu thập thành một tin nhắn riêng, trống rỗng, "
-        "hoặc thay thế cho câu trả lời. Luôn trả lời trước thắc mắc/tư vấn lợi ích trong KB, "
-        "rồi mới hỏi MỘT câu ngắn ở cuối, có lý do gắn với tình huống vừa tư vấn "
-        "(ví dụ: giữ vị trí, đặt lịch phỏng vấn, nhắn lịch xe đưa đón cho anh/chị).\n"
-        "- Không xuống dòng trống trước câu hỏi; câu hỏi phải nghe như lời đề nghị giúp đỡ, "
-        "không như đòi thông tin.\n"
-        "- Hệ thống chỉ cho hỏi khi đủ lâu sau lần hỏi trước — nếu hướng dẫn này vẫn tới, "
-        "hãy hỏi thật khẽ và đa dạng lời hỏi, không lặp nguyên câu cũ.\n"
-        "- Số điện thoại di động là thông tin liên hệ bắt buộc duy nhất. Họ tên rất nên có, "
-        "nguyện vọng hữu ích, năm sinh tùy chọn. Thiếu các thông tin bổ sung không được "
-        "chặn ghi nhận liên hệ hoặc buộc khai thêm. Khu vực, lương chỉ hỏi khi cần tư vấn.\n"
+        "- Tự diễn đạt lời hỏi THEO NGỮ CẢNH của câu trả lời. TUYỆT ĐỐI KHÔNG "
+        "dùng nguyên văn các ví dụ dưới đây, và KHÔNG dùng lại y hệt cách nói "
+        "của lượt trước — mỗi lượt một cách diễn đạt mới.\n"
+        "  VÍ DỤ CÁCH DIỄN ĐẠT (chỉ lấy hướng, không phải câu mẫu):\n"
+        "  • Anh/chị cho em xin số điện thoại để chuyên viên tuyển dụng liên hệ "
+        "hướng dẫn cho anh/chị ạ.\n"
+        "  • Nếu anh/chị để lại số, chuyên viên bên em chủ động gọi hướng dẫn "
+        "hộ anh/chị nhé ạ.\n"
+        "  • Để chuyên viên giữ vị trí và liên hệ trực tiếp với anh/chị, em xin "
+        "số liên hệ được không ạ?\n"
+        "- LỒNG GHÉP vào cuối câu trả lời: luôn trả lời trước thắc mắc/tư vấn "
+        "lợi ích trong KB, rồi mới hỏi MỘT câu ngắn ở cuối, có lý do gắn với "
+        "tình huống vừa tư vấn (ví dụ: giữ vị trí, đặt lịch phỏng vấn, nhắn lịch "
+        "xe đưa đón cho anh/chị).\n"
+        "- TUYỆT ĐỐI không gửi câu hỏi thu thập thành một tin nhắn riêng, trống "
+        "rỗng, hoặc thay thế cho câu trả lời.\n"
+        "- Không xuống dòng trống trước câu hỏi; câu hỏi phải nghe như lời đề nghị "
+        "giúp đỡ, không như đòi thông tin.\n"
+        "- Hệ thống chỉ cho hỏi khi đủ lâu sau lần hỏi trước — nếu hướng dẫn này vẫn "
+        "tới, hãy hỏi thật khẽ và đa dạng lời hỏi, không lặp nguyên câu cũ.\n"
+        "- Số điện thoại di động là thông tin liên hệ bắt buộc duy nhất. Họ tên rất "
+        "nên có, nguyện vọng hữu ích, năm sinh tùy chọn. Thiếu các thông tin bổ sung "
+        "không được chặn ghi nhận liên hệ hoặc buộc khai thêm. Khu vực, lương chỉ hỏi "
+        "khi cần tư vấn.\n"
         "- Không hỏi lại dữ liệu đã có trong hồ sơ, lịch sử hoặc tin nhắn hiện tại; "
         "không ép cung cấp nếu anh/chị từ chối hoặc còn do dự — khi đó chỉ tư vấn tiếp, "
         "để anh/chị chủ động đưa sau.\n"
-        "- Có thông tin liên hệ không đồng nghĩa đã nộp hồ sơ, có lịch phỏng vấn hay được nhận; "
-        "chỉ xác nhận điều hệ thống đã ghi nhận.\n"
+        "- Có thông tin liên hệ không đồng nghĩa đã nộp hồ sơ, có lịch phỏng vấn hay "
+        "được nhận; chỉ xác nhận điều hệ thống đã ghi nhận.\n"
         "- KHÔNG hỏi lại cùng một thông tin hai lần trong một tin nhắn."
     )
 
@@ -56,10 +77,18 @@ def oa_profile_name_guidance(
     )
 
 
-# Mobile is the only mandatory contact field. Optional information is captured
-# as it is offered rather than turning the consultation into a questionnaire.
+# The field the model must ask for — a REQUIREMENT, never a ready-made
+# sentence. The agent phrases the ask itself (lead_collection_instruction
+# carries the phrasing contract), so the wording never lands as the same
+# canned line twice: the 2026-10-04 prod review showed the old fixed
+# sentence read as a demand ("xin số điện thoại di động để em gửi thông
+# tin...") and a candidate pushed back before giving a number.
 ASKABLE_FIELDS: list[tuple[str, str]] = [
-    ("phone", "Anh/chị cho em xin số điện thoại di động để em tiện liên hệ nhé"),
+    (
+        "phone",
+        "Số điện thoại di động — thông tin liên hệ bắt buộc duy nhất, "
+        "để chuyên viên tuyển dụng liên hệ hướng dẫn và hỗ trợ đăng ký",
+    ),
 ]
 
 # Subtlety guard: the ask must be rare, not a per-turn nag. Any recent bot
