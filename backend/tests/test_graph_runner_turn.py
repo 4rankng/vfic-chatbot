@@ -5307,3 +5307,139 @@ async def test_wage_wait_flag_keeps_login_trouble_on_the_reset_flow(monkeypatch)
     assert reply != TINGTING_WAGE_WAIT_REPLY
     assert reply == "reset flow reply"
     assert captured != {}
+
+
+# ─── progressive remainder: the placeholder is created only when dispatched ──
+#
+# Regression pin for the orphaned "Đang soạn trả lời..." rows (42 between
+# 2026-07-14 and 2026-10-06): a progressive turn whose REMAINDER was suppressed
+# by grounding used to create the remainder's PENDING placeholder first and then
+# exit without ever resolving it — the next turn's stale-pending sweep flipped
+# it FAILED, and the CRM thread showed a dead "Gửi lỗi" bubble that was never a
+# real message. Grounding now runs before the row is created.
+
+
+def _progressive_fixture(*, remainder: str):
+    from types import SimpleNamespace
+
+    conv = SimpleNamespace(id="conv-1")
+    state = SimpleNamespace(
+        conversation_id="conv-1",
+        trace_id=None,
+        pending_message_id=42,
+    )
+    early = SimpleNamespace(
+        raw="Phần một câu trả lời.",
+        offset=len("Phần một câu trả lời."),
+        text="Phần một câu trả lời.",
+        message_id=42,
+        outbox_id=900,
+        send_result=SimpleNamespace(
+            ok=True, msg_id="z-1", error=None, error_class=None, suppressed=False
+        ),
+    )
+    stream = SimpleNamespace(
+        raw=f"Phần một câu trả lời.{remainder}", evidence=[]
+    )
+
+    class _Svc:
+        def __init__(self) -> None:
+            self.pending_created = 0
+            self.finalized: list[int] = []
+
+        async def finalize_outbound_dispatch(self, _conv, **kwargs):  # noqa: ARG002
+            self.finalized.append(kwargs.get("message_id"))
+
+        async def record_bot_pending(self, _conv, **_kwargs):
+            self.pending_created += 1
+            return SimpleNamespace(id=555)
+
+    return conv, state, early, stream, _Svc()
+
+
+@pytest.mark.asyncio
+async def test_suppressed_remainder_never_creates_its_placeholder_row(monkeypatch):
+    """An ungrounded remainder is suppressed BEFORE its placeholder exists."""
+    import app.graph.progressive as prog
+    from app.graph.grounding import _UngroundedContact
+
+    conv, state, early, stream, svc = _progressive_fixture(
+        remainder=" Gọi ngay 0912345678 để được giữ vị trí."
+    )
+
+    def _ungrounded(*_args, **_kwargs):
+        return _UngroundedContact(channels=("phone",))
+
+    monkeypatch.setattr(prog, "ground_reply", _ungrounded)
+
+    remainder, outcome = await prog._complete_progressive_prefix(
+        early=early,
+        stream=stream,
+        full_text=stream.raw,
+        state=state,
+        deps=SimpleNamespace(),
+        conv=conv,
+        svc=svc,
+        timings={},
+        lock_owner=None,
+        recipient_id=None,
+        allowed_text="",
+        started=0.0,
+        outcome_label="agent",
+        faq_metadata=None,
+        manifest_policy=None,
+        allow_recruitment_fast_lane=True,
+        pending_kwargs={},
+        t0=0.0,
+    )
+
+    assert remainder == ""
+    assert outcome is None
+    # The fix's whole point: no placeholder row for a dispatch that will never
+    # happen — the next turn has nothing to flip to FAILED.
+    assert svc.pending_created == 0
+    # The delivered bubble itself was terminalized exactly once.
+    assert svc.finalized == [42]
+
+
+@pytest.mark.asyncio
+async def test_live_remainder_creates_exactly_one_placeholder_after_grounding(
+    monkeypatch,
+):
+    """A grounded remainder still gets its placeholder, created post-grounding."""
+    import app.graph.progressive as prog
+
+    conv, state, early, stream, svc = _progressive_fixture(
+        remainder=" Ca ngày chạy từ 08:00 đến 20:00."
+    )
+
+    def _passthrough(text, *_args, **_kwargs):
+        return text
+
+    monkeypatch.setattr(prog, "ground_reply", _passthrough)
+
+    remainder, outcome = await prog._complete_progressive_prefix(
+        early=early,
+        stream=stream,
+        full_text=stream.raw,
+        state=state,
+        deps=SimpleNamespace(),
+        conv=conv,
+        svc=svc,
+        timings={},
+        lock_owner=None,
+        recipient_id=None,
+        allowed_text="",
+        started=0.0,
+        outcome_label="agent",
+        faq_metadata=None,
+        manifest_policy=None,
+        allow_recruitment_fast_lane=True,
+        pending_kwargs={},
+        t0=0.0,
+    )
+
+    assert outcome is None
+    assert remainder == " Ca ngày chạy từ 08:00 đến 20:00."
+    assert svc.pending_created == 1
+    assert state.pending_message_id == 555

@@ -595,13 +595,6 @@ async def _complete_progressive_prefix(
         telemetry=None,
     )
     _stamp_db(timings, "finalize_outbound_dispatch", db_t0)
-    # A NEW pending row for the remainder: the early bubble's row is terminal, so
-    # the existing claim path needs its own placeholder to flip.
-    db_t0 = time.monotonic()
-    pending_msg = await svc.record_bot_pending(conv, **pending_kwargs)
-    _stamp_db(timings, "record_bot_pending", db_t0)
-    state.pending_message_id = pending_msg.id
-    timings["progressive_bubbles"] = 2
     # Ground the remainder against the full evidence exactly as the bubble was
     # grounded: each part passes the same job-id/entity guard, independently.
     grounded_remainder = ground_reply(
@@ -611,6 +604,22 @@ async def _complete_progressive_prefix(
     )
     if isinstance(grounded_remainder, _UngroundedContact):
         # A channel the evidence never had: suppress the remainder rather than
-        # forward an invented contact to the candidate.
+        # forward an invented contact to the candidate. Exit BEFORE creating the
+        # remainder's pending row — the suppression exit records the turn on the
+        # delivered bubble and never touches a placeholder, so one made here
+        # would be stranded PENDING until the next turn flipped it FAILED (the
+        # orphaned "Đang soạn trả lời..." rows: 42 since 2026-07-14).
         return "", None
+    if not grounded_remainder.strip():
+        # Grounding consumed the whole remainder: same terminal as an empty
+        # stream remainder — the delivered bubble was the whole answer.
+        return "", None
+    # A NEW pending row for the remainder: the early bubble's row is terminal, so
+    # the existing claim path needs its own placeholder to flip. Created only
+    # after grounding, so every exit below it has a dispatch that resolves it.
+    db_t0 = time.monotonic()
+    pending_msg = await svc.record_bot_pending(conv, **pending_kwargs)
+    _stamp_db(timings, "record_bot_pending", db_t0)
+    state.pending_message_id = pending_msg.id
+    timings["progressive_bubbles"] = 2
     return grounded_remainder, None
