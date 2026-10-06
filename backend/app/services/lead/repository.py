@@ -22,7 +22,7 @@ from app.services.viewer_scope import Viewer, viewer_lead_filter
 
 _FETCH_SQL = text(
     """
-    SELECT id, zalo_id, contact_id, name, phone, birth_year, age, living_area, address, gender,
+    SELECT id, zalo_id, contact_id, project_id, name, phone, birth_year, age, living_area, address, gender,
            region, desired_job, years_experience, expected_salary, avatar_url,
            lead_score, lead_stage, notes, version
     FROM leads WHERE zalo_id = :zalo_id
@@ -116,7 +116,7 @@ _UPSQL = text(
 # NEW-stage rows.
 _BY_CONTACT_SQL = text(
     """
-    SELECT id, zalo_id, contact_id, name, phone, birth_year, age, living_area, address, gender,
+    SELECT id, zalo_id, contact_id, project_id, name, phone, birth_year, age, living_area, address, gender,
            region, desired_job, years_experience, expected_salary, avatar_url,
            lead_score, lead_stage, notes, version
     FROM leads WHERE contact_id = CAST(:contact_id AS uuid)
@@ -215,8 +215,7 @@ class LeadRepository:
             return lead
         latest = await self.candidate_phone_evidence(lead_id)
         if latest is not None and (
-            latest.payload.get("disavowed") is True
-            or latest.payload.get("phone") != incoming_phone
+            latest.payload.get("disavowed") is True or latest.payload.get("phone") != incoming_phone
         ):
             return {**lead, "phone": None}
         return lead
@@ -228,7 +227,9 @@ class LeadRepository:
         return dict(result) if result else None
 
     async def candidate_phone_evidence(
-        self, lead_id: int, phone: str | None = None,
+        self,
+        lead_id: int,
+        phone: str | None = None,
     ) -> LeadEvent | None:
         """Latest typed contact evidence, bounded by the existing lead/time index."""
         stmt = select(LeadEvent).where(
@@ -242,8 +243,13 @@ class LeadRepository:
         )
 
     async def record_candidate_phone_evidence(
-        self, *, lead_id: int, phone: str, disavowed: bool,
-        message_id: int, occurred_at: datetime,
+        self,
+        *,
+        lead_id: int,
+        phone: str,
+        disavowed: bool,
+        message_id: int,
+        occurred_at: datetime,
     ) -> str | None:
         """Serialize candidate evidence and invalidate a matching denied CRM phone.
 
@@ -251,7 +257,9 @@ class LeadRepository:
         or delayed old turn cannot reverse a newer confirmation/correction.
         """
         current = await self.db.scalar(
-            select(Lead).where(Lead.id == lead_id).with_for_update()
+            select(Lead)
+            .where(Lead.id == lead_id)
+            .with_for_update()
             .execution_options(populate_existing=True)
         )
         if current is None:
@@ -261,13 +269,18 @@ class LeadRepository:
             latest_order = (latest.created_at, int(latest.payload.get("message_id", 0)))
             if latest_order >= (occurred_at, message_id):
                 return current.phone
-        self.db.add(LeadEvent(
-            lead_id=lead_id, event_type="candidate_phone_evidence",
-            payload={
-                "phone": phone, "disavowed": disavowed, "message_id": message_id,
-            },
-            created_at=occurred_at,
-        ))
+        self.db.add(
+            LeadEvent(
+                lead_id=lead_id,
+                event_type="candidate_phone_evidence",
+                payload={
+                    "phone": phone,
+                    "disavowed": disavowed,
+                    "message_id": message_id,
+                },
+                created_at=occurred_at,
+            )
+        )
         next_phone = current.phone if disavowed else phone
         if disavowed and candidate_mobile(current.phone) == phone:
             next_phone = None
@@ -309,6 +322,29 @@ class LeadRepository:
         if not override:
             stmt = stmt.where(or_(Lead.gender.is_(None), func.btrim(Lead.gender) == ""))
         result = await self.db.execute(stmt.execution_options(synchronize_session=False))
+        return cast(CursorResult[Any], result).rowcount > 0
+
+    async def set_project_by_id(self, lead_id: int, project_id: str) -> bool:
+        """Pin the first known dự án onto a lead; True when a row changed.
+
+        First-touch-wins is the guarantee, enforced in the statement rather than
+        by a read: ``project_id IS NULL`` means a later, weaker signal (an ad
+        title matching two projects, a chat focus on a different project) can
+        never overwrite the project the candidate actually entered through.
+        There is no read-then-write window to lose, and concurrent writers are
+        safe — only the first update affects a row.
+
+        ``version`` deliberately does NOT advance: the recruiter console treats
+        a version bump as a recruiter-visible edit needing reconciliation, and
+        this is derived attribution the recruiter never typed. ``updated_at``
+        moves so the write is still visible in the activity trail.
+        """
+        result = await self.db.execute(
+            update(Lead)
+            .where(Lead.id == lead_id, Lead.project_id.is_(None))
+            .values(project_id=project_id, updated_at=func.now())
+            .execution_options(synchronize_session=False)
+        )
         return cast(CursorResult[Any], result).rowcount > 0
 
     async def by_contact_id(self, contact_id: str) -> dict | None:

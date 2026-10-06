@@ -19,6 +19,12 @@ class LeadOut(BaseModel):
     # this and carry a NULL zalo_id, so a client that only knows zalo_id cannot
     # find them — which is what left Messenger inbox rows showing a PSID tail.
     contact_id: uuid.UUID | None = None
+    # The dự án this candidate was recruited for (Alembic 0071), resolved from
+    # the Messenger ad's ``ref`` / ``ad_title`` or the conversation's project
+    # focus. Read-only: it is derived attribution, so it is deliberately absent
+    # from ``LeadUpdate`` — a recruiter edit would let the column disagree with
+    # the ``project_interest`` event written beside it.
+    project_id: uuid.UUID | None = None
     name: str | None = None
     phone: str | None = None
     birth_year: int | None = None

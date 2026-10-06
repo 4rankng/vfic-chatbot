@@ -14,6 +14,7 @@ from app.conversation_messaging.domain.statuses import DeliveryStatus
 from app.models.contact import ContactChannelIdentity
 from app.models.conversation import Conversation, Message
 from app.services.conversation import ConversationService
+from app.services.lead.interest import resolve_project_from_attribution
 
 
 async def apply_messenger_receipt(db: AsyncSession, receipt, account_key: str) -> None:
@@ -42,9 +43,7 @@ async def apply_messenger_receipt(db: AsyncSession, receipt, account_key: str) -
         current_rank = rank.get(message.delivery_status, 0)
         if current_rank >= target_rank or current_rank == 0:
             continue
-        message.delivery_status = (
-            DeliveryStatus.DELIVERED if delivered else DeliveryStatus.READ
-        )
+        message.delivery_status = DeliveryStatus.DELIVERED if delivered else DeliveryStatus.READ
     await db.commit()
 
 
@@ -58,6 +57,13 @@ async def apply_messenger_referral(
     anything — there is no inbound row to carry that write. The conversation is
     ensured (idempotent, exactly what the first message would create) and the
     source stamped on it. Callers wrap this best-effort, like receipts.
+
+    The dự án is resolved HERE, on this path specifically: the postback is the
+    earliest touch a candidate produces, so resolving at the message boundary
+    would leave every thread that entered via Get Started projectless until
+    they typed — and a candidate who clicked an ad and never wrote would stay
+    unattributed forever. Resolution is best-effort by contract: a catalog
+    problem must never fail the webhook ack.
     """
     if not psid or not attribution:
         return
@@ -69,6 +75,10 @@ async def apply_messenger_referral(
         zalo_chat_id_alias=None,
         zalo_channel_alias="facebook_messenger",
     )
+    if not attribution.get("project_id"):
+        project_id = await resolve_project_from_attribution(db, attribution)
+        if project_id:
+            attribution = {**attribution, "project_id": project_id}
     await service.stamp_attribution(conversation, attribution)
 
 
@@ -83,9 +93,7 @@ async def enqueue_facebook_turn(
     if persisted is None:
         return
     conversation = await db.scalar(
-        select(Conversation).where(
-            Conversation.id == uuid.UUID(persisted.conversation_id)
-        )
+        select(Conversation).where(Conversation.id == uuid.UUID(persisted.conversation_id))
     )
     if conversation is None:
         return
@@ -106,18 +114,14 @@ async def enqueue_facebook_turn(
         "reply_to_message_id": persisted.provider_message_id,
         "lock_owner": str(lock_owner),
         "execution_source": "queued",
-        "received_at": (
-            persisted.created_at.isoformat() if persisted.created_at else ""
-        ),
+        "received_at": (persisted.created_at.isoformat() if persisted.created_at else ""),
         "received_at_epoch": time.time(),
         "trace_id": "",
         "runtime_revision_id": (
             str(runtime_authority.revision_id) if runtime_authority is not None else ""
         ),
         "authority_generation": (
-            runtime_authority.authority_generation
-            if runtime_authority is not None
-            else None
+            runtime_authority.authority_generation if runtime_authority is not None else None
         ),
         "runtime_fingerprint": (
             runtime_authority.fingerprint if runtime_authority is not None else ""

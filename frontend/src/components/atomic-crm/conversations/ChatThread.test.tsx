@@ -813,6 +813,97 @@ describe("ChatThread — failed-send bubble diagnosability", () => {
   });
 });
 
+describe("ChatThread — unreachable-send bubble is channel-aware and not retryable", () => {
+  // A permanently unreachable recipient (Zalo -201, Messenger 551) can never
+  // receive the message: the bubble must say so in the channel's own words and
+  // must not offer "Thử lại" — a retry only re-pays for a doomed send.
+  const messengerConversation = baseConversation({
+    channel_identity: {
+      id: "ci-1",
+      provider: "facebook_messenger",
+      account_key: "486833177846024",
+      external_id: "28606960018965816",
+    },
+  } as Partial<Conversation>);
+
+  const messengerUnavailableError =
+    "messenger send rejected (code=551, subcode=1545041): This person isn't available right now.";
+
+  it("shows the Messenger unreachable reason on content and hides retry", async () => {
+    messageStoreState.messages = [
+      msg(2, {
+        type: "outbound",
+        content: "Chào anh, công ty em có vị trí phù hợp.",
+        delivery_status: "failed",
+        external_error: messengerUnavailableError,
+        // Recruiter-authored so the row is agent kind — the only reason the
+        // retry button is missing must be the unreachable classification.
+        data: { recruiter_id: "42" },
+      }),
+    ];
+    const screen = await mountThread({
+      conversation: messengerConversation,
+      canHumanReplyOverride: true,
+    });
+
+    await expect
+      .element(
+        screen.getByText(
+          "Người nhận không liên lạc được qua Messenger — thử lại sẽ không thành công",
+        ),
+      )
+      .toBeVisible();
+    expect(screen.container.querySelector(".delivery-retry-button")).toBeNull();
+  });
+
+  it("keeps the Zalo unreachable wording and hides retry on a Zalo conversation", async () => {
+    messageStoreState.messages = [
+      msg(2, {
+        type: "outbound",
+        content: "Chào anh.",
+        delivery_status: "failed",
+        external_error: "user_id is invalid",
+        data: { recruiter_id: "42" },
+      }),
+    ];
+    const screen = await mountThread({ canHumanReplyOverride: true });
+
+    await expect
+      .element(
+        screen.getByText(
+          "Người nhận không liên lạc được qua Zalo — thử lại sẽ không thành công",
+        ),
+      )
+      .toBeVisible();
+    expect(screen.container.querySelector(".delivery-retry-button")).toBeNull();
+  });
+
+  it("keeps the retry button for a retryable Messenger rejection", async () => {
+    messageStoreState.messages = [
+      msg(2, {
+        type: "outbound",
+        content: "",
+        delivery_status: "failed",
+        external_error: "messenger send rejected (code=10): transient outage",
+        data: { recruiter_id: "42" },
+      }),
+    ];
+    const screen = await mountThread({
+      conversation: messengerConversation,
+      canHumanReplyOverride: true,
+    });
+
+    await expect
+      .element(screen.getByText("Messenger từ chối tin nhắn"))
+      .toBeVisible();
+    await vi.waitFor(() => {
+      expect(
+        screen.container.querySelector(".delivery-retry-button"),
+      ).not.toBeNull();
+    });
+  });
+});
+
 describe("ChatThread — reply-failure toast is channel-aware", () => {
   // The `provider`/`unavailable` toast copy names the delivery channel, so a
   // Messenger conversation must never be told "Zalo chưa nhận được tin nhắn" —

@@ -60,17 +60,20 @@ def _column_xml() -> str:
 
 
 def _candidate_value(candidate: DigestCandidate, attr: str) -> str | int | None:
-    """The cell value for one attribute; a missing summary falls back to the
-    candidate's own last messages so the column stays useful when the LLM
-    summarizer failed."""
+    """The cell value for one attribute.
+
+    ``summary`` is written only when the LLM actually produced one. There is
+    deliberately no fallback to the candidate's verbatim messages: that fallback
+    shipped a recruiter sheet whose "Tóm tắt hội thoại" column was the last
+    three messages joined by " · " — a cut-and-paste of the transcript wearing a
+    summary's header, which is worse than an empty cell because it looks
+    summarised. A blank summary now means "the summarizer could not answer",
+    which is honest and fixable; a pasted transcript is neither.
+    """
     value = getattr(candidate, attr, None)
     if attr == "summary":
         text = str(value or "").strip()
-        if text:
-            return text
-        if candidate.candidate_messages:
-            return " · ".join(candidate.candidate_messages[-3:])
-        return None
+        return text or None
     return value
 
 

@@ -21,8 +21,12 @@ from app.conversation_messaging.application.ingress import (
     InboundIdentity,
     InboundTextCommand,
 )
+from app.channels.providers.facebook_messenger import FacebookMessengerNormalizer
 from app.conversation_messaging.infrastructure.ingress import (
     SqlAlchemyInboundMessageAdapter,
+)
+from app.conversation_messaging.infrastructure.webhook_delivery import (
+    apply_messenger_referral,
 )
 from app.models.company import Project
 from app.models.conversation import Conversation
@@ -320,3 +324,226 @@ async def test_messenger_inbound_resolves_the_ad_ref_to_a_project(
     assert events[0].payload["project_id"] == str(project.id)
     # Idempotent: the following seam adds no second row.
     assert await record_conversation_project_interest(integration_session, conv) is False
+
+
+@pytest.mark.asyncio
+async def test_ad_title_resolves_a_project_when_the_ad_sets_no_ref(
+    integration_session,
+) -> None:
+    """An ad running today with no custom ``ref`` still names its dự án.
+
+    ``ads_context_data.ad_title`` is the ad's own creative copy, so an ad
+    written as "Tuyển dụng dự án RORZE - Hải Phòng" attributes without any
+    Ads Manager discipline. Diacritics and case are irrelevant, matching the
+    in-chat project resolver's rules.
+    """
+    project = await _project(
+        integration_session, slug="rorze", name="Rorze", aliases=["Công ty Rorze VN"]
+    )
+    adapter = SqlAlchemyInboundMessageAdapter(integration_session)
+    command = InboundTextCommand(
+        identity=InboundIdentity(
+            provider="facebook_messenger",
+            account_key="page-1",
+            external_id="psid-title-only",
+        ),
+        external_message_id="mid-title-1",
+        text="cho em hoi viec lam",
+        attribution={
+            "kind": "referral",
+            "ad_id": "555000111",
+            "ad_title": "Tuyển dụng dự án RORZE - Hải Phòng",
+            "referral_source": "ADS",
+        },
+    )
+
+    persisted = await adapter.persist(command)
+    assert persisted is not None
+    conv = (
+        await integration_session.scalars(
+            select(Conversation).where(
+                Conversation.id == uuid.UUID(persisted.conversation_id)
+            )
+        )
+    ).one()
+
+    assert conv.attribution["project_id"] == str(project.id)
+    assert conv.attribution["ad_title"] == "Tuyển dụng dự án RORZE - Hải Phòng"
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_ad_title_attributes_neither_project(
+    integration_session,
+) -> None:
+    """An ad naming two dự án is left unattributed rather than guessed.
+
+    Picking one would silently file the candidate in the wrong recruiter queue.
+    The chat-focus signal can still pin them once they mention a dự án.
+    """
+    await _project(integration_session, slug="rorze-a", name="Rorze")
+    await _project(integration_session, slug="lg-a", name="LG Display")
+    adapter = SqlAlchemyInboundMessageAdapter(integration_session)
+    command = InboundTextCommand(
+        identity=InboundIdentity(
+            provider="facebook_messenger",
+            account_key="page-1",
+            external_id="psid-ambiguous",
+        ),
+        external_message_id="mid-ambiguous-1",
+        text="cho em hoi viec lam",
+        attribution={
+            "kind": "referral",
+            "ad_title": "Tuyển Rorze và LG Display",
+            "referral_source": "ADS",
+        },
+    )
+
+    persisted = await adapter.persist(command)
+    assert persisted is not None
+    conv = (
+        await integration_session.scalars(
+            select(Conversation).where(
+                Conversation.id == uuid.UUID(persisted.conversation_id)
+            )
+        )
+    ).one()
+
+    assert "project_id" not in (conv.attribution or {})
+
+
+@pytest.mark.asyncio
+async def test_lead_records_the_first_project_and_never_overwrites_it(
+    integration_session,
+) -> None:
+    """``leads.project_id`` is first-touch, like the interest event beside it.
+
+    The entry project is what the candidate came for, so a later chat focus on
+    a different dự án records its own interest event but leaves the column on
+    the ad's project.
+    """
+    ad_project = await _project(
+        integration_session, slug="lg-lead-pin", name="LG Display Pin"
+    )
+    focus_project = await _project(
+        integration_session, slug="vus-lead-pin", name="VUS Pin"
+    )
+    conv = await _conversation(integration_session, "lead-pin-user")
+    lead_id = await _lead(integration_session, chat_id=conv.zalo_chat_id)
+    conv.attribution = {"kind": "referral", "project_id": str(ad_project.id)}
+    conv.focused_project_id = focus_project.id
+
+    assert await record_conversation_project_interest(integration_session, conv) is True
+
+    lead = await LeadRepository(integration_session).by_zalo_id(conv.zalo_chat_id)
+    assert lead is not None
+    # Both interests are recorded...
+    events = await _interest_events(integration_session, lead_id)
+    assert {event.payload["project_id"] for event in events} == {
+        str(ad_project.id),
+        str(focus_project.id),
+    }
+    # ...but the column keeps the project the candidate entered through.
+    assert str(lead["project_id"]) == str(ad_project.id)
+
+    # A later, weaker signal cannot move it.
+    conv.focused_project_id = None
+    conv.attribution = {"kind": "referral", "project_id": str(focus_project.id)}
+    assert await record_conversation_project_interest(integration_session, conv) is False
+    lead_again = await LeadRepository(integration_session).by_zalo_id(conv.zalo_chat_id)
+    assert lead_again is not None
+    assert str(lead_again["project_id"]) == str(ad_project.id)
+
+
+@pytest.mark.asyncio
+async def test_lead_column_is_written_for_a_chat_focus_only_candidate(
+    integration_session,
+) -> None:
+    """An organic candidate who only ever mentions a dự án still gets the column."""
+    project = await _project(
+        integration_session, slug="organic-focus", name="Organic Focus"
+    )
+    conv = await _conversation(integration_session, "organic-focus-user")
+    lead_id = await _lead(integration_session, chat_id=conv.zalo_chat_id)
+    conv.focused_project_id = project.id
+
+    assert await record_conversation_project_interest(integration_session, conv) is True
+
+    lead = await LeadRepository(integration_session).by_zalo_id(conv.zalo_chat_id)
+    assert lead is not None
+    assert str(lead["project_id"]) == str(project.id)
+    events = await _interest_events(integration_session, lead_id)
+    assert events[0].payload["source"] == SOURCE_CHAT_FOCUS
+
+
+@pytest.mark.asyncio
+async def test_get_started_postback_resolves_and_records_the_project(
+    integration_session,
+) -> None:
+    """A candidate who clicks an ad and never types is still attributed.
+
+    Regression for the gap this closes: the postback path stamps the raw
+    referral but used to leave it without a ``project_id``, so a thread that
+    entered via Get Started and never sent a message stayed unattributed
+    forever. Resolving on the postback is what makes the attribution
+    independent of the candidate ever typing.
+    """
+    project = await _project(
+        integration_session, slug="get-started-slug", name="Get Started Project"
+    )
+    psid = "psid-get-started"
+    payload = {
+        "entry": [
+            {
+                "id": "page-1",
+                "messaging": [
+                    {
+                        "sender": {"id": psid},
+                        "recipient": {"id": "page-1"},
+                        "postback": {
+                            "mid": "m-postback-1",
+                            "title": "Get Started",
+                            "payload": "GET_STARTED",
+                            "referral": {
+                                "ref": "get-started-slug",
+                                "ad_id": "777222333",
+                                "source": "ADS",
+                                "type": "OPEN_THREAD",
+                            },
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+
+    events = FacebookMessengerNormalizer.referrals_from_payload(
+        payload, page_id="page-1"
+    )
+    assert [(p, a["post_code"]) for p, a in events] == [(psid, "get-started-slug")]
+
+    await apply_messenger_referral(
+        integration_session,
+        psid=psid,
+        account_key="page-1",
+        attribution=events[0][1],
+    )
+
+    conv = (
+        await integration_session.scalars(
+            select(Conversation).where(Conversation.channel_identity_id.isnot(None))
+        )
+    )
+    stamped = [c for c in conv if c.attribution and c.attribution.get("post_code") == "get-started-slug"]
+    assert stamped, "the postback referral was not stamped"
+    conversation = stamped[0]
+    assert conversation.attribution["project_id"] == str(project.id)
+
+    # And the lead the conversation trigger created carries the dự án.
+    assert await record_conversation_project_interest(integration_session, conversation) is True
+    lead = await LeadRepository(integration_session).by_contact_id(
+        str(conversation.contact_id)
+    )
+    assert lead is not None
+    assert str(lead["project_id"]) == str(project.id)
+    events_for_lead = await _interest_events(integration_session, int(lead["id"]))
+    assert [event.payload["source"] for event in events_for_lead] == [SOURCE_POST_LINK]

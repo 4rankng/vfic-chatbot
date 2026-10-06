@@ -22,6 +22,7 @@ import {
 import { isUnseenWorthyArrival } from "../domain/conversation-thread";
 import { groupConversationMessages } from "../domain/conversation-thread-rows";
 import { replyFailureMessageKey } from "../domain/reply-failure-messages";
+import { resolveConversationDisplayChannel } from "../domain/conversation-channel-display";
 import { useConversationActions } from "./use-conversation-actions";
 import { useConversationRealtime } from "./use-conversation-realtime";
 import { useConversationOperations } from "./use-conversation-operations";
@@ -515,6 +516,12 @@ export const ChatThread = ({
   // value that really changes: an arrival re-derives the rows, while typing a
   // reply or settling a retry leaves every row's props untouched.
   const rows = useMemo(() => groupConversationMessages(messages), [messages]);
+  // The display channel drives channel-aware failure copy on every bubble row;
+  // resolved once per conversation instead of per row render.
+  const channelProvider = useMemo(
+    () => resolveConversationDisplayChannel(conversation?.channel_identity),
+    [conversation?.channel_identity],
+  );
 
   // --- Render ---
 
@@ -602,6 +609,7 @@ export const ChatThread = ({
                 candidateAvatarUrl={candidateAvatarUrl}
                 isRetrying={retryingMessageId === message.id}
                 onRetry={handleRetryMessage}
+                channelProvider={channelProvider}
               />
             </Fragment>
           ))}

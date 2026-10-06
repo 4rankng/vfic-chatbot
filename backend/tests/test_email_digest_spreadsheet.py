@@ -100,7 +100,15 @@ def test_full_row_content():
     )
 
 
-def test_missing_fields_blank_and_summary_fallback():
+def test_missing_fields_blank_and_summary_never_pastes_the_transcript():
+    """A missing summary must leave the cell EMPTY, never filled with messages.
+
+    The removed fallback wrote the candidate's last three messages joined by
+    " · " under the "Tóm tóm hội thoại" header — a cut-and-paste of the
+    transcript wearing a summary's label, which reads as summarised when it is
+    not. Missing name/age/project still blank normally; only the summary column
+    behaviour changed.
+    """
     candidate = _full_candidate(
         name=None,
         age=None,
@@ -113,7 +121,10 @@ def test_missing_fields_blank_and_summary_fallback():
         build_lead_workbook([candidate], ict_date="03-10-2026").content
     )
     lines = [line for line in text.splitlines() if line.strip()]
-    assert lines[2] == "1\t\t0365717912\t\tVũ Thư\t\tMessenger\tHỏi lương · Hỏi vị trí · Hỏi ca làm"
+    # Blank summary cell at the end of the row, and no transcript text anywhere.
+    assert lines[2] == "1\t\t0365717912\t\tVũ Thư\t\tMessenger\t"
+    assert "Hỏi lương" not in text
+    assert "·" not in lines[2]
 
     silent = _full_candidate(summary=None, candidate_messages=())
     text = _extract_xlsx_text(

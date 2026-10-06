@@ -34,10 +34,14 @@ def run_email_digest_tick() -> str:
 
 async def _tick_async():
     # The worker layer (not the service) builds the LLM callable: services must
-    # not import the graph package, so the summarizer is injected here.
-    from app.graph.factories import build_minimax_extractor
+    # not import the graph package, so the summarizer is injected here. It is
+    # built inside the session because it resolves the operator's provider
+    # chain from settings, and it fails over across providers — a single dead
+    # provider must not empty every summary in the sheet.
+    from app.graph.factories import build_digest_summarizer
     from app.services.email_digest.service import run_digest
     from app.workers._db import worker_session
 
     async with worker_session() as db:
-        return await run_digest(db, summarizer=build_minimax_extractor())
+        summarizer = await build_digest_summarizer(db)
+        return await run_digest(db, summarizer=summarizer)

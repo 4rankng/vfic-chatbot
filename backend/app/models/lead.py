@@ -39,6 +39,19 @@ class Lead(Base):
     contact_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="RESTRICT")
     )
+    # The dự án this candidate was recruited for (Alembic 0071): the project a
+    # Messenger ad's ``ref`` / ``ad_title`` resolved to, or the project the
+    # conversation focused on. Written from the same seam as the
+    # ``project_interest`` lead event, first-touch-wins (the writer guards on
+    # ``project_id IS NULL``), so this column and that event never disagree.
+    # Derived state, not recruiter input — deliberately absent from the
+    # lead-update schema. SET NULL rather than CASCADE: retiring a project from
+    # the catalog must never delete the candidate who came from its ad.
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        index=True,
+    )
     name: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(Text)
     birth_year: Mapped[int | None] = mapped_column(Integer)

@@ -558,8 +558,13 @@ conversation API:
 | Encoding | What arrives | Record |
 |---|---|---|
 | Zalo prefill link `https://zalo.me/<oa>?text=%23<CODE>` | the campaign's post code at the front of the first message (`services/webhook.py::_post_link_attribution`, Bot and OA) | `{"kind": "post_link", "post_code": "BV1026"}` |
-| Messenger `message.referral` (Click-to-Messenger ad) | Meta's `ad_id` + `ads_context_data.post_id` on the first message (`channels/providers/facebook_messenger.py::attribution_from_referral`) | `{"kind": "referral", "post_code", "ad_id", "post_id", "referral_source"}` |
+| Messenger `message.referral` (Click-to-Messenger ad) | Meta's `ad_id` + `ads_context_data.post_id` / `ad_title` on the first message (`channels/providers/facebook_messenger.py::attribution_from_referral`) | `{"kind": "referral", "post_code", "ad_id", "post_id", "ad_title", "referral_source"}` |
 | Messenger `postback.referral` (Get Started / m.me / QR) | our `ref` + `source`, arriving **before** the candidate types — stamped by `webhook_delivery.apply_messenger_referral` because there is no message to carry the write | same shape, usually `post_code` + `referral_source` only |
+
+Meta ships **no `utm_*` parameters** on a Messenger ad: those are appended to
+website destinations only, and the `referral` object has no such field (verified
+2026-10-06 against Meta's `messages` / `messaging_referrals` webhook
+references). `ref` and `ad_title` are the whole campaign signal available here.
 
 Rules: a Zalo code must be the **leading** `#TOKEN`, 2–20 ASCII
 alphanumerics/`-`/`_` **with at least one digit** (that rejects `#1`, `#viec`
@@ -590,7 +595,7 @@ that found it:
 
 | `source` | Signal | Where it is captured |
 |---|---|---|
-| `post_link` | the `ref` of a Messenger m.me / Click-to-Messenger ad matched against the project catalog — case-insensitive `projects.slug` or any `projects.aliases` entry — stored as `attribution.project_id` | `conversation_messaging/infrastructure/ingress.py` at inbound, before the candidate types (Messenger only for now) |
+| `post_link` | the `ref` of a Messenger m.me / Click-to-Messenger ad matched against the project catalog — case-insensitive `projects.slug` or any `projects.aliases` entry — or, when the ad sets no `ref`, the project named by `ads_context_data.ad_title`; stored as `attribution.project_id` | `conversation_messaging/infrastructure/ingress.py` at inbound and `webhook_delivery.apply_messenger_referral` on the postback — both before the candidate types |
 | `chat_focus` | the project the conversation's turn focus points at (`conversations.focused_project_id`) | channel-neutral: identical on Zalo and Messenger |
 
 | Seam | When it fires | Why it exists |
@@ -613,6 +618,40 @@ resolves to no project. Zalo's link→project resolution is deliberately **not
 wired yet** (Messenger first): its capture already exists, so enabling it is
 one resolve call in `services/webhook.py`, and a Zalo code must additionally
 carry a digit (§2.4), which makes it an *alias* of the project (`lgd26`).
+
+`services/lead/interest.py::resolve_project_from_attribution` is the **single**
+cascade both entry paths use, so an ad cannot resolve to one dự án on the
+message path and another on the postback path:
+
+1. **`post_code` exact match** — an operator typed it, so it wins outright
+   (matched against every project, active or archived: an archived row is the
+   record of a project we once recruited for).
+2. **`ad_title` substring match** — the fallback for ads already running with
+   no custom `ref`. It guesses from free text, so it is held to a higher bar:
+   **active projects only**, accent-insensitive and word-anchored via the same
+   `normalize_vietnamese_text` + min-2-char rules the in-chat resolver uses
+   (`graph/adapters.py`), and an **ambiguous title resolves to nothing** —
+   attributing a candidate to the wrong recruiter queue is worse than leaving
+   them unattributed, since `chat_focus` can still pin them.
+
+An already-set `project_id` short-circuits, so a re-resolution never replaces
+a first touch with a weaker guess.
+
+#### The lead's dự án column
+
+`leads.project_id` (Alembic 0071, nullable FK `projects.id`
+`ON DELETE SET NULL`, indexed) carries the same answer as a queryable column,
+so lead lists and exports filter by project without an unindexed join over the
+JSONB event table. `record_conversation_project_interest` — the same seam that
+writes the event — pins it from the **first** signal (link before focus), and
+the repository's `WHERE project_id IS NULL` guard makes first-touch hold across
+turns, retries and concurrent writers. `version` deliberately does **not**
+advance: the recruiter console treats a version bump as a recruiter-visible
+edit needing reconciliation, and this is derived attribution nobody typed.
+
+It is read-only (`LeadOut` only, deliberately absent from `LeadUpdate`) and
+fully rebuildable from `lead_events`, which is why migration 0071 ships no
+backfill.
 
 Read surface: `GET /api/v1/leads/{id}/project-interests` returns the list
 (`ProjectInterestOut`) with the project's **current** slug/name resolved live,

@@ -123,13 +123,35 @@ def test_oa_event_path_uses_the_same_code_rule() -> None:
 # --- Messenger referral -----------------------------------------------------
 
 
-def test_ad_referral_maps_ad_id_and_post_id() -> None:
+def test_ad_referral_maps_ad_id_post_id_and_ad_title() -> None:
+    # ad_title is the ad's own creative copy — the only human-written string in
+    # the payload that says which dự án the ad is for, and the fallback when an
+    # ad sets no custom ``ref``. Meta ships no campaign id here and no utm_*
+    # parameters on a Messenger ad at all.
     assert attribution_from_referral(_AD_REFERRAL) == {
         "kind": "referral",
         "post_code": "BaiTuyenDung-01",
         "ad_id": "1234567890",
         "post_id": "111_222",
+        "ad_title": "Tuyển dụng LG",
         "referral_source": "ADS",
+    }
+
+
+def test_blank_ad_title_is_omitted_rather_than_stored_empty() -> None:
+    # Same truthy-string contract as every other field: an empty value must not
+    # become a key, or downstream matchers would treat "" as a real title.
+    attribution = attribution_from_referral(
+        {
+            "ref": "BaiTuyenDung-01",
+            "ads_context_data": {"post_id": "111_222", "ad_title": "   "},
+        }
+    )
+
+    assert attribution == {
+        "kind": "referral",
+        "post_code": "BaiTuyenDung-01",
+        "post_id": "111_222",
     }
 
 

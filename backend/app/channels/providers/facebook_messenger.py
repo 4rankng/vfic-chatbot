@@ -49,9 +49,7 @@ logger = logging.getLogger(__name__)
 #
 #   100 / 2018001 — "No matching user found": the PSID is not a sendable
 #   thread of this Page (belongs to another Page, or the thread is gone).
-_RECIPIENT_UNREACHABLE_CODES: frozenset[tuple[int | None, int | None]] = frozenset(
-    {(100, 2018001)}
-)
+_RECIPIENT_UNREACHABLE_CODES: frozenset[tuple[int | None, int | None]] = frozenset({(100, 2018001)})
 
 #   551 — "This person isn't available right now" (any subcode; production
 #   observed subcode 1545041): the recipient blocked the Page / messaging or
@@ -89,11 +87,16 @@ def attribution_from_referral(referral: object) -> dict | None:
     """Map Meta's referral object onto the neutral attribution record.
 
     Handles both shapes Meta ships: ``message.referral`` on the first message
-    of a Click-to-Messenger ad (carries ``ad_id`` and
-    ``ads_context_data.post_id`` — the ad and the ad post behind the thread)
-    and ``postback.referral`` from an m.me link / Get Started / QR code (our
-    own ``ref`` only, plus ``source``: SHORTLINK or ADS). ``None`` when the
-    object carries nothing beyond its type.
+    of a Click-to-Messenger ad (carries ``ad_id`` plus
+    ``ads_context_data.post_id`` / ``ad_title`` — the ad, the ad post, and the
+    ad's own creative title behind the thread) and ``postback.referral`` from an
+    m.me link / Get Started / QR code (our own ``ref`` only, plus ``source``:
+    SHORTLINK or ADS). ``None`` when the object carries nothing beyond its type.
+
+    Note that Meta ships NO ``utm_*`` parameters for a Messenger ad: those are
+    appended to website destinations only, and the ``referral`` object has no
+    such field. ``ref`` / ``ad_title`` are the whole campaign signal available
+    on this path.
     """
     if not isinstance(referral, dict):
         return None
@@ -104,6 +107,12 @@ def attribution_from_referral(referral: object) -> dict | None:
         ("post_code", referral.get("ref")),
         ("ad_id", referral.get("ad_id")),
         ("post_id", ads.get("post_id")),
+        # The ad's own creative title. Not an ad/campaign id — Meta ships no
+        # campaign id here — but it is the one human-written string that says
+        # which dự án the ad is for, so it is the fallback for ads that set no
+        # custom ``ref``. Resolution lives downstream, never here: this module
+        # only maps Meta's payload onto the neutral record.
+        ("ad_title", ads.get("ad_title")),
         ("referral_source", referral.get("source")),
     ):
         text = str(value).strip() if value is not None else ""
@@ -193,7 +202,11 @@ class FacebookMessengerNormalizer:
             ignored["missing_mid"] = ignored.get("missing_mid", 0) + 1
             return
 
-        occurred_at = datetime.fromtimestamp(int(timestamp) / 1000, tz=timezone.utc) if timestamp else datetime.now(timezone.utc)
+        occurred_at = (
+            datetime.fromtimestamp(int(timestamp) / 1000, tz=timezone.utc)
+            if timestamp
+            else datetime.now(timezone.utc)
+        )
         # Meta attaches the referral of a Click-to-Messenger ad to the first
         # message itself; some payloads carry it on the item instead. Either
         # way it rides the neutral type so the persist step can stamp the
@@ -217,9 +230,7 @@ class FacebookMessengerNormalizer:
         )
 
     @classmethod
-    def referrals_from_payload(
-        cls, payload: dict, *, page_id: str
-    ) -> list[tuple[str, dict]]:
+    def referrals_from_payload(cls, payload: dict, *, page_id: str) -> list[tuple[str, dict]]:
         """``(psid, attribution)`` for this Page's referral-carrying postbacks.
 
         The Get Started postback is where Meta puts a new thread's entry source
@@ -361,8 +372,7 @@ class FacebookMessengerAdapter(TextChannelAdapter, ReceiptCapability):
                 # terminal marker for this PSID so later turns stop paying for
                 # a full generation + send cycle that cannot succeed.
                 logger.warning(
-                    "messenger send rejected: recipient unreachable "
-                    "(code=%s subcode=%s page=%s)",
+                    "messenger send rejected: recipient unreachable (code=%s subcode=%s page=%s)",
                     exc.code,
                     exc.subcode,
                     self._config.page_id,

@@ -22,10 +22,7 @@ def _is_duplicate_message_integrity_error(error: IntegrityError) -> bool:
         sqlstate = sqlstate or getattr(current, "sqlstate", None)
         constraint_name = constraint_name or getattr(current, "constraint_name", None)
         current = current.__cause__ or current.__context__
-    return (
-        sqlstate == "23505"
-        and constraint_name == _MESSAGE_PROVIDER_ID_UNIQUE_CONSTRAINT
-    )
+    return sqlstate == "23505" and constraint_name == _MESSAGE_PROVIDER_ID_UNIQUE_CONSTRAINT
 
 
 class SqlAlchemyInboundMessageAdapter:
@@ -44,7 +41,7 @@ class SqlAlchemyInboundMessageAdapter:
 
     async def persist(self, command: InboundTextCommand) -> PersistedInboundMessage | None:
         from app.services.conversation import ConversationService
-        from app.services.lead.interest import resolve_project_by_code
+        from app.services.lead.interest import resolve_project_from_attribution
 
         identity = command.identity
         if identity.provider == "zalo_bot":
@@ -64,17 +61,14 @@ class SqlAlchemyInboundMessageAdapter:
         )
         await self._db.refresh(conversation)
         attribution = command.attribution
-        if attribution and attribution.get("post_code") and not attribution.get(
-            "project_id"
-        ):
-            # Campaign code → project: the ``ref`` an m.me link or a
-            # Click-to-Messenger ad carries is matched against the project
-            # catalog (slug/alias) so the entry itself says which dự án the
-            # candidate came for, before they type a word. Best-effort by
-            # contract — an unmatched code simply stays a code.
-            project_id = await resolve_project_by_code(
-                self._db, str(attribution["post_code"])
-            )
+        if attribution and not attribution.get("project_id"):
+            # Campaign code / ad title → project: the ``ref`` an m.me link or a
+            # Click-to-Messenger ad carries (or the project its creative title
+            # names) is matched against the project catalog so the entry itself
+            # says which dự án the candidate came for, before they type a word.
+            # Best-effort by contract — an unmatched or ambiguous code simply
+            # stays un-attributed, it never drops the message.
+            project_id = await resolve_project_from_attribution(self._db, attribution)
             if project_id:
                 attribution = {**attribution, "project_id": project_id}
         try:

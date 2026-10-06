@@ -14,9 +14,13 @@ import { Sparkles } from "lucide-react";
 
 import { Button } from "@/components/base/buttons/button";
 
-import type { Message } from "../../types";
+import type { ConversationChannelProvider, Message } from "../../types";
 import { splitMessageTextBlocks } from "../domain/conversation-message-text";
 import type { ConversationMessageKind } from "../domain/conversation-thread-rows";
+import {
+  isUserUnreachableError,
+  replyFailureReasonLabel,
+} from "../domain/reply-failure-messages";
 import { LeadAvatar } from "../LeadAvatar";
 
 const AVATAR_PLACEHOLDER_STYLE: CSSProperties = { width: 32 };
@@ -45,34 +49,6 @@ const deliveryRetryLabel = (attempts?: number) => {
   return `Đã thử lại ${retries} lần`;
 };
 
-/**
- * Map a failed/unknown send's backend `external_error` to a short Vietnamese
- * reason, so a "Gửi lỗi" bubble is diagnosable instead of blank when the
- * attempted reply content is empty/unavailable. Mirrors the provider/network
- * taxonomy used elsewhere in the CRM (vietnameseCrmMessages.reply.*), in Vietnamese.
- */
-const failureReasonLabel = (m: Message): string => {
-  if (m.delivery_status !== "failed" && m.delivery_status !== "send_unknown") {
-    return "";
-  }
-  const reason = (m.external_error ?? "").toLowerCase();
-  if (!reason) return "";
-  if (
-    reason.includes("user_id is invalid") ||
-    reason.includes("user_id is not valid")
-  ) {
-    return "Người nhận không liên lạc được qua Zalo — thử lại sẽ không thành công";
-  }
-  if (
-    reason.includes("timeout") ||
-    reason.includes("connect") ||
-    reason.includes("network")
-  ) {
-    return "Lỗi kết nối mạng";
-  }
-  return "Zalo từ chối tin nhắn";
-};
-
 export type ChatMessageRowProps = {
   message: Message;
   kind: ConversationMessageKind;
@@ -80,6 +56,8 @@ export type ChatMessageRowProps = {
   candidateAvatarUrl?: string | null;
   isRetrying?: boolean;
   onRetry?: (messageId: string) => void;
+  /** The conversation's resolved display channel; picks the failure wording. */
+  channelProvider?: ConversationChannelProvider | null;
 };
 
 export const ChatMessageRow = memo(
@@ -90,6 +68,7 @@ export const ChatMessageRow = memo(
     candidateAvatarUrl,
     isRetrying = false,
     onRetry,
+    channelProvider = null,
   }: ChatMessageRowProps) => {
     const translate = useTranslate();
     const textBlocks = useMemo(
@@ -116,14 +95,25 @@ export const ChatMessageRow = memo(
 
     const deliveryLabel = deliveryStatusLabel(m.delivery_status);
     const retryLabel = deliveryRetryLabel(m.delivery_attempts);
+    // A permanently unreachable recipient (Zalo -201, Messenger 551) can
+    // never be delivered to: retrying only re-pays for a doomed send, so the
+    // retry affordance is withheld and the reason is always shown.
+    const isUnreachable =
+      m.delivery_status === "failed" &&
+      isUserUnreachableError(m.external_error);
     const canRetry =
       kind === "agent" &&
       m.delivery_status === "failed" &&
+      !isUnreachable &&
       !m.id.startsWith("optimistic-");
     // A failed send whose reply body is empty (e.g. an empty candidate that
     // slipped through) would render a blank bubble. Surface the failure reason
-    // instead so the "Gửi lỗi" row always tells the recruiter what happened.
-    const failureReason = failureReasonLabel(m);
+    // instead so the "Gửi lỗi" row always tells the recruiter what happened —
+    // and on an unreachable send, even when the body exists.
+    const failureReason = replyFailureReasonLabel(
+      m.external_error,
+      channelProvider,
+    );
     const hasText = textBlocks.some((block) => block && block.trim());
     const avatar =
       kind === "user" ? (
@@ -158,7 +148,7 @@ export const ChatMessageRow = memo(
                 />
               ),
             )}
-            {failureReason && !hasText ? (
+            {failureReason && (!hasText || isUnreachable) ? (
               <p className="message-text-block delivery-error-detail">
                 {failureReason}
               </p>

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Callable, Sequence
+from typing import Callable, Sequence, cast
 
 from app.core.config import get_settings
 from app.graph.adapters import (
@@ -39,6 +39,7 @@ from app.graph.clients import (
     _resolve_reasoning_mode,
 )
 from app.graph.types import GraphDeps
+from app.graph.providers import LlmProvider
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,82 @@ def build_minimax_extractor():
         return _message_text(response.content)
 
     return extractor
+
+
+async def build_digest_summarizer(db):
+    """Summarizer for the email digest, failing over across configured providers.
+
+    ``build_minimax_extractor`` binds a single provider, so when that provider
+    is rate-limited or its plan is spent every candidate's summary comes back
+    empty — the digest then had nothing to print. The agent lane already
+    survives this via ``_build_failover_chain``; the summarizer now uses the
+    same chain over the same operator-enabled providers, so one dead provider
+    cannot empty the whole sheet.
+
+    Raises only when every enabled provider fails, which the digest treats as
+    "no summary for this candidate" — the cell is left empty rather than filled
+    with transcript text.
+    """
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from app.services.integration_settings import IntegrationSettingsService
+
+    settings_service = IntegrationSettingsService(db)
+    minimax_config = await settings_service.resolve_minimax()
+    openrouter_config = await settings_service.resolve_openrouter()
+    custom_config = await settings_service.resolve_custom_llm()
+    failover_order = await settings_service.resolve_llm_failover_order()
+
+    primary = _chat_for_role(
+        "extractor",
+        temperature=0.0,
+        custom_enabled=custom_config.enabled,
+        custom_config=custom_config,
+        minimax_api_key=minimax_config.api_key,
+        openrouter_api_key=openrouter_config.api_key,
+        minimax_enabled=minimax_config.enabled,
+        openrouter_enabled=openrouter_config.enabled,
+        default_provider=cast(LlmProvider, minimax_config.default_provider),
+        openrouter_agent_model=openrouter_config.agent_model,
+        openrouter_extractor_model=openrouter_config.extractor_model,
+    )
+    spares = _build_failover_chain(
+        minimax_config=minimax_config,
+        openrouter_config=openrouter_config,
+        custom_config=custom_config,
+        failover_order=failover_order,
+    )
+    clients = [primary, *spares]
+
+    async def summarize(system: str, user: str) -> str:
+        messages = [SystemMessage(content=system), HumanMessage(content=user)]
+        failures = 0
+        for index, client in enumerate(clients):
+            try:
+                response = await client.ainvoke(messages)
+            except Exception:  # noqa: BLE001 — try the next provider
+                failures += 1
+                logger.warning(
+                    "digest summary provider %d/%d failed; trying the next",
+                    index + 1,
+                    len(clients),
+                    exc_info=True,
+                )
+                continue
+            text = _message_text(response.content)
+            if text.strip():
+                return text
+            logger.warning(
+                "digest summary provider %d/%d returned no text; trying the next",
+                index + 1,
+                len(clients),
+            )
+        raise RuntimeError(
+            f"digest summarizer: all {len(clients)} configured providers failed "
+            f"({failures} raised, {len(clients) - failures} returned empty)"
+        )
+
+    return summarize
 
 
 def make_minimax_llm_json(

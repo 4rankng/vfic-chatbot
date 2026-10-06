@@ -290,9 +290,15 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0070_backfill_lead_age_from_birth_year` (6 Oct 2026). This line is grepped by the
+- **HEAD:** `0071_lead_project_id` (6 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0070` fills the
+  new migration that does not update it blocks the release. `0071` adds the
+  nullable, indexed `leads.project_id` FK (ON DELETE SET NULL) — the catalog
+  entry a candidate entered through, so the lead list can filter by project
+  without an unindexed join over the JSONB `lead_events` table. **Additive**
+  and derived from the existing `project_interest` event, so blue and green run
+  against either schema and no existing row is rewritten; `downgrade()` drops
+  the constraint, index and column. `0070` fills the
   NULL `leads.age` rows from the year the candidate already gave —
   `age = Vietnam year − birth_year`, clamped to the existing 15..80 contract —
   **data-only, fills NULLs**, so blue and green run against either state and an
