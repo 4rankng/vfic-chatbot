@@ -22,6 +22,7 @@ from app.services.candidate_extraction import (
 )
 from app.services.lead.normalizers import (
     _pick,
+    current_year,
     extract_self_reported_name,
     lead_profile_text,
     normalize_integer,
@@ -266,6 +267,37 @@ class TestNormalizeLead:
         result = normalize_lead(raw, "zalo_1")
         assert result is not None
         assert result["expected_salary"] == "9-11 triệu"
+
+    def test_age_is_derived_from_a_stated_birth_year(self):
+        """A stated year IS an age — a blank Tuổi column is the bug.
+
+        Regression (2026-10-06): the extractor stored the year in
+        ``birth_year`` and only filled ``age`` when the candidate said their
+        age outright, so the digest shipped blank Tuổi cells for candidates
+        who had given a year ("Mình 1976 có được không ạ" → birth_year 1976,
+        age NULL; 168 such leads on prod).
+        """
+        result = normalize_lead('{"birth_year": "1976"}', "zalo_1")
+        assert result["birth_year"] == 1976
+        assert result["age"] == current_year() - 1976
+
+    def test_explicit_age_wins_over_the_birth_year_derivation(self):
+        """The candidate's own age beats arithmetic on their year."""
+        result = normalize_lead('{"birth_year": "1976", "age": "48"}', "zalo_1")
+        assert result["birth_year"] == 1976
+        assert result["age"] == 48
+
+    def test_derived_age_obeys_the_same_range_as_an_explicit_one(self):
+        """Out-of-range → NULL, exactly like the explicit-age path drops it.
+
+        The column contract is 15..80 (the lead-update API enforces it), so a
+        junk year must not smuggle a value past that boundary.
+        """
+        assert normalize_lead('{"birth_year": "1900"}', "zalo_1")["age"] is None
+        assert normalize_lead('{"birth_year": "2024"}', "zalo_1")["age"] is None
+        # Boundary years stay inside the contract.
+        assert normalize_lead('{"birth_year": "2011"}', "zalo_1")["age"] == 15
+        assert normalize_lead('{"birth_year": "1946"}', "zalo_1")["age"] == 80
 
 
 # ---------------------------------------------------------------------------

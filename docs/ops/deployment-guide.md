@@ -290,9 +290,14 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0069_conversation_attribution` (6 Oct 2026). This line is grepped by the
+- **HEAD:** `0070_backfill_lead_age_from_birth_year` (6 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0069` adds the
+  new migration that does not update it blocks the release. `0070` fills the
+  NULL `leads.age` rows from the year the candidate already gave —
+  `age = Vietnam year − birth_year`, clamped to the existing 15..80 contract —
+  **data-only, fills NULLs**, so blue and green run against either state and an
+  explicitly-stated age is never touched (`downgrade()` nulls only values still
+  equal to the derivation). `0069` adds the
   nullable `conversations.attribution` JSONB — the candidate's first-touch
   source (a Zalo prefill post code, a Messenger ad/post id) written by the
   inbound path and read-only on the conversation API — **additive**: a new

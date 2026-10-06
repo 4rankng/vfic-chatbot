@@ -367,12 +367,25 @@ def normalize_lead(raw, chat_id: str | None) -> dict | None:
 
     notes = normalize_notes(ext.get("notes"))
 
+    birth_year = normalize_integer(ext.get("birth_year"), 1900, current_year())
+    age = normalize_integer(ext.get("age"), 15, 80)
+    if age is None and birth_year is not None:
+        # A stated year IS an age: candidates routinely write "sinh 1976" or
+        # "sn 1981" and never say their age, which left ``age`` — and the
+        # digest's Tuổi column — blank (2026-10-06: 168 leads carried a year
+        # with no age). Bounded by the SAME 15..80 contract the explicit age
+        # uses, so the column never holds a value the lead-update API
+        # (`ge=15, le=80`) would reject; an explicit age from the same extract
+        # still wins.
+        derived_age = current_year() - birth_year
+        age = derived_age if 15 <= derived_age <= 80 else None
+
     return {
         "zalo_id": chat_id,
         "name": _pick(ext.get("name")),
         "phone": phone,
-        "birth_year": normalize_integer(ext.get("birth_year"), 1900, current_year()),
-        "age": normalize_integer(ext.get("age"), 15, 80),
+        "birth_year": birth_year,
+        "age": age,
         "living_area": _pick(ext.get("living_area")),
         "address": _pick(ext.get("address")),
         "gender": _pick(ext.get("gender")),
