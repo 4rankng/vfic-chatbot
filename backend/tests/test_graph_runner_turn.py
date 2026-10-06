@@ -5443,3 +5443,126 @@ async def test_live_remainder_creates_exactly_one_placeholder_after_grounding(
     assert remainder == " Ca ngày chạy từ 08:00 đến 20:00."
     assert svc.pending_created == 1
     assert state.pending_message_id == 555
+
+
+@pytest.mark.asyncio
+async def test_pleasantry_gets_a_smile_not_a_generation(monkeypatch):
+    """A politeness-only message is acknowledged with an emoji, no model run.
+
+    The 2026-10-06 incident: a bare "cam on" ran the full agent stack for 252
+    seconds (37 LLM calls across the stacked repair layers) and shipped a
+    degenerate answer that repeated its opener four times, while the
+    candidate's follow-ups queued behind the chat lock. Jev's pleasantry
+    judgment — a message that is ONLY a greeting/thanks/ack — now answers with
+    the smile and never reaches the agent.
+    """
+    from app.graph.runner import _agent_turn
+    from types import SimpleNamespace as _Msg
+
+    class _FakeAgent:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            self.calls += 1
+            return "model reply"
+
+    agent = _FakeAgent()
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = agent
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=False),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+    # Prior bot traffic: the candidate has already been answered before, so
+    # this is not a cold open.
+    from app.models.conversation import MessageSender
+    prior = [_Msg(sender=MessageSender.BOT)]
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="cam on"),
+        deps,
+        "cam on",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=prior,
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="small_talk", intent_confidence=0.95, pleasantry=True),
+    )
+
+    assert reply == lanes.POLITE_ACK_REPLY == "😊"
+    assert agent.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_pleasantry_ack_never_fires_on_a_cold_open(monkeypatch):
+    """A bare "hi" as the FIRST message keeps the greeting flow, not a smile."""
+    from app.graph.runner import _agent_turn
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            return "Dạ em chào anh ạ."
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=False),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="hi"),
+        deps,
+        "hi",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="small_talk", intent_confidence=0.9, pleasantry=True),
+    )
+
+    assert reply == "Dạ em chào anh ạ."
+
+
+@pytest.mark.asyncio
+async def test_pleasantry_ack_keeps_contact_info_on_the_workflow(monkeypatch):
+    """A message carrying contact info is workflow input, never just a smile."""
+    from app.graph.runner import _agent_turn
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            return "Dạ em đã nhận số của anh rồi ạ."
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=False),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+    from types import SimpleNamespace as _Msg
+    from app.models.conversation import MessageSender
+    prior = [_Msg(sender=MessageSender.BOT)]
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="dạ đây 0356631024"),
+        deps,
+        "dạ đây 0356631024",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=prior,
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(
+            intent="general", intent_confidence=0.8, pleasantry=True, contact_info=True
+        ),
+    )
+
+    assert reply == "Dạ em đã nhận số của anh rồi ạ."

@@ -77,13 +77,46 @@ def _join_answer_parts(parts: list[str]) -> str:
     A continuation round either re-emits the tail it was handed (verbatim seam
     below) or re-opens the answer with a sentence from earlier in it behind a
     fresh opener — both are dropped, so the candidate reads each sentence once.
+    A final pass collapses a degenerate consecutive repetition (the same
+    sentence three or more times back-to-back inside one streamed round).
     """
     joined = ""
     for part in parts:
         if not part:
             continue
         joined = part if not joined else joined + _seam_remainder(joined, part)
-    return joined
+    return _collapse_repeated_sentences(joined)
+
+
+def _collapse_repeated_sentences(text: str) -> str:
+    """Collapse a consecutive run of 3+ identical sentences down to two.
+
+    The 2026-10-06 "cam on" turn shipped "Dạ không có gì ạ 😊 Anh cứ nhắn..."
+    four times back-to-back inside one answer: the model degenerated on a
+    pleasantry prompt and each repair round re-opened the same opener. Only a
+    CONSECUTIVE run collapses — list answers legitimately repeat a sentence
+    between different items ("1. A: ... Phạm vi: X. 2. B: ... Phạm vi: X."), so
+    non-adjacent occurrences are never touched.
+    """
+    if not text:
+        return text
+    spans = _SENTENCE_SPAN_RE.findall(text)
+    if len(spans) < 3:
+        return text
+    kept: list[str] = []
+    run_key: str | None = None
+    run_len = 0
+    for span in spans:
+        key = _normalized(span)
+        if key == run_key:
+            run_len += 1
+            if run_len > 2:
+                continue
+        else:
+            run_key = key
+            run_len = 1
+        kept.append(span)
+    return "".join(kept)
 
 
 def _seam_remainder(joined: str, part: str) -> str:

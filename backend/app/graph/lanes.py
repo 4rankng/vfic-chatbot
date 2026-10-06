@@ -68,9 +68,16 @@ from app.recruitment.domain.recommendation import (
     parse_salary_band,
 )
 from app.shared.domain.addressing import address_form
+
 from app.shared.domain.text import normalize_vietnamese_text
 
 logger = logging.getLogger(__name__)
+
+# The politeness-only acknowledgment: a smile, nothing else. Jev's pleasantry
+# judgment gates it (see the ack lane in `_agent_turn`) — a message that is
+# only a greeting/thanks/ack carries nothing to answer, and generating on it
+# is how the 252-second "cam on" turn happened.
+POLITE_ACK_REPLY = "😊"
 DIRECT_HISTORY_TOKEN_BUDGET = 12_000
 _INCOME_COMPARE_HINT = (
     "Ý định: hỏi mốc thu nhập chung khi chưa chốt dự án. Phải dùng compare_income trước, "
@@ -513,6 +520,30 @@ async def _agent_turn(
             timings.setdefault("route_reason", route.reason)
             timings.setdefault("route_confidence", round(route.confidence, 2))
         return vfic_hotline_reply()
+    if (
+        decisions.pleasantry
+        and not decisions.contact_info
+        and not tingting_support_account
+        and not tingting_reset_allowed
+        and route.intent != "employee_support"
+        and any(
+            "bot" in str(getattr(m, "sender", "")).lower()
+            for m in (recent_messages or [])
+        )
+    ):
+        # Politeness-only messages ("cảm ơn", "ok", "Dạ đây ạ") carry no
+        # question and no workflow input: a smile acknowledges them and no
+        # generation runs. The 2026-10-06 incident: a bare "cam on" ran the
+        # full agent stack for 252 seconds (37 LLM calls across the stacked
+        # repair layers) and shipped a degenerate answer that repeated its
+        # opener four times, while follow-up messages queued behind the chat
+        # lock. The prior-bot-reply guard keeps a cold open ("hi") on the
+        # normal greeting path; the TingTing accounts keep their own flows.
+        if timings is not None:
+            timings.setdefault("intent", route.intent)
+            timings.setdefault("route_strategy", route.strategy)
+            timings.setdefault("route_reason", "pleasantry_ack")
+        return POLITE_ACK_REPLY
     focused_project = bool(
         project_context is not None and getattr(project_context, "state", None) == "FOCUSED"
     )
