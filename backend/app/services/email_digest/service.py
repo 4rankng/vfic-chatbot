@@ -37,9 +37,7 @@ from app.services.email_service import EmailDeliveryError, send_email_via_resend
 
 logger = logging.getLogger(__name__)
 
-ICT = ZoneInfo("Asia/Ho_Chi_Minh")
-# Fallback window when nothing has ever been sent (first run).
-DIGEST_FIRST_WINDOW = timedelta(days=1)
+ICT = ZoneInfo("Asia/Ho_Chi_Minh")  # Vietnam — GMT+7, no DST
 
 SUMMARY_SYSTEM_PROMPT = (
     "Bạn là trợ lý tóm tắt hội thoại tuyển dụng. Viết 2-4 câu tiếng Việt tóm tắt "
@@ -100,6 +98,37 @@ def is_due(config: EmailDigestRuntimeConfig, *, now: datetime) -> bool:
         return True
     last_ict = config.last_sent_at.astimezone(ICT)
     return _period_key(last_ict, config.frequency) != _period_key(ict_now, config.frequency)
+
+
+def _digest_window(
+    moment: datetime, last_sent_at: datetime | None
+) -> tuple[datetime, datetime]:
+    """The Vietnam calendar day this run reports on: 00:00 → 23:59 ICT (GMT+7).
+
+    ``window_start`` is midnight of the previous ICT day and ``window_end`` is
+    midnight of the current one — the whole previous day, none of today. The
+    rolling ``last_sent_at → now`` span this replaces had two failure modes:
+    a late or missed send shifted the next window forward and shrank it (the
+    2026-10-06 digest shipped 4 rows for a day that had 19), and a same-day
+    send mixed today's early chatters into yesterday's letter.
+
+    ``window_start`` still walks back to midnight of the last sent day when an
+    outage skipped whole days, so a missed day is caught up instead of
+    dropped. Asia/Ho_Chi_Minh observes no DST, so the boundary is a constant
+    +07:00 year-round.
+    """
+    today_midnight = moment.astimezone(ICT).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    window_start = today_midnight - timedelta(days=1)
+    if last_sent_at is not None:
+        window_start = min(
+            window_start,
+            last_sent_at.astimezone(ICT).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ),
+        )
+    return window_start, today_midnight
 
 
 _THINK_PAIR_RE = re.compile(
@@ -194,9 +223,9 @@ async def run_digest(
     if not is_due(config, now=moment):
         return DigestRunResult(status=STATUS_NOT_DUE)
 
-    window_start = config.last_sent_at or (moment - DIGEST_FIRST_WINDOW)
+    window_start, window_end = _digest_window(moment, config.last_sent_at)
     candidates = await collect_new_candidates(
-        db, window_start=window_start, window_end=moment
+        db, window_start=window_start, window_end=window_end
     )
     candidates = _with_phone(candidates)
     if not candidates:
@@ -285,10 +314,10 @@ async def send_test_digest(
         return TestDigestResult(ok=False, configured=False, missing=missing)
 
     moment = now or datetime.now(timezone.utc)
-    window_start = config.last_sent_at or (moment - DIGEST_FIRST_WINDOW)
+    window_start, window_end = _digest_window(moment, config.last_sent_at)
     candidates = _with_phone(
         await collect_new_candidates(
-            db, window_start=window_start, window_end=moment
+            db, window_start=window_start, window_end=window_end
         )
     )
     if not candidates:

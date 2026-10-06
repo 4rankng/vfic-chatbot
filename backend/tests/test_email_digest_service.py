@@ -6,7 +6,7 @@ on the service module); the renderer is exercised as the pure function it is.
 
 # pyright: reportArgumentType=false
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.services.email_digest import service as digest_module
 from app.services.email_digest.repository import DigestCandidate
@@ -162,6 +162,10 @@ async def test_run_digest_empty_window(monkeypatch):
 async def test_run_digest_sends_and_advances_state(monkeypatch):
     async def fake_collect(db, *, window_start, window_end):
         assert window_start is not None
+        # The window is the previous Vietnam calendar day (GMT+7), not a
+        # rolling last_sent→now span: 00:00 yesterday → 00:00 today, ICT.
+        assert window_start == datetime(2026, 10, 4, 0, 0, tzinfo=digest_module.ICT)
+        assert window_end == datetime(2026, 10, 5, 0, 0, tzinfo=digest_module.ICT)
         return [_candidate()]
 
     async def fake_send(**kwargs):
@@ -187,6 +191,46 @@ async def test_run_digest_sends_and_advances_state(monkeypatch):
     assert result.candidate_count == 1
     assert result.provider_id == "pid-1"
     assert db.commit_count == 1  # state advanced on success only
+
+
+# ── _digest_window — the Vietnam calendar day (GMT+7) ──────────────────────
+
+
+def test_digest_window_is_the_whole_previous_vietnam_day():
+    """00:00 → 23:59 of yesterday, ICT: none of today's chatters bleed in."""
+    moment = datetime(2026, 10, 6, 2, 5, tzinfo=timezone.utc)  # 09:05 ICT
+    start, end = digest_module._digest_window(moment, None)
+    assert start == datetime(2026, 10, 5, 0, 0, tzinfo=digest_module.ICT)
+    assert end == datetime(2026, 10, 6, 0, 0, tzinfo=digest_module.ICT)
+    assert end - start == timedelta(days=1)
+    # The ask: GMT+7, not the server clock.
+    assert start.utcoffset() == timedelta(hours=7)
+    assert end.utcoffset() == timedelta(hours=7)
+
+
+def test_digest_window_follows_gmt7_across_the_midnight_boundary():
+    """17:00 UTC is already the next day in Vietnam — the boundary follows ICT."""
+    moment = datetime(2026, 10, 5, 17, 30, tzinfo=timezone.utc)  # 00:30 ICT, 6 Oct
+    start, end = digest_module._digest_window(moment, None)
+    assert start == datetime(2026, 10, 5, 0, 0, tzinfo=digest_module.ICT)
+    assert end == datetime(2026, 10, 6, 0, 0, tzinfo=digest_module.ICT)
+
+
+def test_digest_window_catches_up_an_outage_instead_of_dropping_days():
+    """Three missed sends → the window starts at the last sent day, not yesterday."""
+    moment = datetime(2026, 10, 6, 2, 5, tzinfo=timezone.utc)
+    last_sent = datetime(2026, 10, 3, 2, 8, tzinfo=timezone.utc)  # 09:08 ICT, 3 Oct
+    start, end = digest_module._digest_window(moment, last_sent)
+    assert start == datetime(2026, 10, 3, 0, 0, tzinfo=digest_module.ICT)
+    assert end == datetime(2026, 10, 6, 0, 0, tzinfo=digest_module.ICT)
+
+
+def test_digest_window_ignores_a_same_day_send():
+    """A last_sent inside today must not move the window into today."""
+    moment = datetime(2026, 10, 6, 7, 31, tzinfo=timezone.utc)  # sent today
+    start, end = digest_module._digest_window(moment, moment)
+    assert start == datetime(2026, 10, 5, 0, 0, tzinfo=digest_module.ICT)
+    assert end == datetime(2026, 10, 6, 0, 0, tzinfo=digest_module.ICT)
 
 
 # ── send_test_digest ─────────────────────────────────────────────────────────
