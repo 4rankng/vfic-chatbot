@@ -203,7 +203,7 @@ async def test_webhook_ack_guards_run_through_state_and_the_inbound_read_through
             AsyncMock(return_value=True),
         ),
         patch(
-            "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+            "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
             AsyncMock(return_value=None),
         ),
     ):

@@ -160,10 +160,20 @@ async def warm_llm_client_cache() -> None:
 
 
 def _enqueue_persist(persist_job: dict) -> None:
-    """Fire candidate extraction after a SENT reply (best-effort)."""
+    """Fire candidate extraction after a SENT reply (best-effort).
+
+    The turn itself must not fail on a Redis hiccup, but a lost enqueue is a
+    lost candidate record — so it is logged loudly (with the chat id) instead
+    of being silently dropped, and the job it queues carries a bounded retry.
+    """
     from app.workers.persistence_worker import enqueue_persist_candidate
 
-    enqueue_persist_candidate(persist_job)
+    if enqueue_persist_candidate(persist_job) is False:
+        logger.error(
+            "candidate extraction enqueue failed chat_id=%s — this turn's lead "
+            "details will not be extracted",
+            persist_job.get("chat_id"),
+        )
 
 
 def _preamble_timings(state, started_at, *, lane: str, throttle: bool = False) -> dict:

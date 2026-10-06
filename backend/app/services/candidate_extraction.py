@@ -25,7 +25,11 @@ from app.recruitment.domain.intake import candidate_contact_mobile, candidate_wi
 from app.recruitment.domain.provider import lead_key_for_chat, lead_key_for_conversation
 from app.services.lead.events import LeadEventBus
 from app.services.lead.interest import record_conversation_project_interest
-from app.services.lead.normalizers import extract_self_reported_name, normalize_lead
+from app.services.lead.normalizers import (
+    deterministic_lead_details,
+    extract_self_reported_name,
+    normalize_lead,
+)
 from app.services.lead.repository import LeadRepository
 from app.services.memory_service import (
     BatchEmbedder,
@@ -100,7 +104,7 @@ def candidate_turn(
 
 class CandidateExtractionService:
     @staticmethod
-    async def persist_explicit_name(
+    async def persist_explicit_details(
         db: AsyncSession,
         chat_id: str,
         user_text: str,
@@ -109,23 +113,22 @@ class CandidateExtractionService:
         conversation: Conversation | None = None,
         contact_id: str | None = None,
     ) -> str | None:
-        """Persist an unambiguous self-introduced name on the inbound path.
+        """Deterministic pass on the inbound path: name + age/year + salary.
 
-        This intentionally does not wait for the deferred LLM extraction job.
-        The deferred extractor still enriches the rest of the candidate profile,
-        while the persistence boundary protects this confirmed identity.
+        Runs before — and independently of — the deferred LLM extraction job,
+        so the closed-shape fields land even when the queue, the model, or a
+        review gate never gets there. The deferred extractor keeps owning the
+        open-ended fields (desired job, address, gender, notes) and may refine
+        anything this pass writes.
 
         ``prev_bot_message`` is the bot's immediately preceding reply; when it
         asked for the name, a bare reply ("Dũng") is captured here so the next
         turn personalises correctly instead of reverting to the Zalo profile
         name.
 
-        The write goes through the same provider-neutral lead key the deferred
-        path uses: a Zalo/OA conversation is keyed by its chat id, every other
-        provider (Messenger today) by its contact. Passing the chat id alone
-        made a Messenger name resolve to a patch this method could not persist
-        (``leads.zalo_id`` is a Zalo-only compatibility alias), so the name was
-        silently dropped on every Messenger thread.
+        One write, one commit: the name and the deterministic details share a
+        single upsert through the same provider-neutral lead key the deferred
+        path uses (Zalo/OA by chat id, every other provider by contact).
         """
         lead_key = (
             lead_key_for_conversation(conversation)
@@ -134,21 +137,27 @@ class CandidateExtractionService:
         )
         if not lead_key.is_writable:
             return None
+        # The patch only needs a non-empty key to be built; the contact-keyed
+        # write ignores its ``zalo_id`` and the INSERT stores NULL there.
+        write_key = lead_key.zalo_id or lead_key.contact_id or chat_id
         resolved = _candidate_extraction_use_cases().resolve_explicit_name(
-            # The patch only needs a non-empty key to be built; the contact-keyed
-            # write ignores its ``zalo_id`` and the INSERT stores NULL there.
-            chat_id=lead_key.zalo_id or lead_key.contact_id or chat_id,
+            chat_id=write_key,
             user_text=user_text,
             prev_bot_message=prev_bot_message,
         )
-        if resolved is None:
+        name = (resolved.lead_patch or {}).get("name") if resolved is not None else None
+        details = deterministic_lead_details(user_text)
+        if not name and not details:
+            return None
+        patch = normalize_lead({"name": name, **details}, write_key)
+        if not patch:
             return None
         await CandidateExtractionService.upsert_lead(
             db,
-            resolved.lead_patch,
+            patch,
             contact_id=None if lead_key.is_zalo_keyed else lead_key.contact_id,
         )
-        return resolved.value
+        return resolved.value if resolved is not None else None
 
     @staticmethod
     async def extract(

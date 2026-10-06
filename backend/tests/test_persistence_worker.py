@@ -252,3 +252,58 @@ async def test_oa_profile_worker_waits_for_inline_lookup_before_retrying():
         user_id="user-1",
         wait_for_inflight=True,
     )
+
+
+def test_extraction_jobs_are_queued_with_a_bounded_retry(monkeypatch: pytest.MonkeyPatch):
+    """A failed job must be retried by RQ, not reported as a silent Job OK."""
+    from app.workers import persistence_worker
+
+    captured: dict = {}
+
+    def fake_enqueue(queue_name, fn, *args, **kwargs):
+        captured.update(queue=queue_name, fn=fn, kwargs=kwargs)
+        return True
+
+    monkeypatch.setattr("app.workers.utils.enqueue_job", fake_enqueue)
+
+    assert persistence_worker.enqueue_persist_candidate({"chat_id": "zalo_1"}) is True
+
+    retry = captured["kwargs"]["retry"]
+    assert captured["queue"] == "persistence_low"
+    assert captured["fn"] is persistence_worker.run_persist_candidate_job
+    assert retry.max == 3
+    assert retry.intervals == [15, 60, 300]
+
+
+@pytest.mark.asyncio
+async def test_failed_extraction_job_raises_so_rq_can_retry():
+    """The old handler swallowed every error, so RQ logged Job OK and dropped
+    the candidate's details with no retry and no failed-job record."""
+    from app.workers.persistence_worker import _persist_candidate_async
+
+    db = AsyncMock()
+
+    @asynccontextmanager
+    async def fake_worker_session():
+        yield db
+
+    clients = SimpleNamespace(
+        embedder=SimpleNamespace(batch=AsyncMock()), extractor=AsyncMock()
+    )
+
+    with (
+        patch("app.workers._db.worker_session", fake_worker_session),
+        patch(
+            "app.graph.client_cache.build_cached_extraction",
+            AsyncMock(return_value=clients),
+        ),
+        patch(
+            "app.composition.recruitment.run_candidate_persistence",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("extractor down"),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="extractor down"):
+            await _persist_candidate_async(
+                {"chat_id": "zalo_1", "user_text": "x", "bot_output": "y"}
+            )

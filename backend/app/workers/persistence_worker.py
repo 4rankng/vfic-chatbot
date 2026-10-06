@@ -11,10 +11,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def enqueue_persist_candidate(job: dict) -> None:
+def enqueue_persist_candidate(job: dict) -> bool:
+    """Queue one extraction job with a bounded retry.
+
+    A job that raises is retried by RQ (three attempts, 15s/60m/5m apart) and
+    lands in the failed-job registry afterwards — visible instead of the
+    silent "Job OK" a swallowed exception used to report.
+    """
+    from rq import Retry
+
     from app.workers.utils import enqueue_job
 
-    enqueue_job("persistence_low", run_persist_candidate_job, job)
+    return enqueue_job(
+        "persistence_low",
+        run_persist_candidate_job,
+        job,
+        retry=Retry(max=3, interval=[15, 60, 300]),
+    )
 
 
 def enqueue_enrich_oa_profile(job: dict) -> None:
@@ -98,11 +111,15 @@ async def _persist_candidate_async(job: dict) -> None:
                 conversation_id=job.get("conversation_id"),
             )
     except Exception:
+        # Rethrow on purpose: RQ must see the failure for the bounded retry
+        # (and the failed-job registry) to exist. A swallowed exception here
+        # reported "Job OK" and dropped the candidate's details forever.
         logger.warning(
-            "candidate extraction failed for chat %s; chat turn continues",
+            "candidate extraction failed for chat %s; RQ will retry",
             job.get("chat_id"),
             exc_info=True,
         )
+        raise
 
 
 async def _enrich_oa_profile_async(job: dict) -> None:

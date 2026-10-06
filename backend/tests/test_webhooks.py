@@ -304,7 +304,7 @@ async def test_webhook_copies_active_runtime_authority_to_inbound_and_queued_tur
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         AsyncMock(return_value=None),
     )
     db = MagicMock()
@@ -408,7 +408,7 @@ async def test_inbound_while_the_mutex_is_held_is_stored_but_not_queued(monkeypa
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         AsyncMock(return_value=None),
     )
     db = MagicMock()
@@ -469,7 +469,7 @@ async def test_webhook_persists_explicit_name_before_queuing_turn(monkeypatch):
         return "LiteQA"
 
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         persist_name,
     )
     db = MagicMock()
@@ -522,7 +522,7 @@ async def test_future_human_review_inbound_is_stored_without_extraction_or_bot(m
     )
     persist_name = AsyncMock()
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         persist_name,
     )
     db = MagicMock(refresh=AsyncMock())
@@ -573,7 +573,7 @@ async def test_active_semi_auto_still_captures_name_before_bot_guard(monkeypatch
     )
     persist_name = AsyncMock(return_value="An")
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         persist_name,
     )
     db = MagicMock(refresh=AsyncMock())
@@ -633,7 +633,7 @@ async def test_webhook_rolls_back_profile_failure_then_queues_turn(monkeypatch, 
         raise RuntimeError("LiteQA confidential detail")
 
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         persist_name,
     )
     db = MagicMock()
@@ -1140,7 +1140,7 @@ async def test_ingress_delegates_status_to_the_owned_turn_without_orphan_request
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         AsyncMock(return_value=None),
     )
     db = MagicMock()
@@ -1306,7 +1306,7 @@ async def test_phase3_queued_job_carries_no_provider_token(monkeypatch):
 
     monkeypatch.setattr(wh_mod, "ConversationService", lambda _db: svc)
     monkeypatch.setattr(ce_mod, "CandidateExtractionService", SimpleNamespace(
-        persist_explicit_name=AsyncMock()
+        persist_explicit_details=AsyncMock()
     ))
     monkeypatch.setattr(
         "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
@@ -1474,7 +1474,7 @@ async def test_zalo_route_awaits_async_enqueue_and_maps_backpressure_to_503(monk
         "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
     )
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         AsyncMock(return_value=None),
     )
     db = MagicMock()
@@ -1549,7 +1549,7 @@ async def test_ack_path_refreshes_the_conversation_exactly_once(monkeypatch):
         "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
     )
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         AsyncMock(return_value=None),
     )
     db = MagicMock()
@@ -1600,7 +1600,7 @@ async def test_ack_path_does_not_re_read_the_conversation_through_the_service(
         "app.services.webhook.MessageDedupService.claim", AsyncMock(return_value=True)
     )
     monkeypatch.setattr(
-        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_name",
+        "app.services.candidate_extraction.CandidateExtractionService.persist_explicit_details",
         AsyncMock(return_value=None),
     )
     db = MagicMock()

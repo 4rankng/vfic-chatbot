@@ -40,7 +40,7 @@ from app.services.memory_service import greeting_gate
 def _session() -> AsyncSession:
     """A session stand-in: these tests never reach a database.
 
-    ``persist``/``persist_explicit_name`` take ``AsyncSession``; typing the
+    ``persist``/``persist_explicit_details`` take ``AsyncSession``; typing the
     double is what keeps those parameters checked instead of passing
     ``object()`` and erasing the argument type at every call site.
     """
@@ -397,7 +397,7 @@ class TestCandidateExtractionService:
             upsert,
         )
 
-        saved_name = await CandidateExtractionService.persist_explicit_name(
+        saved_name = await CandidateExtractionService.persist_explicit_details(
             _session(),
             "zalo_1",
             "mình là công nhân",
@@ -420,7 +420,7 @@ class TestCandidateExtractionService:
             staticmethod(save_name),
         )
 
-        saved_name = await CandidateExtractionService.persist_explicit_name(
+        saved_name = await CandidateExtractionService.persist_explicit_details(
             _session(),
             "zalo_1",
             "mình tên LiteQA",
@@ -430,6 +430,33 @@ class TestCandidateExtractionService:
         assert len(saved) == 1
         assert saved[0]["zalo_id"] == "zalo_1"
         assert saved[0]["name"] == "LiteQA"
+
+    @pytest.mark.asyncio
+    async def test_persists_name_age_and_salary_in_one_inbound_write(self, monkeypatch):
+        """The deterministic fields land WITH the name, before any LLM or queue."""
+        saved: list[dict] = []
+
+        async def save(_db, lead_patch, *, contact_id=None):
+            saved.append(lead_patch)
+            return 1
+
+        monkeypatch.setattr(
+            CandidateExtractionService,
+            "upsert_lead",
+            staticmethod(save),
+        )
+
+        saved_name = await CandidateExtractionService.persist_explicit_details(
+            _session(),
+            "zalo_1",
+            "mình tên LiteQA, 25 tuổi, lương mong muốn 12 triệu",
+        )
+
+        assert saved_name == "LiteQA"
+        assert len(saved) == 1  # ONE upsert: one commit, one realtime update
+        assert saved[0]["name"] == "LiteQA"
+        assert saved[0]["age"] == 25
+        assert saved[0]["expected_salary"] == "12 triệu"
 
     @pytest.mark.asyncio
     async def test_persists_bare_name_when_bot_just_asked(self, monkeypatch):
@@ -447,7 +474,7 @@ class TestCandidateExtractionService:
             staticmethod(save_name),
         )
 
-        saved_name = await CandidateExtractionService.persist_explicit_name(
+        saved_name = await CandidateExtractionService.persist_explicit_details(
             _session(),
             "zalo_1",
             "Dũng",
@@ -464,7 +491,7 @@ class TestCandidateExtractionService:
         monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
 
         # No prior name request -> a bare reply must not be stored as a name.
-        saved_name = await CandidateExtractionService.persist_explicit_name(
+        saved_name = await CandidateExtractionService.persist_explicit_details(
             _session(),
             "zalo_1",
             "Dũng",
@@ -494,7 +521,7 @@ class TestCandidateExtractionService:
             staticmethod(save_name),
         )
 
-        saved_name = await CandidateExtractionService.persist_explicit_name(
+        saved_name = await CandidateExtractionService.persist_explicit_details(
             _session(),
             "29678353618419609",
             "Bùi thị hòa",

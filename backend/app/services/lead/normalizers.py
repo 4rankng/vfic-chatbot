@@ -398,6 +398,82 @@ def normalize_lead(raw, chat_id: str | None) -> dict | None:
     }
 
 
+# ---------------------------------------------------------------------------
+# Deterministic candidate details — the regex tier
+# ---------------------------------------------------------------------------
+# Fields whose SHAPE is closed beat the LLM on both recall and precision, and
+# they run at inbound, before the deferred job can be lost. Everything open
+# ended (name phrasing beyond the explicit template, desired_job, address,
+# gender) deliberately stays with the LLM: a wrong value a recruiter acts on is
+# worse than a blank one. Phone is not duplicated here — it already has its own
+# synchronous path (the typed contact-evidence event, `contact_evidence.py`).
+_AGE_RE = re.compile(r"(?<![\d.,])([1-9]\d?)\s*(?:tuổi|tuoi)\b", re.IGNORECASE)
+_BIRTH_YEAR_RE = re.compile(
+    r"(?:\bsn\b|sinh(?:\s*năm)?|năm\s*sinh|born(?:\s*năm)?)\s*"
+    r"(?:năm\s*)?((?:19|20)\d{2})\b",
+    re.IGNORECASE,
+)
+# A bare number is not a salary: the message has to talk about salary first, or
+# "12 triệu" could be anything at all. Precision beats recall on a field a
+# recruiter dials against. Each pattern accepts the ASCII spelling candidates
+# actually type ("trieu", "tuoi" lives in the age pattern above).
+_SALARY_HINT_RE = re.compile(
+    r"lương|luong|thu\s*nhập|thu\s*nhap|salary", re.IGNORECASE
+)
+_SALARY_RANGE_RE = re.compile(
+    r"(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:-|–|đến|den)\s*"
+    r"(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:triệu|trieu|tr|million)\b",
+    re.IGNORECASE,
+)
+# "12tr5" / "12triệu5" is 12.5 triệu — read it as such instead of truncating.
+_SALARY_SPLIT_DECIMAL_RE = re.compile(
+    r"(\d{1,3})\s*(?:triệu|trieu|tr)\s*(\d)\b", re.IGNORECASE
+)
+_SALARY_SINGLE_RE = re.compile(
+    r"(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:triệu|trieu|tr|million)\b", re.IGNORECASE
+)
+_SALARY_VND_RE = re.compile(r"\b(\d{1,3}(?:\.\d{3}){2})\b")
+
+
+def deterministic_lead_details(text: str | None) -> dict[str, object]:
+    """Closed-shape fields stated in one message: age, birth year, salary.
+
+    Returns only what the text actually contains (``{}`` = nothing to write);
+    every value still passes through :func:`normalize_lead` before it reaches
+    the database, so the age/year bounds and coercion stay in one place.
+    """
+    body = text or ""
+    details: dict[str, object] = {}
+
+    age = _AGE_RE.search(body)
+    if age:
+        details["age"] = int(age.group(1))
+
+    year = _BIRTH_YEAR_RE.search(body)
+    if year:
+        details["birth_year"] = int(year.group(1))
+
+    if _SALARY_HINT_RE.search(body):
+        salary_range = _SALARY_RANGE_RE.search(body)
+        if salary_range:
+            details["expected_salary"] = (
+                f"{salary_range.group(1)}-{salary_range.group(2)} triệu"
+            )
+        else:
+            split = _SALARY_SPLIT_DECIMAL_RE.search(body)
+            if split:
+                details["expected_salary"] = f"{split.group(1)}.{split.group(2)} triệu"
+            else:
+                single = _SALARY_SINGLE_RE.search(body)
+                if single:
+                    details["expected_salary"] = f"{single.group(1)} triệu"
+                else:
+                    vnd = _SALARY_VND_RE.search(body)
+                    if vnd:
+                        details["expected_salary"] = vnd.group(1)
+    return details
+
+
 # The address-form mapping lives in the neutral shared layer so the graph runner
 # can normalize deterministic replies without importing this services module.
 from app.shared.domain.addressing import (  # noqa: E402,F401  (re-export)

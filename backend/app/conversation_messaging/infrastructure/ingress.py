@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.exc import IntegrityError
 
 from app.conversation_messaging.application.ingress import (
@@ -10,6 +12,8 @@ from app.conversation_messaging.application.ingress import (
 )
 
 _MESSAGE_PROVIDER_ID_UNIQUE_CONSTRAINT = "uq_messages_conv_provider_message"
+
+logger = logging.getLogger(__name__)
 
 
 def _is_duplicate_message_integrity_error(error: IntegrityError) -> bool:
@@ -40,6 +44,7 @@ class SqlAlchemyInboundMessageAdapter:
         )
 
     async def persist(self, command: InboundTextCommand) -> PersistedInboundMessage | None:
+        from app.services.candidate_extraction import CandidateExtractionService
         from app.services.conversation import ConversationService
         from app.services.lead.interest import resolve_project_from_attribution
 
@@ -88,6 +93,24 @@ class SqlAlchemyInboundMessageAdapter:
             # A racing delivery won the exact durable message-id uniqueness
             # constraint after the transient claim.
             return None
+        # Deterministic candidate details (name / age / salary) land on the
+        # inbound path, before the deferred LLM job — a Messenger thread must
+        # not depend on the queue for fields a regex can read. Best-effort like
+        # the Zalo side: the inbound above is already durable, so a profile
+        # write failure is logged, rolled back, and never fails the webhook.
+        try:
+            await CandidateExtractionService.persist_explicit_details(
+                self._db,
+                identity.external_id,
+                command.text,
+                conversation=conversation,
+            )
+        except Exception as exc:  # noqa: BLE001 — the message row outranks the profile
+            await self._db.rollback()
+            logger.error(
+                "deterministic candidate details persistence failed error_type=%s",
+                type(exc).__name__,
+            )
         return PersistedInboundMessage(
             conversation_id=str(conversation.id),
             message_id=message.id,

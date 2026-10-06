@@ -176,7 +176,7 @@ async def test_denied_or_questioned_name_never_overwrites_confirmed_identity(mon
     upsert = AsyncMock()
     monkeypatch.setattr(CandidateExtractionService, "upsert_lead", upsert)
     assert extract_self_reported_name(text, prev_bot_message="Họ tên đầy đủ của anh/chị là gì?") is None
-    assert await CandidateExtractionService.persist_explicit_name(
+    assert await CandidateExtractionService.persist_explicit_details(
         object(), "chat-1", text, prev_bot_message="Họ tên đầy đủ của anh/chị là gì?",
     ) is None
     upsert.assert_not_awaited()

@@ -664,6 +664,30 @@ they are recorded in `lead.notes` under its own strict evidence rule
 ("đang tìm hiểu" ≠ "muốn ứng tuyển") and are deliberately not merged into
 `project_interest`.
 
+### 2.6 Lead details extraction — two tiers
+
+A candidate's details are captured by two deliberately different mechanisms,
+split by whether the field's vocabulary is **closed** (a pattern wins) or
+**open** (only the model can read it):
+
+| Tier | Fields | Where / when |
+|---|---|---|
+| **Deterministic** (`services/lead/normalizers.py::deterministic_lead_details` + the explicit-name resolver) | name (explicit template, plus a bare reply to the bot's name request), age (`25 tuổi`/`25 tuoi`), birth year (`sn 1998` / `sinh 2001`), expected salary (`12 triệu`, `12-14 triệu`, `12tr5`, `12.000.000` — only when the message also says `lương`/`thu nhập`/`salary`), phone (the typed contact-evidence path, `services/lead/contact_evidence.py`) | **on the inbound path**, one upsert inside `CandidateExtractionService.persist_explicit_details` — Zalo via `services/webhook.py`, Messenger via `conversation_messaging/infrastructure/ingress.py`. No queue, no model, no gate. |
+| **LLM** (deferred job on `persistence_low`) | `desired_job`, `living_area`, `address`, `gender`, `years_experience`, notes, contact intent — plus refinement of anything tier 1 found | after the reply is sent (`graph/dispatch.py::_record_dispatched_outcome`); gated by the greeting gate, the conversation mode, and the human-review rule |
+
+Why the split: a regex on an open vocabulary produces wrong values a
+recruiter acts on (a name or a district guessed from prose), while a closed
+shape produces wrong values only when the message itself is ambiguous — so
+salary is keyword-gated and the age/year bounds stay in **one** place
+(`normalize_lead`'s 15..80 / 1900..current contract).
+
+Reliability of the deferred tier (`workers/persistence_worker.py`): a failed
+extraction job now **re-raises** after logging, so RQ retries it three times
+(15 s / 60 s / 300 s) and keeps it in the failed-job registry — the previous
+handler swallowed every exception and reported `Job OK`, which is how a model
+or queue failure used to drop a candidate's details silently. An enqueue
+failure is logged at ERROR with the chat id (the turn itself still succeeds).
+
 ### Durable outbound delivery states
 
 The message delivery state and its one-to-one outbox command advance together:

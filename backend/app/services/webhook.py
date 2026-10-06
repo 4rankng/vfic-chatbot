@@ -248,7 +248,7 @@ class ZaloWebhookService:
                     except Exception:
                         prev_bot_message = None
 
-                await CandidateExtractionService.persist_explicit_name(
+                await CandidateExtractionService.persist_explicit_details(
                     db,
                     norm.zalo_chat_id,
                     norm.user_text,
