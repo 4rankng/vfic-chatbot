@@ -5018,3 +5018,292 @@ def test_outbox_payload_attaches_media_for_tingting_self_checkin_caption():
         "u", TINGTING_SELF_CHECKIN_REPLY, "m", account_key="other-oa"
     )
     assert "media_url" not in other_account
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_intent_forces_the_guide_caption_on_the_support_oa(monkeypatch):
+    """Jev's self_checkin judgment (not a phrase list) picks the guide caption.
+
+    Operator rule (2026-10-06): the old prompt rule listed example phrases and
+    "đăng ký tự chấm công" matched none of them, so the turn fell to the
+    redirect and the home-screen image never shipped. The lane now returns the
+    approved caption directly off the Jev flag — no generation at all — and the
+    send layer attaches the image to that exact caption on this account.
+    """
+    from app.graph.runner import _agent_turn
+    from app.graph.tingting_guide import TINGTING_SELF_CHECKIN_REPLY
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "model reply"
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="đăng ký tự chấm công"),
+        deps,
+        "đăng ký tự chấm công",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="general", intent_confidence=0.2, self_checkin=True),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=True,
+        tingting_support_account=True,
+    )
+
+    assert reply == TINGTING_SELF_CHECKIN_REPLY
+    assert "Tư vấn ngay" in reply
+    assert captured == {}  # fixed caption: no generation at all
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_flag_is_inert_off_the_support_oa(monkeypatch):
+    """The flag must not fire where the media rule cannot (identity gate).
+
+    Off the support account there is no guide image to attach, so the turn
+    runs the normal agent path instead of forcing TingTing-specific wording.
+    """
+    from app.graph.runner import _agent_turn
+    from app.graph.tingting_guide import TINGTING_SELF_CHECKIN_REPLY
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "model reply"
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "RECRUITMENT-PERSONA-MARKER", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=False),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="chấm công thế nào"),
+        deps,
+        "chấm công thế nào",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="general", intent_confidence=0.4, self_checkin=True),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=False,
+        tingting_support_account=False,
+    )
+
+    assert reply != TINGTING_SELF_CHECKIN_REPLY
+    assert reply == "model reply"
+    assert captured != {}  # the agent ran its normal path
+
+
+@pytest.mark.asyncio
+async def test_login_trouble_outranks_the_self_checkin_flag(monkeypatch):
+    """A login problem mid-message keeps the reset flow — the image is secondary.
+
+    Both judgments can be true ("quên mật khẩu, không chấm công được"); the
+    employee_support intent must win so the reset tools stay bound.
+    """
+    from app.graph.runner import _agent_turn
+    from app.graph.tingting_guide import TINGTING_SELF_CHECKIN_REPLY
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "reset flow reply"
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="quên mật khẩu, không chấm công được",
+        ),
+        deps,
+        "quên mật khẩu, không chấm công được",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(
+            intent="employee_support",
+            intent_confidence=0.92,
+            login_problem=True,
+            self_checkin=True,
+        ),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=True,
+        tingting_support_account=True,
+    )
+
+    assert reply != TINGTING_SELF_CHECKIN_REPLY
+    assert reply == "reset flow reply"
+    assert captured != {}  # the reset flow ran, not the fixed caption
+
+
+@pytest.mark.asyncio
+async def test_wage_wait_intent_forces_the_waiting_line_before_the_hotline(monkeypatch):
+    """One payday intent, one answer: the waiting line beats the hotline branch.
+
+    Operator rule (2026-10-06): "có lương chưa" used to be short-circuited to
+    ``tingting_hotline_reply`` by a confident faq_detail reading — the lane
+    answered WITHOUT the model ever running — while "ứng lương được chưa"
+    fell through to the model and matched the payday prompt rule. The Jev
+    ``wage_wait`` flag now forces the approved waiting line before that
+    clarify/hotline branch, so both phrasings get the same answer.
+    """
+    from app.graph.runner import _agent_turn
+    from app.graph.tingting_guide import TINGTING_WAGE_WAIT_REPLY
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "model reply"
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    # faq_detail at 0.95 is exactly the reading that used to hit the hotline
+    # branch (not in _SUPPORT_CLARIFY_INTENTS, above the route floor).
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="có lương chưa"),
+        deps,
+        "có lương chưa",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="faq_detail", intent_confidence=0.95, wage_wait=True),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=True,
+        tingting_support_account=True,
+    )
+
+    assert reply == TINGTING_WAGE_WAIT_REPLY
+    assert "chờ VFIC gửi dữ liệu tiền công" in reply
+    assert captured == {}  # no generation, no hotline handoff
+
+
+@pytest.mark.asyncio
+async def test_wage_wait_flag_keeps_login_trouble_on_the_reset_flow(monkeypatch):
+    """Login trouble outranks the payday flag — same precedence as self_checkin."""
+    from app.graph.runner import _agent_turn
+    from app.graph.tingting_guide import TINGTING_WAGE_WAIT_REPLY
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "reset flow reply"
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _Lead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _Lead()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="quên mật khẩu, lương về chưa cho em biết",
+        ),
+        deps,
+        "quên mật khẩu, lương về chưa cho em biết",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(
+            intent="employee_support",
+            intent_confidence=0.9,
+            login_problem=True,
+            wage_wait=True,
+        ),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=True,
+        tingting_support_account=True,
+    )
+
+    assert reply != TINGTING_WAGE_WAIT_REPLY
+    assert reply == "reset flow reply"
+    assert captured != {}

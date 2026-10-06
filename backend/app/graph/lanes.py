@@ -51,6 +51,8 @@ from app.graph.runtime_policy import TINGTING_TOOL_NAMES
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.tingting_guide import (
     TINGTING_RESET_REDIRECT_REPLY,
+    TINGTING_SELF_CHECKIN_REPLY,
+    TINGTING_WAGE_WAIT_REPLY,
     tingting_hotline_reply,
     tingting_support_system_prompt,
 )
@@ -445,6 +447,37 @@ async def _agent_turn(
         # running a flow this channel cannot serve (the guide and the reset tools
         # are not bound here either).
         return TINGTING_RESET_REDIRECT_REPLY
+    if (
+        tingting_support_account
+        and decisions.self_checkin
+        and not decisions.pleasantry
+        and route.intent != "employee_support"
+    ):
+        # Operator rule (2026-10-06): Jev classifies this turn's intent BY
+        # MEANING — asking how to / wanting to / registering for tự chấm công
+        # on the app — and the approved caption IS the reply; the send layer
+        # attaches the home-screen guide image to it (media keys on the exact
+        # caption + account, so a sweep re-dispatch rebuilds the same payload).
+        # This replaced the old example-phrase prompt rule as the TRIGGER,
+        # which missed phrasings like "đăng ký tự chấm công" and fell to the
+        # redirect. Login trouble (employee_support) and closers (pleasantry)
+        # outrank it; off this account the flag never fires.
+        return TINGTING_SELF_CHECKIN_REPLY
+    if (
+        tingting_support_account
+        and decisions.wage_wait
+        and not decisions.pleasantry
+        and route.intent != "employee_support"
+    ):
+        # Operator rule (2026-10-06: same intent, same answer): Jev classifies
+        # a payday-status question BY MEANING and the approved waiting line IS
+        # the reply. This branch sits BEFORE the clarify/hotline branch below:
+        # a confident faq_detail/out_of_scope reading used to return the
+        # hotline for "có lương chưa" without ever running the model, while
+        # "ứng lương được chưa" fell to the model and matched the payday prompt
+        # rule — one intent, two answers. Login trouble and closers outrank it;
+        # off this account the flag never fires.
+        return TINGTING_WAGE_WAIT_REPLY
     if tingting_reset_allowed and route.intent != "employee_support":
         # This IS the support OA. It serves the reset flow and no recruitment
         # knowledge, but "the employee wants help here and has not said what"

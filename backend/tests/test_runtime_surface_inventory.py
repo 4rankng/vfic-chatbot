@@ -55,7 +55,7 @@ EXPECTED_ROUTE_COUNTS = {
     "jobs": 7,
     "knowledge": 14,  # -7 the legacy KB-version lane; -4 the Google Sheet external-source routes (0067)
     "knowledge_bases": 11,
-    "leads": 15,
+    "leads": 16,  # +1 GET /{lead_id}/project-interests — project interest (2026-10-06)
     "main": 3,
     "notifications": 4,  # GET vapid-public-key, POST/DELETE subscriptions, POST test
     "performance": 2,
@@ -79,7 +79,9 @@ EXPECTED_ROUTE_COUNTS = {
 # server-side (services/push), so no route carries them. The key handler reads
 # `get_vapid_public_key` (renamed from `vapid_public_key` when the router became
 # transport-only: config/ORM access moved into the service).
-EXPECTED_ROUTE_INVENTORY_SHA256 = "a6b7b4505afd487e41285cfb1b4b0816196ca58e0e5f52f0d4df91e6428c7c11"
+# 2026-10-06: +1 leads route (GET /{lead_id}/project-interests,
+# capability.recruitment); digest recomputed from the post-change scan.
+EXPECTED_ROUTE_INVENTORY_SHA256 = "e014bfb24322264e7361cef327be7e6439ca4e7c5b8c09e125150c83ceae8c01"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -346,7 +348,14 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # -1 provider_boundary (the proactive send). Digest recomputed.
 # 2026-10-05: +1 provider_boundary (the chat_status preparation pulse above);
 # digest recomputed from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "a6e0a0e3af2d45cbc126194ef69f995f25f77d88d95c86ee53e5c984d3dfb7d2"
+# 2026-10-06: the two new Jev answer parses in JevDecisionClient.decide_turn
+# (`self_checkin`, `wage_wait` — a provider-transport scope, so its dict `.get`
+# reads count) moved that site's `get` 21→23. No site was added, removed, or
+# moved, so EXPECTED_BROAD_BOUNDARY_COUNTS is unchanged; the digest was
+# recomputed from the post-change scan and the prior digest reconstructs
+# exactly from that single count change (verified by re-hashing the scan with
+# the count reverted to 21), so nothing else moved.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "10b180ed16e05077640fe2111b4c52b570fe267bac38551ebb968c9f2eda24af"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

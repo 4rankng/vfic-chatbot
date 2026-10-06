@@ -124,6 +124,24 @@ class TurnDecisions:
     # other message Jev labelled employee_support without a login problem is
     # demoted by the router (operator bug 2026-10-03: unprompted password talk).
     login_problem: bool = False
+    # True when Jev reads this turn's message as a self check-in how-to on the
+    # TingTing app (asking how to tự chấm công, wanting to, or registering for
+    # it — judged by meaning, not by example phrases). On the support account
+    # this flag IS the trigger: the lane returns the fixed approved caption and
+    # the send layer attaches the home-screen guide image to it (operator rule
+    # 2026-10-06). Login trouble outranks it (intent ``employee_support``), and
+    # off the support account the flag never fires.
+    self_checkin: bool = False
+    # True when Jev reads this turn's message as a payday-status question —
+    # asking whether/when salary or wages have arrived ("có lương chưa",
+    # "ứng lương được chưa"), judged by meaning, not by example phrases. On the
+    # support account this flag IS the trigger: the lane returns the approved
+    # waiting-for-VFIC line before the clarify/hotline branch (operator rule
+    # 2026-10-06: same intent, same answer — a confident faq_detail/out_of_scope
+    # reading used to short-circuit one phrasing to the hotline while the
+    # model's payday prompt rule answered another). Login trouble outranks it
+    # (intent ``employee_support``), and off the support account it never fires.
+    wage_wait: bool = False
     model: str = ""
     input_tokens: int = 0
     output_tokens: int = 0

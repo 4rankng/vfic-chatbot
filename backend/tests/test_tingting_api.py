@@ -505,18 +505,22 @@ def test_resolved_conversation_gets_the_closer_not_another_pitch() -> None:
 
 
 def test_payday_question_gets_the_wage_wait_reply_not_the_handoff() -> None:
-    """Operator rule (2026-10-05): "Hôm nay có lương không?" gets the waiting line.
+    """Operator rule (2026-10-05/06): a payday-status question gets the waiting line.
 
     Payday questions used to fall into the out-of-scope catch-all and be
     answered with the hotline escalation. The operator approved one fixed
     waiting-for-VFIC-data reply instead: both prompt sections must quote it
-    verbatim, keep the trigger phrasings, and the payday rule sits before the
-    catch-all so the question is answered in-chat, not handed off.
+    verbatim. The rule classifies the intent (payday status), not example
+    phrasings — Jev's ``wage_wait`` judgment is the primary trigger and this
+    is its degraded fallback; "ứng lương được chưa" and "có lương chưa" are
+    one intent and must get one answer. The rule sits before the catch-all so
+    the question is answered in-chat, not handed off.
     """
     for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
         assert TINGTING_WAGE_WAIT_REPLY in prompt
-        assert "Hôm nay có lương không" in prompt
-        assert "lương đã về chưa" in prompt
+        assert "hỏi tình trạng nhận tiền" in prompt
+        assert "ứng lương đã về hay chưa" in prompt
+        assert "phán theo ý định, không theo từ khóa" in prompt
         assert "KHÔNG trả lời dòng hotline" in prompt
         assert "không hẹn ai sẽ nhắn lại" in prompt
     # the escalation reply is reserved for the can't-help cases: a fixed payday
@@ -543,16 +547,20 @@ def test_payday_question_gets_the_wage_wait_reply_not_the_handoff() -> None:
 
 
 def test_self_checkin_question_gets_the_fixed_media_caption() -> None:
-    """Operator rule (2026-10-05): "Tự chấm công như thế nào?" gets caption + image.
+    """Operator rules (2026-10-05/06): a self-check-in intent gets caption + image.
 
     Both prompt sections quote the fixed caption verbatim; the send layer
     attaches the repo-hosted app-home screenshot when a TingTing OA reply
-    matches it exactly, so the prompt owns only the words. Like the payday
-    rule, the media rule sits before the out-of-scope catch-all.
+    matches it exactly, so the prompt owns only the words. The rule classifies
+    the intent, not example phrasings — Jev's ``self_checkin`` judgment is the
+    primary trigger (the old phrase list missed "đăng ký tự chấm công") and
+    this is its degraded fallback. Like the payday rule, the media rule sits
+    before the out-of-scope catch-all.
     """
     for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
         assert TINGTING_SELF_CHECKIN_REPLY in prompt
-        assert "tự chấm công như thế nào" in prompt
+        assert "TỰ CHẤM CÔNG trên ứng dụng TingTing" in prompt
+        assert "không theo từ khóa" in prompt
         assert "ảnh màn hình chính" in prompt
         assert "KHÔNG trả lời dòng hotline" in prompt
     # the guide image is repo-hosted at the production frontend root — the

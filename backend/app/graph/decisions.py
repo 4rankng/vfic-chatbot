@@ -262,6 +262,43 @@ def build_turn_questions(
             ),
             "criteria": _NOUL_CRITERIA,
         },
+        # The self-check-in guide gate (operator rule 2026-10-06): judged
+        # independently of the intent choice, by MEANING — the previous
+        # trigger was a prompt list of example phrases, and "đăng ký tự chấm
+        # công" matched none of them, so the turn fell to the redirect and the
+        # guide image never shipped. Conservative: login trouble, payday and
+        # job questions all answer False (their own lanes own those turns).
+        "self_checkin": {
+            "type": "noul",
+            "instructions": (
+                "Ý định chính của người gửi trong `message` (kèm ngữ cảnh `recent`) "
+                "có phải là HỎI CÁCH HOẶC MUỐN TỰ CHẤM CÔNG trên ứng dụng TingTing "
+                "không — ví dụ hỏi cách tự chấm công, muốn tự chấm công, hoặc đăng "
+                "ký tự chấm công? Phán theo Ý ĐỊNH, không theo từ khóa. Hỏi cách "
+                "đăng nhập/quên mật khẩu, hỏi khi nào có lương, hoặc hỏi việc làm "
+                "thì không phải — trả về sai."
+            ),
+            "criteria": _NOUL_CRITERIA,
+        },
+        # The payday-status gate (operator rule 2026-10-06: same intent, same
+        # answer): "ứng lương được chưa" and "có lương chưa" are one question,
+        # but the lane used to answer them differently — a confident
+        # faq_detail/out_of_scope reading short-circuited "có lương chưa" to
+        # the hotline BEFORE the model's payday prompt rule could run, while a
+        # low-confidence reading let the model answer with the waiting line.
+        # Judged by meaning; login trouble and app how-tos answer False.
+        "wage_wait": {
+            "type": "noul",
+            "instructions": (
+                "Ý định chính của người gửi trong `message` (kèm ngữ cảnh `recent`) "
+                "có phải là HỎI TÌNH TRẠNG NHẬN TIỀN — lương/ứng lương đã về hay "
+                "chưa, khi nào có lương (ví dụ 'có lương chưa', 'ứng lương được "
+                "chưa')? Phán theo Ý ĐỊNH, không theo từ khóa. Hỏi cách tự chấm "
+                "công, cách đăng nhập, hoặc hỏi việc làm/lương khi xin việc thì "
+                "không phải — trả về sai."
+            ),
+            "criteria": _NOUL_CRITERIA,
+        },
     }
     if include_profile_name:
         questions["profile_name_is_name"] = {
@@ -391,12 +428,16 @@ class JevDecisionClient:
             job_seeking = "unknown"
 
         login_problem = self._noul(answers.get("login_problem"))
+        self_checkin = self._noul(answers.get("self_checkin"))
+        wage_wait = self._noul(answers.get("wage_wait"))
 
         return TurnDecisions(
             intent=intent,
             intent_confidence=self._confidence(answers.get("intent")),
             job_seeking=job_seeking,
             login_problem=login_problem,
+            self_checkin=self_checkin,
+            wage_wait=wage_wait,
             vacancy_listing=self._noul(answers.get("vacancy_listing")),
             pleasantry=self._noul(answers.get("pleasantry")),
             gender=gender,

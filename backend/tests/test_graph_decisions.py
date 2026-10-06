@@ -77,6 +77,8 @@ async def test_questions_match_contract() -> None:
         "recent_vacancy",
         "recent_account_support",
         "login_problem",
+        "self_checkin",
+        "wage_wait",
         "contact_info",
         "gender",
         "gender_stated",
@@ -89,6 +91,8 @@ async def test_questions_match_contract() -> None:
         "recent_vacancy",
         "recent_account_support",
         "login_problem",
+        "self_checkin",
+        "wage_wait",
         "contact_info",
     }
     # The profile-name question is opt-in: only a non-blank profile_name asks it.
@@ -102,6 +106,8 @@ async def test_questions_match_contract() -> None:
         "recent_vacancy",
         "recent_account_support",
         "login_problem",
+        "self_checkin",
+        "wage_wait",
         "contact_info",
         "gender",
         "gender_stated",
@@ -403,6 +409,8 @@ async def test_client_parses_full_fan_out() -> None:
     assert decisions.recent_vacancy is True
     assert decisions.job_seeking == "unknown"  # absent answer never gates
     assert decisions.login_problem is False  # absent answer keeps the flow closed
+    assert decisions.self_checkin is False  # absent answer never forces the guide caption
+    assert decisions.wage_wait is False  # absent answer never forces the waiting line
     assert decisions.degraded is False
     assert decisions.model == _MODEL
     assert decisions.input_tokens == 650
@@ -415,6 +423,74 @@ async def test_client_parses_login_problem_answer() -> None:
     )
     decisions = await client.decide_turn(user_text="x", recent_messages=[])
     assert decisions.login_problem is True
+
+
+async def test_client_parses_self_checkin_answer() -> None:
+    """The guide-image flag parses from its own noul answer.
+
+    Regression for the keyword trigger (operator rule 2026-10-06): the old
+    prompt phrase list missed "đăng ký tự chấm công", so the turn fell to the
+    redirect and the home-screen image never shipped. The flag now classifies
+    by meaning through its own question, independent of the intent choice.
+    """
+    client = _client()
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(self_checkin=_noul(0.91)))
+    )
+    decisions = await client.decide_turn(user_text="đăng ký tự chấm công", recent_messages=[])
+    assert decisions.self_checkin is True
+
+
+async def test_client_parses_wage_wait_answer() -> None:
+    """The payday-status flag parses from its own noul answer.
+
+    Regression for the split-brain payday answers (operator rule 2026-10-06):
+    "ứng lương được chưa" reached the model and matched the payday prompt rule
+    while "có lương chưa" was short-circuited to the hotline by a confident
+    non-support intent — one intent, two answers. The lane now forces the
+    waiting line off this flag before the clarify/hotline branch.
+    """
+    client = _client()
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(wage_wait=_noul(0.95)))
+    )
+    decisions = await client.decide_turn(user_text="có lương chưa", recent_messages=[])
+    assert decisions.wage_wait is True
+
+
+async def test_wage_wait_criteria_judges_meaning_not_phrases() -> None:
+    """Payday status is one intent judged by meaning — both observed phrasings named.
+
+    "ứng lương được chưa" and "có lương chưa" must both classify (they got
+    different answers in prod), while app how-tos, login trouble and job
+    salary questions stay out — their own lanes own those turns.
+    """
+    question = build_turn_questions()["wage_wait"]
+    instructions = question["instructions"]
+    assert "Ý ĐỊNH" in instructions
+    assert "không theo từ khóa" in instructions
+    assert "có lương chưa" in instructions  # the short-circuited miss, named
+    assert "ứng lương được chưa" in instructions  # the answered phrasing, named
+    assert "hỏi việc làm/lương khi xin việc" in instructions  # job salary is out
+    assert "trả về sai" in instructions
+    assert question["criteria"] == {"true": "Có", "false": "Không"}
+
+
+async def test_self_checkin_criteria_judges_meaning_not_phrases() -> None:
+    """The question must classify intent, not match the old example phrases.
+
+    The observed miss ("đăng ký tự chấm công") shares none of the removed
+    phrase list's wording beyond "tự chấm công" being absent entirely, and
+    login/payday/job questions must stay out — their lanes own those turns.
+    """
+    question = build_turn_questions()["self_checkin"]
+    instructions = question["instructions"]
+    assert "Ý ĐỊNH" in instructions
+    assert "không theo từ khóa" in instructions
+    assert "đăng ký tự chấm công" in instructions  # the observed miss, named
+    assert "đăng nhập/quên mật khẩu" in instructions  # login lane outranks
+    assert "khi nào có lương" in instructions  # payday lane outranks
+    assert question["criteria"] == {"true": "Có", "false": "Không"}
 
 
 async def test_client_parses_job_seeking_answer() -> None:
