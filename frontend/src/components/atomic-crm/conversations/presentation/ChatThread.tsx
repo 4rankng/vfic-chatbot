@@ -21,6 +21,7 @@ import {
 } from "../application/conversation-operations";
 import { isUnseenWorthyArrival } from "../domain/conversation-thread";
 import { groupConversationMessages } from "../domain/conversation-thread-rows";
+import { replyFailureMessageKey } from "../domain/reply-failure-messages";
 import { useConversationActions } from "./use-conversation-actions";
 import { useConversationRealtime } from "./use-conversation-realtime";
 import { useConversationOperations } from "./use-conversation-operations";
@@ -433,6 +434,21 @@ export const ChatThread = ({
     [handleLoadMore],
   );
 
+  // One failure toast for both write paths. The channel-naming statuses pick
+  // their copy per delivery channel (Messenger ≠ Zalo); the rest stay shared.
+  const notifyReplyFailure = useCallback(
+    (err: unknown) => {
+      const status = isHumanReplyFailure(err) ? err.status : "error";
+      notify(
+        translate(
+          replyFailureMessageKey(status, conversation?.channel_identity),
+        ),
+        { type: "error" },
+      );
+    },
+    [conversation?.channel_identity, notify, translate],
+  );
+
   // --- Send (optimistic) ---
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -452,10 +468,7 @@ export const ChatThread = ({
     try {
       await sendConversationReply(operations, conversationId, sentText);
     } catch (err: unknown) {
-      const status = isHumanReplyFailure(err) ? err.status : "error";
-      notify(translate(`resources.conversations.reply.${status}`), {
-        type: "error",
-      });
+      notifyReplyFailure(err);
       if (tempId) markOptimisticFailed(tempId);
       // A 502 means the API persisted a failed delivery command. Keep its
       // bubble as the single retry target instead of placing duplicate text in
@@ -476,17 +489,14 @@ export const ChatThread = ({
       try {
         await retryConversationReply(operations, conversationId, messageId);
       } catch (err: unknown) {
-        const status = isHumanReplyFailure(err) ? err.status : "error";
-        notify(translate(`resources.conversations.reply.${status}`), {
-          type: "error",
-        });
+        notifyReplyFailure(err);
       } finally {
         setRetryingMessageId((current) =>
           current === messageId ? null : current,
         );
       }
     },
-    [conversationId, notify, operations, retryingMessageId, translate],
+    [conversationId, notifyReplyFailure, operations, retryingMessageId],
   );
   // Stable identity: the memoized bubble compares `onRetry`, so a callback
   // that changed with the in-flight retry id would re-render every message in

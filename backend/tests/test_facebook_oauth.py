@@ -1577,3 +1577,73 @@ async def test_status_response_masks_page_id_and_carries_no_token(monkeypatch):
     dumped_json = response.model_dump_json()
     assert "token" not in dumped_json.lower()
     assert "secret" not in dumped_json.lower()
+
+
+# ─── Graph error detail (rejection diagnosability) ──────────────────────────
+#
+# Production bug: ``send_message`` raised with the Meta ``code`` only, and the
+# adapter then dropped even that. Every refusal collapsed to one opaque string,
+# so a per-recipient rejection could not be told apart from a dead credential.
+
+
+def test_sanitize_graph_error_detail_redacts_recipient_ids():
+    """Meta echoes the PSID in object errors; it must not reach stored text."""
+    from app.channels.providers.facebook_oauth import _sanitize_graph_error_detail
+
+    detail = _sanitize_graph_error_detail(
+        "Unsupported get request. Object with ID '28606960018965816' does not exist"
+    )
+    assert detail is not None
+    assert "28606960018965816" not in detail
+    assert "[id]" in detail
+
+
+def test_sanitize_graph_error_detail_bounds_length():
+    """Provider text is unbounded; storage and logs need a hard ceiling."""
+    from app.channels.providers.facebook_oauth import _sanitize_graph_error_detail
+
+    detail = _sanitize_graph_error_detail("x" * 5000)
+    assert detail is not None
+    assert len(detail) <= 203
+
+
+@pytest.mark.parametrize("value", ["", "   ", None])
+def test_sanitize_graph_error_detail_empty_is_none(value):
+    from app.channels.providers.facebook_oauth import _sanitize_graph_error_detail
+
+    assert _sanitize_graph_error_detail(value) is None
+
+
+async def test_send_message_carries_code_subcode_and_detail(monkeypatch):
+    """A rejection must survive the transport boundary with its reason intact."""
+    from app.channels.providers import facebook_oauth as fo
+
+    monkeypatch.setattr(
+        fo,
+        "_bounded_post",
+        AsyncMock(
+            return_value={
+                "error": {
+                    "code": 100,
+                    "error_subcode": 2018001,
+                    "message": "(#100) No matching user found for 28606960018965816",
+                    "type": "GraphMethodException",
+                }
+            }
+        ),
+    )
+    config = SimpleNamespace(
+        graph_api_base="https://graph.facebook.com",
+        graph_api_version="v25.0",
+        page_access_token="EAAB-token",
+    )
+    with pytest.raises(fo.FacebookOAuthError) as excinfo:
+        await fo.send_message(config, recipient_psid="28606960018965816", text="hi")
+
+    exc = excinfo.value
+    assert exc.code == 100
+    assert exc.subcode == 2018001
+    assert exc.detail is not None
+    assert "No matching user found" in exc.detail
+    # The recipient id is redacted even though Meta put it in the message.
+    assert "28606960018965816" not in exc.detail

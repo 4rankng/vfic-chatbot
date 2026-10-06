@@ -18,6 +18,7 @@ and dispatch services must NOT import it — they resolve through the
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode
@@ -110,11 +111,61 @@ class FacebookOAuthError(RuntimeError):
     error ``code`` when the Graph API returned a structured error envelope so
     callers can classify (e.g. code 190 = auth-related → auth_revoked) without
     brittle substring matching on the message text.
+
+    ``subcode`` narrows a coarse code (code 100 is Meta's catch-all), and
+    ``detail`` is the sanitized provider message. Both exist because dropping
+    them made every send rejection indistinguishable: three failures on one
+    candidate were persisted only as "messenger send rejected" with the code
+    discarded one layer down, so nothing in the database or the logs could say
+    why Meta refused. ``detail`` is sanitized (no ids, bounded length) and
+    never carries the token or a request body.
     """
 
-    def __init__(self, message: str, *, code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: int | None = None,
+        subcode: int | None = None,
+        detail: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.subcode = subcode
+        self.detail = detail
+
+
+def _sanitize_graph_error_detail(value: object) -> str | None:
+    """Reduce a Graph ``error.message`` to a safe, bounded, diagnosable phrase.
+
+    Meta error text is the only thing that distinguishes "this recipient is not
+    sendable" from "the token is dead" from "we sent a bad payload", so it has
+    to survive into ``messages.external_error`` and the logs — but it can carry
+    the recipient's PSID ("Object with ID '2860...' does not exist") and is
+    provider-controlled free text. This strips digit runs that could be an
+    id, collapses whitespace, and bounds the length, so the detail is useful
+    for triage without becoming a PII or unbounded-storage sink.
+
+    Returns ``None`` when nothing usable survives.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return None
+    # Any run of 6+ digits may be a recipient id (a PSID); PSIDs are 15-17
+    # digits today, so this cannot miss one without also eating timestamps.
+    text = re.sub(r"\d{6,}", "[id]", text)
+    text = " ".join(text.split())
+    if not text:
+        return None
+    return f"{text[:200]}..." if len(text) > 203 else text
+
+
+def _error_detail_from_envelope(data: dict) -> str | None:
+    """The sanitized ``error.message`` from a Graph error envelope, if present."""
+    error = data.get("error")
+    if not isinstance(error, dict):
+        return None
+    return _sanitize_graph_error_detail(error.get("message"))
 
 
 def _error_code_from_envelope(data: dict) -> int | None:
@@ -412,6 +463,8 @@ async def send_message(
         raise FacebookOAuthError(
             "messenger send rejected",
             code=_error_code_from_envelope(data),
+            subcode=_error_subcode_from_envelope(data),
+            detail=_error_detail_from_envelope(data),
         )
     return data
 

@@ -249,6 +249,7 @@ ChannelErrorClass = Literal[
     "provider_error",     # provider returned a definite failure envelope
     "policy_suppressed",  # provider policy (e.g. messaging window) blocked send
     "auth_revoked",       # credential revoked; fail closed, surface reconnect
+    "user_unreachable",   # this recipient can never be written to again
 ]
 
 

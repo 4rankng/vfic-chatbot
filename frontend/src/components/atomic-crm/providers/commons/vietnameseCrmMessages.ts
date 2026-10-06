@@ -33,6 +33,15 @@ export const vietnameseCrmMessages = {
         network: "Không kết nối được đến máy chủ. Vui lòng thử lại.",
         error: "Gửi tin nhắn thất bại.",
       },
+      // The channel-naming reply failures (`unavailable` / `provider`) re-keyed
+      // for Messenger conversations — a Messenger failure must not be reported
+      // as a Zalo one. Neutral statuses (conflict/network/…) stay in `reply`.
+      reply_messenger: {
+        unavailable:
+          "Không thể gửi tin qua Messenger lúc này. Hãy chờ ứng viên nhắn lại rồi thử lại.",
+        provider:
+          "Messenger chưa nhận được tin nhắn. Bạn có thể thử lại ngay trên bong bóng tin nhắn.",
+      },
     },
     projects: {
       name: "Dự án |||| Dự án",

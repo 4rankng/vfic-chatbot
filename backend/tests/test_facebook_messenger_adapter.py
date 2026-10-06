@@ -299,6 +299,121 @@ async def test_adapter_auth_revoked_classification(monkeypatch):
     assert result.error_class == "auth_revoked"
 
 
+async def test_adapter_send_rejection_keeps_structured_reason(monkeypatch):
+    """A rejected send must stay diagnosable after it leaves the adapter.
+
+    Production bug: three refusals on one candidate were persisted only as the
+    bare string "messenger send rejected". The Meta code was dropped one layer
+    down (the transport raised with ``code`` but the adapter discarded it), so
+    neither the database nor the logs could say why Meta refused — and the
+    incident could only be diagnosed by guessing.
+    """
+    from app.channels.providers.facebook_oauth import FacebookOAuthError
+
+    adapter = _adapter()
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_messenger.graph_send_message",
+        AsyncMock(
+            side_effect=FacebookOAuthError(
+                "messenger send rejected",
+                code=131047,
+                subcode=2018065,
+                detail="This message was not delivered to maintain engagement quality",
+            )
+        ),
+    )
+    result = await adapter.send_text(_cmd())
+    assert not result.ok
+    # Unrecognised recipient signals stay retryable rather than terminal.
+    assert result.error_class == "provider_error"
+    assert "code=131047" in result.error
+    assert "subcode=2018065" in result.error
+    assert "engagement quality" in result.error
+
+
+async def test_adapter_permanent_recipient_rejection_is_terminal(monkeypatch):
+    """Meta's permanent per-recipient refusal must map to user_unreachable.
+
+    Code 100 / subcode 2018001 ("No matching user found") is a property of the
+    PSID, not the request, so retrying can never succeed. ``user_unreachable``
+    is what makes the dispatcher stamp a terminal recipient marker instead of
+    re-paying for a full generation + send cycle on every turn.
+    """
+    from app.channels.providers.facebook_oauth import FacebookOAuthError
+
+    adapter = _adapter()
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_messenger.graph_send_message",
+        AsyncMock(
+            side_effect=FacebookOAuthError(
+                "messenger send rejected",
+                code=100,
+                subcode=2018001,
+                detail="No matching user found",
+            )
+        ),
+    )
+    result = await adapter.send_text(_cmd())
+    assert not result.ok
+    assert result.error_class == "user_unreachable"
+    assert "subcode=2018001" in result.error
+
+
+async def test_adapter_551_recipient_unavailable_is_terminal(monkeypatch):
+    """Code 551 "This person isn't available right now" is terminal.
+
+    Production proof (2026-10-06, PSID 28606960018965816): three sends failed
+    over 44 minutes — two bot turns and a recruiter retry — all with
+    code=551 subcode=1545041 while every other conversation delivered on the
+    same Page token. A blocked/deactivated recipient is a property of the
+    person, so the send is classified user_unreachable regardless of subcode.
+    """
+    from app.channels.providers.facebook_oauth import FacebookOAuthError
+
+    adapter = _adapter()
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_messenger.graph_send_message",
+        AsyncMock(
+            side_effect=FacebookOAuthError(
+                "messenger send rejected",
+                code=551,
+                subcode=1545041,
+                detail="This person isn't available right now.",
+            )
+        ),
+    )
+    result = await adapter.send_text(_cmd())
+    assert not result.ok
+    assert result.error_class == "user_unreachable"
+    assert "code=551" in result.error
+    assert "This person isn't available right now" in result.error
+
+
+async def test_adapter_rejection_detail_never_carries_recipient_id(monkeypatch):
+    """The persisted reason must not leak the PSID back out of Meta's text.
+
+    Meta echoes the object id in "Object with ID '28...' does not exist"; that
+    value lands in ``messages.external_error``, which is read by staff and by
+    reconcile sweeps, so it is redacted at the transport boundary.
+    """
+    from app.channels.providers.facebook_oauth import FacebookOAuthError
+
+    adapter = _adapter()
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_messenger.graph_send_message",
+        AsyncMock(
+            side_effect=FacebookOAuthError(
+                "messenger send rejected",
+                code=100,
+                subcode=2018001,
+                detail="Unsupported get request. Object with ID '[id]' does not exist",
+            )
+        ),
+    )
+    result = await adapter.send_text(_cmd())
+    assert "28606960018965816" not in (result.error or "")
+
+
 async def test_adapter_auth_revoked_not_triggered_by_message_text(monkeypatch):
     """A message containing 'token' + 'expired' but code != 190 must NOT
     classify as auth_revoked — the structured code is the authority, not the

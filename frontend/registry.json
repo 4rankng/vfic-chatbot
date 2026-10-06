@@ -704,6 +704,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/conversations/domain/reply-failure-messages.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/conversations/domain/conversation-thread.ts",
           "type": "registry:component"
         },

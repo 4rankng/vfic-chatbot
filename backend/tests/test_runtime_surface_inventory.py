@@ -208,7 +208,16 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # `send_` prefix), routed through the existing Zalo Bot adapter's
     # `sendChatAction`. No existing row moved: dropping exactly that row from
     # the post-change scan reproduces the prior digest byte-for-byte.
-    "provider_boundary": 100,
+    # 2026-10-06 (later): +1 — `_error_detail_from_envelope`, the new helper in
+    # facebook_oauth.py that lifts Meta's `error.message` out of a Graph
+    # rejection envelope (a provider-transport scope, so its two dict `.get`
+    # reads count: the envelope lookup and the message lookup). This is how the
+    # reason for a rejected send survives into `messages.external_error` instead
+    # of collapsing to "messenger send rejected". Verified: reverting both
+    # provider files to their pre-change state reproduces the prior digest
+    # byte-for-byte, so this single site is the whole difference. (The adapter's
+    # new logging is scan-neutral.)
+    "provider_boundary": 101,
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -355,7 +364,10 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # recomputed from the post-change scan and the prior digest reconstructs
 # exactly from that single count change (verified by re-hashing the scan with
 # the count reverted to 21), so nothing else moved.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "10b180ed16e05077640fe2111b4c52b570fe267bac38551ebb968c9f2eda24af"
+# 2026-10-06 (later): the new `_error_detail_from_envelope` transport helper
+# (+1 provider_boundary at the annotated count above), so the digest was
+# recomputed from the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "ff771697e2873ff34cb9587eb5465d2b3e3b095ac2da0bd1e417b16dfcfe35dd"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

@@ -107,12 +107,14 @@ const dataProviderMock = {
   retryHumanReply: vi.fn(() => Promise.resolve()),
 };
 
+const notifyMock = vi.hoisted(() => vi.fn());
+
 vi.mock("ra-core", () => ({
   // The component under test reads its labels from the Vietnamese catalog.
   useTranslate: () => testI18nProvider.translate,
   useDataProvider: () => dataProviderMock,
   useGetIdentity: () => ({ identity: { id: "recruiter-1" } }),
-  useNotify: vi.fn(),
+  useNotify: () => notifyMock,
 }));
 
 import { ChatThread } from "./presentation/ChatThread";
@@ -808,5 +810,58 @@ describe("ChatThread — failed-send bubble diagnosability", () => {
     await expect
       .element(screen.getByText("Cảm ơn bạn đã liên hệ."))
       .toBeVisible();
+  });
+});
+
+describe("ChatThread — reply-failure toast is channel-aware", () => {
+  // The `provider`/`unavailable` toast copy names the delivery channel, so a
+  // Messenger conversation must never be told "Zalo chưa nhận được tin nhắn" —
+  // that sent the recruiter debugging the wrong integration.
+  const messengerConversation = baseConversation({
+    channel_identity: {
+      id: "ci-1",
+      provider: "facebook_messenger",
+      account_key: "486833177846024",
+      external_id: "28606960018965816",
+    },
+  } as Partial<Conversation>);
+
+  const sendRejectedError = () =>
+    Object.assign(new Error("messenger send rejected"), {
+      status: "provider",
+      httpStatus: 502,
+    });
+
+  it("reports a provider failure as Messenger on a Messenger conversation", async () => {
+    dataProviderMock.sendHumanReply.mockRejectedValueOnce(sendRejectedError());
+    const screen = await mountThread({
+      conversation: messengerConversation,
+      canHumanReplyOverride: true,
+    });
+
+    await screen.getByRole("textbox", { name: "Tin nhắn trả lời" }).fill("Alo");
+    await screen.getByRole("button", { name: "Gửi tin nhắn" }).click();
+
+    await vi.waitFor(() => {
+      expect(notifyMock).toHaveBeenCalledWith(
+        "Messenger chưa nhận được tin nhắn. Bạn có thể thử lại ngay trên bong bóng tin nhắn.",
+        { type: "error" },
+      );
+    });
+  });
+
+  it("keeps the Zalo wording on a Zalo conversation", async () => {
+    dataProviderMock.sendHumanReply.mockRejectedValueOnce(sendRejectedError());
+    const screen = await mountThread({ canHumanReplyOverride: true });
+
+    await screen.getByRole("textbox", { name: "Tin nhắn trả lời" }).fill("Alo");
+    await screen.getByRole("button", { name: "Gửi tin nhắn" }).click();
+
+    await vi.waitFor(() => {
+      expect(notifyMock).toHaveBeenCalledWith(
+        "Zalo chưa nhận được tin nhắn. Bạn có thể thử lại ngay trên bong bóng tin nhắn.",
+        { type: "error" },
+      );
+    });
   });
 });

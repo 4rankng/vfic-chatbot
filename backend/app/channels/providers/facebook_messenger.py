@@ -38,6 +38,53 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Meta error signals that mean *this recipient* can never be written to again,
+# as opposed to a bad request or a dead credential. Kept deliberately narrow:
+# stamping ``user_unreachable`` makes the dispatcher record a terminal marker
+# (``recipient_marks``) that suppresses every later send to this PSID for its
+# full TTL, so a misclassification silently drops messages to a live candidate
+# for days. Only signals Meta documents as permanent recipient failures belong
+# here; anything unrecognised stays ``provider_error`` (retryable) and is now
+# recorded with its code/subcode/detail so a human can extend this list.
+#
+#   100 / 2018001 — "No matching user found": the PSID is not a sendable
+#   thread of this Page (belongs to another Page, or the thread is gone).
+_RECIPIENT_UNREACHABLE_CODES: frozenset[tuple[int | None, int | None]] = frozenset(
+    {(100, 2018001)}
+)
+
+#   551 — "This person isn't available right now" (any subcode; production
+#   observed subcode 1545041): the recipient blocked the Page / messaging or
+#   the account is deactivated or restricted. A per-recipient state, proven
+#   persistent across bot turns and a recruiter retry on 2026-10-06, and
+#   subcode-agnostic in Meta's docs — match on the code alone.
+_RECIPIENT_UNREACHABLE_CODES_ANY_SUBCODE: frozenset[int] = frozenset({551})
+
+
+def _is_recipient_unreachable(exc: FacebookOAuthError) -> bool:
+    """Whether Meta refused this PSID permanently rather than the request."""
+    if exc.code in _RECIPIENT_UNREACHABLE_CODES_ANY_SUBCODE:
+        return True
+    return (exc.code, exc.subcode) in _RECIPIENT_UNREACHABLE_CODES
+
+
+def _rejection_detail(exc: FacebookOAuthError) -> str:
+    """A one-line, persistable summary of why Meta refused this send.
+
+    Replaces the bare ``"messenger send rejected"`` that every failure used to
+    collapse to. It carries the structured code and subcode plus the sanitized
+    provider message, so ``messages.external_error`` and
+    ``outbound_outbox.last_error`` are enough to tell a dead credential from a
+    dead recipient from a malformed payload without re-running the send.
+    """
+    parts = [f"code={exc.code}"]
+    if exc.subcode is not None:
+        parts.append(f"subcode={exc.subcode}")
+    line = f"messenger send rejected ({', '.join(parts)})"
+    detail = getattr(exc, "detail", None)
+    return f"{line}: {detail}" if detail else line
+
+
 def attribution_from_referral(referral: object) -> dict | None:
     """Map Meta's referral object onto the neutral attribution record.
 
@@ -308,9 +355,36 @@ class FacebookMessengerAdapter(TextChannelAdapter, ReceiptCapability):
                     error="page access token invalid or revoked",
                     error_class="auth_revoked",
                 )
+            detail = _rejection_detail(exc)
+            if _is_recipient_unreachable(exc):
+                # Permanent per-recipient refusal: the dispatcher stamps a
+                # terminal marker for this PSID so later turns stop paying for
+                # a full generation + send cycle that cannot succeed.
+                logger.warning(
+                    "messenger send rejected: recipient unreachable "
+                    "(code=%s subcode=%s page=%s)",
+                    exc.code,
+                    exc.subcode,
+                    self._config.page_id,
+                )
+                return ct.ChannelSendResult(
+                    ok=False,
+                    error=detail,
+                    error_class="user_unreachable",
+                )
+            # Log the structured reason (no token, no recipient id) so a
+            # rejection is diagnosable from logs alone. Previously nothing was
+            # logged at all and the reason never left this frame.
+            logger.warning(
+                "messenger send rejected (code=%s subcode=%s page=%s): %s",
+                exc.code,
+                exc.subcode,
+                self._config.page_id,
+                getattr(exc, "detail", None) or "no provider detail",
+            )
             return ct.ChannelSendResult(
                 ok=False,
-                error="messenger send rejected",
+                error=detail,
                 error_class="provider_error",
             )
         mid = data.get("message_id") or data.get("recipient_id")
