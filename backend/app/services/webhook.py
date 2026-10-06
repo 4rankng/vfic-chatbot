@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -61,6 +62,33 @@ class NormalizedMessage:
     user_name: str
     msg_id: str
     msg_hash: str
+    # Source of the candidate's entry, when this inbound carries one (the
+    # ``#CODE`` a Zalo prefill link put at the front of the first message).
+    # None for an ordinary message.
+    attribution: dict | None = None
+
+
+# A Zalo prefill link — ``https://zalo.me/<oa_id>?text=%23<CODE>`` — makes the
+# candidate's first message open with the campaign's post code. Only a LEADING
+# ``#TOKEN`` counts (a hashtag later in a sentence is just conversation), the
+# token is 2-20 ASCII alphanumerics/``-``/``_`` and MUST carry a digit, and the
+# code is recorded but NEVER stripped: the turn sees the exact text the
+# candidate sent. The digit rule is what separates a code from a word: the
+# class rejects every Vietnamese hashtag with diacritics, and the digit rejects
+# ASCII spellings of the same words (``#viec``, ``#tuyen``) — our codes are
+# campaign codes like ``BV1026``.
+_POST_CODE_RE = re.compile(r"#([A-Za-z0-9][A-Za-z0-9_-]{1,19})\b")
+
+
+def _post_link_attribution(text: str) -> dict | None:
+    """``{"kind": "post_link", "post_code": ...}`` when ``text`` opens with a code."""
+    match = _POST_CODE_RE.match(text.lstrip())
+    if match is None:
+        return None
+    code = match.group(1)
+    if not any(char.isdigit() for char in code):
+        return None
+    return {"kind": "post_link", "post_code": code}
 
 
 class ZaloWebhookService:
@@ -92,6 +120,7 @@ class ZaloWebhookService:
             user_name=str(sender.get("display_name") or sender.get("name") or ""),
             msg_id=msg_id,
             msg_hash=hashlib.sha256(msg_id.encode("utf-8")).hexdigest()[:32],
+            attribution=_post_link_attribution(str(text_body)),
         )
 
     @staticmethod
@@ -166,6 +195,7 @@ class ZaloWebhookService:
                 runtime_authority.authority_generation if runtime_authority else None
             ),
             runtime_fingerprint=(runtime_authority.fingerprint if runtime_authority else None),
+            attribution=norm.attribution,
         )  # persists candidate message; stamps last_inbound_at; bumps unread if HUMAN
 
         # The guard chain below runs against ONE column-scoped reload placed
@@ -347,6 +377,7 @@ def _normalized_from_oa_event(event, account_key: str | None = None) -> Normaliz
         user_name=_oa_sender_name(event.raw),
         msg_id=event.message_id or f"{chat_id}:{event.text[:40]}",
         msg_hash=event.dedup_hash,
+        attribution=_post_link_attribution(event.text),
     )
 
 

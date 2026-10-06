@@ -44,6 +44,7 @@ class SqlAlchemyInboundMessageAdapter:
 
     async def persist(self, command: InboundTextCommand) -> PersistedInboundMessage | None:
         from app.services.conversation import ConversationService
+        from app.services.lead.interest import resolve_project_by_code
 
         identity = command.identity
         if identity.provider == "zalo_bot":
@@ -62,6 +63,20 @@ class SqlAlchemyInboundMessageAdapter:
             zalo_channel_alias=channel_alias,
         )
         await self._db.refresh(conversation)
+        attribution = command.attribution
+        if attribution and attribution.get("post_code") and not attribution.get(
+            "project_id"
+        ):
+            # Campaign code → project: the ``ref`` an m.me link or a
+            # Click-to-Messenger ad carries is matched against the project
+            # catalog (slug/alias) so the entry itself says which dự án the
+            # candidate came for, before they type a word. Best-effort by
+            # contract — an unmatched code simply stays a code.
+            project_id = await resolve_project_by_code(
+                self._db, str(attribution["post_code"])
+            )
+            if project_id:
+                attribution = {**attribution, "project_id": project_id}
         try:
             message = await service.record_inbound(
                 conversation,
@@ -70,6 +85,7 @@ class SqlAlchemyInboundMessageAdapter:
                 runtime_revision_id=None,
                 authority_generation=None,
                 runtime_fingerprint=None,
+                attribution=attribution,
             )
         except IntegrityError as exc:
             await self._db.rollback()

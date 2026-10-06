@@ -105,6 +105,7 @@ class ConversationService:
         runtime_revision_id: uuid.UUID | None = None,
         authority_generation: int | None = None,
         runtime_fingerprint: str | None = None,
+        attribution: dict | None = None,
     ) -> Message:
         return await self.state.record_inbound(
             conv,
@@ -114,7 +115,18 @@ class ConversationService:
             runtime_revision_id=runtime_revision_id,
             authority_generation=authority_generation,
             runtime_fingerprint=runtime_fingerprint,
+            attribution=attribution,
         )
+
+    async def stamp_attribution(
+        self, conv: Conversation, attribution: dict | None
+    ) -> None:
+        """Record a candidate's source when the event carries no message.
+
+        Best-effort by contract: used by referral-only webhook events, so a
+        failure is swallowed inside the state layer instead of failing the ack.
+        """
+        return await self.state.stamp_attribution(conv, attribution)
 
     async def escalate_extracted_intent(
         self,

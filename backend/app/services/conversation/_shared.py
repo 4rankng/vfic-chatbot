@@ -39,3 +39,26 @@ def affected_rows(result: Result[Any]) -> int:
 
 def _delivery_status_for_send_error(error_class: str | None, *, ok: bool):
     return DeliveryStatus.SEND_UNKNOWN if is_ambiguous_send(error_class, ok=ok) else None
+
+
+def merge_attribution(
+    existing: dict[str, Any] | None, incoming: dict[str, Any]
+) -> dict[str, Any]:
+    """Fold one source touch into a conversation's first-touch record.
+
+    First touch wins on every key it already set; a later touch only fills keys
+    the record is still missing. That ordering matters for Messenger: the
+    Get Started/m.me postback carries our own ``post_code`` but no Meta ids,
+    while the ad's ``ad_id``/``post_id`` arrive with the first *message* — the
+    second touch must be able to complete the first without replacing it.
+
+    Blank values never count as "set" (``None`` and ``""`` are both "absent"),
+    so an empty field on the first touch stays open for a later one.
+    """
+    if not existing:
+        return dict(incoming)
+    merged = dict(existing)
+    for key, value in incoming.items():
+        if merged.get(key) in (None, "") and value not in (None, ""):
+            merged[key] = value
+    return merged

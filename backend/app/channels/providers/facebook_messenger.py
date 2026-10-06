@@ -38,6 +38,33 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def attribution_from_referral(referral: object) -> dict | None:
+    """Map Meta's referral object onto the neutral attribution record.
+
+    Handles both shapes Meta ships: ``message.referral`` on the first message
+    of a Click-to-Messenger ad (carries ``ad_id`` and
+    ``ads_context_data.post_id`` — the ad and the ad post behind the thread)
+    and ``postback.referral`` from an m.me link / Get Started / QR code (our
+    own ``ref`` only, plus ``source``: SHORTLINK or ADS). ``None`` when the
+    object carries nothing beyond its type.
+    """
+    if not isinstance(referral, dict):
+        return None
+    ads = referral.get("ads_context_data")
+    ads = ads if isinstance(ads, dict) else {}
+    attribution: dict[str, str] = {"kind": "referral"}
+    for key, value in (
+        ("post_code", referral.get("ref")),
+        ("ad_id", referral.get("ad_id")),
+        ("post_id", ads.get("post_id")),
+        ("referral_source", referral.get("source")),
+    ):
+        text = str(value).strip() if value is not None else ""
+        if text:
+            attribution[key] = text
+    return attribution if len(attribution) > 1 else None
+
+
 class FacebookMessengerNormalizer:
     """Normalize a raw Messenger webhook payload into zero or more events.
 
@@ -120,6 +147,13 @@ class FacebookMessengerNormalizer:
             return
 
         occurred_at = datetime.fromtimestamp(int(timestamp) / 1000, tz=timezone.utc) if timestamp else datetime.now(timezone.utc)
+        # Meta attaches the referral of a Click-to-Messenger ad to the first
+        # message itself; some payloads carry it on the item instead. Either
+        # way it rides the neutral type so the persist step can stamp the
+        # conversation's first-touch source.
+        referral = message.get("referral")
+        if not isinstance(referral, dict):
+            referral = item.get("referral")
         messages.append(
             ct.ChannelInboundMessage(
                 identity=ct.ChannelIdentityRef(
@@ -131,8 +165,46 @@ class FacebookMessengerNormalizer:
                 text=str(text),
                 occurred_at=occurred_at,
                 participant_name="",
+                attribution=attribution_from_referral(referral),
             )
         )
+
+    @classmethod
+    def referrals_from_payload(
+        cls, payload: dict, *, page_id: str
+    ) -> list[tuple[str, dict]]:
+        """``(psid, attribution)`` for this Page's referral-carrying postbacks.
+
+        The Get Started postback is where Meta puts a new thread's entry source
+        (m.me ``ref``, Conversation ad) — before the candidate has typed a
+        single message, so nothing else in the pipeline can capture it. Scoped
+        to ``page_id`` exactly like the message path: one webhook can carry
+        events for every Page the app is subscribed to, and only the connected
+        Page's events may touch this deployment. Pure payload scan; persisting
+        is the caller's job.
+        """
+        events: list[tuple[str, dict]] = []
+        entries = payload.get("entry") or []
+        if not isinstance(entries, list):
+            return events
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            for item in entry.get("messaging") or []:
+                if not isinstance(item, dict):
+                    continue
+                recipient = item.get("recipient") or {}
+                if str(recipient.get("id") or "") != page_id:
+                    continue
+                postback = item.get("postback")
+                if not isinstance(postback, dict):
+                    continue
+                attribution = attribution_from_referral(postback.get("referral"))
+                sender = item.get("sender") or {}
+                psid = str(sender.get("id") or "") if isinstance(sender, dict) else ""
+                if attribution is not None and psid:
+                    events.append((psid, attribution))
+        return events
 
     @staticmethod
     def parse_receipt_from_payload(payload: dict) -> ct.ChannelReceipt | None:
@@ -251,4 +323,8 @@ class FacebookMessengerAdapter(TextChannelAdapter, ReceiptCapability):
         return FacebookMessengerNormalizer.parse_receipt_from_payload(payload)
 
 
-__all__ = ["FacebookMessengerNormalizer", "FacebookMessengerAdapter"]
+__all__ = [
+    "FacebookMessengerNormalizer",
+    "FacebookMessengerAdapter",
+    "attribution_from_referral",
+]

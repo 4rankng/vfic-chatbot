@@ -132,6 +132,15 @@ class Conversation(Base):
     last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_outbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # First-touch source of the thread: how the candidate entered —
+    # {"kind": "post_link", "post_code": "BV1026"} from a Zalo prefill link
+    # (``https://zalo.me/<oa>?text=%23<CODE>``), or {"kind": "referral", ...}
+    # from a Messenger referral (Meta ``ad_id`` / ads ``post_id`` / m.me ``ref``).
+    # Written by the inbound path on the first touch that carries a source;
+    # later touches only fill keys the record is still missing (first touch
+    # wins). Read-only on the recruiter API. Nullable for pre-0069 rows.
+    attribution: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     # Retired proactive-follow-up bookkeeping. These columns survive the 2026-10-04
     # removal of the proactive feature and are now read/written by nothing on the
     # bot path. ``followup_opted_out`` is the exception and is still load-bearing: the

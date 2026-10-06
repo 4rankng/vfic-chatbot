@@ -20,6 +20,9 @@ class InboundTextCommand:
     identity: InboundIdentity
     external_message_id: str
     text: str
+    # Source of the participant's entry when this inbound carries one; folded
+    # into the conversation's first-touch record by the persist adapter.
+    attribution: dict | None = None
 
 
 @dataclass(frozen=True, slots=True)

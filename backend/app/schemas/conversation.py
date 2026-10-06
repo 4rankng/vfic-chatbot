@@ -64,6 +64,9 @@ class ConversationOut(BaseModel):
     bot_locked_until: datetime | None = None
     last_inbound_at: datetime | None = None
     last_outbound_at: datetime | None = None
+    # First-touch source of the candidate (Zalo prefill post code, Messenger
+    # ad_id/post_id/ref). None when the entry carried no source; read-only.
+    attribution: dict | None = None
     created_at: datetime
     updated_at: datetime
 

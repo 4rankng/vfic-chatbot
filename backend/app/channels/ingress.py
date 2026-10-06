@@ -22,6 +22,7 @@ def _command(message: ct.ChannelInboundMessage) -> InboundTextCommand:
         ),
         external_message_id=message.external_message_id,
         text=message.text,
+        attribution=message.attribution,
     )
 
 

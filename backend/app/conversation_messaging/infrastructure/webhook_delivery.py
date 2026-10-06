@@ -48,6 +48,30 @@ async def apply_messenger_receipt(db: AsyncSession, receipt, account_key: str) -
     await db.commit()
 
 
+async def apply_messenger_referral(
+    db: AsyncSession, *, psid: str, account_key: str, attribution: dict
+) -> None:
+    """Record a thread's source when the referral carries no message.
+
+    A new thread entered from an m.me link / Conversation ad / QR code delivers
+    its ``ref`` in the Get Started **postback**, before the candidate types
+    anything — there is no inbound row to carry that write. The conversation is
+    ensured (idempotent, exactly what the first message would create) and the
+    source stamped on it. Callers wrap this best-effort, like receipts.
+    """
+    if not psid or not attribution:
+        return
+    service = ConversationService(db)
+    conversation = await service.ensure_by_identity(
+        provider="facebook_messenger",
+        account_key=account_key,
+        external_id=psid,
+        zalo_chat_id_alias=None,
+        zalo_channel_alias="facebook_messenger",
+    )
+    await service.stamp_attribution(conversation, attribution)
+
+
 async def enqueue_facebook_turn(
     db: AsyncSession,
     outcome,

@@ -112,6 +112,7 @@ class ConversationState:
         runtime_revision_id: uuid.UUID | None = None,
         authority_generation: int | None = None,
         runtime_fingerprint: str | None = None,
+        attribution: dict | None = None,
     ) -> Message:
         return await self._bot.record_inbound(
             conv,
@@ -121,7 +122,13 @@ class ConversationState:
             runtime_revision_id=runtime_revision_id,
             authority_generation=authority_generation,
             runtime_fingerprint=runtime_fingerprint,
+            attribution=attribution,
         )
+
+    async def stamp_attribution(
+        self, conv: Conversation, attribution: dict | None
+    ) -> None:
+        return await self._bot.stamp_attribution(conv, attribution)
 
     async def escalate_extracted_intent(
         self,

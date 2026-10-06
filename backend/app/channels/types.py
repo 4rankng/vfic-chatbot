@@ -163,6 +163,11 @@ class ChannelInboundMessage:
     occurred_at: datetime
     trace_id: str | None = None
     participant_name: str = ""
+    # Where the participant came from, when the provider attached a source to
+    # this inbound (a Messenger referral's ad_id / ads post_id / m.me ref).
+    # Provider-owned: the normalizer maps its own payload into this flat dict.
+    # None for a message with no source attached.
+    attribution: dict | None = None
 
     def __post_init__(self) -> None:
         if not self.external_message_id:

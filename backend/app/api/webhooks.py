@@ -35,6 +35,7 @@ from app.composition.conversation_messaging import (
 )
 from app.conversation_messaging.infrastructure.webhook_delivery import (
     apply_messenger_receipt,
+    apply_messenger_referral,
     enqueue_facebook_turn,
 )
 from app.shared.infrastructure.db import get_request_db
@@ -356,6 +357,23 @@ async def facebook_webhook(
             await apply_messenger_receipt(db, receipt, active.account_key)
         except Exception:  # noqa: BLE001 — receipts are best-effort; never fail the ack
             logger.info("facebook receipt apply failed account_suffix=%s", active.account_key[-4:])
+
+    # Get Started / m.me referral: the entry source (our ref, the ad behind a
+    # Conversation ad) arrives in the postback BEFORE the candidate types, so
+    # it is stamped here as a conversation-only touch. Best-effort like the
+    # receipts above — a source hint never fails the ack.
+    for psid, referral_attribution in normalizer.referrals_from_payload(
+        payload, page_id=active.account_key
+    ):
+        try:
+            await apply_messenger_referral(
+                db,
+                psid=psid,
+                account_key=active.account_key,
+                attribution=referral_attribution,
+            )
+        except Exception:  # noqa: BLE001
+            logger.info("facebook referral attribution failed account_suffix=%s", active.account_key[-4:])
 
     if ignored:
         logger.info("facebook webhook ignored events reasons=%s", dict(ignored))

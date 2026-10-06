@@ -40,7 +40,7 @@ from app.models.conversation import (
 )
 from app.recruitment.domain.proactive_policy import PROACTIVE_OPTOUT_PHRASES
 from app.services.audit_service import record_audit
-from app.services.conversation._shared import utcnow
+from app.services.conversation._shared import merge_attribution, utcnow
 from app.services.conversation.bot_outcome import BotOutcomeMixin
 from app.services.conversation.locking import LockingMixin
 from app.services.conversation.reconcile import ReconcileMixin
@@ -239,6 +239,33 @@ class BotConversationState(
             return self.semi_auto_inactive(conv)
         return False
 
+    async def stamp_attribution(
+        self, conv: Conversation, attribution: dict | None
+    ) -> None:
+        """Fold a source touch that has no message to carry it (best-effort).
+
+        Used by referral-only webhook events (Messenger Get Started / m.me
+        postback): there is no inbound row to piggyback the write on, so this
+        commits its own transaction. A source hint must never fail the webhook
+        ack — every error is logged and rolled back, never raised.
+        """
+        if not attribution:
+            return
+        merged = merge_attribution(conv.attribution, attribution)
+        if merged == (conv.attribution or {}):
+            return
+        conv.attribution = merged
+        try:
+            await self.db.commit()
+        except Exception:  # noqa: BLE001 — attribution is a hint, never load-bearing
+            logger.warning(
+                "attribution stamp failed conversation=%s", conv.id, exc_info=True
+            )
+            try:
+                await self.db.rollback()
+            except Exception:  # noqa: BLE001 — rollback failure must stay silent too
+                logger.debug("attribution stamp rollback failed", exc_info=True)
+
     async def record_inbound(
         self,
         conv: Conversation,
@@ -249,8 +276,15 @@ class BotConversationState(
         runtime_revision_id: uuid.UUID | None = None,
         authority_generation: int | None = None,
         runtime_fingerprint: str | None = None,
+        attribution: dict | None = None,
     ) -> Message:
         """Persist an inbound worker message and update conversation attention state.
+
+        ``attribution`` is the source the provider attached to this inbound
+        (a Zalo prefill post code, a Messenger referral). It rides the same
+        transaction as the message and is folded into the conversation's
+        first-touch record by :func:`merge_attribution` — first touch wins,
+        later touches only fill gaps.
 
         ``provider_message_id`` is the canonical neutral message id (Alembic
         0047). ``zalo_message_id`` remains as a compatibility alias; when only
@@ -321,6 +355,8 @@ class BotConversationState(
             )
             self.db.add(msg)
         conv.last_inbound_at = utcnow()
+        if attribution:
+            conv.attribution = merge_attribution(conv.attribution, attribution)
         # Proactive opt-out: cheap substring scan on the hot path. Accepted
         # tradeoff (A7) — atomicity with the inbound txn outweighs purity.
         _lower = body.strip().lower()

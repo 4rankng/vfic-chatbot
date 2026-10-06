@@ -333,7 +333,13 @@ async def subscribe_app_to_page(page_id: str, page_access_token: str) -> None:
     data = await _bounded_post(
         f"{_graph_base()}/{page_id}/subscribed_apps",
         params={"access_token": page_access_token},
-        json_body={"subscribed_fields": "messages,messaging_postbacks"},
+        # Meta delivers a Click-to-Messenger ad's referral (the ``ad_id`` /
+        # ``ads_context_data.post_id`` behind a candidate's first message)
+        # only when the Page is subscribed to ``messaging_referrals`` *and*
+        # ``messages`` — so the field list carries it alongside the two that
+        # started this integration. A Page connected before this change keeps
+        # the old list until it is disconnected and reconnected.
+        json_body={"subscribed_fields": "messages,messaging_postbacks,messaging_referrals"},
     )
     if data.get("success") is not True:
         # Meta's contract is an explicit boolean acknowledgement. Empty,
