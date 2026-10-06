@@ -1454,6 +1454,45 @@ class TestCachedEmbed:
         assert unpack_vector(value) == [0.5] * 8
         assert ttl == 60
 
+    @pytest.mark.asyncio
+    async def test_key_follows_the_embedder_stamp_not_env(self, monkeypatch):
+        """The cache key must name the embedder's RESOLVED configuration.
+
+        Regression pin for the 2026-10-06 retrieval blackout: the Settings page
+        said ``gemini`` while env still said ``openrouter``, so Gemini vectors
+        were stored under ``embed:openrouter:*`` keys and served for a full
+        embed-cache TTL — cosine ~0 against every chunk, every retrieval empty.
+        A stamped embedder must win over env for both provider and model.
+        """
+        settings = self._settings()
+        monkeypatch.setattr(embed_cache, "get_settings", lambda: settings)
+        gets: list[str] = []
+        sets: list[tuple] = []
+
+        async def _get(key):
+            gets.append(key)
+            return None
+
+        async def _set(key, value, ttl):
+            sets.append((key, value, ttl))
+
+        monkeypatch.setattr(embed_cache, "cache_get_json", _get)
+        monkeypatch.setattr(embed_cache, "cache_set_json", _set)
+        embedder = _FakeEmbedder(vec=[0.5] * 8)
+        # What build_embedder stamps on the resolved client.
+        embedder.embedding_provider = "gemini"
+        embedder.embedding_model = settings.gemini_embedding_model
+
+        await embed_cache.cached_embed(embedder, "thưởng")
+
+        key = sets[0][0]
+        assert key.startswith("embed:gemini:gemini-test:8:")
+        assert not key.startswith("embed:openrouter:")
+        # The unstamped path still keys on env (back-compat for bare embedders).
+        bare = _FakeEmbedder(vec=[0.5] * 8)
+        await embed_cache.cached_embed(bare, "thưởng")
+        assert sets[1][0].startswith("embed:openrouter:text-embedding-test:8:")
+
 
 # ---------------------------------------------------------------------------
 # Geo-distance rows ("dự án nào gần nhà")

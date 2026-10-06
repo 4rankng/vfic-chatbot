@@ -203,11 +203,27 @@ def build_embedder(
     ``provider``/``gemini_api_key`` come from the Settings page resolution
     (``IntegrationSettingsService.resolve_embedding``); when omitted the env
     default applies.
+
+    The client is stamped with ``embedding_provider``/``embedding_model`` so
+    cache keys (the query-embed cache) can name the configuration that actually
+    produced a vector. Stamping is what keeps a Settings-page provider flip
+    from filing vectors under another provider's cache namespace — that
+    mismatch is how the 2026-10-06 retrieval blackout happened: Gemini vectors
+    stored under ``embed:openrouter:*`` keys served ~0-similarity embeddings
+    for up to a full embed-cache TTL, and every retrieval came back empty.
     """
     s = settings or get_settings()
     chosen = (provider or s.embedding_provider or "openrouter").strip().lower()
     if chosen == "openrouter":
-        return OpenRouterEmbedder(s, api_key=openrouter_api_key)
-    if chosen == "gemini":
-        return GeminiEmbedder(s, api_key=gemini_api_key)
-    raise RuntimeError("EMBEDDING_PROVIDER must be 'openrouter' or 'gemini'")
+        client = OpenRouterEmbedder(s, api_key=openrouter_api_key)
+    elif chosen == "gemini":
+        client = GeminiEmbedder(s, api_key=gemini_api_key)
+    else:
+        raise RuntimeError("EMBEDDING_PROVIDER must be 'openrouter' or 'gemini'")
+    client.embedding_provider = chosen
+    client.embedding_model = (
+        s.openrouter_embedding_model
+        if chosen == "openrouter"
+        else s.gemini_embedding_model
+    )
+    return client

@@ -87,3 +87,30 @@ def test_build_default_embedder_requires_the_settings_page_key() -> None:
 
     with pytest.raises(TypeError):
         build_default_embedder()  # type: ignore[call-arg]
+
+
+class _GeminiSettings(_Settings):
+    gemini_api_key = ""
+    gemini_embedding_model = "gemini-embedding-2"
+
+
+def test_built_embedder_is_stamped_with_its_resolved_config() -> None:
+    """The instance carries the provider/model that produced its vectors.
+
+    The query-embed cache reads this stamp for its key namespace. Without it, a
+    Settings-page provider flip files vectors under the env provider's keys —
+    the 2026-10-06 incident: Gemini vectors under ``embed:openrouter:*`` blanked
+    retrieval for a full embed-cache TTL.
+    """
+    openrouter = build_embedder(_Settings(), openrouter_api_key="sk-or")
+    assert openrouter.embedding_provider == "openrouter"
+    assert openrouter.embedding_model == "openai/text-embedding-3-large"
+
+    gemini = build_embedder(
+        _GeminiSettings(), provider="gemini", gemini_api_key="g-key"
+    )
+    assert gemini.embedding_provider == "gemini"
+    assert gemini.embedding_model == "gemini-embedding-2"
+    # The stamp overrides env: an env that still says openrouter must not leak
+    # into the gemini-built client's cache namespace.
+    assert gemini.embedding_provider != _GeminiSettings.embedding_provider

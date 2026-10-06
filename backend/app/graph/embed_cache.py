@@ -18,7 +18,17 @@ from app.graph.llm import Embedder
 
 
 async def cached_embed(embedder: Embedder, query: str) -> list[float]:
-    """Embed ``query``, reusing the Redis entry when the normalized form matches."""
+    """Embed ``query``, reusing the Redis entry when the normalized form matches.
+
+    The cache key names the configuration that produced the vector — read from
+    the embedder's stamp (``embedding_provider``/``embedding_model``, set by
+    ``build_embedder`` from the resolved Settings-page config) and only falling
+    back to env when the embedder carries no stamp. Keying on env alone while
+    the embedder follows the Settings page is how a provider flip once filed
+    Gemini vectors under OpenRouter keys and blanked retrieval for a day (the
+    2026-10-06 incident): same query, wrong-space vector, zero similarity
+    against every chunk.
+    """
     s = get_settings()
     if not s.rag_cache_enabled:
         return await embedder(query)
@@ -27,8 +37,12 @@ async def cached_embed(embedder: Embedder, query: str) -> list[float]:
     # receives the original raw query.
     normalized = normalize_query(query)
     query_hash = sha256(normalized.encode("utf-8")).hexdigest()
-    provider = (s.embedding_provider or "openrouter").strip().lower()
-    model = s.openrouter_embedding_model if provider == "openrouter" else s.gemini_embedding_model
+    provider = (
+        getattr(embedder, "embedding_provider", None) or s.embedding_provider or "openrouter"
+    ).strip().lower()
+    model = getattr(embedder, "embedding_model", None) or (
+        s.openrouter_embedding_model if provider == "openrouter" else s.gemini_embedding_model
+    )
     key = f"embed:{provider}:{model}:{s.embedding_dim}:{query_hash}"
     vector = unpack_vector(await cache_get_json(key))
     if vector:
