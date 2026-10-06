@@ -27,6 +27,7 @@ from app.models.conversation import (
     MessageSender,
 )
 from app.services.conversation._shared import affected_rows, utcnow
+from app.services.lead.interest import record_conversation_project_interest
 
 
 
@@ -243,6 +244,14 @@ class BotOutcomeMixin:
         await self.db.commit()
         await self.db.refresh(msg)
         msg._delivery_attempts = outbox_attempts
+        # Which dự án this candidate is interested in: whatever project signal
+        # this conversation carries — the campaign link/ad that brought them
+        # in (attribution) and/or the project the turn focused on — recorded
+        # once per (lead, project) in its own transaction. The outcome row
+        # above is load-bearing, an interest hint is not; with no signal the
+        # recorder returns before touching the database. Extraction is the
+        # backstop for a turn whose outcome never ran.
+        await record_conversation_project_interest(self.db, conv)
         await self.events.message_created(msg, conv)
         await self.events.conversation_updated(conv)
         return msg

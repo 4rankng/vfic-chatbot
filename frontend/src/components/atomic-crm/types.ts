@@ -85,6 +85,15 @@ export type LeadTag = {
   system: boolean;
 };
 
+/** One dự án the candidate has engaged with — `GET /api/v1/leads/{id}/project-interests`. */
+export type ProjectInterest = {
+  project_id: string;
+  project_slug: string | null;
+  project_name: string | null;
+  source: string;
+  first_interested_at: string;
+};
+
 export type LeadAssistMessage = {
   sender: "candidate" | "recruiter" | "bot" | "system" | string;
   body: string;

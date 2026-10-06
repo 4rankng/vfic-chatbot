@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslate } from "ra-core";
+import { apiJson } from "@/lib/apiClient";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
@@ -12,7 +13,7 @@ import {
   Modal,
   ModalOverlay,
 } from "@/components/application/slideout-menus/slideout-menu";
-import type { Lead } from "../types";
+import type { Lead, ProjectInterest } from "../types";
 import {
   candidateProfileDraft,
   candidateProfileFields,
@@ -22,6 +23,7 @@ import {
 } from "../leads/domain/candidateProfile";
 import { formatCandidateNotes } from "./domain/candidate-notes";
 import {
+  Building2,
   BusFront,
   CalendarDays,
   Check,
@@ -57,7 +59,15 @@ type CandidateInfoItem = {
 
 const hasMeaningfulValue = (value: unknown) => display(value, "") !== "";
 
-const PRIORITY_INFO_KEYS = ["phone", "name", "expectation", "birth"];
+// ``projects`` (Dự án quan tâm) renders only when the candidate has engaged a
+// project, so listing it here adds a row to see, never an empty one.
+const PRIORITY_INFO_KEYS = [
+  "phone",
+  "name",
+  "expectation",
+  "birth",
+  "projects",
+];
 const PRIORITY_EDIT_KEYS = ["phone", "name", "desired_job", "birth_year"];
 const orderedProfileFields = [...candidateProfileFields].sort(
   (first, second) => {
@@ -99,6 +109,35 @@ export const ConversationContextPanel = ({
   const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
   const leadId = String(lead?.id ?? "empty");
   const isSaving = savingLeadId === leadId;
+  // Which dự án this candidate has engaged with (bot project focus, captured
+  // on either channel). Read per lead; a failed or empty read simply omits the
+  // row — interest is a hint, never an error surface.
+  const [projectInterests, setProjectInterests] = useState<ProjectInterest[]>(
+    [],
+  );
+  const interestLeadId = lead?.id ?? null;
+  useEffect(() => {
+    if (interestLeadId === null) {
+      setProjectInterests([]);
+      return;
+    }
+    const controller = new AbortController();
+    let cancelled = false;
+    apiJson<ProjectInterest[]>(
+      `/api/v1/leads/${interestLeadId}/project-interests`,
+      { signal: controller.signal },
+    )
+      .then((rows) => {
+        if (!cancelled) setProjectInterests(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setProjectInterests([]);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [interestLeadId]);
   const candidateInfoItems = useMemo<CandidateInfoItem[]>(() => {
     const noData = translate("crm.common.no_data");
     const notes = lead?.notes;
@@ -130,6 +169,10 @@ export const ConversationContextPanel = ({
       "tuyến xe",
       "tuyen xe",
     ]);
+
+    const interestedProjects = projectInterests
+      .map((row) => (row.project_name || row.project_slug || "").trim())
+      .filter(Boolean);
 
     return [
       {
@@ -180,6 +223,19 @@ export const ConversationContextPanel = ({
         complete: hasMeaningfulValue(lead?.desired_job),
         Icon: Handshake,
       },
+      // Only when the candidate has actually engaged a project — a row of
+      // "no data" for every lead would bury the signal it exists to show.
+      ...(interestedProjects.length > 0
+        ? [
+            {
+              key: "projects",
+              label: "Dự án quan tâm",
+              value: interestedProjects.join(" · "),
+              complete: true,
+              Icon: Building2,
+            },
+          ]
+        : []),
       {
         key: "salary",
         label: translate("leads.fields.salary"),
@@ -229,7 +285,7 @@ export const ConversationContextPanel = ({
         Icon: NotepadText,
       },
     ];
-  }, [lead, translate]);
+  }, [lead, translate, projectInterests]);
   const content = (
     <CandidateContextBody
       key={String(lead?.id ?? "empty")}

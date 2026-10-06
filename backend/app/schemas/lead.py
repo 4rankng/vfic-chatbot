@@ -46,6 +46,21 @@ class LeadListResponse(BaseModel):
     total: int
 
 
+class ProjectInterestOut(BaseModel):
+    """One dự án the candidate has engaged with (bot project focus).
+
+    Written from the chat on either channel; ``source`` says how it was
+    observed (``chat_focus``). Oldest first — the first interest is the one a
+    recruiter acts on.
+    """
+
+    project_id: uuid.UUID
+    project_slug: str | None = None
+    project_name: str | None = None
+    source: str = ""
+    first_interested_at: datetime
+
+
 class LeadBoardQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

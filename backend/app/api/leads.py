@@ -26,6 +26,7 @@ from app.schemas.lead import (
     LeadTagOut,
     LeadTagsUpdate,
     LeadUpdate,
+    ProjectInterestOut,
     StageRequest,
 )
 from app.shared.domain.errors import BadRequestError, ConflictError, NotFoundError
@@ -34,6 +35,7 @@ from app.shared.infrastructure.rate_limits import (
     enforce_lead_chatops_action_rate_limit,
 )
 from app.services.lead import LeadService
+from app.services.lead.interest import project_interests
 from app.services.memory_repository import MemoryRepository
 from app.shared.infrastructure.db import get_request_db as get_db
 
@@ -301,6 +303,25 @@ async def list_events(
 ) -> list[LeadEventOut]:
     await _load(lead_id, db, user)
     return [LeadEventOut.model_validate(e) for e in await LeadService(db).list_events(lead_id)]
+
+
+@router.get(
+    "/{lead_id}/project-interests",
+    response_model=list[ProjectInterestOut],
+)
+async def lead_project_interests(
+    lead_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> list[ProjectInterestOut]:
+    """Which dự án this candidate has engaged with, oldest first.
+
+    Recorded from the bot's project focus on either channel (Zalo, Messenger),
+    once per project; the project's current slug/name is resolved live.
+    """
+    lead = await _load(lead_id, db, user)
+    return [
+        ProjectInterestOut(**interest)
+        for interest in await project_interests(db, lead.id)
+    ]
 
 
 @router.get("/{lead_id}/memories", response_model=list[LeadMemoryOut])

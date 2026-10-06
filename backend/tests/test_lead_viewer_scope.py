@@ -221,6 +221,7 @@ READ_ROUTES = [
     ("get", f"/api/v1/leads/{LEAD_ID}/assist", None, 200),
     ("get", f"/api/v1/leads/{LEAD_ID}/follow-ups", None, 200),
     ("get", f"/api/v1/leads/{LEAD_ID}/events", None, 200),
+    ("get", f"/api/v1/leads/{LEAD_ID}/project-interests", None, 200),
     ("get", f"/api/v1/leads/{LEAD_ID}/memories", None, 200),
     ("get", f"/api/v1/leads/{LEAD_ID}/presence", None, 200),
 ]

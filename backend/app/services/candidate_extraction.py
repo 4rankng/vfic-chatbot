@@ -24,6 +24,7 @@ from app.recruitment.domain.candidate_extraction import CandidateExtraction, Con
 from app.recruitment.domain.intake import candidate_contact_mobile, candidate_wish
 from app.recruitment.domain.provider import lead_key_for_chat, lead_key_for_conversation
 from app.services.lead.events import LeadEventBus
+from app.services.lead.interest import record_conversation_project_interest
 from app.services.lead.normalizers import extract_self_reported_name, normalize_lead
 from app.services.lead.repository import LeadRepository
 from app.services.memory_service import (
@@ -355,6 +356,11 @@ class CandidateExtractionService:
                 result.lead_patch,
                 contact_id=None if lead_key.is_zalo_keyed else lead_key.contact_id,
             )
+            # Which dự án this candidate is interested in, from whatever
+            # signal the conversation carries (campaign link/ad + turn focus).
+            # Backstop for a turn whose outcome never ran — the outcome seam
+            # normally gets there first, and both are idempotent.
+            await record_conversation_project_interest(db, conversation)
 
         if result.memory_facts:
             try:

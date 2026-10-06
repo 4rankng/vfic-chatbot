@@ -1,6 +1,6 @@
 import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import type { Lead } from "../types";
 import { ConversationContextPanel } from "./ConversationContextPanel";
 import { TestMessages } from "@/components/atomic-crm/providers/commons/TestMessages";
@@ -11,6 +11,16 @@ const mobileMock = vi.hoisted(() => ({ isMobile: false }));
 vi.mock("@/hooks/use-mobile", () => ({
   useIsMobile: () => mobileMock.isMobile,
 }));
+
+// The panel reads the candidate's project interests per lead; every test that
+// does not care about them gets an empty list (no row), never a real request.
+const apiJsonMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/apiClient", () => ({ apiJson: apiJsonMock }));
+
+beforeEach(() => {
+  apiJsonMock.mockReset();
+  apiJsonMock.mockResolvedValue([]);
+});
 
 afterEach(async () => {
   await cleanup();
@@ -371,5 +381,91 @@ describe("ConversationContextPanel notes", () => {
           .query(),
       )
       .not.toBeInTheDocument();
+  });
+});
+
+describe("ConversationContextPanel project interests", () => {
+  it("shows the dự án the candidate is interested in, oldest first", async () => {
+    apiJsonMock.mockResolvedValue([
+      {
+        project_id: "p1",
+        project_slug: "lg-display",
+        project_name: "LG Display",
+        source: "chat_focus",
+        first_interested_at: "2026-10-01T00:00:00Z",
+      },
+      {
+        project_id: "p2",
+        project_slug: "ssg-bac-ninh",
+        project_name: "SSG Bắc Ninh",
+        source: "chat_focus",
+        first_interested_at: "2026-10-02T00:00:00Z",
+      },
+    ]);
+
+    const screen = await render(
+      <TestMessages>
+        <div className="inbox-bg-container">
+          <ConversationContextPanel
+            lead={lead}
+            open
+            persistent
+            onClose={() => undefined}
+          />
+        </div>
+      </TestMessages>,
+    );
+
+    expect(apiJsonMock).toHaveBeenCalledWith(
+      "/api/v1/leads/1/project-interests",
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    await expect.element(screen.getByText("Dự án quan tâm")).toBeVisible();
+    await expect
+      .element(screen.getByText("LG Display · SSG Bắc Ninh"))
+      .toBeVisible();
+  });
+
+  it("omits the row when no interest is recorded", async () => {
+    const screen = await render(
+      <TestMessages>
+        <div className="inbox-bg-container">
+          <ConversationContextPanel
+            lead={lead}
+            open
+            persistent
+            onClose={() => undefined}
+          />
+        </div>
+      </TestMessages>,
+    );
+
+    await expect
+      .element(screen.getByText("Dự án quan tâm").query())
+      .not.toBeInTheDocument();
+  });
+
+  it("never surfaces a failed interest read as an error", async () => {
+    apiJsonMock.mockRejectedValue(new Error("offline"));
+
+    const screen = await render(
+      <TestMessages>
+        <div className="inbox-bg-container">
+          <ConversationContextPanel
+            lead={lead}
+            open
+            persistent
+            onClose={() => undefined}
+          />
+        </div>
+      </TestMessages>,
+    );
+
+    await expect
+      .element(screen.getByText("Dự án quan tâm").query())
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByText("Ứng viên mẫu", { exact: true }).first())
+      .toBeVisible();
   });
 });
