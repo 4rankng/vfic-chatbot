@@ -15,7 +15,9 @@ untouched); disconnecting a Page keeps its conversations and history.
 |---|---|
 | Meta app | "TingHire Messenger" (App ID `1052965677598216`) with Facebook Login for Business + Messenger/Webhooks configured. |
 | Business verification | Done through the Business Portfolio "TingTing Soft" (ID `1091256110292973`). Required for App Review. |
-| App mode | For a Page you do **not** own, the app must be **Live** with App Review approval (advanced access) for `pages_messaging` (+ `pages_show_list`, `pages_manage_metadata`). In Development mode only app-role users (admin/dev/tester) can chat with the bot — everyone else's messages are silently dropped by Meta. |
+| App mode | For a Page you do **not** own, the app must be **Live** with App Review approval (advanced access) for `pages_messaging` (+ `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`). In Development mode only app-role users (admin/dev/tester) can chat with the bot — everyone else's messages are silently dropped by Meta. |
+| Scope re-mint | `pages_read_engagement` was added to the login scope on 2026-10-07. A Page token only carries the scopes present when the admin authorised it, so **reconnect the Page** in CRM Settings → Facebook Messenger, otherwise profile reads keep failing with code 100. |
+| Messaging window | Sends outside the Standard Messaging Window (24 h after the person's last message) need `pages_utility_messaging` plus an approved message tag. Neither is approved: `HUMAN_AGENT` is refused with subcode 2018276 ("without prior approval") and `ACCOUNT_UPDATE` with subcode 1893061 ("Invalid parameter"). Such sends are treated as terminal — see `reconcile_worker._TERMINAL_SEND_ERROR_MARKERS`. |
 | App webhook | Callback URL `https://<backend-host>/webhooks/facebook`, verify token = the value configured in CRM Settings → Facebook Messenger → "Verify Token". Subscribe to the `messages` and `messaging_postbacks` fields (matches what the connect flow requests per Page). |
 | App credentials | CRM Settings → Facebook Messenger: App ID, App Secret, Verify Token (DB-first, env fallback). No secrets in this doc. |
 

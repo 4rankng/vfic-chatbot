@@ -272,9 +272,9 @@ async def complete_page_selection(
     try:
         # No separate identity probe: the token is read from the /me/accounts
         # entry whose id equals page_id, so it is bound to this Page by
-        # construction. Probing it via GET /me would additionally require
-        # pages_read_engagement, which this integration does not request.
-        # subscribe_app_to_page below still fails closed on an unusable token.
+        # construction, and GET /me would only spend a round trip to re-derive
+        # that. subscribe_app_to_page below still fails closed on an unusable
+        # token.
         page_token = await get_page_access_token(user_token, payload.page_id)
         await subscribe_app_to_page(payload.page_id, page_token)
     except (FacebookOAuthError, httpx.HTTPError, ValueError) as exc:
@@ -349,8 +349,8 @@ async def probe_facebook_connection(db: AsyncSession) -> FacebookChannelTestOut:
         )
     # The subscription lookup below doubles as the token check: it is made with
     # the Page token and fails closed when that token is invalid or revoked.
-    # A dedicated GET /me identity probe would additionally require
-    # pages_read_engagement, which this integration does not request.
+    # A dedicated GET /me identity probe would re-derive the same fact for one
+    # more round trip, so it stays out.
     #
     # A valid Page token alone does not prove webhook events arrive: the app
     # must also be subscribed to the Page (Meta or a competing integration on

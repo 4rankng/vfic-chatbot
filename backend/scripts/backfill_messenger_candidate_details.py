@@ -9,13 +9,14 @@ it scans for the leads that are still missing candidate details, reads each
 one's conversation, and runs the SAME persistence path live traffic uses, with
 several conversations in flight.
 
-Why the details are missing at all: the Messenger User Profile API cannot
-supply a name for this app. The Page token lacks ``pages_read_engagement``, so
-every PSID lookup is refused with code 100 / subcode 33, the provider label on
-``contacts.display_name`` is never filled, and the profile-name capture in the
-graph turn has nothing to write. Until Meta grants that access, the only source
-of candidate detail is what the candidate actually said — which is what this
-replays.
+Why the details are missing at all: until 2026-10-07 the app did not request
+``pages_read_engagement``, so every PSID lookup through the Messenger User
+Profile API was refused with code 100 / subcode 33 and the provider label on
+``contacts.display_name`` was never filled. The scope is now requested, so new
+Page tokens will populate it — but only after the Page is reconnected, and never
+for phone-number accounts (error 2018218) or people who shared nothing public.
+This replay stays useful for exactly those: the name is what the candidate
+actually said, which no API permission can supply.
 
 Concurrency is bounded by the deployment-wide Redis semaphores
 (``llm_concurrency_limit`` / ``embed_concurrency_limit``), which exist exactly

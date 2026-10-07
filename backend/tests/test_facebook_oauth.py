@@ -108,12 +108,14 @@ def test_facebook_runtime_config_dataclass():
 
 
 def test_oauth_client_permission_set_matches_messenger_requirements():
-    """Permissions revalidated against the official docs (2026-07-17):
-    pages_show_list, pages_manage_metadata, pages_messaging, public_profile."""
+    """Permissions revalidated against the official docs (2026-10-07):
+    pages_show_list, pages_read_engagement, pages_manage_metadata,
+    pages_messaging, public_profile."""
     from app.channels.providers.facebook_oauth import MESSENGER_PERMISSIONS
 
     assert set(MESSENGER_PERMISSIONS) >= {
         "pages_show_list",
+        "pages_read_engagement",
         "pages_manage_metadata",
         "pages_messaging",
         "public_profile",
@@ -123,6 +125,38 @@ def test_oauth_client_permission_set_matches_messenger_requirements():
     # "Invalid Scope: pages_user_gender", blocking Page linking. Gender is
     # inferred per turn by Jev instead.
     assert "pages_user_gender" not in MESSENGER_PERMISSIONS
+
+
+def test_login_scope_includes_pages_read_engagement():
+    """The scope is what makes GET /{PSID} readable at all.
+
+    Production 2026-10-07: /debug_token on the stored Page token reported
+    scopes=[pages_messaging, pages_show_list, pages_manage_metadata,
+    public_profile] and every /{page-id} and /{PSID} read came back code 100
+    naming 'pages_read_engagement'. get_user_profile then returned None for
+    every candidate, so no first name, last name or avatar was ever populated.
+    A Page token only carries the scopes present when the admin authorised it,
+    so this only takes effect once the Page is reconnected.
+    """
+    from app.channels.providers.facebook_oauth import (
+        MESSENGER_PERMISSIONS,
+        build_authorization_url,
+    )
+    from app.services.integration_settings import FacebookOAuthConfig
+
+    assert "pages_read_engagement" in MESSENGER_PERMISSIONS
+
+    cfg = FacebookOAuthConfig(
+        app_id="app-123",
+        app_secret="app-secret",
+        login_config_id="login-config-456",
+        verify_token="verify",
+    )
+    url = build_authorization_url(
+        state="opaque-state-123", redirect_uri="https://x.test/cb", config=cfg
+    )
+    scope = parse_qs(urlparse(url).query)["scope"][0].split(",")
+    assert "pages_read_engagement" in scope
 
 
 def test_build_authorization_url_includes_state_scope_and_config():

@@ -5,9 +5,9 @@ probe, and webhook subscription. Uses the shared httpx client. Never logs raw
 response bodies (they can contain tokens). The Meta Graph API version is pinned
 centrally in config (``meta_graph_api_version``).
 
-Required permissions (revalidated 2026-07-17 against the official docs):
-``pages_show_list``, ``pages_manage_metadata``, ``pages_messaging``,
-``public_profile`` (advanced access for go-live).
+Required permissions (revalidated 2026-10-07 against the official docs):
+``pages_show_list``, ``pages_read_engagement``, ``pages_manage_metadata``,
+``pages_messaging``, ``public_profile`` (advanced access for go-live).
 
 This module is imported only by the OAuth/account-lifecycle layer
 (``facebook_account.py``) and the admin endpoints. The shared ingress, graph,
@@ -33,7 +33,16 @@ logger = logging.getLogger(__name__)
 
 _FACEBOOK_OAUTH_DIALOG_ORIGIN = "https://www.facebook.com"
 
-# Required permissions for Messenger Platform (revalidated 2026-07-17).
+# Required permissions for Messenger Platform (revalidated 2026-10-07).
+#
+# ``pages_read_engagement`` is Standard Access — granted to app-role accounts
+# without App Review — and is what makes ``GET /{PSID}`` readable at all. Without
+# it every profile read came back ``(#100) Object does not exist … requires the
+# 'pages_read_engagement' permission`` and :func:`get_user_profile` silently
+# returned ``None`` for every candidate, so first name, last name and avatar were
+# never populated. Verified on production 2026-10-07: the Page token carried only
+# ``pages_messaging``/``pages_show_list``/``pages_manage_metadata``/``public_profile``
+# and every ``/{page-id}`` and ``/{PSID}`` read failed.
 #
 # ``pages_user_gender`` — the Messenger User Profile API field that backs the
 # Vietnamese address form (anh / chị) — is deliberately NOT requested here. It
@@ -45,6 +54,7 @@ _FACEBOOK_OAUTH_DIALOG_ORIGIN = "https://www.facebook.com"
 # approved for Business Asset User Profile Access.
 MESSENGER_PERMISSIONS = (
     "pages_show_list",
+    "pages_read_engagement",
     "pages_manage_metadata",
     "pages_messaging",
     "public_profile",
@@ -59,11 +69,15 @@ _NO_PROFILE_AVAILABLE_ERROR_CODE = 2018218
 # subcode 33, "Object with ID ... does not exist, cannot be loaded due to
 # missing permissions, or does not support this operation". For the Messenger
 # User Profile API this is what an app without Business Asset User Profile
-# Access (and a Page token without ``pages_read_engagement``) gets for EVERY
-# PSID — measured on production 2026-09-28 across a full Page's contacts, where
-# ``/me`` on the same token reports the missing permission outright. Subcode 33
-# is the narrow signal; code 100 alone also covers a malformed request, which
-# must keep raising.
+# Access gets for EVERY PSID — measured on production 2026-09-28 across a full
+# Page's contacts, and again on 2026-10-07, where the cause was the Page token
+# itself: it carried no ``pages_read_engagement`` (now requested — see
+# ``MESSENGER_PERMISSIONS``), so every ``/{page-id}`` and ``/{PSID}`` read
+# returned code 100 naming that permission. Tokens minted before the scope was
+# added keep failing this way until the Page is reconnected, and a revoked or
+# unapproved feature fails it too, so this stays the fail-soft path rather than
+# becoming an error. Subcode 33 is the narrow signal; code 100 alone also covers
+# a malformed request, which must keep raising.
 _UNREADABLE_OBJECT_ERROR_CODE = 100
 _UNREADABLE_OBJECT_ERROR_SUBCODE = 33
 

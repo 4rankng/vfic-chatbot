@@ -621,6 +621,42 @@ async def test_dead_channel_credential_is_never_retried(mock_session_cls, mock_e
 
 @patch(_PATCH_ENQUEUE, return_value=True)
 @patch(_PATCH_SESSION)
+async def test_closed_messenger_window_is_never_retried(mock_session_cls, mock_enqueue):
+    """Meta code 10 subcode 2018278 is not a transient blip either.
+
+    Production 2026-10-07: the Messenger conversation recorded an inbound at
+    05:49:38, so the local policy gate let the send out, but Meta answered
+    "This message is sent outside of allowed window" and rejected all five
+    replies the sweep generated over the next 13 minutes. The Standard Messaging
+    Window only reopens when the person writes again, so every retry fails
+    identically and only adds failed bubbles. Escaping the window needs
+    pages_utility_messaging plus an approved tag — an App Review item.
+    """
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    failed_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    failed_bot_msg.created_at = datetime.now(timezone.utc) - timedelta(minutes=13)
+    failed_bot_msg.external_error = (
+        "messenger send rejected (code=10, subcode=2018278): (#10) This message "
+        "is sent outside of allowed window."
+    )
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=failed_bot_msg)
+
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_not_called()
+    mock_redis.incrby.assert_any_call("reconcile_terminal_send_skipped_total", 1)
+    assert conv.bot_locked_until is None
+
+
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
 async def test_transient_send_failure_keeps_its_retry(mock_session_cls, mock_enqueue):
     """A provider blip (not a dead credential) still earns its recovery turn."""
     mock_redis = _mock_redis()
