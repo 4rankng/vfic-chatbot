@@ -277,58 +277,33 @@ class BotConversationState(
             except Exception:  # noqa: BLE001 — rollback failure must stay silent too
                 logger.debug("attribution stamp rollback failed", exc_info=True)
 
-    async def mark_ad_entry_prefill(
+    async def flag_ad_entry_prefill(
         self,
-        conv: Conversation,
-        *,
-        expected_version: int,
+        conversation_id: uuid.UUID,
     ) -> bool:
-        """Park a Click-to-Messenger ad thread whose only inbound is the prefill.
+        """Record that a thread's newest inbound is the ad prefill — bot skips it.
 
-        Meta counts the ad's pre-filled first message as page-initiated, so the
-        24h messaging window never opens and every automated reply is refused
-        (``code 10, subcode 2018278``). Answering it would burn an LLM turn and
-        leave one more failed bubble per ad re-click, so the thread moves to
-        human-only review — the same shape as :meth:`escalate_extracted_intent`
-        (HUMAN + needs_human): the reconcile sweep's mode filter keeps it out of
-        recovery, ``run_start_guard`` starves later bot turns, and the console's
-        "Cần xử lý" queue surfaces it. The candidate's first real message opens
-        the standard window, so the recruiter's replies deliver.
+        Meta counts a Click-to-Messenger ad's pre-filled message as
+        page-initiated, so the 24h messaging window never opens and any reply
+        is refused (``code 10, subcode 2018278``). The conversation stays in
+        BOT mode: the flag makes the reconcile sweep skip it (so the unanswered
+        prefill never triggers a recovery turn) while the webhook skips the
+        immediate turn. The candidate's first genuine message clears the flag
+        (:meth:`clear_ad_entry_prefill_flag`), reopens the standard window, and
+        the bot answers it through the normal path.
 
-        Idempotent like the sibling escalation: a thread already in human
-        review, closed, or raced by a newer inbound/recruiter action loses the
-        conditional update cleanly and reports ``False``.
+        Writes the explainer note once, on the first flag. Idempotent: a thread
+        already flagged reports without rewriting. Unknown ids report False.
         """
-        target_state = and_(
-            Conversation.mode == ConversationMode.HUMAN,
-            Conversation.needs_human.is_(True),
-        )
-        transition = await self.db.execute(
-            update(Conversation)
-            .where(
-                Conversation.id == conv.id,
-                Conversation.version == expected_version,
-                Conversation.status != ConversationStatus.CLOSED,
-                ~target_state,
-            )
-            .values(
-                mode=ConversationMode.HUMAN,
-                status=ConversationStatus.OPEN,
-                needs_human=True,
-                bot_locked_until=None,
-                bot_lock_owner=None,
-                bot_lock_heartbeat_at=None,
-                version=Conversation.version + 1,
-                conversation_seq=Conversation.conversation_seq + 1,
-            )
-            .returning(Conversation.version)
-            .execution_options(synchronize_session=False)
-        )
-        transitioned_version = transition.scalar_one_or_none()
-        if transitioned_version is None:
-            await self.db.rollback()
+        conv = await self.db.get(Conversation, conversation_id)
+        if conv is None:
             return False
+        attribution = conv.attribution or {}
+        merged = merge_attribution(attribution, {"ad_prefill_pending": "true"})
+        if merged == attribution:
+            return True
 
+        conv.attribution = merged
         system_note = Message(
             conversation_id=conv.id,
             sender=MessageSender.SYSTEM,
@@ -337,10 +312,10 @@ class BotConversationState(
         self.db.add(system_note)
         await record_audit(
             self.db,
-            action="ad_entry_prefill_human_review",
+            action="ad_entry_prefill_flagged",
             target_type="conversation",
             target_id=str(conv.id),
-            payload={"version": transitioned_version},
+            payload={"first_flag": bool(system_note)},
         )
 
         await self.db.commit()
@@ -357,6 +332,28 @@ class BotConversationState(
                 conv.id,
                 exc_info=True,
             )
+        return True
+
+    async def clear_ad_entry_prefill_flag(
+        self,
+        conversation_id: uuid.UUID,
+    ) -> bool:
+        """Clear the ad-prefill skip flag on the candidate's first real message.
+
+        The candidate typing for themselves is what reopens Meta's standard
+        24h window, so from this message on the thread rides the normal bot
+        path again — including reconcile recovery if that turn later dies.
+        Best-effort by contract: an unknown id or an unflagged thread is a
+        no-op that reports False.
+        """
+        conv = await self.db.get(Conversation, conversation_id)
+        attribution = conv.attribution or {} if conv is not None else {}
+        if conv is None or attribution.get("ad_prefill_pending") != "true":
+            return False
+        conv.attribution = {
+            key: value for key, value in attribution.items() if key != "ad_prefill_pending"
+        }
+        await self.db.commit()
         return True
 
     async def record_inbound(

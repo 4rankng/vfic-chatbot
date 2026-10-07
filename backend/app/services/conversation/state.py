@@ -147,15 +147,11 @@ class ConversationState:
             preserve_turn_ownership=preserve_turn_ownership,
         )
 
-    async def mark_ad_entry_prefill(
-        self,
-        conv: Conversation,
-        *,
-        expected_version: int,
-    ) -> bool:
-        return await self._bot.mark_ad_entry_prefill(
-            conv, expected_version=expected_version
-        )
+    async def flag_ad_entry_prefill(self, conversation_id: uuid.UUID) -> bool:
+        return await self._bot.flag_ad_entry_prefill(conversation_id)
+
+    async def clear_ad_entry_prefill_flag(self, conversation_id: uuid.UUID) -> bool:
+        return await self._bot.clear_ad_entry_prefill_flag(conversation_id)
 
     async def acquire_lock(
         self,

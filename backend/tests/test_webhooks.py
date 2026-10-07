@@ -1682,13 +1682,11 @@ async def test_active_runtime_authority_is_untouched_by_the_tally(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_messenger_ad_prefill_first_message_parks_the_thread_without_a_turn(
-    monkeypatch,
-):
-    """A Click-to-Messenger ad's pre-filled first message never opens Meta's
-    24h window (it is page-initiated content), so an automated reply is always
+async def test_messenger_ad_prefill_message_is_flagged_and_skipped(monkeypatch):
+    """A Click-to-Messenger ad's pre-filled message never opens Meta's 24h
+    window (it is page-initiated content), so an automated reply is always
     refused (code 10, subcode 2018278) — production 2026-10-07. The webhook
-    must park the thread for human review instead of enqueueing the turn."""
+    must flag the thread (staying in BOT mode) and enqueue no turn."""
     import json
 
     from app.api import webhooks
@@ -1728,8 +1726,8 @@ async def test_messenger_ad_prefill_first_message_parks_the_thread_without_a_tur
     monkeypatch.setattr("app.channels.ingress.ChannelIngressService", FakeIngress)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
     monkeypatch.setattr(webhooks, "enqueue_messenger_profile_enrichment", MagicMock())
-    escalation = AsyncMock(return_value=True)
-    monkeypatch.setattr(webhooks, "escalate_messenger_ad_entry", escalation)
+    flagging = AsyncMock(return_value=True)
+    monkeypatch.setattr(webhooks, "flag_messenger_ad_entry", flagging)
     enqueue = MagicMock()
     monkeypatch.setattr(webhooks, "enqueue_chat_turn", enqueue)
     monkeypatch.setattr(webhooks, "record_webhook_ack_ms", AsyncMock())
@@ -1753,12 +1751,12 @@ async def test_messenger_ad_prefill_first_message_parks_the_thread_without_a_tur
     )
 
     assert response.status_code == 200
-    escalation.assert_awaited_once()
+    flagging.assert_awaited_once()
     enqueue.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_messenger_genuine_message_after_an_escalated_thread_rides_the_normal_path(
+async def test_messenger_genuine_message_clears_the_flag_and_rides_the_normal_path(
     monkeypatch,
 ):
     """A message without the ad-referral marker is a real candidate message:
@@ -1802,8 +1800,10 @@ async def test_messenger_genuine_message_after_an_escalated_thread_rides_the_nor
     monkeypatch.setattr("app.channels.ingress.ChannelIngressService", FakeIngress)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
     monkeypatch.setattr(webhooks, "enqueue_messenger_profile_enrichment", MagicMock())
-    escalation = AsyncMock(return_value=False)
-    monkeypatch.setattr(webhooks, "escalate_messenger_ad_entry", escalation)
+    flagging = AsyncMock(return_value=False)
+    monkeypatch.setattr(webhooks, "flag_messenger_ad_entry", flagging)
+    cleared = AsyncMock(return_value=False)
+    monkeypatch.setattr(webhooks, "clear_messenger_ad_entry_flag", cleared)
     turn = AsyncMock()
     monkeypatch.setattr(webhooks, "enqueue_facebook_turn", turn)
     monkeypatch.setattr(webhooks, "record_webhook_ack_ms", AsyncMock())
@@ -1823,5 +1823,6 @@ async def test_messenger_genuine_message_after_an_escalated_thread_rides_the_nor
     )
 
     assert response.status_code == 200
-    escalation.assert_not_awaited()
+    flagging.assert_not_awaited()
+    cleared.assert_awaited_once()
     turn.assert_awaited_once()

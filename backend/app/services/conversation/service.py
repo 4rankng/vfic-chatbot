@@ -145,21 +145,23 @@ class ConversationService:
             preserve_turn_ownership=preserve_turn_ownership,
         )
 
-    async def mark_ad_entry_prefill(
-        self,
-        conv: Conversation,
-        *,
-        expected_version: int,
-    ) -> bool:
-        """Park a Click-to-Messenger ad thread whose only inbound is the prefill.
+    async def flag_ad_entry_prefill(self, conversation_id: uuid.UUID) -> bool:
+        """Mark a thread's newest inbound as the ad prefill — bot skips it.
 
-        See :meth:`BotConversationState.mark_ad_entry_prefill` — Meta refuses
-        every automated reply there (the 24h window never opens for an ad
-        prefill), so the thread goes to human review instead of the bot path.
+        See :meth:`BotConversationState.flag_ad_entry_prefill`: Meta refuses
+        every automated reply on a Click-to-Messenger prefill (the 24h window
+        never opens), so the flag makes webhook and reconcile skip it while the
+        conversation stays in BOT mode.
         """
-        return await self.state.mark_ad_entry_prefill(
-            conv, expected_version=expected_version
-        )
+        return await self.state.flag_ad_entry_prefill(conversation_id)
+
+    async def clear_ad_entry_prefill_flag(self, conversation_id: uuid.UUID) -> bool:
+        """Clear the ad-prefill skip flag on the candidate's first real message.
+
+        The candidate typing is what reopens Meta's window; from here the
+        thread rides the normal bot path again.
+        """
+        return await self.state.clear_ad_entry_prefill_flag(conversation_id)
 
     # --- per-chat lock lifecycle (the graph port's surface) ---
 

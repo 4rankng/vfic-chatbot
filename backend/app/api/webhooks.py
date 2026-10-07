@@ -36,8 +36,9 @@ from app.composition.conversation_messaging import (
 from app.conversation_messaging.infrastructure.webhook_delivery import (
     apply_messenger_receipt,
     apply_messenger_referral,
+    clear_messenger_ad_entry_flag,
     enqueue_facebook_turn,
-    escalate_messenger_ad_entry,
+    flag_messenger_ad_entry,
 )
 from app.shared.infrastructure.db import get_request_db
 from app.shared.infrastructure.rate_limits import enforce_webhook_rate_limit
@@ -418,20 +419,33 @@ async def facebook_webhook(
             )
         except Exception:  # noqa: BLE001 — enrichment is best-effort
             logger.info("facebook profile enrichment enqueue failed")
-        # A Click-to-Messenger ad's pre-filled first message is page-initiated
+        # A Click-to-Messenger ad's pre-filled message is page-initiated
         # content: Meta never opens the 24h reply window for it, so an
         # automated reply is always refused (code 10, subcode 2018278) and each
-        # ad re-click would add another failed bubble. Park the thread for
-        # human review instead of enqueueing a turn that cannot deliver.
+        # ad re-click would add another failed bubble. The thread stays in BOT
+        # mode; the flag makes webhook and reconcile skip the prefill until the
+        # candidate's first genuine message clears it and reopens the window.
         if msg.attribution is not None and msg.attribution.get("referral_source") == "ADS":
             try:
-                if await escalate_messenger_ad_entry(db, outcome):
-                    continue
-            except Exception:  # noqa: BLE001 — escalation is best-effort; the
+                await flag_messenger_ad_entry(db, outcome)
+            except Exception:  # noqa: BLE001 — flagging is best-effort; the
                 # normal path below still applies rather than dropping the event
                 logger.info(
-                    "messenger ad-entry escalation failed conversation=%s",
+                    "messenger ad-entry flagging failed conversation=%s",
                     outcome.conversation_id,
+                )
+            continue
+        # A message without the ad-referral marker is the candidate's own —
+        # Meta's window is open from here, so clear the prefill skip if this
+        # thread carried one and answer through the normal path.
+        conversation_id = outcome.conversation_id
+        if conversation_id is not None:
+            try:
+                await clear_messenger_ad_entry_flag(db, conversation_id)
+            except Exception:  # noqa: BLE001 — best-effort, same contract
+                logger.info(
+                    "messenger ad-entry flag clear failed conversation=%s",
+                    conversation_id,
                 )
         # Enqueue a bot turn for the persisted message, mirroring the Zalo
         # webhook flow. The v2 job payload carries only neutral ids.

@@ -14,6 +14,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from app.models.conversation import (
     Conversation,
     ConversationMode,
@@ -772,3 +774,35 @@ async def test_outcome_that_answered_the_newest_message_is_not_recovered(
         call.args[0] == "reconcile_superseded_inbound_total"
         for call in mock_redis.incrby.call_args_list
     )
+
+
+@pytest.mark.asyncio
+async def test_ad_prefill_flag_excludes_a_thread_from_the_candidate_scan():
+    """A thread flagged ``ad_prefill_pending`` is never a recovery candidate.
+
+    The guard is raw SQL inside the candidate scan, so this pins the compiled
+    statement: an unanswered ad prefill (page-initiated, window closed) must
+    not be re-answered by the sweep — the webhook cleared path is the only
+    thing that lifts the flag.
+    """
+    from app.services.conversation.repository import ConversationRepository
+
+    captured: dict[str, str] = {}
+
+    class FakeResult:
+        def all(self):
+            return []
+
+    class FakeDB:
+        async def scalars(self, statement, _params):
+            captured["sql"] = str(statement)
+            return FakeResult()
+
+    await ConversationRepository(FakeDB()).find_reconcile_candidates(
+        now=datetime(2026, 10, 7, tzinfo=timezone.utc),
+        grace_seconds=120,
+        max_age_seconds=86400,
+        limit=25,
+    )
+
+    assert "ad_prefill_pending" in captured["sql"]
