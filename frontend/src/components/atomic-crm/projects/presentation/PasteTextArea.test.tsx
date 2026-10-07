@@ -1,7 +1,7 @@
 import { cleanup, render } from "vitest-browser-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PASTED_TEXT_FILENAME } from "../infrastructure/project-text-file";
+import { PASTED_TEXT_FILENAME } from "../project-knowledge-service";
 import { PasteTextArea } from "./PasteTextArea";
 
 afterEach(async () => {

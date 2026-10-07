@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/base/buttons/button";
 import { TextArea } from "@/components/base/textarea/textarea";
 
-import { pastedTextFile } from "../infrastructure/project-text-file";
+import { pastedTextFile } from "../project-knowledge-service";
 
 type Props = {
   busy?: boolean;

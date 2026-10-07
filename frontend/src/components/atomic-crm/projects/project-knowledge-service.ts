@@ -16,8 +16,10 @@ import type {
 import type { ProjectKnowledgeCategory } from "./domain/project-knowledge-policy";
 import { httpProjectKnowledgeAdapter } from "./infrastructure/http-project-knowledge-adapter";
 export {
+  PASTED_TEXT_FILENAME,
   PROJECT_TEXT_FILE_ACCEPT,
   assertProjectTextFile,
+  pastedTextFile,
   readProjectBriefPreview,
 } from "./infrastructure/project-text-file";
 

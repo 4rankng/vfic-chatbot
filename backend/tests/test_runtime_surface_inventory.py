@@ -53,7 +53,7 @@ EXPECTED_ROUTE_COUNTS = {
     # +3 candidate email digest: GET/PUT /email-digest config + POST test send
     "installation": 8,
     "jobs": 7,
-    "knowledge": 14,  # -7 the legacy KB-version lane; -4 the Google Sheet external-source routes (0067)
+    "knowledge": 15,  # -7 the legacy KB-version lane; -4 the Google Sheet external-source routes (0067); +1 POST /documents/extract-text (stateless editor pre-fill extraction)
     "knowledge_bases": 11,
     "leads": 16,  # +1 GET /{lead_id}/project-interests — project interest (2026-10-06)
     "main": 3,
@@ -81,7 +81,10 @@ EXPECTED_ROUTE_COUNTS = {
 # transport-only: config/ORM access moved into the service).
 # 2026-10-06: +1 leads route (GET /{lead_id}/project-interests,
 # capability.recruitment); digest recomputed from the post-change scan.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "e014bfb24322264e7361cef327be7e6439ca4e7c5b8c09e125150c83ceae8c01"
+# 2026-10-07: +1 knowledge route (POST /documents/extract-text,
+# capability.knowledge — the stateless single-page .docx pre-fill extraction);
+# digest recomputed from the post-change scan.
+EXPECTED_ROUTE_INVENTORY_SHA256 = "a75b26cdcc4bde4d8f9a62b1f92fbca38006b4984a2b2b40ad08d7b1396fc50b"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
