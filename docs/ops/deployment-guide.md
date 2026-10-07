@@ -10,6 +10,11 @@ CI deploy to production** — `make deploy` builds + pushes both images and runs
 zero-downtime: the new color is health- + smoke-checked before Caddy is flipped
 onto it, and a failed smoke gate aborts with the old color still serving.
 
+`make release-check` is the operator-run pre-deploy gate and is **not** chained
+by `make deploy` — run it yourself before every deploy. It may be skipped for a
+genuinely urgent deploy under the conditions in §3; the health and smoke gates
+inside `make deploy` always run regardless.
+
 ---
 
 ## 1. Production stack — Docker Compose with a blue/green web tier
@@ -72,6 +77,43 @@ The full deploy sequence: `make release-check` (run it yourself — `make deploy
 does not chain it) → `make deploy` = build + push both images + blue/green
 cutover.
 
+### Urgent deploys may skip `release-check` — explicitly, never silently
+
+`release-check` remains the default and should run for every deploy. When a
+production-facing fix is genuinely urgent, the operator may go straight to
+`make deploy` **without** it. That is a deliberate, documented escape hatch —
+not an oversight and not a step to quietly drop.
+
+When skipping it, the operator takes on the risk and must:
+
+1. **Say so in the session.** Record that `release-check` was skipped, why, and
+   what was deployed. An unannounced skip is the thing this rule exists to
+   prevent.
+2. **Run the narrow gates the change actually touches** — they take seconds, not
+   minutes, and they catch the failures that have historically reached
+   production:
+   - the affected backend test files (`cd backend && .venv/bin/pytest <files> -q`);
+   - `cd backend && .venv/bin/ruff check app tests`;
+   - `cd backend && uvx pyright app/graph` **only if** `app/graph` changed — it
+     is the one gate the deploy path itself does not cover;
+   - `cd backend && .venv/bin/pytest tests/test_architecture_boundaries.py -q`
+     when any cross-layer import changed — the zero-exception dependency matrix;
+   - `node scripts/check-doc-links.mjs` when agent routing changed.
+3. **Run the rest of the gate afterwards, not instead of it.** `release-check`
+   can still be run after a successful cutover; a late failure is a follow-up
+   fix, not a rollback of unrelated, working code.
+4. **Confirm the rollback is available before flipping**: `make deploy-status`
+   shows `PREV_COLOR`@`PREV_TAG`, and `make -C backend rollback` needs no
+   rebuild. The blue/green cutover and its smoke gate (§3 below) still run
+   inside `make deploy` — skipping `release-check` never skips the health and
+   smoke gates, which are what actually protect the edge.
+
+Skipping trades the *pre-deploy* gate for a *post-deploy* one. It is safe for a
+small, well-understood change whose narrow gates are green. It is **not**
+appropriate for a migration, an `app/graph` change, a dependency bump, or
+anything that has not had its own tests run — those are the changes
+`release-check`'s expensive lanes exist to vet.
+
 ### Full deploy (`make deploy`)
 1. `make release-check` — the operator-run prerequisite: `make deploy` does
    not chain it (the `deploy-backend` / `deploy-frontend` fast-tracks still
@@ -90,7 +132,7 @@ cutover.
    blockers. Every lane runs on the deploying
    machine — there is **no CI** in the release path (see K-13 in
    `docs/project-roadmap.md`). Stops before any image is pushed if a check
-   fails.
+   fails. Skippable only under the urgent-deploy policy above.
 2. `cd frontend && make push` — buildx AMD64, tag `:latest` + `:<git-sha>`, push.
 3. `cd backend && make push` — same for the backend image (now including
    `scripts/smoke_turn.py`, which ships in the image).
