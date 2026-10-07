@@ -146,7 +146,6 @@ vi.mock("./api", () => ({
         oa_last_error: "",
         oa_token_updated_at: null,
         oa_token_managed_note: "Payroll quản lý và tự gia hạn token Zalo OA",
-        tingting_oa_enabled: true,
       }),
     ),
     saveTingtingSettings: vi.fn(),

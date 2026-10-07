@@ -129,12 +129,6 @@ export type TingtingSettings = {
   oa_token_updated_at: string | null;
   /** Fixed label: the token is not an admin credential for this account. */
   oa_token_managed_note: string;
-  /**
-   * Admin kill switch for candidate-message processing on the support OA.
-   * Absent server-side row = enabled; off means inbound there is not
-   * processed at all (no LLM call, no reply).
-   */
-  tingting_oa_enabled: boolean;
 };
 
 /**
@@ -146,8 +140,6 @@ export type TingtingSettingsUpdate = {
   api_key?: string;
   reset_oa_id?: string;
   hotline?: string;
-  /** Omitted keeps the stored switch value. */
-  tingting_oa_enabled?: boolean;
 };
 
 export type GeocoderSettings = {

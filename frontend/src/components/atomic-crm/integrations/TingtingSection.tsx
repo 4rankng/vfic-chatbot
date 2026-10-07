@@ -86,12 +86,7 @@ export const TingtingSection = () => {
   const trimmedHotline = hotlineDraft.trim();
   const hotlineChanged =
     Boolean(trimmedHotline) && trimmedHotline !== storedHotline;
-
-  // The switch falls back to on while the settings are loading, so the toggle
-  // never renders a disabled-looking half state before the truth arrives.
-  const oaEnabled = oaEnabledDraft ?? settings?.tingting_oa_enabled ?? true;
-  const dirty =
-    Boolean(trimmedApiKey) || hotlineChanged || oaEnabledDraft !== null;
+  const dirty = Boolean(trimmedApiKey) || hotlineChanged;
 
   // The badge counts the admin-editable inputs, so the section reports how
   // much of what the ADMIN owns is configured — the OA token is Payroll's.
@@ -105,9 +100,6 @@ export const TingtingSection = () => {
     saveSettings.mutate({
       ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
       ...(hotlineChanged ? { hotline: trimmedHotline } : {}),
-      ...(oaEnabledDraft !== null
-        ? { tingting_oa_enabled: oaEnabledDraft }
-        : {}),
     });
   };
 
