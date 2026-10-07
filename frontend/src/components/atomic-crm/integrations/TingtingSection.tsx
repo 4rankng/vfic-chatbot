@@ -49,9 +49,6 @@ export const TingtingSection = () => {
   // its draft holds the EDIT only; saving keeps the stored number when the
   // field is untouched or cleared — the backend never loses the seed by accident.
   const [hotlineDraft, setHotlineDraft] = useState("");
-  // Untouched-draft sentinel for the OA processing switch: null tracks the
-  // server value until the operator toggles.
-  const [oaEnabledDraft, setOaEnabledDraft] = useState<boolean | null>(null);
 
   const settingsQuery = useQuery<TingtingSettings>({
     queryKey: tingtingSettingsKey,
@@ -76,7 +73,6 @@ export const TingtingSection = () => {
       // Back to "keep stored": the response is the section's new truth.
       setApiKey("");
       setHotlineDraft("");
-      setOaEnabledDraft(null);
       queryClient.setQueryData(tingtingSettingsKey, data);
       notify("Đã lưu cấu hình TingTing.", { type: "success" });
     },
@@ -196,49 +192,6 @@ export const TingtingSection = () => {
           <div className="settings-tingting-link">
             <span className="settings-tingting-link-copy" role="status">
               {describeToken(settings)}
-            </span>
-          </div>
-
-          <div className="settings-tingting-subhead">
-            <h3>Xử lý tin nhắn</h3>
-            <p>
-              Tắt để dừng xử lý tin nhắn của thí sinh trên Zalo OA (không dùng
-              LLM). Bật lại để tiếp tục.
-            </p>
-          </div>
-          <div
-            className="flex flex-wrap items-center gap-2"
-            role="group"
-            aria-label="Xử lý tin nhắn TingTing OA"
-          >
-            <Button
-              type="button"
-              size="sm"
-              color={oaEnabled ? "primary" : "secondary"}
-              className="uu-scope tt-btn-touch"
-              aria-pressed={oaEnabled}
-              onClick={() => setOaEnabledDraft(true)}
-            >
-              Bật
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              color={oaEnabled ? "secondary" : "primary"}
-              className="uu-scope tt-btn-touch"
-              aria-pressed={!oaEnabled}
-              onClick={() => setOaEnabledDraft(false)}
-            >
-              Tắt
-            </Button>
-            <span className="settings-tingting-link-copy" role="status">
-              {oaEnabledDraft === true
-                ? "Sẽ bật sau khi bấm Lưu cấu hình."
-                : oaEnabledDraft === false
-                  ? "Sẽ tắt sau khi bấm Lưu cấu hình."
-                  : oaEnabled
-                    ? "Đang xử lý tin nhắn trên Zalo OA này."
-                    : "Đang tắt — tin nhắn trên Zalo OA này không được xử lý."}
             </span>
           </div>
         </SettingsGroup>
