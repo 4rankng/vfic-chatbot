@@ -248,36 +248,6 @@ async def _inbound_already_answered(svc, state) -> bool:  # noqa: ANN001 (servic
         return False
 
 
-async def _tingting_oa_disabled(db, state) -> bool:  # noqa: ANN001 (session/state ports)
-    """Whether this turn sits on the TingTing OA while the admin kill switch is off.
-
-    Settings → TingTing exposes a processing switch for the support OA
-    (``tingting_oa_enabled``): off means candidate messages there are not
-    processed at all — no graph run, no LLM tokens, no reply. The check is
-    scoped to that one account: the default Zalo bot, Messenger, and every
-    other OA resolve to a different (or no) account key and turn here is a
-    no-op. Fail-open twice over: an identity-read error and a settings-read
-    error both leave processing ON (logged), because a broken read must never
-    silently silence the bot.
-    """
-    from app.channels.types import TINGTING_OA_ACCOUNT_KEY
-    from app.graph.factories import resolve_zalo_account_key
-    from app.services.tingting_oa import processing_enabled
-
-    try:
-        account_key = await resolve_zalo_account_key(db, state.conversation_id)
-    except Exception:  # noqa: BLE001 — a routing read must not stand turns down
-        logger.warning(
-            "tingting oa gate account read failed conversation=%s",
-            state.conversation_id,
-            exc_info=True,
-        )
-        return False
-    if account_key != TINGTING_OA_ACCOUNT_KEY:
-        return False
-    return not await processing_enabled(db)
-
-
 async def _handoff_to_newer_inbound(state) -> None:
     """Give a message that arrived mid-turn the turn the ingress guard refused it.
 
@@ -582,41 +552,6 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                         state.reply_to_message_id,
                     )
                     await _handoff_to_newer_inbound(state)
-                    return
-                if await _tingting_oa_disabled(db, state):
-                    # The admin kill switch for the TingTing OA: the inbound is
-                    # not processed — no graph run, no LLM tokens, no reply.
-                    # The turn is still recorded SUPPRESSED so the per-chat
-                    # mutex clears and the dashboard keeps the audit row;
-                    # re-enabling resumes with the NEXT inbound (recorded
-                    # stand-downs are terminal, so nothing replays the gap).
-                    logger.info(
-                        "tingting oa disabled: turn stood down conversation=%s",
-                        state.conversation_id,
-                    )
-                    try:
-                        from app.services.conversation import ConversationService
-
-                        svc = ConversationService(db)
-                        conv = await svc.get(uuid.UUID(state.conversation_id))
-                        if conv is not None:
-                            await db.refresh(conv)
-                            await svc.record_bot_outcome(
-                                conv,
-                                version_at_start=state.version_at_start,
-                                reply="",
-                                started_at=started_at,
-                                sent=False,
-                                stage_timings=_preamble_timings(
-                                    state, started_at, lane="agent"
-                                ),
-                                lock_owner=state.lock_owner or None,
-                                trace_id=state.trace_id or None,
-                            )
-                    except Exception:  # noqa: BLE001
-                        logger.error(
-                            "failed to record stood-down turn outcome", exc_info=True
-                        )
                     return
                 await run_turn(state, deps)
             except LLMThrottled as exc:
