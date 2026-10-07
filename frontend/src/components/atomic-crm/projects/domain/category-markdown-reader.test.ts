@@ -156,3 +156,42 @@ describe("category markdown reader", () => {
     expect(document.isCategoryMarkdown).toBe(false);
   });
 });
+
+describe("escaped scalars from the backend writer", () => {
+  it("parses a multi-line escaped summary without marking it malformed", () => {
+    // The production case (LG-DISPLAY jobs, 2026-10-07): the backend writes a
+    // summary whose value carries literal \n escapes and \" quotes. The
+    // stored source is one physical line per scalar; the reader must unescape
+    // — never let a caller pre-convert \n to real newlines, which shatters
+    // the scalar into stray malformed lines.
+    const source = [
+      "---",
+      'schema_version: "1.0"',
+      "category: jobs",
+      "---",
+      "",
+      "## jobs",
+      "",
+      "### record: legacy-main-job",
+      'title: "Công nhân thời vụ"',
+      "aliases: []",
+      'location: "KCN Tràng Duệ, An Dương, Hải Phòng"',
+      'summary: "LG Display Hải Phòng tuyển công nhân thời vụ.\\nQuy trình ứng tuyển:\\nHọ và tên\\nSố điện thoại.\\nVFIC không thu phí tuyển dụng."',
+      "keywords: []",
+      "",
+    ].join("\n");
+
+    const document = parseCategoryMarkdownView(source, "jobs");
+
+    expect(document.records).toHaveLength(1);
+    const record = document.records[0];
+    expect(record.malformed).toEqual([]);
+    const summary = record.fields.find((field) => field.name === "summary");
+    expect(summary && summary.kind === "scalar").toBe(true);
+    if (summary && summary.kind === "scalar") {
+      expect(summary.display).toContain("\n");
+      expect(summary.display).toContain("Quy trình ứng tuyển:");
+      expect(summary.display).not.toContain("\\n");
+    }
+  });
+});

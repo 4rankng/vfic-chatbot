@@ -79,8 +79,12 @@ export const CategoryEditor = ({
     return null;
   }, [category?.updated_at, filename, hasCurrentSource, processing]);
 
+  // Parse the RAW stored content: record scalars carry escaped `\n`/`\"`
+  // sequences that the reader unescapes per field. Pre-converting them to
+  // real newlines here would shatter a multi-line scalar into stray lines
+  // and mark most of the record malformed (LG-DISPLAY jobs, 2026-10-07).
   const view = useMemo(
-    () => parseCategoryMarkdownView(content.replace(/\\n/g, "\n"), selectedKey),
+    () => parseCategoryMarkdownView(content, selectedKey),
     [content, selectedKey],
   );
   const showCards =
