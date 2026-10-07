@@ -278,15 +278,21 @@ class BotConversationState(
         The candidate typing for themselves is what reopens Meta's standard
         24h window, so from this message on the thread rides the normal bot
         path again — including reconcile recovery if that turn later dies.
-        Best-effort by contract: an unknown id or an unflagged thread is a
-        no-op that reports False.
+        Also drops the consecutive-refusal counter so a later window problem
+        starts a fresh two-attempt cycle. Best-effort by contract: an unknown
+        id or a thread carrying neither key is a no-op that reports False.
         """
         conv = await self.db.get(Conversation, conversation_id)
         attribution = conv.attribution or {} if conv is not None else {}
-        if conv is None or attribution.get("ad_prefill_pending") != "true":
+        if conv is None or not (
+            attribution.get("ad_prefill_pending") == "true"
+            or "ad_prefill_refusals" in attribution
+        ):
             return False
         conv.attribution = {
-            key: value for key, value in attribution.items() if key != "ad_prefill_pending"
+            key: value
+            for key, value in attribution.items()
+            if key not in ("ad_prefill_pending", "ad_prefill_refusals")
         }
         await self.db.commit()
         return True

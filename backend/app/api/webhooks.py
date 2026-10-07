@@ -423,11 +423,11 @@ async def facebook_webhook(
         # whether the candidate genuinely typed it or Meta auto-sent the
         # prefill — the marker alone does not say the window is closed (a
         # genuinely typed question answered fine, 2026-10-07 20:27). So the
-        # turn RUNS and the attempt itself is the test: a window-closed send
-        # is stamped ad_prefill_pending by the outcome recorder, and the flag
-        # (not the marker) is what skips the next referral message. The
-        # candidate's own typed message clears the flag and rides the normal
-        # path.
+        # turn RUNS and the attempt itself is the test: a SECOND consecutive
+        # window-closed send stamps ad_prefill_pending (the outcome recorder
+        # counts refusals in ad_prefill_refusals), and the flag — not the
+        # marker — is what skips the next referral message. The candidate's
+        # own typed message clears the flag and rides the normal path.
         if msg.attribution is not None and msg.attribution.get("referral_source") == "ADS":
             try:
                 if await messenger_ad_entry_flagged(db, outcome.conversation_id or ""):

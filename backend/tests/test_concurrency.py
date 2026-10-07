@@ -23,6 +23,7 @@ from app.models.conversation import (
 )
 from app.models.lead import Lead, LeadStage
 from app.models.user import Role, User
+from app.services.conversation._shared import AD_ENTRY_PREFILL_SYSTEM_NOTE
 from app.services.conversation.state import ConversationConflict, ConversationState, utcnow
 from app.shared.domain.errors import ConflictError
 from app.services.lead import LeadService
@@ -529,6 +530,89 @@ async def test_record_bot_outcome_transitions_sending_row_in_place():
     assert conv.last_outbound_at is not None
     events.message_created.assert_awaited_once()
     events.conversation_updated.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_record_bot_outcome_stamps_the_prefill_skip_on_the_second_refusal():
+    """Owner policy (2026-10-07): try the send twice, then stop. The first
+    closed-window refusal only counts in ad_prefill_refusals; the second
+    consecutive one stamps the skip flag plus the explainer note, and a
+    successful send resets the count so a later problem starts a fresh
+    two-attempt cycle."""
+    window_error = " (#100) This message is sent outside the allowed window."
+
+    def _harness(conv):
+        pending = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.BOT,
+            body="Trả lời bot",
+            delivery_status=DeliveryStatus.PENDING,
+        )
+        pending.id = 42
+        db = AsyncMock()
+        db.add = MagicMock()
+
+        async def _flush():
+            for call in db.add.call_args_list:
+                obj = call.args[0]
+                if hasattr(obj, "proposed_reply"):
+                    obj.id = 99
+
+        db.flush = AsyncMock(side_effect=_flush)
+        db.commit = AsyncMock()
+        db.refresh = AsyncMock()
+        db.get = AsyncMock(return_value=pending)
+        state = ConversationState(db, MagicMock(), AsyncMock())
+        return state, db
+
+    conv = _make_conv(version=3)
+    state, db = _harness(conv)
+
+    await state.record_bot_outcome(
+        conv,
+        version_at_start=3,
+        reply="Trả lời bot",
+        started_at=utcnow(),
+        sent=False,
+        pending_message_id=42,
+        external_error=window_error,
+    )
+    # First refusal: counted, nothing stamped, no system note yet.
+    assert conv.attribution == {"ad_prefill_refusals": 1}
+    assert not [c for c in db.add.call_args_list if isinstance(c.args[0], Message)]
+
+    await state.record_bot_outcome(
+        conv,
+        version_at_start=3,
+        reply="Trả lời bot",
+        started_at=utcnow(),
+        sent=False,
+        pending_message_id=42,
+        external_error=window_error,
+    )
+    # Second consecutive refusal: skip flag + the one-time explainer note.
+    assert conv.attribution["ad_prefill_refusals"] == 2
+    assert conv.attribution["ad_prefill_pending"] == "true"
+    notes = [
+        c.args[0]
+        for c in db.add.call_args_list
+        if isinstance(c.args[0], Message) and c.args[0].sender == MessageSender.SYSTEM
+    ]
+    assert len(notes) == 1
+    assert notes[0].body == AD_ENTRY_PREFILL_SYSTEM_NOTE
+
+    await state.record_bot_outcome(
+        conv,
+        version_at_start=3,
+        reply="Trả lời bot",
+        started_at=utcnow(),
+        sent=True,
+        pending_message_id=42,
+    )
+    # A success after the flag stays: the counter clears, the skip flag waits
+    # for the candidate's genuine message (clear_ad_entry_prefill_flag).
+    assert "ad_prefill_refusals" not in conv.attribution
+    assert conv.attribution["ad_prefill_pending"] == "true"
 
 
 @pytest.mark.asyncio

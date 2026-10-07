@@ -212,21 +212,36 @@ class BotOutcomeMixin:
             conv.conversation_seq = (conv.conversation_seq or 1) + 1
         # A Messenger send refused with Meta's closed-window error (code 10
         # subcode 2018278) is the one reliable signal that an ad thread's
-        # pre-filled message never opened the 24h window: stamp the skip flag
-        # + the explainer note so the webhook and the reconcile sweep stop
-        # spending turns on it (2026-10-07). Rides this transaction; the flag
-        # is its own dedupe, so the note lands once per thread.
+        # pre-filled message never opened the 24h window. Policy (owner
+        # directive, 2026-10-07): try the send twice, then stop. Consecutive
+        # window-closed refusals accrue in ad_prefill_refusals; the second one
+        # stamps the skip flag + the explainer note so the webhook and the
+        # reconcile sweep stop spending turns on the thread. A successful send
+        # or the candidate's next genuine message (which calls
+        # clear_ad_entry_prefill_flag) resets the count, so any later trouble
+        # starts a fresh two-attempt cycle. Rides this transaction; the flag is
+        # its own dedupe, so the note lands once per thread.
+        attribution = conv.attribution or {}
         if external_error and "allowed window" in external_error.lower():
-            attribution = conv.attribution or {}
             if attribution.get("ad_prefill_pending") != "true":
-                conv.attribution = {**attribution, "ad_prefill_pending": "true"}
-                self.db.add(
-                    Message(
-                        conversation_id=conv.id,
-                        sender=MessageSender.SYSTEM,
-                        body=AD_ENTRY_PREFILL_SYSTEM_NOTE,
+                refusals = int(attribution.get("ad_prefill_refusals") or 0) + 1
+                updates = {**attribution, "ad_prefill_refusals": refusals}
+                if refusals >= 2:
+                    updates["ad_prefill_pending"] = "true"
+                    self.db.add(
+                        Message(
+                            conversation_id=conv.id,
+                            sender=MessageSender.SYSTEM,
+                            body=AD_ENTRY_PREFILL_SYSTEM_NOTE,
+                        )
                     )
-                )
+                conv.attribution = updates
+        elif not external_error and "ad_prefill_refusals" in attribution:
+            conv.attribution = {
+                key: value
+                for key, value in attribution.items()
+                if key != "ad_prefill_refusals"
+            }
         # Transactional outbox (Tech-Lead Directive §14): record the dispatch
         # outcome in the same transaction as the message. Best-effort — outbox
         # failures never block the turn (logged in outbox_service).
