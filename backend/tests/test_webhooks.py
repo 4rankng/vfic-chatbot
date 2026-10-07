@@ -1914,14 +1914,14 @@ def _patch_token_push(monkeypatch, *, stored_key: str | None):
     from app.api import webhooks
     from app.services import tingting_api as tingting_mod
 
-    writes: list[tuple[str, dict]] = []
+    writes: list[tuple[str, str]] = []
 
-    async def fake_write(account_key, values, *, actor_id=None):  # noqa: ANN001
-        writes.append((account_key, dict(values)))
-        return list(values)
+    async def fake_store(account_key, access_token):  # noqa: ANN001
+        writes.append((account_key, access_token))
+        return [f"zalo_oa_access_token:{account_key}"]
 
     fake_settings = SimpleNamespace(
-        write_oa_account_credentials=AsyncMock(side_effect=fake_write)
+        store_pushed_oa_token=AsyncMock(side_effect=fake_store)
     )
     monkeypatch.setattr(
         webhooks, "IntegrationSettingsService", lambda _db: fake_settings
@@ -1939,14 +1939,13 @@ def _patch_token_push(monkeypatch, *, stored_key: str | None):
         "app.services.audit_service.record_audit",
         AsyncMock(side_effect=lambda _db, **kw: audits.append(kw) or None),
     )
-    monkeypatch.setattr("app.core.cache.bump_cache_version", AsyncMock())
     return writes, audits
 
 
 @pytest.mark.asyncio
 async def test_token_push_stores_the_tingting_access_token(monkeypatch, caplog):
     from app.api import webhooks
-    writes, audits = _patch_token_push(monkeypatch, stored_key="k-1")
+    writes, _audits = _patch_token_push(monkeypatch, stored_key="k-1")
 
     response = await webhooks.zalo_oa_token_webhook(
         FakeRequest(
@@ -1958,8 +1957,7 @@ async def test_token_push_stores_the_tingting_access_token(monkeypatch, caplog):
 
     assert response.status_code == 200
     assert response.body == b'{"status":"stored"}'
-    assert writes == [("tingting", {"zalo_oa_access_token": "at-secret-1"})]
-    assert audits[0]["action"] == "store_pushed_zalo_oa_token"
+    assert writes == [("tingting", "at-secret-1")]
     # The token must never reach the logs, in any form.
     assert "at-secret-1" not in caplog.text
 

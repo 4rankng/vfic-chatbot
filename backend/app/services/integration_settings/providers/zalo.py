@@ -410,6 +410,34 @@ class ZaloSettingsMixin:
             logger.warning("tingting OA payroll token pull cache invalidation failed", exc_info=True)
         return token
 
+    async def store_pushed_oa_token(self, account_key: str, access_token: str) -> list[str]:
+        """Persist a payroll-pushed access token and invalidate the runtime cache.
+
+        The write side of the push webhook (``POST /webhooks/zalo-oa-token``):
+        the same per-account storage the payroll pull writes, with the cache
+        eviction included so the very next send resolves the fresh token. The
+        audit row rides the same commit. The route stays transport-only —
+        ``app.api`` may not import ``app.core``, where the cache-namespace
+        mechanics live, so this method is the whole write path.
+        """
+        storage_key = oa_account_setting_key(ZALO_OA_ACCESS_TOKEN, account_key)
+        changed = await self._write_secret(storage_key, access_token)
+        await record_audit(
+            self.db,
+            action="store_pushed_zalo_oa_token",
+            actor_id=None,
+            target_type="integration_settings",
+            target_id="zalo",
+            payload={"account_key": account_key, "source": "payroll"},
+        )
+        await self.db.commit()
+        evict_local_namespace(NS_INTEGRATION_ZALO)
+        try:
+            await bump_cache_version(NS_INTEGRATION_ZALO)
+        except Exception:  # noqa: BLE001 — the push itself is durable; cache catches up on TTL
+            logger.warning("zalo oa token push cache invalidation failed", exc_info=True)
+        return [storage_key] if changed else []
+
     async def refresh_oa_access_token(self, account_key: str | None = None) -> str | None:
         """Refresh one OA account's access_token from its stored refresh_token.
 

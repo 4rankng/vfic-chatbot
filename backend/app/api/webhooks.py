@@ -288,28 +288,12 @@ async def zalo_oa_token_webhook(
         return JSONResponse({"detail": "missing access_token"}, status_code=400)
 
     from app.channels.types import TINGTING_OA_ACCOUNT_KEY
-    from app.core.cache import bump_cache_version
-    from app.core.preamble_cache import NS_INTEGRATION_ZALO, evict_local_namespace
-    from app.services.audit_service import record_audit
 
-    service = IntegrationSettingsService(db)
-    stored = await service.write_oa_account_credentials(
-        TINGTING_OA_ACCOUNT_KEY, {"zalo_oa_access_token": token}
+    # Transport only: the storage, audit, and cache invalidation live on the
+    # settings service (app.api may not import app.core for the cache work).
+    stored = await IntegrationSettingsService(db).store_pushed_oa_token(
+        TINGTING_OA_ACCOUNT_KEY, token
     )
-    await record_audit(
-        db,
-        action="store_pushed_zalo_oa_token",
-        actor_id=None,
-        target_type="integration_settings",
-        target_id="zalo",
-        payload={"account_key": TINGTING_OA_ACCOUNT_KEY, "source": "payroll"},
-    )
-    await db.commit()
-    evict_local_namespace(NS_INTEGRATION_ZALO)
-    try:
-        await bump_cache_version(NS_INTEGRATION_ZALO)
-    except Exception:  # noqa: BLE001 — the push itself is durable; cache catches up on TTL
-        logger.warning("zalo oa token push cache invalidation failed", exc_info=True)
     # Shape only: the keys written, never the token.
     logger.info("zalo oa token push stored keys=%s", stored)
     return JSONResponse({"status": "stored"}, status_code=200)

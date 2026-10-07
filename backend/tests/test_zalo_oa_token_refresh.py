@@ -420,3 +420,34 @@ async def test_non_tingting_account_still_refreshes_through_zalo_oauth(monkeypat
     assert token == "at-new"
     assert fake_client.posted == 1
     fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pushed_token_store_writes_commits_and_audits(monkeypatch):
+    """The push webhook's write path: same storage as the pull, one commit."""
+    from app.services.integration_settings import ZALO_OA_ACCESS_TOKEN
+
+    audits: list[dict] = []
+
+    async def fake_record_audit(*_args, **kwargs):
+        audits.append(kwargs)
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.providers.zalo.record_audit", fake_record_audit
+    )
+    monkeypatch.setattr("app.core.redis.get_redis", lambda: _FakeRedis(set_ok=True))
+
+    service = IntegrationSettingsService(_RefreshDb([]), settings=_Settings())
+    db = _RefreshDb([])
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    stored = await service.store_pushed_oa_token("tingting", "at-pushed-1")
+
+    assert stored == [f"{ZALO_OA_ACCESS_TOKEN}:tingting"]
+    assert db.committed is True
+    assert (
+        service.cipher.decrypt(db._by_key[f"{ZALO_OA_ACCESS_TOKEN}:tingting"].encrypted_value)
+        == "at-pushed-1"
+    )
+    assert audits[0]["action"] == "store_pushed_zalo_oa_token"
+    assert audits[0]["payload"] == {"account_key": "tingting", "source": "payroll"}
