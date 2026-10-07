@@ -5,9 +5,6 @@ Two upload routes:
   * ``POST /documents/upload-file``  — multipart file upload (DOCX/Markdown/text). Extracts text,
                                        persists the original, then enqueues the async LLM
                                        training pipeline on the ``ingest`` queue.
-``POST /documents/extract-text`` is the stateless sibling of the file upload: same
-format contract, but it only returns the extracted text (editor pre-fill) — no
-document row, no pipeline.
 ``process`` / ``reindex`` enqueue the same async pipeline. Pipeline progress is read back
 via ``GET /documents/{id}`` (``stage`` / ``digest_meta`` / ``error``).
 """
@@ -41,7 +38,7 @@ from app.schemas.knowledge import (
 )
 from app.services.audit_service import record_audit
 from app.services.ingestion.limits import read_upload_within_limit
-from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeService, extract_text
+from app.services.knowledge import KnowledgeFileExtractionError, KnowledgeService
 from app.services.knowledge.canonical import (
     CanonicalValidationError,
 )
@@ -258,31 +255,6 @@ async def upload_file(
     await record_audit_safe(db, "upload_knowledge", _admin.id, str(doc.id))
     await _queue_document(doc, db, reuse_completed=True)
     return KnowledgeDocumentOut.model_validate(doc)
-
-
-@router.post("/documents/extract-text")
-async def extract_document_text(
-    file: UploadFile = File(...),
-    _admin: Any = Depends(require_admin),
-) -> dict:
-    """Stateless text extraction: file → text, nothing stored or queued.
-
-    Lets a text editor surface .docx content in place — the browser cannot
-    decode the OOXML container — without creating a knowledge document or
-    enqueueing the training pipeline. The caller stays responsible for what it
-    does with the text.
-    """
-    data = await read_upload_within_limit(file)
-    try:
-        text = extract_text(file.filename or "upload", file.content_type or "", data)
-    except ValueError as exc:
-        # KnowledgeFileExtractionError and the format detector's rejections are
-        # both ValueError subclasses; either way the caller gets a 422.
-        logger.warning(
-            "knowledge text extraction rejected file=%s cause=%s", file.filename, exc
-        )
-        raise ValidationError({"errors": [str(exc)]}) from exc
-    return {"text": text}
 
 
 async def _queue_document(doc, db, *, reuse_completed=False) -> None:
