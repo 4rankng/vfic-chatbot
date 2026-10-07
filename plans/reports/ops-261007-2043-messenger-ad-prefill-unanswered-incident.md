@@ -63,3 +63,29 @@ reconcile sweep also excluded flagged threads, so nothing recovered them.
   another channel; Meta refuses every send on the PSID until they write again.
 - Two chat turns timed out at the 60s RQ job timeout in the 12:24–12:36
   window — separate latency issue, not touched here.
+
+## Addendum (22:45–23:00): TingTing OA send failures (-155 / -14014)
+
+Separate incident found the same evening: every send on the TingTing support
+OA (`account_key=tingting`) fails with `chunk 1/1 failed: Access token has
+expired (-155)` from 21:38, and the lazy refresh is refused with
+`-14014 Invalid refresh token`. Timeline: operator pasted fresh credentials
+12:11:12 (`updated_by` set — user write); sends OK 12:21–21:06; refresh token
+already invalid at 21:38:29; one recruiter send SUCCEEDED at 21:51 amid the
+failures. A refused refresh redeems nothing, so the product's lazy refresh
+and any later manual attempt (22:41) cannot be the cause of invalidation.
+
+Prime suspect for the invalidation: the refresh token is single-use and the
+payroll side demonstrably holds its own live Zalo credential for the same OA
+(its ZNS OTP send succeeded at 22:38 while all chatbot sends failed). Two
+independent redeemers of one OA's refresh token will keep killing whichever
+copy redeems second — the durable fix is single ownership of the OA token
+lifecycle. Interim fix: operator re-grant in Settings → Zalo OA.
+
+Second finding in thread `669c0931` (self check-in enable): payroll
+`POST /integration/self-checkin/verify` → 200, but
+`POST /integration/self-checkin/update` → 400 in 8 ms. OTP flow healthy;
+suspect the LGD-only gate / payload mismatch (payroll env
+`SELF_CHECKIN_SUPPORTED_PROJECT_CODES`, default "LGD"; open item "confirm
+LGD project code in prod DB at e2e" was still pending). Handled by the
+TingTing session, which owns the payroll repo.
