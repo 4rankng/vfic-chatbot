@@ -75,6 +75,16 @@ export const uploadProjectDocument = async (projectId: string, file: File) =>
     type: file.type,
     bytes: await file.arrayBuffer(),
   });
+/**
+ * Server-side text extraction for one source file — nothing is stored. The
+ * single-page editor converts a .docx pick through this before the save.
+ */
+export const extractProjectDocumentText = async (file: File) =>
+  operations.extractDocumentText({
+    name: file.name,
+    type: file.type,
+    bytes: await file.arrayBuffer(),
+  });
 export const getProjectTrainingDocument = operations.getTrainingDocument;
 export const getProjectSinglePage = operations.getSinglePage;
 export const replaceProjectSinglePage = operations.replaceSinglePage;

@@ -1451,6 +1451,29 @@ describe("ProjectKnowledgePanel", () => {
     expect(item.element().closest(".uu-scope")).not.toBeNull();
   });
 
+  it("runs pasted text through the same source-upload chain as a picked file", async () => {
+    const screen = await renderPanel(
+      <ProjectKnowledgePanel project={project} editable />,
+    );
+    await screen.getByRole("button", { name: "Nhập", exact: true }).click();
+    await screen.getByRole("menuitem", { name: "Từ văn bản dán…" }).click();
+    await screen
+      .getByRole("textbox", { name: "Văn bản kiến thức dán vào" })
+      .fill(REUPLOAD_BRIEF);
+    await screen.getByRole("button", { name: "Nạp văn bản đã dán" }).click();
+    await vi.waitFor(() =>
+      expect(mocks.uploadProjectDocument).toHaveBeenCalledTimes(1),
+    );
+    const [, uploaded] = mocks.uploadProjectDocument.mock.calls[0];
+    expect(uploaded.name).toBe("van-ban-dan.md");
+    expect(uploaded.type).toBe("text/markdown");
+    expect(await uploaded.text()).toBe(REUPLOAD_BRIEF);
+    // The paste closed its own area; the chain's result takes over.
+    await expect
+      .element(screen.getByText(/Đã nạp xong \d+ phần kiến thức từ phiếu\./))
+      .toBeVisible();
+  }, 30000);
+
   it("cuts a migrated single-page project over exactly once after the chain lands", async () => {
     mocks.getProjectSinglePage.mockRejectedValue(
       new ApiError(404, "Chưa có dữ liệu"),

@@ -120,6 +120,13 @@ export type ProjectKnowledgePort = Readonly<{
     projectId: string,
     file: ProjectDocumentUpload,
   ) => Promise<ProjectTrainingDocument>;
+  /**
+   * Stateful-free text extraction of one source file (docx/md/txt): the
+   * backend parses and returns the text without storing anything. A text
+   * editor uses it to surface a .docx pick in place — the browser cannot
+   * decode the OOXML container.
+   */
+  extractDocumentText: (file: ProjectDocumentUpload) => Promise<string>;
   getTrainingDocument: (documentId: string) => Promise<ProjectTrainingDocument>;
   getSinglePage: (projectId: string) => Promise<SinglePageKnowledge>;
   replaceSinglePage: (

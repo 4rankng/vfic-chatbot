@@ -2,7 +2,12 @@ import { useRef, useState, type ReactNode } from "react";
 import { AlertCircle, Database, Upload } from "lucide-react";
 import { useNotify, useRefresh } from "ra-core";
 
-import { ChevronDown, FileDownload02, Loading01 } from "@untitledui/icons";
+import {
+  ChevronDown,
+  Clipboard,
+  FileDownload02,
+  Loading01,
+} from "@untitledui/icons";
 
 import { Badge } from "@/components/base/badges/badges";
 import { Dropdown } from "@/components/base/dropdown/dropdown";
@@ -23,6 +28,7 @@ import { useBriefFileIngest } from "./presentation/use-brief-file-ingest";
 import type { BriefFileIngest } from "./presentation/use-brief-file-ingest";
 import { IngestProgressBoard } from "./presentation/IngestProgressBoard";
 import { useSinglePageDraft } from "./presentation/use-single-page-draft";
+import { PasteTextArea } from "./presentation/PasteTextArea";
 import { WorkspaceCommandBar } from "./presentation/WorkspaceCommandBar";
 import {
   ProjectKnowledgeExport,
@@ -194,6 +200,7 @@ const BriefIngestSection = ({
   const { state, ingest } = useProjectIngest();
   /** Vietnamese labels of the categories this brief cannot seed. */
   const [needsHuman, setNeedsHuman] = useState<string[] | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [error, setError] = useState("");
 
   const read = async (file?: File) => {
@@ -240,7 +247,7 @@ const BriefIngestSection = ({
           <p className="text-body font-semibold">Cập nhật kiến thức từ tệp</p>
           <p className="text-helper text-muted-foreground">
             Một tệp văn bản (.txt, .md, .csv…) hoặc tệp Word (.docx), tối đa 20
-            MB. Không cần theo mẫu.
+            MB — hoặc dán trực tiếp nội dung. Không cần theo mẫu.
           </p>
         </div>
         {/*
@@ -262,6 +269,18 @@ const BriefIngestSection = ({
         >
           {buttonLabel}
         </Button>
+        <Button
+          type="button"
+          color="secondary"
+          size="sm"
+          className="uu-scope"
+          iconLeading={Clipboard}
+          isDisabled={disabled || ingesting}
+          aria-expanded={pasteOpen}
+          onClick={() => setPasteOpen((open) => !open)}
+        >
+          Dán văn bản
+        </Button>
         <input
           ref={inputRef}
           type="file"
@@ -273,6 +292,16 @@ const BriefIngestSection = ({
           onChange={(event) => void read(event.target.files?.[0])}
         />
       </div>
+      {pasteOpen && !ingesting ? (
+        <PasteTextArea
+          confirmLabel="Nạp văn bản đã dán"
+          onSubmit={(file) => {
+            setPasteOpen(false);
+            void read(file);
+          }}
+          onClose={() => setPasteOpen(false)}
+        />
+      ) : null}
       {state.phase === "running" ? (
         <>
           <p
@@ -427,6 +456,7 @@ const RagCategoriesPanel = ({
 }) => {
   const projectId = String(project.id);
   const [selected, setSelected] = useState<KnowledgeCategoryKey>("jobs");
+  const [pasteOpen, setPasteOpen] = useState(false);
   const categoryDetailRef = useRef<HTMLElement>(null);
   const catalog = useProjectKnowledgeCatalog(projectId);
   const draft = useCategoryDraft(projectId, selected, catalog);
@@ -497,6 +527,7 @@ const RagCategoriesPanel = ({
     project.category_authority_started !== false ? (
       <KnowledgeImportMenu
         onPickFile={() => ingest.inputRef.current?.click()}
+        onPaste={() => setPasteOpen(true)}
         onTemplate={() => templateDownload.download()}
       />
     ) : null;
@@ -528,7 +559,11 @@ const RagCategoriesPanel = ({
           (project.category_authority_started === false ? (
             <MigrationSection projectId={projectId} />
           ) : (
-            <RagIngestStrip ingest={ingest} />
+            <RagIngestStrip
+              ingest={ingest}
+              pasteOpen={pasteOpen}
+              onPasteClose={() => setPasteOpen(false)}
+            />
           ))}
         <div className="project-category-workspace">
           <nav
@@ -671,14 +706,17 @@ const RagCategoriesPanel = ({
   );
 };
 
-/** The command bar's import menu: the file chain and the full-template
- *  download. The hidden input itself lives beside the ingest strip, outside
- *  any popover, so a closed menu never unmounts it. */
+/** The command bar's import menu: the file chain, the paste area, and the
+ *  full-template download. The hidden input and the paste area live beside
+ *  the ingest strip, outside any popover, so a closed menu never unmounts
+ *  them. */
 const KnowledgeImportMenu = ({
   onPickFile,
+  onPaste,
   onTemplate,
 }: {
   onPickFile: () => void;
+  onPaste: () => void;
   onTemplate: () => void;
 }) => (
   <Dropdown.Root>
@@ -696,9 +734,14 @@ const KnowledgeImportMenu = ({
         menu text becomes unreadable on it. */}
     <Dropdown.Popover className="uu-scope">
       <Dropdown.Menu
-        onAction={(key) => (key === "file" ? onPickFile() : onTemplate())}
+        onAction={(key) => {
+          if (key === "file") onPickFile();
+          else if (key === "paste") onPaste();
+          else onTemplate();
+        }}
       >
         <Dropdown.Item id="file" label="Từ tệp văn bản…" icon={Upload} />
+        <Dropdown.Item id="paste" label="Từ văn bản dán…" icon={Clipboard} />
         <Dropdown.Item id="template" label="Tải mẫu KB" icon={FileDownload02} />
       </Dropdown.Menu>
     </Dropdown.Popover>
@@ -706,9 +749,18 @@ const KnowledgeImportMenu = ({
 );
 
 /** Idle-quiet ingest strip of the RAG workspace: the permanent hidden file
- *  input plus the progress and result messages; there is no heading or button
- *  because the command bar's import menu owns the entry point. */
-const RagIngestStrip = ({ ingest }: { ingest: BriefFileIngest }) => {
+ *  input, the paste area the import menu opens, and the progress/result
+ *  messages; there is no heading or button because the command bar's import
+ *  menu owns the entry point. */
+const RagIngestStrip = ({
+  ingest,
+  pasteOpen,
+  onPasteClose,
+}: {
+  ingest: BriefFileIngest;
+  pasteOpen: boolean;
+  onPasteClose: () => void;
+}) => {
   const { state } = ingest;
   return (
     <section
@@ -725,6 +777,16 @@ const RagIngestStrip = ({ ingest }: { ingest: BriefFileIngest }) => {
         disabled={ingest.ingesting}
         onChange={(event) => void ingest.read(event.target.files?.[0])}
       />
+      {pasteOpen && !ingest.ingesting ? (
+        <PasteTextArea
+          confirmLabel="Nạp văn bản đã dán"
+          onSubmit={(file) => {
+            onPasteClose();
+            void ingest.read(file);
+          }}
+          onClose={onPasteClose}
+        />
+      ) : null}
       {state.phase === "running" ? (
         <>
           <p

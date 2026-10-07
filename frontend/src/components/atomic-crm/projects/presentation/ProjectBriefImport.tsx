@@ -1,11 +1,14 @@
 import { useRef, useState } from "react";
 import { FileText, Upload } from "lucide-react";
 
+import { Clipboard } from "@untitledui/icons";
+
 import { Button } from "@/components/base/buttons/button";
 import {
   parseProjectBrief,
   type ProjectBrief,
 } from "../domain/project-brief-ingest";
+import { PasteTextArea } from "./PasteTextArea";
 import {
   PROJECT_TEXT_FILE_ACCEPT,
   readProjectBriefPreview,
@@ -45,6 +48,7 @@ export const ProjectBriefImport = ({
 }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [error, setError] = useState("");
 
   const read = async (file?: File) => {
@@ -100,6 +104,18 @@ export const ProjectBriefImport = ({
         >
           {reading ? "Đang đọc tệp…" : busy ? "Đang nạp…" : "Nhập từ tệp"}
         </Button>
+        <Button
+          type="button"
+          color="secondary"
+          size="sm"
+          className="uu-scope"
+          iconLeading={Clipboard}
+          isDisabled={reading || busy}
+          aria-expanded={pasteOpen}
+          onClick={() => setPasteOpen((open) => !open)}
+        >
+          Dán văn bản
+        </Button>
         <input
           ref={inputRef}
           type="file"
@@ -112,10 +128,20 @@ export const ProjectBriefImport = ({
         />
       </div>
       <p className="text-helper text-muted-foreground">
-        Một tệp văn bản (.txt, .md, .csv…) hoặc tệp Word (.docx), tối đa 20 MB.
-        Không cần theo mẫu. Hệ thống phân loại nội dung vào 12 danh mục. Kiểm
-        tra kết quả trước khi bật tuyển dụng.
+        Một tệp văn bản (.txt, .md, .csv…) hoặc tệp Word (.docx), tối đa 20 MB —
+        hoặc dán trực tiếp nội dung. Không cần theo mẫu. Hệ thống phân loại nội
+        dung vào 12 danh mục. Kiểm tra kết quả trước khi bật tuyển dụng.
       </p>
+      {pasteOpen && !reading && !busy ? (
+        <PasteTextArea
+          confirmLabel="Nạp văn bản đã dán"
+          onSubmit={(file) => {
+            setPasteOpen(false);
+            void read(file);
+          }}
+          onClose={() => setPasteOpen(false)}
+        />
+      ) : null}
       {error ? (
         <p role="alert" className="text-helper text-destructive">
           {error}

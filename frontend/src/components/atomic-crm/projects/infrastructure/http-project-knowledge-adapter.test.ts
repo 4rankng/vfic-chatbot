@@ -230,6 +230,45 @@ describe("HTTP project-knowledge adapter", () => {
     );
   });
 
+  it("extracts a source's text server-side without storing anything", async () => {
+    mocks.apiRequest.mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: "Nội dung Word đã trích xuất" }),
+    });
+
+    await expect(
+      httpProjectKnowledgeAdapter.extractDocumentText({
+        name: "tuyen-dung.docx",
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        bytes: new TextEncoder().encode("docx-bytes").buffer,
+      }),
+    ).resolves.toBe("Nội dung Word đã trích xuất");
+
+    const [path, options] = mocks.apiRequest.mock.calls[0];
+    expect(path).toBe("/api/v1/knowledge/documents/extract-text");
+    expect(options.body.get("file").name).toBe("tuyen-dung.docx");
+  });
+
+  it("surfaces the server's own extraction rejection", async () => {
+    mocks.apiRequest.mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        detail: { errors: ["YAML knowledge files are not accepted."] },
+      }),
+    });
+
+    await expect(
+      httpProjectKnowledgeAdapter.extractDocumentText({
+        name: "categories.yaml",
+        type: "application/yaml",
+        bytes: new TextEncoder().encode("jobs: []").buffer,
+      }),
+    ).rejects.toThrow(
+      'Không đọc được nội dung tệp.: {"errors":["YAML knowledge files are not accepted."]}',
+    );
+  });
+
   it("guards migration empty initialization while preserving ordinary clear requests", async () => {
     mocks.apiJson.mockResolvedValue({});
     await httpProjectKnowledgeAdapter.clearCategory(

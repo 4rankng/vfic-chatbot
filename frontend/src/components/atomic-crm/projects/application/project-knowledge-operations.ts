@@ -35,6 +35,8 @@ export const createProjectKnowledgeOperations = (port: ProjectKnowledgePort) =>
     cutoverCategories: (projectId: string) => port.cutoverCategories(projectId),
     uploadDocument: (projectId: string, file: ProjectDocumentUpload) =>
       port.uploadDocument(projectId, file),
+    extractDocumentText: (file: ProjectDocumentUpload) =>
+      port.extractDocumentText(file),
     getTrainingDocument: (documentId: string) =>
       port.getTrainingDocument(documentId),
     getSinglePage: (projectId: string) => port.getSinglePage(projectId),

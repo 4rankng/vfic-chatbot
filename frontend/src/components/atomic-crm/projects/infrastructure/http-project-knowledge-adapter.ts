@@ -9,6 +9,32 @@ const BASE = "/api/v1/knowledge/projects";
 const projectPath = (projectId: string) =>
   `${BASE}/${encodeURIComponent(projectId)}`;
 const DOCUMENT_UPLOAD_PATH = "/api/v1/knowledge/documents/upload-file";
+const DOCUMENT_EXTRACT_PATH = "/api/v1/knowledge/documents/extract-text";
+
+/** Multipart body for one source-file upload to the knowledge API. */
+const fileForm = (file: { name: string; type: string; bytes: ArrayBuffer }) => {
+  const form = new FormData();
+  form.append("file", new Blob([file.bytes], { type: file.type }), file.name);
+  return form;
+};
+
+/** The server's own Vietnamese rejection reason, when it gave one. */
+const rejectionDetail = async (
+  response: Response,
+  fallback: string,
+): Promise<string> => {
+  let detail = "";
+  try {
+    const body = await response.json();
+    detail =
+      typeof body?.detail === "string"
+        ? body.detail
+        : JSON.stringify(body?.detail ?? body?.errors ?? body ?? "");
+  } catch {
+    detail = "";
+  }
+  return detail && detail !== "{}" ? `${fallback}: ${detail}` : fallback;
+};
 
 const nativeSignal = (
   signal?: CancellationSignal,
@@ -162,8 +188,7 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
     }),
 
   uploadDocument: async (projectId, file) => {
-    const form = new FormData();
-    form.append("file", new Blob([file.bytes], { type: file.type }), file.name);
+    const form = fileForm(file);
     form.append("project_id", projectId);
     // A browser preview recognizes only some layouts. Always classify the
     // entire original source on the worker, even when preview found headings.
@@ -176,24 +201,36 @@ export const httpProjectKnowledgeAdapter: ProjectKnowledgePort = Object.freeze({
       // Surface the server's own rejection (plan mismatch, category contract
       // errors) instead of a generic string — the precise Vietnamese reason is
       // the only thing that makes the failure fixable from the UI.
-      let detail = "";
-      try {
-        const body = await response.json();
-        detail =
-          typeof body?.detail === "string"
-            ? body.detail
-            : JSON.stringify(body?.detail ?? body?.errors ?? body ?? "");
-      } catch {
-        detail = "";
-      }
       throw new ApiError(
         response.status,
-        detail && detail !== "{}"
-          ? `Không lưu được tệp vào tài liệu dự án: ${detail}`
-          : "Không lưu được tệp vào tài liệu dự án.",
+        await rejectionDetail(
+          response,
+          "Không lưu được tệp vào tài liệu dự án.",
+        ),
       );
     }
     return response.json();
+  },
+
+  extractDocumentText: async (file) => {
+    const response = await apiRequest(DOCUMENT_EXTRACT_PATH, {
+      method: "POST",
+      body: fileForm(file),
+    });
+    if (!response.ok) {
+      throw new ApiError(
+        response.status,
+        await rejectionDetail(response, "Không đọc được nội dung tệp."),
+      );
+    }
+    const body = (await response.json()) as { text?: unknown };
+    if (typeof body?.text !== "string") {
+      throw new ApiError(
+        502,
+        "Phản hồi đọc nội dung tệp không đúng định dạng.",
+      );
+    }
+    return body.text;
   },
 
   getTrainingDocument: (documentId) =>

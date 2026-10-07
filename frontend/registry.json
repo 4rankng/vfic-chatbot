@@ -220,6 +220,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/projects/presentation/PasteTextArea.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/projects/presentation/IngestTimeline.tsx",
           "type": "registry:component"
         },

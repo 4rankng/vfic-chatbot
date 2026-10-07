@@ -95,7 +95,7 @@ export const SinglePageEditor = ({ draft, editable }: Props) => {
                     ref={fileInputRef}
                     type="file"
                     hidden
-                    accept=".txt,.md,text/plain,text/markdown"
+                    accept=".txt,.md,.docx,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     aria-label="Chọn tệp trang kiến thức"
                     disabled={saving || loadFailed}
                     onChange={(event) => {

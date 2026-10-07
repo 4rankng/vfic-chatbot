@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   replace: vi.fn(),
+  extract: vi.fn(),
   notify: vi.fn(),
   refresh: vi.fn(),
 }));
@@ -14,6 +15,7 @@ vi.mock("ra-core", () => ({
 vi.mock("../project-knowledge-service", () => ({
   getProjectSinglePage: mocks.load,
   replaceProjectSinglePage: mocks.replace,
+  extractProjectDocumentText: mocks.extract,
 }));
 import { useSinglePageDraft } from "./use-single-page-draft";
 
@@ -103,6 +105,61 @@ describe("single-page draft ownership", () => {
     expect(mocks.notify).toHaveBeenCalledWith(
       "Không đọc được tệp. Vui lòng thử lại.",
       { type: "error" },
+    );
+  });
+
+  it("fills the draft from a .docx pick through backend extraction under a .md name", async () => {
+    mocks.extract.mockResolvedValueOnce("Nội dung Word đã trích xuất");
+    const hook = await renderHook(() =>
+      useSinglePageDraft("project-1", options),
+    );
+    await expect.poll(() => hook.result.current.loading).toBe(false);
+    const file = new File([new Uint8Array([0x50, 0x4b])], "tuyen-dung.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    await hook.act(async () => {
+      await hook.result.current.readFile(file);
+    });
+    expect(mocks.extract).toHaveBeenCalledWith(file);
+    expect(hook.result.current.text).toBe("Nội dung Word đã trích xuất");
+    expect(hook.result.current.filename).toBe("tuyen-dung.md");
+  });
+
+  it("keeps the draft when the backend rejects a .docx pick", async () => {
+    mocks.extract.mockRejectedValueOnce(
+      new Error("Không đọc được nội dung tệp."),
+    );
+    const hook = await renderHook(() =>
+      useSinglePageDraft("project-1", options),
+    );
+    await expect.poll(() => hook.result.current.loading).toBe(false);
+    await hook.act(async () => {
+      await hook.result.current.readFile(
+        new File(["PK"], "hong.docx", { type: "application/zip" }),
+      );
+    });
+    expect(hook.result.current.text).toBe("Current knowledge");
+    expect(hook.result.current.filename).toBe("knowledge.md");
+    expect(mocks.notify).toHaveBeenCalledWith("Không đọc được nội dung tệp.", {
+      type: "error",
+    });
+  });
+
+  it("still rejects a pick with an unsupported suffix", async () => {
+    const hook = await renderHook(() =>
+      useSinglePageDraft("project-1", options),
+    );
+    await expect.poll(() => hook.result.current.loading).toBe(false);
+    await hook.act(async () => {
+      await hook.result.current.readFile(
+        new File(["%PDF-1.7"], "brief.pdf", { type: "application/pdf" }),
+      );
+    });
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(hook.result.current.text).toBe("Current knowledge");
+    expect(mocks.notify).toHaveBeenCalledWith(
+      "Trang kiến thức chỉ nhận file .txt, .md hoặc .docx.",
+      { type: "warning" },
     );
   });
 });

@@ -3,6 +3,7 @@ import { useNotify, useRefresh } from "ra-core";
 
 import { ApiError } from "@/lib/apiClient";
 import {
+  extractProjectDocumentText,
   getProjectSinglePage,
   replaceProjectSinglePage,
 } from "../project-knowledge-service";
@@ -188,10 +189,53 @@ export const useSinglePageDraft = (
   const readFile = useCallback(
     async (file?: File) => {
       if (!file || savingRef.current) return;
-      if (!/\.(txt|md)$/i.test(file.name)) {
-        notify("Trang kiến thức chỉ nhận file .txt hoặc .md.", {
+      const isDocx = /\.docx$/i.test(file.name);
+      if (!/\.(txt|md|docx)$/i.test(file.name)) {
+        notify("Trang kiến thức chỉ nhận file .txt, .md hoặc .docx.", {
           type: "warning",
         });
+        return;
+      }
+      const context = contextRef.current;
+      const request = ++fileRequestRef.current;
+      const editVersion = editVersionRef.current;
+      // A .docx is a zip container the browser cannot decode as text, so its
+      // content comes from the backend's stateless extraction and lands under
+      // a .md name; the saved page stays .md/.txt per the backend contract.
+      if (isDocx) {
+        // The backend enforces the same 20 MB source ceiling; rejecting here
+        // keeps the failure local instead of a round trip.
+        if (file.size > 20 * 1024 * 1024) {
+          notify("Tệp quá lớn. Hãy tải lên tệp dưới 20 MB.", {
+            type: "warning",
+          });
+          return;
+        }
+        try {
+          const extracted = await extractProjectDocumentText(file);
+          if (
+            context !== contextRef.current ||
+            request !== fileRequestRef.current ||
+            editVersion !== editVersionRef.current
+          )
+            return;
+          // Mirrors MAX_DIRECT_CONTEXT_CHARS in the backend's upsert schema.
+          if (extracted.length > 300_000) {
+            notify(
+              "Tệp Word vượt quá giới hạn 300.000 ký tự của trang kiến thức. Hãy tóm lược nội dung trước khi tải lên.",
+              { type: "warning" },
+            );
+            return;
+          }
+          updateFilename(file.name.replace(/\.docx$/i, ".md"));
+          updateText(extracted);
+        } catch (error) {
+          if (
+            context === contextRef.current &&
+            request === fileRequestRef.current
+          )
+            notify((error as Error).message, { type: "error" });
+        }
         return;
       }
       // Every legal 300,000-character UTF-8 page fits within this read budget.
@@ -202,9 +246,6 @@ export const useSinglePageDraft = (
         });
         return;
       }
-      const context = contextRef.current;
-      const request = ++fileRequestRef.current;
-      const editVersion = editVersionRef.current;
       try {
         const fileText = await file.text();
         if (

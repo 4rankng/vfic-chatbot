@@ -22,6 +22,15 @@ export const assertProjectTextFile = (file: File): void => {
   if (file.size === 0) throw new Error("Tệp chưa có nội dung văn bản.");
 };
 
+/** The stored filename a pasted source carries through the ingest chain. */
+export const PASTED_TEXT_FILENAME = "van-ban-dan.md";
+
+/** Wrap pasted text as the markdown source file the brief chain already
+ *  accepts, so a paste rides the exact same upload-and-classify path as a
+ *  picked file — the backend stays the single authority on content. */
+export const pastedTextFile = (text: string): File =>
+  new File([text], PASTED_TEXT_FILENAME, { type: "text/markdown" });
+
 export const readProjectBriefPreview = async (
   file: File,
 ): Promise<string | null> => {
