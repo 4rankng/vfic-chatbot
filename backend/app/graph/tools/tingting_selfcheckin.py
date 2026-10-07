@@ -53,6 +53,15 @@ _NO_PROJECT = (
     "Thiếu mã dự án (project_id). Hãy lấy project_id đúng như send_self_checkin_otp đã "
     "liệt kê cho người dùng, rồi gọi lại tool."
 )
+_NO_ELIGIBLE_PROJECT = (
+    "Hồ sơ này chưa thuộc dự án nào hỗ trợ bật/tắt tự chấm công qua Zalo. Nói nhân viên "
+    "liên hệ quản lý trực tiếp để được hỗ trợ, và DỪNG flow — không xin mã OTP, không gọi "
+    "update_self_checkin."
+)
+_PROJECT_NOT_LISTED = (
+    "project_id không nằm trong danh sách dự án mà tool OTP đã liệt kê cho hồ sơ này. "
+    "Hãy dùng đúng project_id đã lưu; không tự nghĩ ra dự án khác."
+)
 
 
 def _digits(value: Any) -> str:
@@ -121,6 +130,11 @@ async def send_self_checkin_otp(retrieval: GraphRetrievalPort, *, phone: str) ->
     if not session_id:
         return _UNREADABLE
     assignments = _stored_assignments({"sc_assignments": data.get("assignments")})
+    if not assignments:
+        # Payroll verified the phone but found no active assignment in a
+        # supported project — the toggle cannot apply to this profile. Stop
+        # here rather than drive to an update that payroll must refuse.
+        return _NO_ELIGIBLE_PROJECT
     await retrieval.save_tingting_flow_state(
         clean_phone,
         {"sc_session_id": session_id, "sc_assignments": assignments},
@@ -236,15 +250,19 @@ async def update_self_checkin(
     action_token = str(state.get("sc_action_token") or "")
     if not action_token:
         return _NO_ACTION_TOKEN
+    assignments = _stored_assignments(state)
+    if not assignments:
+        return _NO_ELIGIBLE_PROJECT
     clean_project = str(project_id or "").strip()
     if not clean_project:
-        assignments = _stored_assignments(state)
         if len(assignments) == 1:
             # One eligible project and the model omitted it: fill it rather than
             # stalling the flow with a question nobody needs to answer.
             clean_project = assignments[0]["project_id"]
         else:
             return _NO_PROJECT
+    if clean_project not in {item["project_id"] for item in assignments}:
+        return _PROJECT_NOT_LISTED
     outcome = await retrieval.call_tingting_api(
         method="POST",
         path=SC_UPDATE_PATH,

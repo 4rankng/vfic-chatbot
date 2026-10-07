@@ -1036,6 +1036,18 @@ async def test_self_checkin_otp_with_one_project_skips_the_project_question() ->
 
 
 @pytest.mark.asyncio
+async def test_self_checkin_otp_without_eligible_project_stops_the_flow() -> None:
+    """A verified phone with no supported-project assignment cannot toggle —
+    the tool must stop the flow instead of driving payroll to a 400."""
+    retrieval = _FlowRetrieval(_sc_otp_ok("sc-sess-1", assignments=[]), state={"verified": True})
+    result = await send_self_checkin_otp(retrieval, phone="0987654321")
+    assert "chưa thuộc dự án nào hỗ trợ" in result
+    assert "liên hệ quản lý" in result
+    assert retrieval.saved == []
+    assert "confirm_self_checkin_otp" not in result
+
+
+@pytest.mark.asyncio
 async def test_self_checkin_confirm_requires_the_stored_session() -> None:
     retrieval = _FlowRetrieval(_sc_verify_ok())
     result = await confirm_self_checkin_otp(retrieval, phone="0987654321", code="123456")
@@ -1086,14 +1098,20 @@ async def test_self_checkin_update_relays_an_immediate_enable() -> None:
 async def test_self_checkin_update_relays_a_deferred_enable_and_disable() -> None:
     deferred = _FlowRetrieval(
         _sc_update_ok("enable", immediate=False, effective_from="2026-11-01"),
-        state={"sc_action_token": "sc-tok-9"},
+        state={
+            "sc_action_token": "sc-tok-9",
+            "sc_assignments": [{"project_id": "7", "project_name": "LGD"}],
+        },
     )
     result = await update_self_checkin(deferred, phone="0987654321", project_id="7", enable=True)
     assert "SẼ BẬT từ ngày 01/11" in result
 
     disabled = _FlowRetrieval(
         _sc_update_ok("disable", immediate=False, effective_from="2026-11-01"),
-        state={"sc_action_token": "sc-tok-9"},
+        state={
+            "sc_action_token": "sc-tok-9",
+            "sc_assignments": [{"project_id": "7", "project_name": "LGD"}],
+        },
     )
     result = await update_self_checkin(disabled, phone="0987654321", project_id="7", enable=False)
     assert "SẼ TẮT từ ngày 01/11; trước đó vẫn chấm công bình thường" in result
@@ -1104,10 +1122,39 @@ async def test_self_checkin_update_relays_a_deferred_enable_and_disable() -> Non
 async def test_self_checkin_update_mentions_a_cancelled_pending_enable() -> None:
     retrieval = _FlowRetrieval(
         _sc_update_ok("disable", immediate=False, effective_from="2026-11-01", cancelled=True),
-        state={"sc_action_token": "sc-tok-9"},
+        state={
+            "sc_action_token": "sc-tok-9",
+            "sc_assignments": [{"project_id": "7", "project_name": "LGD"}],
+        },
     )
     result = await update_self_checkin(retrieval, phone="0987654321", project_id="7", enable=False)
     assert "Yêu cầu bật đang chờ trước đó đã được hủy" in result
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_update_without_stored_assignments_refuses() -> None:
+    retrieval = _FlowRetrieval(
+        _sc_update_ok("enable", immediate=True, effective_from="2026-10-01"),
+        state={"sc_action_token": "sc-tok-9"},
+    )
+    result = await update_self_checkin(retrieval, phone="0987654321", project_id="7", enable=True)
+    assert "chưa thuộc dự án nào hỗ trợ" in result
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_update_refuses_a_project_not_in_the_stored_list() -> None:
+    """A guessed project_id must never reach payroll — only the stored ids."""
+    retrieval = _FlowRetrieval(
+        _sc_update_ok("enable", immediate=True, effective_from="2026-10-01"),
+        state={
+            "sc_action_token": "sc-tok-9",
+            "sc_assignments": [{"project_id": "7", "project_name": "LGD"}],
+        },
+    )
+    result = await update_self_checkin(retrieval, phone="0987654321", project_id="99", enable=True)
+    assert "không nằm trong danh sách dự án" in result
+    assert retrieval.calls == []
 
 
 @pytest.mark.asyncio
