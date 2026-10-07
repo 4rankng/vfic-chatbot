@@ -1104,3 +1104,87 @@ def test_the_seed_migration_pins_the_owner_approved_hotline() -> None:
     # Downgrade is value-guarded: an admin-edited (re-sealed) row survives.
     assert "DELETE FROM public.integration_settings" in downgrade_sql
     assert "'+84 914 827 988'" in downgrade_sql
+
+
+def test_the_hotline_correction_migration_carries_the_owner_value_forward() -> None:
+    """Alembic 0058's seed is history; 0072 carries the owner's current number.
+
+    0058 must not be edited — it has already been applied everywhere, and its
+    value records what was approved then. So the correction is a separate,
+    reversible data migration that keeps 0058's central contract: an operator
+    edit (an admin-encrypted ``v1:`` row, which matches neither guard) always
+    wins over the seeded value.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "0072_tingting_hotline_number.py"
+    )
+    spec = importlib.util.spec_from_file_location("correction_0072", migration_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.HOTLINE_VALUE == "02256548788"
+    assert module.PREVIOUS_VALUE == "+84 914 827 988"
+    assert module.down_revision == "0071_lead_project_id"
+
+    captured: list[str] = []
+    real_execute = module.op.execute
+    module.op.execute = lambda sql: captured.append(str(sql))
+    try:
+        module.upgrade()
+        module.downgrade()
+    finally:
+        module.op.execute = real_execute
+
+    update, insert, restore = captured
+
+    # Upgrade rewrites only the superseded seed, never an operator edit.
+    assert "UPDATE public.integration_settings" in update
+    assert "'02256548788'" in update
+    assert "AND encrypted_value = '+84 914 827 988'" in update
+    # A deployment that never seeded gets the current number rather than none.
+    assert "WHERE NOT EXISTS" in insert
+    assert "'02256548788'" in insert
+    # Downgrade is value-guarded in the other direction.
+    assert "UPDATE public.integration_settings" in restore
+    assert "'+84 914 827 988'" in restore
+    assert "AND encrypted_value = '02256548788'" in restore
+
+
+def test_the_number_lives_in_a_migration_and_never_in_runtime_copy() -> None:
+    """The owner-approved number may appear in a migration and nowhere else.
+
+    The runtime reads only the stored setting, so a number written into the
+    persona, the guide or an escalation reply would silently drift from the
+    admin-edited value — the exact failure 0058 was written to avoid. The
+    builder is passed the value, so it must not carry one of its own either.
+    """
+    from pathlib import Path
+
+    from app.graph import tingting_guide
+
+    runtime_dir = Path(__file__).resolve().parents[1] / "app"
+    sources = [
+        path
+        for path in runtime_dir.rglob("*.py")
+        if "alembic" not in path.parts
+    ]
+    for digits in ("02256548788", "914827988"):
+        offenders = [
+            str(path.relative_to(runtime_dir))
+            for path in sources
+            if digits in path.read_text(encoding="utf-8").replace(" ", "")
+        ]
+        assert offenders == [], f"{digits} is hardcoded in runtime source: {offenders}"
+
+    # The builder quotes whatever it is given, verbatim, with no fallback of its
+    # own — an empty setting degrades to the honest no-number sentence.
+    assert "02256548788" in tingting_guide.tingting_hotline_reply(
+        "02256548788"
+    ).replace(" ", "")
+    assert "02256548788" not in tingting_guide.tingting_hotline_reply("")
