@@ -82,10 +82,22 @@ independent redeemers of one OA's refresh token will keep killing whichever
 copy redeems second — the durable fix is single ownership of the OA token
 lifecycle. Interim fix: operator re-grant in Settings → Zalo OA.
 
+CORRECTED same night (peer session confirmed): payroll holds a
+manually-pasted copy of the same TingTing OA pair with its own daily 07:00
+renew and Redis cross-process refresh coordinator, and at 21:35 the owner
+pasted fresh credentials into PAYROLL's admin — that console rotation
+invalidated the chatbot's copy, which is why chatbot sends began failing at
+21:38 while payroll's ZNS started succeeding. It is a single-live-pair
+seesaw. The owner was offered both shared-source wirings tonight and
+explicitly deferred — accepted operational rule until further notice: ONE
+side holds the fresh pair at a time; re-granting the chatbot's Settings →
+Zalo OA breaks payroll's ZNS OTP (proven live) and vice versa.
+
 Second finding in thread `669c0931` (self check-in enable): payroll
 `POST /integration/self-checkin/verify` → 200, but
-`POST /integration/self-checkin/update` → 400 in 8 ms. OTP flow healthy;
-suspect the LGD-only gate / payload mismatch (payroll env
-`SELF_CHECKIN_SUPPORTED_PROJECT_CODES`, default "LGD"; open item "confirm
-LGD project code in prod DB at e2e" was still pending). Handled by the
-TingTing session, which owns the payroll repo.
+`POST /integration/self-checkin/update` → 400 in 8 ms. CORRECTED: not the
+LGD gate — the employee has an active LGD assignment (project 58) carried
+correctly through OTP; the model guessed a project_id outside the stored
+assignment list. Fixed chatbot-side in f167c942 (deploying): empty
+assignments stop the flow, update refuses any project_id not in the stored
+list, single-project auto-fill stays.
