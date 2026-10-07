@@ -237,3 +237,97 @@ async def test_catalog_failure_never_raises_on_the_inbound_path() -> None:
 
     assert await resolve_project_from_attribution(db, {"post_code": "rorze"}) is None
     assert await resolve_project_from_attribution(db, {"ad_title": "Rorze"}) is None
+
+@pytest.mark.asyncio
+async def test_ad_id_resolves_through_the_project_aliases() -> None:
+    """Meta's own ad id is curated into a project's aliases, so an ad that sets
+    no ``ref`` still names its project.
+
+    This is the live LG-DISPLAY case: the ads running today carry Meta's asset
+    name ("album_xanh") as their title, so title matching cannot resolve them.
+    """
+    project = _project("lg-display", "LG-DISPLAY", ["LGD", "120255397858310496"])
+    db = _Catalog([project])
+
+    resolved = await resolve_project_from_attribution(
+        db, {"ad_id": "120255397858310496", "ad_title": "album_xanh"}
+    )
+
+    assert resolved == str(project[0])
+
+
+@pytest.mark.asyncio
+async def test_an_unmapped_ad_id_falls_through_to_the_title() -> None:
+    """An ad id nobody curated must not block a title that does resolve."""
+    project = _project("rorze", "Rorze")
+    db = _Catalog([project])
+
+    resolved = await resolve_project_from_attribution(
+        db, {"ad_id": "120255327713950496", "ad_title": "Tuyển dụng Rorze"}
+    )
+
+    assert resolved == str(project[0])
+
+
+@pytest.mark.asyncio
+async def test_an_unmapped_ad_id_and_an_asset_name_resolve_to_nothing() -> None:
+    """Neither signal names a project — the ad stays unattributed rather than
+    being guessed onto one. The digest prints the ad id itself in that case."""
+    db = _Catalog([_project("lg-display", "LG-DISPLAY", ["LGD"])])
+
+    assert (
+        await resolve_project_from_attribution(
+            db, {"ad_id": "120255327713950496", "ad_title": "album_xanh"}
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_ref_still_outranks_a_curated_ad_id() -> None:
+    """``ref`` is the field an ad is written for; it wins outright."""
+    by_ref = _project("rorze", "Rorze")
+    by_ad = _project("lg-display", "LG-DISPLAY", ["120255397858310496"])
+    db = _Catalog([by_ref, by_ad])
+
+    resolved = await resolve_project_from_attribution(
+        db, {"post_code": "Rorze", "ad_id": "120255397858310496"}
+    )
+
+    assert resolved == str(by_ref[0])
+
+
+def test_the_ad_mapping_migration_is_additive_and_idempotent() -> None:
+    """The mapping lives in project aliases: appending can never overwrite an
+    operator's own alias, and the guard keeps a replay from duplicating it."""
+    import importlib.util
+    from pathlib import Path
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "0073_map_lgd_messenger_ad.py"
+    )
+    spec = importlib.util.spec_from_file_location("map_0073", migration_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.MESSENGER_AD_ID == "120255397858310496"
+    assert module.PROJECT_SLUG == "lg-display"
+    assert module.down_revision == "0072_tingting_hotline_number"
+
+    captured: list[str] = []
+    real_execute = module.op.execute
+    module.op.execute = lambda sql: captured.append(str(sql))
+    try:
+        module.upgrade()
+        module.downgrade()
+    finally:
+        module.op.execute = real_execute
+    add, remove = captured
+
+    assert "array_append" in add  # additive: an operator alias survives
+    assert "NOT (" in add and "@>" in add  # idempotent: no duplicate on replay
+    assert "array_remove" in remove  # downgrade drops only what it added
+    assert "120255397858310496" in add and "120255397858310496" in remove

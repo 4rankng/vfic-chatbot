@@ -58,11 +58,6 @@ class DigestCandidate:
     # so the summarizer may narrow an ambiguous mapping to one project without
     # the digest inventing a factory the channel never claimed.
     mapped_projects: tuple[str, ...] = ()
-    # Which campaign/ad brought the candidate in, as recorded on the
-    # conversation's first touch: the Messenger ad's title, the operator's
-    # ``ref`` code, or the raw Meta ad id. None when the entry carried no
-    # source. This is the recruiter's "which ad did this lead click" answer.
-    campaign: str | None = None
     candidate_messages: tuple[str, ...] = ()
     summary: str | None = None
 
@@ -100,21 +95,19 @@ def _attribution_project_id(attribution: object) -> object:
         return None
 
 
-def _campaign_label(attribution: object) -> str | None:
-    """A recruiter-readable name for the campaign a candidate entered from.
+def _referral_ad_id(attribution: object) -> str | None:
+    """The Meta ad id a candidate entered through, when the referral had one.
 
-    ``conversations.attribution`` carries several keys because Meta sends
-    several: the ad's creative ``ad_title`` reads best, then the operator's own
-    ``ref`` code, then the raw Meta ``ad_id``. ``project_id`` is derived, not a
-    campaign name, and never shown here. None when the entry had no source —
-    an organic or QR-code conversation honestly says nothing about an ad.
+    Used only as the ``Dự án quan tâm`` fallback for an ad that resolves to no
+    project: printing the exact ad the candidate clicked answers "where did this
+    lead come from?" far better than the channel's ambiguous project list, and
+    the id is what an operator needs to add the mapping.
     """
     if not isinstance(attribution, dict):
         return None
-    for key in ("ad_title", "post_code", "ad_id"):
-        value = attribution.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
+    value = attribution.get("ad_id")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
     return None
 
 
@@ -123,25 +116,33 @@ def _project_of_interest(
     project_names: dict,
     mapped_names: list[str],
     attributed_id: object = None,
+    ad_id: str | None = None,
 ) -> str | None:
     """Project of interest for one candidate, in descending strength.
 
     The bot-confirmed focus wins; then the project the candidate's CAMPAIGN
-    resolved to (an operator-typed ``ref`` or an ad creative title matched
-    against the catalog) — the system had already resolved that from the thread
-    before the candidate typed a word, so it says more about why this person is
-    here than the Page they happened to message; a Page mapped to exactly one
-    project implies it (the LG Display fanpage case); with SEVERAL mappings the
-    column lists every candidate the channel could mean rather than staying
-    blank — an ambiguous channel is real information the recruiter can act on,
-    and a blank cell hid all of it. The list is the honest fallback; the
-    summarizer may then narrow it to one project, but only to a name that is
-    already in this set.
+    resolved to (an operator-typed ``ref``, a curated ``ad_id``, or an ad
+    creative title matched against the catalog) — the system resolved that from
+    the thread before the candidate typed a word, so it says more about why this
+    person is here than the Page they happened to message.
+
+    An ad that resolves to NO project falls back to its own id rather than the
+    channel's list. Live ads carry Meta's asset name as their title
+    ("album_xanh", "video 1"), so the campaign signal is often unresolvable;
+    printing the ad id names the exact source the recruiter can act on, where an
+    ambiguous channel list would read as a confident guess. A Page mapped to
+    exactly one project implies it (the LG Display fanpage case); with SEVERAL
+    mappings the column lists every candidate the channel could mean rather than
+    staying blank — an ambiguous channel is real information, and a blank cell
+    hid all of it. That list is the honest last resort; the summarizer may then
+    narrow it to one project, but only to a name already in this set.
     """
     if focused_id is not None:
         return project_names.get(focused_id)
     if attributed_id is not None and attributed_id in project_names:
         return project_names[attributed_id]
+    if ad_id:
+        return ad_id
     if not mapped_names:
         return None
     return ", ".join(sorted(mapped_names))
@@ -341,13 +342,14 @@ async def collect_new_candidates(
         focused_id = conv.focused_project_id if conv is not None else None
         attribution = getattr(conv, "attribution", None) if conv is not None else None
         attributed_id = _attribution_project_id(attribution)
+        ad_id = _referral_ad_id(attribution)
         mapped_names = sorted(
             project_names[pid]
             for pid in mapped_projects_by_pair.get(pair, set())
             if pid in project_names
         )
         project_name = _project_of_interest(
-            focused_id, project_names, mapped_names, attributed_id
+            focused_id, project_names, mapped_names, attributed_id, ad_id
         )
         candidates.append(
             DigestCandidate(
@@ -372,7 +374,6 @@ async def collect_new_candidates(
                 ),
                 project_name=project_name,
                 mapped_projects=tuple(mapped_names),
-                campaign=_campaign_label(attribution),
                 candidate_messages=tuple(messages[-MESSAGES_PER_CANDIDATE:]),
             )
         )

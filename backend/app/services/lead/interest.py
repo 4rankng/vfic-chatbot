@@ -176,8 +176,14 @@ async def resolve_project_from_attribution(db, attribution: dict | None) -> str 
 
     1. ``post_code`` (the ad's ``ref``) — exact match against slug/aliases. An
        operator typed it, so it wins outright.
-    2. ``ad_title`` — substring match over the catalog, for ads running today
-       that set no ref.
+    2. ``ad_id`` — also an exact match against slug/aliases. Meta's own
+       Click-to-Messenger ad id, which the operator curates into a project's
+       aliases. It sits below ``ref`` only because ``ref`` is the field an ad is
+       written for, but above ``ad_title`` because it is an exact lookup rather
+       than a guess: live ads carry Meta's asset name in ``ad_title``
+       ("album_xanh", "video 1"), which names no project at all.
+    3. ``ad_title`` — substring match over the catalog, for ads running today
+       that set neither.
 
     An already-resolved ``project_id`` short-circuits, so re-resolution never
     replaces a first touch with a weaker guess. Never raises: this runs on the
@@ -192,6 +198,11 @@ async def resolve_project_from_attribution(db, attribution: dict | None) -> str 
     code = attribution.get("post_code")
     if code and str(code).strip():
         resolved = await resolve_project_by_code(db, str(code))
+        if resolved:
+            return resolved
+    ad_id = attribution.get("ad_id")
+    if ad_id and str(ad_id).strip():
+        resolved = await resolve_project_by_code(db, str(ad_id))
         if resolved:
             return resolved
     title = attribution.get("ad_title")

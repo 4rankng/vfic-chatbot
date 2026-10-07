@@ -28,9 +28,9 @@ _SHEET_NAME = "Ứng viên"
 # (header, candidate attribute, column width, cell kind). ``kind`` picks the
 # data-cell style: "center" for sequence/number columns, "wrap" for the long
 # summary text, "text" for the rest. The single ``None`` attribute is the STT
-# sequence column. "Dự án quan tâm" is wide because an ambiguous channel
-# mapping prints every project it could mean, not just one. "Quảng cáo" names
-# the ad/campaign a candidate entered from — blank when the entry had none.
+# sequence column. "Dự án quan tâm" is wide because it prints every project an
+# ambiguous channel could mean, and may instead print a bare ad id when a
+# candidate's ad is not mapped to any project.
 _COLUMNS: tuple[tuple[str, str | None, float, str], ...] = (
     ("STT", None, 6, "center"),
     ("Họ và tên", "name", 26, "text"),
@@ -39,7 +39,6 @@ _COLUMNS: tuple[tuple[str, str | None, float, str], ...] = (
     ("Khu vực", "living_area", 18, "text"),
     ("Dự án quan tâm", "project_name", 30, "text"),
     ("Nguồn", "channel_label", 14, "text"),
-    ("Quảng cáo", "campaign", 26, "text"),
     ("Tóm tắt hội thoại", "summary", 70, "wrap"),
 )
 

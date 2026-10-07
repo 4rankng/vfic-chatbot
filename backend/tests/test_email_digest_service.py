@@ -950,29 +950,6 @@ def test_attribution_project_id_ignores_junk():
     assert _attribution_project_id({"project_id": "not-a-uuid"}) is None
 
 
-def test_campaign_label_prefers_the_ad_title_then_the_code_then_the_id():
-    """Meta sends several keys; the recruiter-facing one is the ad's own title."""
-    from app.services.email_digest.repository import _campaign_label
-
-    assert (
-        _campaign_label(
-            {"ad_title": "Tuyển dụng LGD — Hải Phòng", "post_code": "LGD", "ad_id": "9"}
-        )
-        == "Tuyển dụng LGD — Hải Phòng"
-    )
-    assert _campaign_label({"post_code": "LGD", "ad_id": "9"}) == "LGD"
-    assert _campaign_label({"ad_id": "9"}) == "9"
-
-
-def test_campaign_label_is_blank_for_an_organic_entry():
-    """No source recorded means no ad claim — inventing one would be a lie."""
-    from app.services.email_digest.repository import _campaign_label
-
-    assert _campaign_label(None) is None
-    assert _campaign_label({}) is None
-    assert _campaign_label({"project_id": "p1"}) is None
-
-
 def test_a_resolved_campaign_project_is_not_re_narrowed_by_the_llm():
     """The ad already named the project; a guess must not override it."""
     candidate = DigestCandidate(
@@ -983,3 +960,73 @@ def test_a_resolved_campaign_project_is_not_re_narrowed_by_the_llm():
     )
 
     assert _resolve_project(candidate, "LG Electronics") == "LG-DISPLAY"
+
+
+def test_an_unmapped_ad_id_is_the_project_fallback():
+    """An ad that resolves to no project prints its own id.
+
+    Live ads carry Meta's asset name as their title ("album_xanh"), so the
+    campaign signal is often unresolvable. The exact ad id is what the
+    recruiter can act on and what an operator needs to add the mapping; the
+    Page's ambiguous list would read as a confident guess.
+    """
+    from app.services.email_digest.repository import _project_of_interest
+
+    assert (
+        _project_of_interest(
+            None,
+            {"p1": "LG-DISPLAY", "p2": "LG Electronics"},
+            ["LG Electronics", "LG-DISPLAY"],
+            None,
+            "120255327713950496",
+        )
+        == "120255327713950496"
+    )
+
+
+def test_a_mapped_ad_wins_over_printing_its_own_id():
+    """The alias mapping resolves the ad to LG-DISPLAY, so that is what prints."""
+    from app.services.email_digest.repository import _project_of_interest
+
+    assert (
+        _project_of_interest(
+            None,
+            {"p1": "LG-DISPLAY"},
+            ["LG Electronics", "LG-DISPLAY"],
+            "p1",
+            "120255397858310496",
+        )
+        == "LG-DISPLAY"
+    )
+
+
+def test_a_mapped_ad_still_loses_to_conversation_focus():
+    from app.services.email_digest.repository import _project_of_interest
+
+    assert (
+        _project_of_interest(
+            "p2", {"p1": "LG-DISPLAY", "p2": "Rorze"}, ["LG Electronics"], "p1", "1202"
+        )
+        == "Rorze"
+    )
+
+
+def test_referral_ad_id_is_read_from_the_referral_only():
+    from app.services.email_digest.repository import _referral_ad_id
+
+    assert _referral_ad_id({"ad_id": " 120255397858310496 "}) == "120255397858310496"
+    assert _referral_ad_id({"ad_title": "album_xanh"}) is None
+    assert _referral_ad_id({"ad_id": "   "}) is None
+    assert _referral_ad_id(None) is None
+
+
+def test_a_printed_ad_id_is_not_re_narrowed_by_the_llm():
+    """The ad is a fact, not a guess; the model must not overwrite it."""
+    candidate = DigestCandidate(
+        lead_id=1,
+        project_name="120255327713950496",
+        mapped_projects=("LG Electronics", "LG-DISPLAY"),
+        candidate_messages=("Hỏi về lương",),
+    )
+
+    assert _resolve_project(candidate, "LG-DISPLAY") == "120255327713950496"
