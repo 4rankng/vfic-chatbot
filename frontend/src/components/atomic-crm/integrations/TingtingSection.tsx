@@ -30,9 +30,8 @@ const describeToken = (settings: TingtingSettings | undefined): string => {
 };
 
 /**
- * The TingTing view: the deployment-wide API key, the escalation hotline, and
- * the message-processing switch for the Zalo OA that serves the password
- * resets.
+ * The TingTing view: the deployment-wide API key and the escalation hotline
+ * for the Zalo OA that serves the password resets.
  *
  * The OA's Zalo credentials are not admin input: Payroll solely owns and
  * rotates the token pair and pushes it to the backend, so the card renders the

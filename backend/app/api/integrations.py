@@ -427,7 +427,7 @@ async def update_tingting_integration_settings(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> TingtingIntegrationSettingsOut:
-    """Save the TingTing API key, hotline, and/or the processing switch.
+    """Save the TingTing API key and hotline.
 
     The support OA's Zalo credentials are not admin input any more: payroll
     solely owns and rotates that token pair (push to

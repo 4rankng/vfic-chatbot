@@ -56,7 +56,7 @@ class TingtingSettingsMixin:
     async def update_tingting(
         self, values: dict[str, str | None], *, actor_id
     ) -> dict:
-        """Persist the API key, the escalation hotline, and/or the processing switch.
+        """Persist the API key and the escalation hotline.
 
         ``reset_oa_id`` is no longer an admin field — it follows the verified
         link (see :mod:`app.services.tingting_oa`) — but the key stays accepted
