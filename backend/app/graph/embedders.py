@@ -40,6 +40,11 @@ class BatchEmbedder(Protocol):
 
 
 class GeminiEmbedder:
+    # Stamped by build_embedder after construction so cache keys can name the
+    # configuration that actually produced a vector (see build_embedder).
+    embedding_provider: str
+    embedding_model: str
+
     def __init__(self, settings=None, *, api_key: str | None = None) -> None:
         self.s = settings or get_settings()
         # The settings page is the credential source; the env key only seeds
@@ -121,6 +126,11 @@ class GeminiEmbedder:
 
 class OpenRouterEmbedder:
     """OpenRouter embeddings client using the OpenAI-compatible embeddings API."""
+
+    # Stamped by build_embedder after construction so cache keys can name the
+    # configuration that actually produced a vector (see build_embedder).
+    embedding_provider: str
+    embedding_model: str
 
     _EMBED_BATCH_SIZE = 96
 
