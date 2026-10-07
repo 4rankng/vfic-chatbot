@@ -133,6 +133,7 @@ async def test_a_body_exactly_at_the_ceiling_is_read_and_returned(tiny_upload_ce
     "path",
     [
         "/api/v1/knowledge/documents/upload-file",
+        "/api/v1/knowledge/documents/extract-text",
     ],
 )
 def test_the_rejection_detail_is_the_same_on_every_upload_route(path, tiny_upload_ceiling) -> None:

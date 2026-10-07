@@ -331,3 +331,70 @@ def test_the_ad_mapping_migration_is_additive_and_idempotent() -> None:
     assert "NOT (" in add and "@>" in add  # idempotent: no duplicate on replay
     assert "array_remove" in remove  # downgrade drops only what it added
     assert "120255397858310496" in add and "120255397858310496" in remove
+
+
+def test_the_ten_du_an_migration_is_idempotent_and_non_destructive() -> None:
+    """The catch-all project is inserted only when absent and each ad id is
+    appended only when missing, so a replay duplicates nothing and an operator's
+    own aliases survive. Downgrade removes only the ad ids — deleting a project
+    that may have gained a knowledge base would be destructive."""
+    import importlib.util
+    from pathlib import Path
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "0074_ten_du_an_project.py"
+    )
+    spec = importlib.util.spec_from_file_location("ten_du_an_0074", migration_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.PROJECT_NAME == "Ten Du An"
+    assert module.PROJECT_SLUG == "du-an-muoi"
+    assert module.down_revision == "0073_map_lgd_messenger_ad"
+    assert len(module.MESSENGER_AD_IDS) == 5
+    assert len(set(module.MESSENGER_AD_IDS)) == len(module.MESSENGER_AD_IDS)
+    assert "120255397858310496" not in module.MESSENGER_AD_IDS  # that is LG-DISPLAY
+
+    captured: list[str] = []
+    real_execute = module.op.execute
+    module.op.execute = lambda sql: captured.append(str(sql))
+    try:
+        module.upgrade()
+        module.downgrade()
+    finally:
+        module.op.execute = real_execute
+    insert, add, remove = captured
+
+    assert "INSERT INTO public.projects" in insert
+    assert "WHERE NOT EXISTS" in insert  # an existing project is never replaced
+    assert "Ten Du An" in insert and "du-an-muoi" in insert
+    # Appends only what is missing, and skips the write when nothing is.
+    assert "@>" in add
+    assert "m.ids <> ARRAY[]::text[]" in add
+    for ad_id in module.MESSENGER_AD_IDS:
+        assert ad_id in add
+        assert ad_id in remove
+    assert "array_agg(value)" in remove  # rebuilds the array minus these ids
+    assert "DELETE" not in remove  # the project itself is never dropped
+
+
+@pytest.mark.asyncio
+async def test_the_catch_all_does_not_swallow_an_unmapped_future_ad() -> None:
+    """A new ad that matches nothing must stay visibly unmapped.
+
+    Filing it silently into the catch-all would hide the fact that no one has
+    mapped it, and the digest would stop printing the very id an operator needs
+    in order to map it. The catch-all is a curated list, not a wildcard.
+    """
+    project = _project("du-an-muoi", "Ten Du An", ["Dự án Mười"])
+    db = _Catalog([project])
+
+    assert (
+        await resolve_project_from_attribution(
+            db, {"ad_id": "120255999999999999", "ad_title": "album_xanh"}
+        )
+        is None
+    )
