@@ -96,13 +96,25 @@ release-check:
 # therefore still hard-gates the cutover — but it no longer serializes in
 # front of the image pushes: backup and both pushes run concurrently, and the
 # recipe waits for all three (failing on any) before touching production.
+# The commit this deploy ships. Resolved ONCE, when the Makefile is read, and
+# passed to every lane below.
+#
+# Each `make` invocation re-evaluates its own `GIT_SHA := $(shell git rev-parse
+# --short HEAD)`. So without this, a commit landing between the image-push lanes
+# and the cutover step made the deploy target a SHA whose image was never built
+# or pushed — the blue/green script then aborted at "image not found", after
+# the pushes had already been tagged to the older commit. Pinning it here makes
+# every lane agree on one SHA regardless of what happens to the worktree
+# mid-flight.
+DEPLOY_SHA := $(shell git rev-parse --short HEAD)
+
 deploy:
-	@echo "=== Backup + frontend/backend image pushes run concurrently ==="
+	@echo "=== Deploying commit $(DEPLOY_SHA) ==="
 	@tmp="$$(mktemp -d -t vfic-deploy.XXXXXX)"; \
 	rc_backup=0; rc_fe=0; rc_be=0; \
 	( $(MAKE) backup ) >"$$tmp/backup.log" 2>&1 & backup_pid=$$!; \
-	( cd frontend && make push ) >"$$tmp/fe-push.log" 2>&1 & fe_pid=$$!; \
-	( cd backend && make push ) >"$$tmp/be-push.log" 2>&1 & be_pid=$$!; \
+	( cd frontend && $(MAKE) push GIT_SHA=$(DEPLOY_SHA) ) >"$$tmp/fe-push.log" 2>&1 & fe_pid=$$!; \
+	( cd backend && $(MAKE) push GIT_SHA=$(DEPLOY_SHA) ) >"$$tmp/be-push.log" 2>&1 & be_pid=$$!; \
 	wait $$backup_pid; rc_backup=$$?; \
 	wait $$fe_pid; rc_fe=$$?; \
 	wait $$be_pid; rc_be=$$?; \
@@ -110,9 +122,9 @@ deploy:
 	rm -rf "$$tmp"; \
 	test "$$rc_backup" -eq 0 -a "$$rc_fe" -eq 0 -a "$$rc_be" -eq 0 || exit 1
 	@echo "=== Deploying to production (blue/green cutover) ==="
-	$(MAKE) -C backend deploy
+	$(MAKE) -C backend deploy GIT_SHA=$(DEPLOY_SHA)
 	@echo "=== Recreating production frontend ==="
-	$(MAKE) -C backend deploy-restart-frontend
+	$(MAKE) -C backend deploy-restart-frontend GIT_SHA=$(DEPLOY_SHA)
 
 # Adminer over an SSH tunnel -> http://localhost:18081 (no public exposure).
 # Ctrl-C closes the tunnel.
