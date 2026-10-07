@@ -219,10 +219,13 @@ class BotOutcomeMixin:
         # reconcile sweep stop spending turns on the thread. A successful send
         # or the candidate's next genuine message (which calls
         # clear_ad_entry_prefill_flag) resets the count, so any later trouble
-        # starts a fresh two-attempt cycle. Rides this transaction; the flag is
-        # its own dedupe, so the note lands once per thread.
-        attribution = conv.attribution or {}
+        # starts a fresh two-attempt cycle. Attribution is only touched when a
+        # refusal or a reset is due, so outcome objects without the column
+        # (test stubs) pass through untouched, exactly like the pre-policy
+        # code. Rides this transaction; the flag is its own dedupe, so the
+        # note lands once per thread.
         if external_error and "allowed window" in external_error.lower():
+            attribution = getattr(conv, "attribution", None) or {}
             if attribution.get("ad_prefill_pending") != "true":
                 refusals = int(attribution.get("ad_prefill_refusals") or 0) + 1
                 updates = {**attribution, "ad_prefill_refusals": refusals}
@@ -236,10 +239,12 @@ class BotOutcomeMixin:
                         )
                     )
                 conv.attribution = updates
-        elif not external_error and "ad_prefill_refusals" in attribution:
+        elif not external_error and "ad_prefill_refusals" in (
+            getattr(conv, "attribution", None) or {}
+        ):
             conv.attribution = {
                 key: value
-                for key, value in attribution.items()
+                for key, value in conv.attribution.items()
                 if key != "ad_prefill_refusals"
             }
         # Transactional outbox (Tech-Lead Directive §14): record the dispatch
