@@ -376,3 +376,34 @@ def test_rank_projects_explicit_sort_by_ignores_distance_but_still_reports_it():
     assert lookup.fits[0].distance_km is not None
     assert lookup.fits[1].distance_km == 0.0
     assert lookup.fits[2].distance_km is None
+
+
+def test_channel_priority_breaks_score_ties():
+    """The channel's linked projects are the catalog's starting point: with
+    everything else equal they rank first (2026-10-07)."""
+    from app.recruitment.domain.recommendation import rank_projects
+
+    linked = _project("alpha-linked", "Alpha")
+    other = _project("beta-other", "Beta")
+
+    lookup = rank_projects([other, linked], priority_ids=frozenset({"alpha-linked"}))
+
+    assert [fit.project.project_id for fit in lookup.fits] == ["alpha-linked", "beta-other"]
+
+
+def test_channel_priority_cannot_override_a_materially_better_fit():
+    """The nudge is 0.05 — a tie-break, never a demotion of a real match: a
+    project whose location fits a stated preference still outranks a
+    channel-linked project that does not."""
+    from app.recruitment.domain.recommendation import rank_projects
+
+    linked = _project("alpha-linked", "Alpha", province="")
+    fits_project = _project("beta-fits", "Beta", province="Hải Phòng")
+
+    lookup = rank_projects(
+        [linked, fits_project],
+        location="Hải Phòng",
+        priority_ids=frozenset({"alpha-linked"}),
+    )
+
+    assert [fit.project.project_id for fit in lookup.fits][:1] == ["beta-fits"]

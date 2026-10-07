@@ -103,14 +103,23 @@ async def test_catalog_read_is_restricted_to_active_kb_gated_projects():
 
 
 @pytest.mark.asyncio
-async def test_catalog_read_honors_page_project_scope():
-    project = _project_row("Rorze", card={"roles": ["Nhân viên lắp ráp"]})
-    db = _db_with(_result([project]), _result([]), _result([]))
+async def test_catalog_read_keeps_linked_projects_first_but_never_exclusive():
+    """Operator directive 2026-10-07: the Page's linked projects are the
+    catalog's starting point, never its ceiling — every active KB-backed
+    project comes back, ordered linked-first, so the bot can consult other
+    projects when the candidate asks."""
+    linked = _project_row("LG Display", card={"roles": ["Nhân viên lắp ráp"]})
+    other = _project_row("AMTRAN", card={"roles": ["Công nhân lắp ráp"]})
+    db = _db_with(_result([linked, other]), _result([]), _result([]))
 
-    await _features(db, page_project_ids=(str(project.id),))
+    features = await _features(db, page_project_ids=(str(linked.id),))
+
+    assert [row.name for row in features] == ["LG Display", "AMTRAN"]
 
     project_sql = _sql(db.execute.await_args_list[0].args[0])
-    assert "projects.id IN" in project_sql
+    where_clause, order_clause = project_sql.split("ORDER BY")
+    assert "projects.id IN" not in where_clause
+    assert "THEN 0 ELSE 1" in order_clause
 
 
 @pytest.mark.asyncio
