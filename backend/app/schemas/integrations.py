@@ -345,6 +345,10 @@ class TingtingIntegrationSettingsOut(BaseModel):
     oa_last_checked_at: str | None = None
     # Redacted reason from the last failed `getoa` probe ("" when it passed).
     oa_last_error: str = ""
+    # Admin kill switch for candidate-message processing on the support OA.
+    # Absent row = enabled; "false" makes the worker stand turns down before
+    # the graph runs (no LLM tokens, no reply).
+    tingting_oa_enabled: bool = True
 
 
 class TingtingIntegrationSettingsUpdate(BaseModel):
@@ -364,6 +368,8 @@ class TingtingIntegrationSettingsUpdate(BaseModel):
     zalo_oa_secret_key: str | None = Field(default=None, max_length=2048)
     zalo_oa_access_token: str | None = Field(default=None, max_length=4096)
     zalo_oa_refresh_token: str | None = Field(default=None, max_length=4096)
+    # The processing kill switch; omitted keeps the stored value.
+    tingting_oa_enabled: bool | None = None
 
 
 # ─── Facebook / Messenger (Phase 4) ─────────────────────────────────────────

@@ -85,6 +85,24 @@ def _link_secrets(*sources: dict[str, str | None]) -> set[str]:
     return secrets
 
 
+async def processing_enabled(db: AsyncSession) -> bool:
+    """Whether candidate messages on the TingTing OA are processed at all.
+
+    The admin kill switch (Settings → TingTing, key ``tingting_oa_enabled``):
+    ``False`` makes the worker stand every turn on that OA down before the
+    graph runs — no LLM call, no reply. Absent row means enabled, so an
+    install that never touched the switch keeps working. A read failure fails
+    OPEN (logged): a settings outage must never silently silence the bot.
+    """
+    from app.services.integration_settings import IntegrationSettingsService
+
+    try:
+        return await IntegrationSettingsService(db).resolve_tingting_oa_enabled()
+    except Exception:  # noqa: BLE001 — fail open on a broken settings read
+        logger.warning("tingting oa enabled read failed; processing stays on", exc_info=True)
+        return True
+
+
 class TingtingOaLinkService:
     """Link (and re-check) the Zalo OA that serves the employee reset flow."""
 
@@ -404,4 +422,5 @@ __all__ = [
     "TINGTING_OA_DEFAULT_LABEL",
     "TingtingOaLinkError",
     "TingtingOaLinkService",
+    "processing_enabled",
 ]
