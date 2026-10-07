@@ -37,6 +37,7 @@ from app.conversation_messaging.infrastructure.webhook_delivery import (
     apply_messenger_receipt,
     apply_messenger_referral,
     enqueue_facebook_turn,
+    escalate_messenger_ad_entry,
 )
 from app.shared.infrastructure.db import get_request_db
 from app.shared.infrastructure.rate_limits import enforce_webhook_rate_limit
@@ -417,6 +418,21 @@ async def facebook_webhook(
             )
         except Exception:  # noqa: BLE001 — enrichment is best-effort
             logger.info("facebook profile enrichment enqueue failed")
+        # A Click-to-Messenger ad's pre-filled first message is page-initiated
+        # content: Meta never opens the 24h reply window for it, so an
+        # automated reply is always refused (code 10, subcode 2018278) and each
+        # ad re-click would add another failed bubble. Park the thread for
+        # human review instead of enqueueing a turn that cannot deliver.
+        if msg.attribution is not None and msg.attribution.get("referral_source") == "ADS":
+            try:
+                if await escalate_messenger_ad_entry(db, outcome):
+                    continue
+            except Exception:  # noqa: BLE001 — escalation is best-effort; the
+                # normal path below still applies rather than dropping the event
+                logger.info(
+                    "messenger ad-entry escalation failed conversation=%s",
+                    outcome.conversation_id,
+                )
         # Enqueue a bot turn for the persisted message, mirroring the Zalo
         # webhook flow. The v2 job payload carries only neutral ids.
         try:

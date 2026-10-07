@@ -7,7 +7,7 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.conversation_messaging.domain.statuses import DeliveryStatus
@@ -80,6 +80,41 @@ async def apply_messenger_referral(
         if project_id:
             attribution = {**attribution, "project_id": project_id}
     await service.stamp_attribution(conversation, attribution)
+
+
+async def escalate_messenger_ad_entry(db: AsyncSession, outcome) -> bool:
+    """Park an ad-entry Messenger thread whose only message is the ad prefill.
+
+    Meta's Click-to-Messenger prefill is page-initiated content: the 24h reply
+    window never opens, so an automated reply is always refused (code 10,
+    subcode 2018278) and every ad re-click would pile on another failed
+    bubble. The thread escalates to human review (needs_human) instead of
+    enqueueing a turn that cannot deliver; a candidate who genuinely types
+    later is the recruiter's to answer.
+
+    Only a thread whose ENTIRE history is this one message escalates: a
+    re-click inside an existing conversation rides the normal path, because
+    there the candidate has demonstrably typed before and the reply window is
+    likely still open. Best-effort by contract — callers must never fail the
+    webhook ack on this.
+    """
+    persisted = outcome.message
+    if persisted is None:
+        return False
+    conversation = await db.scalar(
+        select(Conversation).where(Conversation.id == uuid.UUID(persisted.conversation_id))
+    )
+    if conversation is None:
+        return False
+    message_count = await db.scalar(
+        select(func.count(Message.id)).where(Message.conversation_id == conversation.id)
+    )
+    if (message_count or 0) != 1:
+        return False
+    service = ConversationService(db)
+    return await service.mark_ad_entry_prefill(
+        conversation, expected_version=conversation.version
+    )
 
 
 async def enqueue_facebook_turn(

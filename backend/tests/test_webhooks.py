@@ -1679,3 +1679,149 @@ async def test_active_runtime_authority_is_untouched_by_the_tally(monkeypatch):
 
     assert stamp is authority
     assert webhooks._RUNTIME_INACTIVE.seen == 0
+
+
+@pytest.mark.asyncio
+async def test_messenger_ad_prefill_first_message_parks_the_thread_without_a_turn(
+    monkeypatch,
+):
+    """A Click-to-Messenger ad's pre-filled first message never opens Meta's
+    24h window (it is page-initiated content), so an automated reply is always
+    refused (code 10, subcode 2018278) — production 2026-10-07. The webhook
+    must park the thread for human review instead of enqueueing the turn."""
+    import json
+
+    from app.api import webhooks
+
+    conversation_id = uuid.uuid4()
+    persisted = SimpleNamespace(
+        conversation_id=str(conversation_id),
+        body="Công ty có xe đưa đón không?",
+        provider_message_id="mid-ad-1",
+        created_at=None,
+        id=17,
+    )
+    outcome = SimpleNamespace(
+        status="persisted", message=persisted, conversation_id=str(conversation_id)
+    )
+
+    class FakeIngress:
+        def __init__(self, db) -> None:
+            pass
+
+        async def ingest(self, _message):
+            return outcome
+
+    monkeypatch.setattr(webhooks, "enforce_webhook_rate_limit", AsyncMock())
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService",
+                        lambda _db: SimpleNamespace(
+                            resolve_facebook_oauth=AsyncMock(return_value=SimpleNamespace(app_secret="s"))))
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_signature.verify_messenger_signature",
+        lambda **_kwargs: SimpleNamespace(verified=True, reason=None),
+    )
+    monkeypatch.setattr(
+        webhooks,
+        "_resolve_active_facebook_page",
+        AsyncMock(return_value=(SimpleNamespace(), SimpleNamespace(account_key="page-1"))),
+    )
+    monkeypatch.setattr("app.channels.ingress.ChannelIngressService", FakeIngress)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
+    monkeypatch.setattr(webhooks, "enqueue_messenger_profile_enrichment", MagicMock())
+    escalation = AsyncMock(return_value=True)
+    monkeypatch.setattr(webhooks, "escalate_messenger_ad_entry", escalation)
+    enqueue = MagicMock()
+    monkeypatch.setattr(webhooks, "enqueue_chat_turn", enqueue)
+    monkeypatch.setattr(webhooks, "record_webhook_ack_ms", AsyncMock())
+
+    payload = json.dumps({
+        "entry": [{
+            "messaging": [{
+                "sender": {"id": "psid-1"},
+                "recipient": {"id": "page-1"},
+                "message": {
+                    "mid": "mid-ad-1",
+                    "text": "Công ty có xe đưa đón không?",
+                    "referral": {"source": "ADS", "ad_id": "ad-1"},
+                },
+            }]
+        }]
+    })
+
+    response = await webhooks.facebook_webhook(
+        FakeRequest(payload), db=MagicMock()
+    )
+
+    assert response.status_code == 200
+    escalation.assert_awaited_once()
+    enqueue.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_messenger_genuine_message_after_an_escalated_thread_rides_the_normal_path(
+    monkeypatch,
+):
+    """A message without the ad-referral marker is a real candidate message:
+    the escalation is skipped and the turn is enqueued as usual."""
+    import json
+
+    from app.api import webhooks
+
+    conversation_id = uuid.uuid4()
+    persisted = SimpleNamespace(
+        conversation_id=str(conversation_id),
+        body="LG Hải Phòng",
+        provider_message_id="mid-real-1",
+        created_at=None,
+        id=18,
+    )
+    outcome = SimpleNamespace(
+        status="persisted", message=persisted, conversation_id=str(conversation_id)
+    )
+
+    class FakeIngress:
+        def __init__(self, db) -> None:
+            pass
+
+        async def ingest(self, _message):
+            return outcome
+
+    monkeypatch.setattr(webhooks, "enforce_webhook_rate_limit", AsyncMock())
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService",
+                        lambda _db: SimpleNamespace(
+                            resolve_facebook_oauth=AsyncMock(return_value=SimpleNamespace(app_secret="s"))))
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_signature.verify_messenger_signature",
+        lambda **_kwargs: SimpleNamespace(verified=True, reason=None),
+    )
+    monkeypatch.setattr(
+        webhooks,
+        "_resolve_active_facebook_page",
+        AsyncMock(return_value=(SimpleNamespace(), SimpleNamespace(account_key="page-1"))),
+    )
+    monkeypatch.setattr("app.channels.ingress.ChannelIngressService", FakeIngress)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
+    monkeypatch.setattr(webhooks, "enqueue_messenger_profile_enrichment", MagicMock())
+    escalation = AsyncMock(return_value=False)
+    monkeypatch.setattr(webhooks, "escalate_messenger_ad_entry", escalation)
+    turn = AsyncMock()
+    monkeypatch.setattr(webhooks, "enqueue_facebook_turn", turn)
+    monkeypatch.setattr(webhooks, "record_webhook_ack_ms", AsyncMock())
+
+    payload = json.dumps({
+        "entry": [{
+            "messaging": [{
+                "sender": {"id": "psid-1"},
+                "recipient": {"id": "page-1"},
+                "message": {"mid": "mid-real-1", "text": "LG Hải Phòng"},
+            }]
+        }]
+    })
+
+    response = await webhooks.facebook_webhook(
+        FakeRequest(payload), db=MagicMock()
+    )
+
+    assert response.status_code == 200
+    escalation.assert_not_awaited()
+    turn.assert_awaited_once()

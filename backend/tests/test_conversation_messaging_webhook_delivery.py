@@ -12,6 +12,19 @@ from app.conversation_messaging.application.ingress import (
 from app.conversation_messaging.infrastructure import webhook_delivery
 
 
+def _persisted_outcome(conversation_id: uuid.UUID) -> InboundIngressResult:
+    return InboundIngressResult(
+        status="persisted",
+        message=PersistedInboundMessage(
+            conversation_id=str(conversation_id),
+            message_id=17,
+            body="Công ty có xe đưa đón không?",
+            provider_message_id="facebook-mid-17",
+            created_at=datetime(2026, 10, 7, 5, 49, 38, tzinfo=UTC),
+        ),
+    )
+
+
 async def test_facebook_turn_uses_exact_persisted_message(monkeypatch) -> None:
     conversation_id = uuid.uuid4()
     conversation = SimpleNamespace(id=conversation_id, version=11)
@@ -54,3 +67,60 @@ async def test_facebook_turn_uses_exact_persisted_message(monkeypatch) -> None:
     assert enqueued[0]["reply_to_message_id"] == "facebook-mid-17"
     assert enqueued[0]["received_at"] == persisted_at.isoformat()
     assert not hasattr(db, "scalars")
+
+
+async def test_ad_entry_prefill_escalates_a_first_and_only_message(monkeypatch) -> None:
+    """A thread whose whole history is the ad prefill parks for human review."""
+    conversation_id = uuid.uuid4()
+    conversation = SimpleNamespace(id=conversation_id, version=3)
+    escalated: list[tuple[object, int]] = []
+
+    class Service:
+        def __init__(self, db) -> None:
+            pass
+
+        async def mark_ad_entry_prefill(self, conv, *, expected_version):
+            escalated.append((conv, expected_version))
+            return True
+
+    monkeypatch.setattr(webhook_delivery, "ConversationService", Service)
+    db = SimpleNamespace(scalar=AsyncMock(side_effect=[conversation, 1]))
+
+    assert (
+        await webhook_delivery.escalate_messenger_ad_entry(db, _persisted_outcome(conversation_id))
+        is True
+    )
+    assert escalated == [(conversation, 3)]
+
+
+async def test_ad_entry_prefill_leaves_an_existing_conversation_on_the_bot_path(
+    monkeypatch,
+) -> None:
+    """A re-click inside a thread the candidate has chatted in rides the normal path."""
+
+    conversation_id = uuid.uuid4()
+    conversation = SimpleNamespace(id=conversation_id, version=9)
+
+    class Service:
+        def __init__(self, db) -> None:
+            raise AssertionError("an existing thread must never be escalated here")
+
+    monkeypatch.setattr(webhook_delivery, "ConversationService", Service)
+    db = SimpleNamespace(scalar=AsyncMock(side_effect=[conversation, 4]))
+
+    assert (
+        await webhook_delivery.escalate_messenger_ad_entry(db, _persisted_outcome(conversation_id))
+        is False
+    )
+
+
+async def test_ad_entry_prefill_ignores_an_outcome_without_a_message() -> None:
+    db = SimpleNamespace(scalar=AsyncMock())
+
+    assert (
+        await webhook_delivery.escalate_messenger_ad_entry(
+            db, InboundIngressResult(status="duplicate")
+        )
+        is False
+    )
+    db.scalar.assert_not_awaited()

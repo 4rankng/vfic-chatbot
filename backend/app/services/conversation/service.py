@@ -145,6 +145,22 @@ class ConversationService:
             preserve_turn_ownership=preserve_turn_ownership,
         )
 
+    async def mark_ad_entry_prefill(
+        self,
+        conv: Conversation,
+        *,
+        expected_version: int,
+    ) -> bool:
+        """Park a Click-to-Messenger ad thread whose only inbound is the prefill.
+
+        See :meth:`BotConversationState.mark_ad_entry_prefill` — Meta refuses
+        every automated reply there (the 24h window never opens for an ad
+        prefill), so the thread goes to human review instead of the bot path.
+        """
+        return await self.state.mark_ad_entry_prefill(
+            conv, expected_version=expected_version
+        )
+
     # --- per-chat lock lifecycle (the graph port's surface) ---
 
     def run_start_guard(self, conv: Conversation) -> bool:

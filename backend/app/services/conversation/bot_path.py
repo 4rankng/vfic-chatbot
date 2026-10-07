@@ -56,6 +56,17 @@ _SEMI_AUTO_INACTIVITY = timedelta(minutes=30)
 # operator-visible artifact without duplicating the literal.
 ESCALATION_SYSTEM_NOTE = "Luồng trích xuất đề nghị nhân viên xác minh ý định liên hệ."
 
+# The human-visible note left when a Click-to-Messenger ad thread's only
+# "inbound" is the ad's own pre-filled question. Meta counts the prefill as
+# page-initiated, so the 24h reply window never opens and every automated
+# reply is refused (code 10, subcode 2018278) — production 2026-10-07. The
+# thread parks for a human; the candidate's first real message opens the
+# standard window and recruiter replies deliver normally.
+AD_ENTRY_PREFILL_SYSTEM_NOTE = (
+    "Ứng viên đến từ quảng cáo Messenger và chưa tự nhắn tin nào. Meta chặn "
+    "trang chủ động gửi tin trước — chờ ứng viên nhắn tin thật để tiếp tục."
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -265,6 +276,88 @@ class BotConversationState(
                 await self.db.rollback()
             except Exception:  # noqa: BLE001 — rollback failure must stay silent too
                 logger.debug("attribution stamp rollback failed", exc_info=True)
+
+    async def mark_ad_entry_prefill(
+        self,
+        conv: Conversation,
+        *,
+        expected_version: int,
+    ) -> bool:
+        """Park a Click-to-Messenger ad thread whose only inbound is the prefill.
+
+        Meta counts the ad's pre-filled first message as page-initiated, so the
+        24h messaging window never opens and every automated reply is refused
+        (``code 10, subcode 2018278``). Answering it would burn an LLM turn and
+        leave one more failed bubble per ad re-click, so the thread moves to
+        human-only review — the same shape as :meth:`escalate_extracted_intent`
+        (HUMAN + needs_human): the reconcile sweep's mode filter keeps it out of
+        recovery, ``run_start_guard`` starves later bot turns, and the console's
+        "Cần xử lý" queue surfaces it. The candidate's first real message opens
+        the standard window, so the recruiter's replies deliver.
+
+        Idempotent like the sibling escalation: a thread already in human
+        review, closed, or raced by a newer inbound/recruiter action loses the
+        conditional update cleanly and reports ``False``.
+        """
+        target_state = and_(
+            Conversation.mode == ConversationMode.HUMAN,
+            Conversation.needs_human.is_(True),
+        )
+        transition = await self.db.execute(
+            update(Conversation)
+            .where(
+                Conversation.id == conv.id,
+                Conversation.version == expected_version,
+                Conversation.status != ConversationStatus.CLOSED,
+                ~target_state,
+            )
+            .values(
+                mode=ConversationMode.HUMAN,
+                status=ConversationStatus.OPEN,
+                needs_human=True,
+                bot_locked_until=None,
+                bot_lock_owner=None,
+                bot_lock_heartbeat_at=None,
+                version=Conversation.version + 1,
+                conversation_seq=Conversation.conversation_seq + 1,
+            )
+            .returning(Conversation.version)
+            .execution_options(synchronize_session=False)
+        )
+        transitioned_version = transition.scalar_one_or_none()
+        if transitioned_version is None:
+            await self.db.rollback()
+            return False
+
+        system_note = Message(
+            conversation_id=conv.id,
+            sender=MessageSender.SYSTEM,
+            body=AD_ENTRY_PREFILL_SYSTEM_NOTE,
+        )
+        self.db.add(system_note)
+        await record_audit(
+            self.db,
+            action="ad_entry_prefill_human_review",
+            target_type="conversation",
+            target_id=str(conv.id),
+            payload={"version": transitioned_version},
+        )
+
+        await self.db.commit()
+        await self.db.refresh(system_note)
+        await self.db.refresh(conv)
+        # Post-commit bookkeeping must never fail the webhook ack (same
+        # contract as record_inbound's realtime events).
+        try:
+            await self.events.message_created(system_note, conv)
+            await self.events.conversation_updated(conv)
+        except Exception:  # noqa: BLE001 — a UI update never breaks the ack
+            logger.warning(
+                "ad-entry prefill realtime events failed conversation=%s",
+                conv.id,
+                exc_info=True,
+            )
+        return True
 
     async def record_inbound(
         self,
