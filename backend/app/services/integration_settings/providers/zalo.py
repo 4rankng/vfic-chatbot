@@ -9,6 +9,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 
+from app.channels.types import TINGTING_OA_ACCOUNT_KEY
 from app.core.cache import bump_cache_version
 from app.core.config import ZALO_BOT_API_BASE, ZALO_OA_API_BASE
 from app.core.preamble_cache import NS_INTEGRATION_ZALO, cached_zalo_config, evict_local_namespace
@@ -316,6 +317,84 @@ class ZaloSettingsMixin:
         except Exception:  # noqa: BLE001 — an alert must not break token refresh
             logger.warning("zalo OA refresh alert push failed", exc_info=True)
 
+    async def _alert_payroll_token_unavailable(self) -> None:
+        """The TingTing-account twin of ``_alert_refresh_rejected``.
+
+        When payroll cannot serve the token, every send on that OA keeps
+        failing and only payroll's recovery fixes it — the operator needs to
+        know which side is broken. Deduped under the same per-account
+        namespace as the Zalo-branch alert, so a refresh attempted on every
+        turn does not become a push per turn. Best-effort.
+        """
+        try:
+            from app.services.push import notify_admins
+
+            await notify_admins(
+                self.db,
+                title="Không lấy được token Zalo OA TingTing",
+                body=(
+                    "Payroll chưa trả được Access Token cho OA TingTing. Tin nhắn trên OA này "
+                    "sẽ gửi thất bại cho tới khi payroll phục hồi (kiểm tra khoản tích hợp "
+                    "Zalo của payroll)."
+                ),
+                url="/settings",
+                tag=f"zalo-oa-token-{TINGTING_OA_ACCOUNT_KEY}",
+                dedupe_key=f"zalo-oa-refresh:{TINGTING_OA_ACCOUNT_KEY}",
+            )
+        except Exception:  # noqa: BLE001 — an alert must not break token refresh
+            logger.warning("tingting OA payroll-token alert push failed", exc_info=True)
+
+    async def _pull_tingting_oa_token_from_payroll(self) -> str | None:
+        """The TingTing branch of ``refresh_oa_access_token``: pull from payroll.
+
+        Payroll solely owns and rotates this account's token pair (owner
+        ruling 2026-10-07). The stored ``zalo_oa_refresh_token`` for this
+        account is a fossil no one may redeem again, so instead of the Zalo
+        OAuth POST the fresh access token is pulled from payroll's
+        ``GET /api/v1/integration/zalo/token`` and stored under the same
+        per-account key the push webhook (``POST /webhooks/zalo-oa-token``)
+        writes. Returns the new token, or ``None`` on any failure — the same
+        contract the Zalo branch gives its callers.
+
+        No Redis lock guards the pull, deliberately: the Zalo branch's lock
+        serializes redeemers of a single-use refresh token, while a pull is
+        idempotent — concurrent workers all store the identical token, and the
+        loser of a race costs one redundant GET. ``failure`` alerts are
+        deduped, so a pull per send attempt cannot become an alert storm.
+        """
+        from app.services.tingting_api import TingtingApiService
+
+        token = await TingtingApiService(
+            self.db, settings=self.settings, cipher=self.cipher
+        ).fetch_zalo_oa_access_token()
+        if not token:
+            await self._alert_payroll_token_unavailable()
+            return None
+        await self._write_secret(
+            oa_account_setting_key(ZALO_OA_ACCESS_TOKEN, TINGTING_OA_ACCOUNT_KEY), token
+        )
+        # Persist before nonessential work, like the Zalo branch: a lost token
+        # here means every send on the OA keeps failing until the next pull.
+        await self.db.commit()
+        evict_local_namespace(NS_INTEGRATION_ZALO)
+        try:
+            await record_audit(
+                self.db,
+                action="refresh_zalo_oa_token",
+                actor_id=None,
+                target_type="integration_settings",
+                target_id="zalo",
+                payload={"account_key": TINGTING_OA_ACCOUNT_KEY, "source": "payroll"},
+            )
+            await self.db.commit()
+        except Exception:  # noqa: BLE001
+            logger.warning("tingting OA payroll token pull audit failed", exc_info=True)
+        try:
+            await bump_cache_version(NS_INTEGRATION_ZALO)
+        except Exception:  # noqa: BLE001
+            logger.warning("tingting OA payroll token pull cache invalidation failed", exc_info=True)
+        return token
+
     async def refresh_oa_access_token(self, account_key: str | None = None) -> str | None:
         """Refresh one OA account's access_token from its stored refresh_token.
 
@@ -331,11 +410,18 @@ class ZaloSettingsMixin:
         ``account_key`` scopes both the credentials and the lock: each OA has
         its own single-use refresh token, so two OAs must never share a lock
         (one would block the other's legitimate refresh).
+
+        The TingTing support OA never reaches the Zalo OAuth branch: payroll
+        solely owns and rotates that account's token pair, so its "refresh"
+        is a pull from payroll instead (see
+        :meth:`_pull_tingting_oa_token_from_payroll`).
         """
 
         from app.core.redis import async_value, get_redis
 
         account_key = account_key or ZALO_OA_DEFAULT_ACCOUNT_KEY
+        if account_key == TINGTING_OA_ACCOUNT_KEY:
+            return await self._pull_tingting_oa_token_from_payroll()
         is_default = account_key == ZALO_OA_DEFAULT_ACCOUNT_KEY
 
         def _key(base: str) -> str:

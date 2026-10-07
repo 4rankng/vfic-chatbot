@@ -66,7 +66,10 @@ EXPECTED_ROUTE_COUNTS = {
     # +1 project external-API admin test-call endpoint (post)
     "projects": 25,  # -4 Sheet sync routes; +1 admin-only GET /{id}/knowledge-export
     "users": 10,
-    "webhooks": 4,  # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
+    # Phase 5: +2 Facebook webhook routes (GET challenge + POST events)
+    # 2026-10-07: +1 POST /webhooks/zalo-oa-token — the TingTing OA access
+    # token payroll pushes after each rotation (X-API-Key = tingting_api_key).
+    "webhooks": 5,
 }
 # The legacy KB-version lane removal (-7 knowledge routes, -3 queue producers)
 # is the re-review this digest records.
@@ -89,7 +92,11 @@ EXPECTED_ROUTE_COUNTS = {
 # 2026-10-07 (later): +1 conversations route (POST /{id}/force-bot-reply,
 # active_kernel — the recruiter's nudge answering the latest unanswered
 # candidate message); digest recomputed from the post-change scan.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "f0193909ec25833e58fdf8a5ee7fa280461d13f3f4fd58787af5cb48b9b10a79"
+# 2026-10-07 (latest): +1 webhooks route (POST /webhooks/zalo-oa-token,
+# capability.channel.zalo — payroll pushes the TingTing OA access token it
+# owns and rotates); digest recomputed from the post-change scan, delta
+# verified against a HEAD-worktree scan (exactly one added route).
+EXPECTED_ROUTE_INVENTORY_SHA256 = "79c88a12a2b00371df9c596037e72e8b51587d7794c76a63d74f6a5938baecfd"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -225,7 +232,12 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # provider files to their pre-change state reproduces the prior digest
     # byte-for-byte, so this single site is the whole difference. (The adapter's
     # new logging is scan-neutral.)
-    "provider_boundary": 102,  # +1 the TingTing self check-in toggle's payroll egress site (3ab65a44)
+    # 2026-10-07: +1 provider_boundary — the payroll token pull in
+    # tingting_api.py::fetch_zalo_oa_access_token: the file is provider
+    # transport, so its response-envelope dict `.get` counts as one reviewed
+    # read. No new egress site: the GET rides _send, the module's single
+    # inventoried request call. Delta verified against a HEAD-worktree scan.
+    "provider_boundary": 103,  # +1 the TingTing self check-in toggle's payroll egress site (3ab65a44)
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -379,7 +391,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # (commit 3ab65a44) add a payroll-side egress site; +1 queue_producer — the
 # force-bot-reply endpoint enqueues via enqueue_latest_unanswered_worker_message.
 # Digest recomputed from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "3f85d93a2be38c6e9580ffe5255ffb67f4fd43b076ebe5c2d7691431b83ec224"
+EXPECTED_BROAD_BOUNDARY_SHA256 = "71b68753a278f38d9d2f0bad193b637ad4ea347a6873910753b8135b69cee512"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

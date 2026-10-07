@@ -82,6 +82,14 @@ TINGTING_API_LABEL = "TingTing"
 # sent — a second identical lookup is a legitimate retry, not a duplicate write.
 TINGTING_READ_ONLY_PATHS: frozenset[str] = frozenset({"/api/v1/integration/employee/lookup"})
 
+# Payroll solely owns and rotates the TingTing OA's Zalo token pair (owner
+# ruling 2026-10-07): after each rotation it pushes the fresh access token to
+# the chatbot's POST /webhooks/zalo-oa-token, and this read-only endpoint is
+# the pull fallback the chatbot's OA refresh path uses when no push has
+# arrived. Internal infrastructure call — never model-reachable, so it skips
+# the model-facing quota/dedupe machinery and reuses _send for egress.
+TINGTING_ZALO_TOKEN_PATH = "/api/v1/integration/zalo/token"
+
 # The reset flow spans several turns, but the agent's message list does not: a
 # ``session_id`` handed to the model on the OTP turn is gone by the turn the
 # employee replies with the code, and the model then guesses — production sent
@@ -368,6 +376,44 @@ class TingtingApiService:
         await self.db.commit()
         return await self.admin_view()
 
+    async def fetch_zalo_oa_access_token(self) -> str | None:
+        """Pull the payroll-served TingTing OA access token, or ``None``.
+
+        The pull side of the payroll-owned token handover: payroll rotates the
+        pair, pushes the fresh token to ``POST /webhooks/zalo-oa-token``, and
+        serves this read so the chatbot can recover a missed push on the next
+        send failure. The failure contract matches the refresh path it feeds —
+        a transport error, a non-200 status, or a body without
+        ``access_token`` logs the call shape (never the token) and returns
+        ``None``.
+        """
+        runtime = await self.runtime()
+        if runtime is None:
+            logger.warning("tingting OA token pull skipped: no API key configured")
+            return None
+        started = time.monotonic()
+        try:
+            response = await self._send(runtime, "GET", TINGTING_ZALO_TOKEN_PATH, {})
+        except httpx.TimeoutException:
+            self._log_call("GET", TINGTING_ZALO_TOKEN_PATH, None, started, "timeout")
+            return None
+        except (httpx.HTTPError, OSError):
+            self._log_call("GET", TINGTING_ZALO_TOKEN_PATH, None, started, "network_error")
+            return None
+        self._log_call("GET", TINGTING_ZALO_TOKEN_PATH, response.status_code, started, "")
+        if response.status_code != 200:
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            logger.warning("tingting OA token pull returned a non-JSON body")
+            return None
+        token = str(data.get("access_token") or "").strip() if isinstance(data, dict) else ""
+        if not token:
+            logger.warning("tingting OA token pull response carries no access_token")
+            return None
+        return token
+
     async def replace_key(self, value: Any, *, actor_id: Any = None) -> dict:
         """Persist the key; ``""`` clears it. ``None`` keeps the stored value."""
         if value is None:
@@ -502,6 +548,7 @@ __all__ = [
     "TINGTING_HOTLINE_SETTING",
     "TINGTING_RESET_OA_ID_SETTING",
     "TINGTING_READ_ONLY_PATHS",
+    "TINGTING_ZALO_TOKEN_PATH",
     "TINGTING_FLOW_KEY_PREFIX",
     "TINGTING_FLOW_TTL_SECONDS",
     "TINGTING_VERIFY_ATTEMPTS_TTL_SECONDS",

@@ -242,6 +242,79 @@ async def zalo_oa_webhook(
     return JSONResponse(result, status_code=code)
 
 
+@router.post("/zalo-oa-token")
+async def zalo_oa_token_webhook(
+    request: Request, db: AsyncSession = Depends(get_request_db)
+) -> JSONResponse:
+    """Receive the TingTing OA access token pushed by payroll.
+
+    Payroll solely owns and rotates that account's Zalo token pair (owner
+    ruling 2026-10-07): it pushes the fresh access token here after each
+    rotation and at its own startup, and this deployment never refreshes the
+    ``tingting`` account against Zalo OAuth again. Auth is the same shared
+    secret the reset API already uses — an ``X-API-Key`` header equal to the
+    ``tingting_api_key`` setting — compared constant-time. The token is
+    stored under the account's standard OA namespace (the same row the
+    payroll pull writes) and is never logged.
+
+    Not a message webhook: no runtime-authority gate (no turn is enqueued)
+    and no webhook-ack SLO sample (the SLO measures candidate-message acks).
+    Answers 200 fast — payroll pushes with a ~5s timeout.
+    """
+    await enforce_webhook_rate_limit(request)
+    raw = await _read_body_within_limit(request)
+    logger.info("zalo oa token push inbound bytes=%d", len(raw))
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return JSONResponse({"detail": "invalid JSON body"}, status_code=400)
+
+    from app.services.tingting_api import TINGTING_API_AUTH_HEADER, TingtingApiService
+
+    provided_key = request.headers.get(TINGTING_API_AUTH_HEADER.lower()) or ""
+    runtime = await TingtingApiService(db).runtime()
+    stored_key = runtime.api_key if runtime else ""
+    if not stored_key or not hmac.compare_digest(provided_key, stored_key):
+        logger.info("zalo oa token push rejected reason=bad_api_key")
+        return JSONResponse({"detail": "invalid api key"}, status_code=401)
+
+    token = (
+        str(payload.get("access_token") or "").strip()
+        if isinstance(payload, dict)
+        else ""
+    )
+    if not token:
+        return JSONResponse({"detail": "missing access_token"}, status_code=400)
+
+    from app.channels.types import TINGTING_OA_ACCOUNT_KEY
+    from app.core.cache import bump_cache_version
+    from app.core.preamble_cache import NS_INTEGRATION_ZALO, evict_local_namespace
+    from app.services.audit_service import record_audit
+
+    service = IntegrationSettingsService(db)
+    stored = await service.write_oa_account_credentials(
+        TINGTING_OA_ACCOUNT_KEY, {"zalo_oa_access_token": token}
+    )
+    await record_audit(
+        db,
+        action="store_pushed_zalo_oa_token",
+        actor_id=None,
+        target_type="integration_settings",
+        target_id="zalo",
+        payload={"account_key": TINGTING_OA_ACCOUNT_KEY, "source": "payroll"},
+    )
+    await db.commit()
+    evict_local_namespace(NS_INTEGRATION_ZALO)
+    try:
+        await bump_cache_version(NS_INTEGRATION_ZALO)
+    except Exception:  # noqa: BLE001 — the push itself is durable; cache catches up on TTL
+        logger.warning("zalo oa token push cache invalidation failed", exc_info=True)
+    # Shape only: the keys written, never the token.
+    logger.info("zalo oa token push stored keys=%s", stored)
+    return JSONResponse({"status": "stored"}, status_code=200)
+
+
 # ─── Facebook Messenger webhook (Phase 5) ───────────────────────────────────
 #
 # Two routes, additive to the Zalo routes above. The shared helpers

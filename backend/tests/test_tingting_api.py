@@ -257,6 +257,59 @@ async def test_invoke_without_a_runtime_is_not_configured(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_fetch_oa_token_pulls_from_payroll_with_the_stored_key(monkeypatch) -> None:
+    """The pull: GET the payroll token endpoint with the stored API key."""
+    http = _FakeHttp(text='{"access_token": " at-payroll-1 "}')
+    service = TingtingApiService(_FakeSession(_stored_row()))
+
+    async def _client(_name, timeout=None):  # noqa: ANN001, ARG001
+        return http
+
+    monkeypatch.setattr(mod, "get_http_client", _client)
+    token = await service.fetch_zalo_oa_access_token()
+
+    assert token == "at-payroll-1"
+    call = http.calls[0]
+    assert call["method"] == "GET"
+    assert call["url"] == f"{TINGTING_API_BASE_DEFAULT}/api/v1/integration/zalo/token"
+    assert call["headers"] == {"X-API-Key": _KEY}
+
+
+@pytest.mark.asyncio
+async def test_fetch_oa_token_without_a_key_is_none(monkeypatch) -> None:
+    """No stored API key: the pull is unavailable, not an error."""
+    http = _FakeHttp()
+
+    async def _client(_name, timeout=None):  # noqa: ANN001, ARG001
+        return http
+
+    monkeypatch.setattr(mod, "get_http_client", _client)
+    assert await TingtingApiService(_FakeSession()).fetch_zalo_oa_access_token() is None
+    assert http.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "text"),
+    [
+        (503, "upstream down"),
+        (200, '{"detail": "not_found"}'),
+        (200, "not json at all"),
+    ],
+)
+async def test_fetch_oa_token_failures_are_none(monkeypatch, status, text) -> None:
+    """Every payroll-side failure keeps the refresh failure contract: None."""
+    http = _FakeHttp(status=status, text=text)
+    service = TingtingApiService(_FakeSession(_stored_row()))
+
+    async def _client(_name, timeout=None):  # noqa: ANN001, ARG001
+        return http
+
+    monkeypatch.setattr(mod, "get_http_client", _client)
+    assert await service.fetch_zalo_oa_access_token() is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method", "path", "params", "detail"),
     [

@@ -311,3 +311,112 @@ async def test_refresh_returns_none_on_zalo_error(monkeypatch):
 class AsyncMockNoop:
     async def __call__(self, *_args, **_kwargs):
         return None
+
+
+# ── The TingTing account never touches Zalo OAuth: payroll owns its pair ────
+
+
+def _tingting_seed(service: IntegrationSettingsService) -> list[_Row]:
+    """The account's stored rows: a fossil refresh token, an old access token."""
+    c = service.cipher
+    return [
+        _Row(f"{ZALO_OA_REFRESH_TOKEN}:tingting", c.encrypt("dead-rt")),
+        _Row(f"{ZALO_OA_ACCESS_TOKEN}:tingting", c.encrypt("at-old")),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_tingting_refresh_pulls_from_payroll_and_stores(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    audits: list[dict] = []
+
+    async def fake_record_audit(*_args, **kwargs):
+        audits.append(kwargs)
+
+    monkeypatch.setattr(
+        "app.services.integration_settings.providers.zalo.record_audit", fake_record_audit
+    )
+    fetch = AsyncMock(return_value="at-payroll-1")
+    monkeypatch.setattr(
+        "app.services.tingting_api.TingtingApiService.fetch_zalo_oa_access_token", fetch
+    )
+    # No lock may be taken: a pull is idempotent, the single-use refresh token
+    # it would otherwise serialize does not exist for this account.
+    fake_redis = _FakeRedis(set_ok=True)
+    monkeypatch.setattr("app.core.redis.get_redis", lambda: fake_redis)
+
+    service = IntegrationSettingsService(_RefreshDb([]), settings=_Settings())
+    db = _RefreshDb(_tingting_seed(service))
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    token = await service.refresh_oa_access_token("tingting")
+
+    assert token == "at-payroll-1"
+    fetch.assert_awaited_once_with()
+    assert fake_redis.set_calls == []
+    assert db.committed is True
+    assert (
+        service.cipher.decrypt(db._by_key[f"{ZALO_OA_ACCESS_TOKEN}:tingting"].encrypted_value)
+        == "at-payroll-1"
+    )
+    # Same audit action as the Zalo branch, marked with its source.
+    assert audits and audits[0]["action"] == "refresh_zalo_oa_token"
+    assert audits[0]["payload"] == {"account_key": "tingting", "source": "payroll"}
+
+
+@pytest.mark.asyncio
+async def test_tingting_refresh_payroll_failure_keeps_the_none_contract(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    alerts: list[dict] = []
+
+    async def fake_notify(*_args, **kwargs):
+        alerts.append(kwargs)
+
+    monkeypatch.setattr("app.services.push.notify_admins", fake_notify)
+    monkeypatch.setattr(
+        "app.services.tingting_api.TingtingApiService.fetch_zalo_oa_access_token",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr("app.core.redis.get_redis", lambda: _FakeRedis(set_ok=True))
+
+    service = IntegrationSettingsService(_RefreshDb([]), settings=_Settings())
+    db = _RefreshDb(_tingting_seed(service))
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    token = await service.refresh_oa_access_token("tingting")
+
+    # The send-path failure contract: None, no write, one deduped admin alert.
+    assert token is None
+    assert db.committed is False
+    assert db.added == []
+    assert alerts and alerts[0]["dedupe_key"] == "zalo-oa-refresh:tingting"
+
+
+@pytest.mark.asyncio
+async def test_non_tingting_account_still_refreshes_through_zalo_oauth(monkeypatch):
+    """The payroll branch keys on the tingting account only — the default OA
+    (and any other account) keeps redeeming its own refresh token."""
+    from unittest.mock import AsyncMock
+
+    fetch = AsyncMock(return_value="at-from-payroll")
+    monkeypatch.setattr(
+        "app.services.tingting_api.TingtingApiService.fetch_zalo_oa_access_token", fetch
+    )
+    monkeypatch.setattr("app.core.redis.get_redis", lambda: _FakeRedis(set_ok=True))
+
+    service = IntegrationSettingsService(_RefreshDb([]), settings=_Settings())
+    db = _RefreshDb(_seed(service))
+    service = IntegrationSettingsService(db, settings=_Settings())
+
+    fake_client = _FakeClient({"access_token": "at-new", "refresh_token": "rt-2"})
+    from tests.helpers.http_fake import register_fake_client as _reg_fake
+
+    _reg_fake("zalo_oa_token", fake_client)
+
+    token = await service.refresh_oa_access_token("default:zalo_oa")
+
+    assert token == "at-new"
+    assert fake_client.posted == 1
+    fetch.assert_not_awaited()

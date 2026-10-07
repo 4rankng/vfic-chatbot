@@ -1904,3 +1904,115 @@ async def test_messenger_referral_message_on_a_flagged_thread_is_skipped(monkeyp
     flagged.assert_awaited_once()
     cleared.assert_not_awaited()
     turn.assert_not_awaited()
+
+
+# ── Payroll-pushed TingTing OA token (POST /webhooks/zalo-oa-token) ─────────
+
+
+def _patch_token_push(monkeypatch, *, stored_key: str | None):
+    """Wire the push route's three collaborators with recorder doubles."""
+    from app.api import webhooks
+    from app.services import tingting_api as tingting_mod
+
+    writes: list[tuple[str, dict]] = []
+
+    async def fake_write(account_key, values, *, actor_id=None):  # noqa: ANN001
+        writes.append((account_key, dict(values)))
+        return list(values)
+
+    fake_settings = SimpleNamespace(
+        write_oa_account_credentials=AsyncMock(side_effect=fake_write)
+    )
+    monkeypatch.setattr(
+        webhooks, "IntegrationSettingsService", lambda _db: fake_settings
+    )
+    runtime = (
+        SimpleNamespace(api_key=stored_key) if stored_key is not None else None
+    )
+    monkeypatch.setattr(
+        tingting_mod.TingtingApiService,
+        "runtime",
+        AsyncMock(return_value=runtime),
+    )
+    audits: list[dict] = []
+    monkeypatch.setattr(
+        "app.services.audit_service.record_audit",
+        AsyncMock(side_effect=lambda _db, **kw: audits.append(kw) or None),
+    )
+    monkeypatch.setattr("app.core.cache.bump_cache_version", AsyncMock())
+    return writes, audits
+
+
+@pytest.mark.asyncio
+async def test_token_push_stores_the_tingting_access_token(monkeypatch, caplog):
+    from app.api import webhooks
+    writes, audits = _patch_token_push(monkeypatch, stored_key="k-1")
+
+    response = await webhooks.zalo_oa_token_webhook(
+        FakeRequest(
+            json.dumps({"access_token": "at-secret-1"}).encode(),
+            headers={"x-api-key": "k-1"},
+        ),
+        db=AsyncMock(),
+    )
+
+    assert response.status_code == 200
+    assert response.body == b'{"status":"stored"}'
+    assert writes == [("tingting", {"zalo_oa_access_token": "at-secret-1"})]
+    assert audits[0]["action"] == "store_pushed_zalo_oa_token"
+    # The token must never reach the logs, in any form.
+    assert "at-secret-1" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headers", [{}, {"x-api-key": "wrong-key"}])
+async def test_token_push_rejects_a_bad_or_missing_api_key(monkeypatch, headers):
+    from app.api import webhooks
+    _patch_token_push(monkeypatch, stored_key="k-1")
+
+    response = await webhooks.zalo_oa_token_webhook(
+        FakeRequest(
+            json.dumps({"access_token": "at-secret-1"}).encode(), headers=headers
+        ),
+        db=AsyncMock(),
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_token_push_without_a_configured_api_key_is_401(monkeypatch):
+    from app.api import webhooks
+    _patch_token_push(monkeypatch, stored_key=None)
+
+    response = await webhooks.zalo_oa_token_webhook(
+        FakeRequest(
+            json.dumps({"access_token": "at-secret-1"}).encode(),
+            headers={"x-api-key": "k-1"},
+        ),
+        db=AsyncMock(),
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        json.dumps({"detail": "no token here"}).encode(),
+        json.dumps({"access_token": "   "}).encode(),
+        b'{"access_token": ',
+    ],
+)
+async def test_token_push_rejects_a_body_without_a_token(monkeypatch, body):
+    from app.api import webhooks
+    writes, _audits = _patch_token_push(monkeypatch, stored_key="k-1")
+
+    response = await webhooks.zalo_oa_token_webhook(
+        FakeRequest(body, headers={"x-api-key": "k-1"}),
+        db=AsyncMock(),
+    )
+
+    assert response.status_code == 400
+    assert writes == []
