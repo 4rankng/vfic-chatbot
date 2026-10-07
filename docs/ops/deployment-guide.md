@@ -332,15 +332,18 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0071_lead_project_id` (6 Oct 2026). This line is grepped by the
+- **HEAD:** `0073_map_lgd_messenger_ad` (7 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0071` adds the
-  nullable, indexed `leads.project_id` FK (ON DELETE SET NULL) — the catalog
-  entry a candidate entered through, so the lead list can filter by project
-  without an unindexed join over the JSONB `lead_events` table. **Additive**
-  and derived from the existing `project_interest` event, so blue and green run
-  against either schema and no existing row is rewritten; `downgrade()` drops
-  the constraint, index and column. `0070` fills the
+  new migration that does not update it blocks the release. `0073` maps the
+  live LG-DISPLAY Click-to-Messenger ad by resolving ``ad_id`` against the
+  project catalog alongside ``ref`` (the ads ship no ``utm_*``/``ref``); the
+  mapping is stored **additively** in ``projects.aliases`` — idempotent, never
+  overwrites an operator's own alias, and blue/green run against either state.
+  `downgrade()` removes only the alias this migration added. `0072` corrects
+  the support OA's escalation hotline setting to the owner's current number
+  (`02256548788`, superseding 0058's seed). `0071` added the nullable, indexed
+  `leads.project_id` FK (ON DELETE SET NULL; `downgrade()` drops the
+  constraint, index and column). `0070` fills the
   NULL `leads.age` rows from the year the candidate already gave —
   `age = Vietnam year − birth_year`, clamped to the existing 15..80 contract —
   **data-only, fills NULLs**, so blue and green run against either state and an
