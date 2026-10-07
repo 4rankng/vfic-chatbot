@@ -104,14 +104,19 @@ TINGTING_WAGE_WAIT_REPLY = "Hiện tại bên em cũng đang chờ VFIC gửi d�
 # send layer attaches the topic's screenshot to the exact caption (media keyed
 # by caption + account in dispatch.py) — a paraphrase would lose the image, and
 # a hotline line inside a fixed reply would end the conversation on a real
-# answer. Steps name the exact UI strings from the operator's screenshots; each
-# caption must read complete on its own in case the attachment degrades to
-# text-only. Tan-ca has no screenshot yet, so its reply stands alone.
+# answer. Steps name the exact UI strings from the operator's screenshots; the
+# GPS line reflects the verified two-gate flow (browser per-site permission
+# AND the OS location switch — if the OS gate is off the site prompt never
+# completes, hence the Cài đặt fallback; labels per Google's VN Chrome help
+# and iOS "Website Settings"). Each caption must read complete on its own in
+# case the attachment degrades to text-only. Tan-ca has no screenshot yet, so
+# its reply stands alone.
 TINGTING_SELF_CHECKIN_GPS_REPLY = (
-    "Dạ anh/chị bấm nút xanh «Cho phép vị trí» trên màn hình chính rồi chọn Cho phép nhé ạ. "
-    "Nếu đã từ chối trước đó: trên iPhone bấm aA ở thanh địa chỉ → «Cài đặt cho trang web "
-    "này» → Vị trí → Cho phép; trên Android bấm ổ khóa cạnh địa chỉ → Quyền → Vị trí. "
-    "Nhớ bật Vị trí trong Cài đặt máy ạ."
+    "Dạ anh/chị bấm «Cho phép vị trí» trên màn hình chính rồi chọn Cho phép nhé ạ. "
+    "Android: bấm ổ khóa cạnh thanh địa chỉ → Quyền → Vị trí → Cho phép. "
+    "iPhone: bấm aA trên thanh địa chỉ → Website Settings → Vị trí. "
+    "Vẫn không định vị được thì mở Cài đặt kiểm tra Dịch vụ định vị (iPhone) hoặc "
+    "Vị trí (Android) đang bật nhé ạ."
 )
 TINGTING_SELF_CHECKIN_SCHEDULE_REPLY = (
     "Dạ giờ bấm tự chấm công dự án LGD như sau ạ: «Vào làm» mở từ 1 tiếng trước đến 1 tiếng "
