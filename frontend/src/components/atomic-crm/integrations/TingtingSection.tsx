@@ -70,6 +70,9 @@ export const TingtingSection = () => {
   // its draft holds the EDIT only; saving keeps the stored number when the
   // field is untouched or cleared — the backend never loses the seed by accident.
   const [hotlineDraft, setHotlineDraft] = useState("");
+  // Untouched-draft sentinel for the OA processing switch: null tracks the
+  // server value until the operator toggles.
+  const [oaEnabledDraft, setOaEnabledDraft] = useState<boolean | null>(null);
 
   const settingsQuery = useQuery<TingtingSettings>({
     queryKey: tingtingSettingsKey,
@@ -95,6 +98,7 @@ export const TingtingSection = () => {
       setApiKey("");
       setOaForm(EMPTY_OA_FORM);
       setHotlineDraft("");
+      setOaEnabledDraft(null);
       queryClient.setQueryData(tingtingSettingsKey, data);
       if (data.oa_linked) {
         notify(`Đã liên kết Zalo OA: ${data.oa_name || data.oa_id}.`, {
@@ -145,9 +149,15 @@ export const TingtingSection = () => {
     zalo_oa_access_token: oaForm.access_token.trim(),
     zalo_oa_refresh_token: oaForm.refresh_token.trim(),
   } as const;
-  for (const [key, value] of Object.entries(trimmedOa)) {
+  for (const key of [
+    "zalo_oa_app_id",
+    "zalo_oa_secret_key",
+    "zalo_oa_access_token",
+    "zalo_oa_refresh_token",
+  ] as const) {
+    const value = trimmedOa[key];
     if (value) {
-      oaPost[key as keyof TingtingSettingsUpdate] = value;
+      oaPost[key] = value;
     }
   }
 
@@ -158,8 +168,14 @@ export const TingtingSection = () => {
       settings?.oa_refresh_token?.configured ||
       settings?.oa_secret_key?.configured,
   );
+  // The switch falls back to on while the settings are loading, so the toggle
+  // never renders a disabled-looking half state before the truth arrives.
+  const oaEnabled = oaEnabledDraft ?? settings?.tingting_oa_enabled ?? true;
   const dirty =
-    Boolean(trimmedApiKey) || hotlineChanged || Object.keys(oaPost).length > 0;
+    Boolean(trimmedApiKey) ||
+    hotlineChanged ||
+    oaEnabledDraft !== null ||
+    Object.keys(oaPost).length > 0;
 
   // The badge counts the five visible credentials, so "3/5" names which are
   // still missing instead of restating the backend's overall readiness flag.
@@ -183,6 +199,9 @@ export const TingtingSection = () => {
     saveSettings.mutate({
       ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
       ...(hotlineChanged ? { hotline: trimmedHotline } : {}),
+      ...(oaEnabledDraft !== null
+        ? { tingting_oa_enabled: oaEnabledDraft }
+        : {}),
       ...oaPost,
     });
   };
@@ -328,6 +347,49 @@ export const TingtingSection = () => {
                 {checkOa.isPending ? "Đang kiểm tra…" : "Kiểm tra lại OA"}
               </Button>
             ) : null}
+          </div>
+
+          <div className="settings-tingting-subhead">
+            <h3>Xử lý tin nhắn</h3>
+            <p>
+              Tắt để dừng xử lý tin nhắn của thí sinh trên Zalo OA (không dùng
+              LLM). Bật lại để tiếp tục.
+            </p>
+          </div>
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="group"
+            aria-label="Xử lý tin nhắn TingTing OA"
+          >
+            <Button
+              type="button"
+              size="sm"
+              color={oaEnabled ? "primary" : "secondary"}
+              className="uu-scope tt-btn-touch"
+              aria-pressed={oaEnabled}
+              onClick={() => setOaEnabledDraft(true)}
+            >
+              Bật
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              color={oaEnabled ? "secondary" : "primary"}
+              className="uu-scope tt-btn-touch"
+              aria-pressed={!oaEnabled}
+              onClick={() => setOaEnabledDraft(false)}
+            >
+              Tắt
+            </Button>
+            <span className="settings-tingting-link-copy" role="status">
+              {oaEnabledDraft === true
+                ? "Sẽ bật sau khi bấm Lưu cấu hình."
+                : oaEnabledDraft === false
+                  ? "Sẽ tắt sau khi bấm Lưu cấu hình."
+                  : oaEnabled
+                    ? "Đang xử lý tin nhắn trên Zalo OA này."
+                    : "Đang tắt — tin nhắn trên Zalo OA này không được xử lý."}
+            </span>
           </div>
         </SettingsGroup>
 

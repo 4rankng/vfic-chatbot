@@ -126,6 +126,12 @@ export type TingtingSettings = {
   oa_last_checked_at: string | null;
   /** Redacted reason from the last failed probe ("" when it passed). */
   oa_last_error: string;
+  /**
+   * Admin kill switch for candidate-message processing on the support OA.
+   * Absent server-side row = enabled; off means inbound there is not
+   * processed at all (no LLM call, no reply).
+   */
+  tingting_oa_enabled: boolean;
 };
 
 /**
@@ -141,6 +147,8 @@ export type TingtingSettingsUpdate = {
   zalo_oa_secret_key?: string;
   zalo_oa_access_token?: string;
   zalo_oa_refresh_token?: string;
+  /** Omitted keeps the stored switch value. */
+  tingting_oa_enabled?: boolean;
 };
 
 export type GeocoderSettings = {
