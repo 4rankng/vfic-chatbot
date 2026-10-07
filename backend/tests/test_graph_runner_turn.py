@@ -2370,6 +2370,9 @@ async def test_support_oa_turn_injects_the_guide_and_only_the_reset_tools(monkey
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
+        "send_self_checkin_otp",
+        "confirm_self_checkin_otp",
+        "update_self_checkin",
     }
 
 
@@ -2792,6 +2795,9 @@ async def test_an_unclear_message_on_the_support_oa_makes_the_bot_ask_first(
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
+        "send_self_checkin_otp",
+        "confirm_self_checkin_otp",
+        "update_self_checkin",
     }
     # The turn is served as the reset flow (so the next message can continue it)…
     assert timings["intent"] == "employee_support"
@@ -3178,6 +3184,9 @@ async def test_focused_support_turn_drops_the_project_knowledge_tool(monkeypatch
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
+        "send_self_checkin_otp",
+        "confirm_self_checkin_otp",
+        "update_self_checkin",
     }
     assert "search_knowledge" not in captured["allowed_tools"]
 
@@ -4976,20 +4985,18 @@ async def test_unsupported_native_status_providers_only_send_the_actual_answer(m
     assert len(svc.dispatched) == 1
 
 
-def test_outbox_payload_attaches_media_for_tingting_self_checkin_caption():
-    """The fixed self-check-in media reply is captured in the outbox payload.
+def test_outbox_payload_attaches_media_per_self_checkin_topic():
+    """Each how-to topic caption carries exactly its own screenshot.
 
-    Only the exact approved caption on the TingTing OA account upgrades to the
-    media payload — a paraphrase stays text, and the same sentence on any other
-    account stays text — so a sweep re-dispatch resends the same attachment
-    without re-running the turn.
+    Only the exact approved captions on the TingTing OA account upgrade to a
+    media payload — a paraphrase stays text, a caption with no image (tan-ca,
+    general) stays text, and the same sentence on any other account stays text
+    — so a sweep re-dispatch resends the same attachment without re-running the
+    turn.
     """
     from app.channels.types import TINGTING_OA_ACCOUNT_KEY
     from app.graph.dispatch import _account_key_for_conversation, _build_outbox_payload
-    from app.graph.tingting_guide import (
-        TINGTING_SELF_CHECKIN_IMAGE_URL,
-        TINGTING_SELF_CHECKIN_REPLY,
-    )
+    from app.graph.tingting_guide import TINGTING_SELF_CHECKIN_MEDIA
 
     class _Identity:
         account_key = TINGTING_OA_ACCOUNT_KEY
@@ -4997,15 +5004,16 @@ def test_outbox_payload_attaches_media_for_tingting_self_checkin_caption():
     class _Conv:
         channel_identity = _Identity()
 
-    payload = _build_outbox_payload(
-        "oa:tingting:user-1",
-        TINGTING_SELF_CHECKIN_REPLY,
-        "msg-inbound-1",
-        account_key=_account_key_for_conversation(_Conv()),
-    )
-    assert payload["media_url"] == TINGTING_SELF_CHECKIN_IMAGE_URL
-    assert payload["media_type"] == "image"
-    assert payload["quote_message_id"] == "msg-inbound-1"
+    for caption, media in TINGTING_SELF_CHECKIN_MEDIA.items():
+        payload = _build_outbox_payload(
+            "oa:tingting:user-1",
+            caption,
+            "msg-inbound-1",
+            account_key=_account_key_for_conversation(_Conv()),
+        )
+        assert payload["media_url"] == media["media_url"]
+        assert payload["media_type"] == "image"
+        assert payload["quote_message_id"] == "msg-inbound-1"
 
     paraphrase = _build_outbox_payload(
         "oa:tingting:user-1",
@@ -5015,23 +5023,33 @@ def test_outbox_payload_attaches_media_for_tingting_self_checkin_caption():
     )
     assert "media_url" not in paraphrase
     other_account = _build_outbox_payload(
-        "u", TINGTING_SELF_CHECKIN_REPLY, "m", account_key="other-oa"
+        "u", next(iter(TINGTING_SELF_CHECKIN_MEDIA)), "m", account_key="other-oa"
     )
     assert "media_url" not in other_account
 
 
+@pytest.mark.parametrize(
+    ("user_text", "sub_intent", "expected"),
+    [
+        ("cách bật định vị để chấm công", "how_to_gps", "TINGTING_SELF_CHECKIN_GPS_REPLY"),
+        ("mấy giờ được bấm vào làm", "how_to_schedule", "TINGTING_SELF_CHECKIN_SCHEDULE_REPLY"),
+        ("chấm công ở cổng nào", "how_to_gates", "TINGTING_SELF_CHECKIN_GATES_REPLY"),
+        ("tan ca để làm gì", "how_to_tanca", "TINGTING_SELF_CHECKIN_TANCA_REPLY"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_self_checkin_intent_forces_the_guide_caption_on_the_support_oa(monkeypatch):
-    """Jev's self_checkin judgment (not a phrase list) picks the guide caption.
+async def test_self_checkin_how_to_topics_return_their_fixed_line(
+    monkeypatch, user_text, sub_intent, expected
+):
+    """Jev's sub-intent choice (inside the self_checkin gate) picks the line.
 
-    Operator rule (2026-10-06): the old prompt rule listed example phrases and
-    "đăng ký tự chấm công" matched none of them, so the turn fell to the
-    redirect and the home-screen image never shipped. The lane now returns the
-    approved caption directly off the Jev flag — no generation at all — and the
-    send layer attaches the image to that exact caption on this account.
+    Operator rule (2026-10-07): the old single punt caption is replaced by four
+    per-topic lines — the lane returns the approved line directly off the Jev
+    flags (no generation at all) and the send layer attaches the topic's
+    screenshot to that exact caption on this account.
     """
     from app.graph.runner import _agent_turn
-    from app.graph.tingting_guide import TINGTING_SELF_CHECKIN_REPLY
+    from app.graph import tingting_guide
 
     captured: dict[str, object] = {}
 
@@ -5051,33 +5069,183 @@ async def test_self_checkin_intent_forces_the_guide_caption_on_the_support_oa(mo
     )
 
     reply = await _agent_turn(
-        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="đăng ký tự chấm công"),
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text=user_text),
         deps,
-        "đăng ký tự chấm công",
+        user_text,
         provider="zalo_oa",
         chat_id="oa:user-1",
         recent_messages=[],
         timings={"lane": "agent"},
-        decisions=TurnDecisions(intent="general", intent_confidence=0.2, self_checkin=True),
+        decisions=TurnDecisions(
+            intent="general", intent_confidence=0.2, self_checkin=True, self_checkin_intent=sub_intent
+        ),
         project_context=ProjectTurnContext(state="EXPLORE"),
         tingting_reset_allowed=True,
         tingting_support_account=True,
     )
 
-    assert reply == TINGTING_SELF_CHECKIN_REPLY
-    assert "Tư vấn ngay" in reply
-    assert captured == {}  # fixed caption: no generation at all
+    assert reply == getattr(tingting_guide, expected)
+    assert captured == {}  # fixed line: no generation at all
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_general_intent_falls_through_to_the_model(monkeypatch):
+    """A general how-to is composed from the persona knowledge, not a fixed line."""
+    from app.graph.runner import _agent_turn
+    from app.graph import tingting_guide
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "model reply"
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="tự chấm công là gì"),
+        deps,
+        "tự chấm công là gì",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(
+            intent="general", intent_confidence=0.2, self_checkin=True, self_checkin_intent="how_to_general"
+        ),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=True,
+        tingting_support_account=True,
+    )
+
+    assert reply == "model reply"
+    assert captured != {}
+    assert reply not in tingting_guide.TINGTING_SELF_CHECKIN_MEDIA
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_toggle_intent_routes_to_the_employee_support_flow(monkeypatch):
+    """enable/disable is a mutation: it reroutes and runs the agent with the tools.
+
+    The turn takes the employee-support route (reason ``self_checkin_action``)
+    BEFORE the clarify/hotline branch, so the agent lane runs with the three
+    toggle tools bound (the reset pin narrows the registry to the TingTing
+    toolset) instead of returning any fixed reply.
+    """
+    from app.graph.runner import _agent_turn
+    from app.graph.runtime_policy import TINGTING_TOOL_NAMES
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "Đã gửi mã xác minh 6 số qua Zalo."
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    timings: dict = {"lane": "agent"}
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="đăng ký tự chấm công cho em"),
+        deps,
+        "đăng ký tự chấm công cho em",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings=timings,
+        decisions=TurnDecisions(
+            intent="general", intent_confidence=0.2, self_checkin=True, self_checkin_intent="enable"
+        ),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=True,
+        tingting_support_account=True,
+    )
+
+    assert reply == "Đã gửi mã xác minh 6 số qua Zalo."
+    assert captured != {}  # the agent lane ran the flow
+    assert set(captured["allowed_tools"]) == set(TINGTING_TOOL_NAMES)
+    assert "send_self_checkin_otp" in captured["allowed_tools"]
+    assert timings["route_reason"] == "self_checkin_action"
+    assert timings["intent"] == "employee_support"
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_branch_outranks_the_wage_wait_flag(monkeypatch):
+    """A self-check-in phrasing can light both flags; the topic line wins."""
+    from app.graph.runner import _agent_turn
+    from app.graph.tingting_guide import (
+        TINGTING_SELF_CHECKIN_SCHEDULE_REPLY,
+        TINGTING_WAGE_WAIT_REPLY,
+    )
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            captured.update(kwargs)
+            return "model reply"
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=True),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="mấy giờ bấm vào làm"),
+        deps,
+        "mấy giờ bấm vào làm",
+        provider="zalo_oa",
+        chat_id="oa:user-1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(
+            intent="faq_detail",
+            intent_confidence=0.9,
+            wage_wait=True,
+            self_checkin=True,
+            self_checkin_intent="how_to_schedule",
+        ),
+        project_context=ProjectTurnContext(state="EXPLORE"),
+        tingting_reset_allowed=True,
+        tingting_support_account=True,
+    )
+
+    assert reply == TINGTING_SELF_CHECKIN_SCHEDULE_REPLY
+    assert reply != TINGTING_WAGE_WAIT_REPLY
+    assert captured == {}
 
 
 @pytest.mark.asyncio
 async def test_self_checkin_flag_is_inert_off_the_support_oa(monkeypatch):
     """The flag must not fire where the media rule cannot (identity gate).
 
-    Off the support account there is no guide image to attach, so the turn
+    Off the support account there is no topic image to attach, so the turn
     runs the normal agent path instead of forcing TingTing-specific wording.
     """
     from app.graph.runner import _agent_turn
-    from app.graph.tingting_guide import TINGTING_SELF_CHECKIN_REPLY
+    from app.graph import tingting_guide
 
     captured: dict[str, object] = {}
 
@@ -5122,20 +5290,29 @@ async def test_self_checkin_flag_is_inert_off_the_support_oa(monkeypatch):
         tingting_support_account=False,
     )
 
-    assert reply != TINGTING_SELF_CHECKIN_REPLY
     assert reply == "model reply"
+    assert reply not in tingting_guide.TINGTING_SELF_CHECKIN_MEDIA
+    assert all(
+        reply != getattr(tingting_guide, name)
+        for name in (
+            "TINGTING_SELF_CHECKIN_GPS_REPLY",
+            "TINGTING_SELF_CHECKIN_SCHEDULE_REPLY",
+            "TINGTING_SELF_CHECKIN_GATES_REPLY",
+            "TINGTING_SELF_CHECKIN_TANCA_REPLY",
+        )
+    )
     assert captured != {}  # the agent ran its normal path
 
 
 @pytest.mark.asyncio
 async def test_login_trouble_outranks_the_self_checkin_flag(monkeypatch):
-    """A login problem mid-message keeps the reset flow — the image is secondary.
+    """A login problem mid-message keeps the reset flow — the topic line is secondary.
 
     Both judgments can be true ("quên mật khẩu, không chấm công được"); the
     employee_support intent must win so the reset tools stay bound.
     """
     from app.graph.runner import _agent_turn
-    from app.graph.tingting_guide import TINGTING_SELF_CHECKIN_REPLY
+    from app.graph import tingting_guide
 
     captured: dict[str, object] = {}
 
@@ -5189,9 +5366,17 @@ async def test_login_trouble_outranks_the_self_checkin_flag(monkeypatch):
         tingting_support_account=True,
     )
 
-    assert reply != TINGTING_SELF_CHECKIN_REPLY
     assert reply == "reset flow reply"
-    assert captured != {}  # the reset flow ran, not the fixed caption
+    assert all(
+        reply != getattr(tingting_guide, name)
+        for name in (
+            "TINGTING_SELF_CHECKIN_GPS_REPLY",
+            "TINGTING_SELF_CHECKIN_SCHEDULE_REPLY",
+            "TINGTING_SELF_CHECKIN_GATES_REPLY",
+            "TINGTING_SELF_CHECKIN_TANCA_REPLY",
+        )
+    )
+    assert captured != {}  # the reset flow ran, not a fixed topic line
 
 
 @pytest.mark.asyncio

@@ -78,6 +78,7 @@ async def test_questions_match_contract() -> None:
         "recent_account_support",
         "login_problem",
         "self_checkin",
+        "self_checkin_intent",
         "wage_wait",
         "contact_info",
         "gender",
@@ -92,6 +93,7 @@ async def test_questions_match_contract() -> None:
         "recent_account_support",
         "login_problem",
         "self_checkin",
+        "self_checkin_intent",
         "wage_wait",
         "contact_info",
     }
@@ -107,6 +109,7 @@ async def test_questions_match_contract() -> None:
         "recent_account_support",
         "login_problem",
         "self_checkin",
+        "self_checkin_intent",
         "wage_wait",
         "contact_info",
         "gender",
@@ -175,6 +178,9 @@ async def test_route_employee_support_binds_the_tingting_reset_tools() -> None:
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
+        "send_self_checkin_otp",
+        "confirm_self_checkin_otp",
+        "update_self_checkin",
         "search_knowledge",
     )
     assert route.reason == "employee_support_terms"
@@ -491,6 +497,58 @@ async def test_self_checkin_criteria_judges_meaning_not_phrases() -> None:
     assert "đăng nhập/quên mật khẩu" in instructions  # login lane outranks
     assert "khi nào có lương" in instructions  # payday lane outranks
     assert question["criteria"] == {"true": "Có", "false": "Không"}
+
+
+async def test_client_parses_self_checkin_intent_answer() -> None:
+    """The sub-intent choice parses inside the self_checkin gate.
+
+    The gate flag stays the trigger; the choice names WHAT the employee wants
+    so the lane can route enable/disable into the toggle flow and return one
+    fixed line per how-to topic (operator rules 2026-10-07).
+    """
+    client = _client()
+    client._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(
+            _answers(self_checkin=_noul(0.95), self_checkin_intent=_choice("how_to_gps"))
+        )
+    )
+    decisions = await client.decide_turn(user_text="cách bật định vị", recent_messages=[])
+    assert decisions.self_checkin is True
+    assert decisions.self_checkin_intent == "how_to_gps"
+
+
+async def test_self_checkin_intent_defaults_inert_and_never_guesses() -> None:
+    """Missing, invalid, or degraded answers stay "none" — the field never fires alone."""
+    absent = await _client().decide_turn(user_text="x", recent_messages=[])
+    assert absent.self_checkin_intent == "none"
+    assert TurnDecisions().self_checkin_intent == "none"
+    assert TurnDecisions(degraded=True).self_checkin_intent == "none"
+
+    invalid = _client()
+    invalid._system_one = AsyncMock(  # noqa: SLF001 — test seam
+        return_value=_payload(_answers(self_checkin_intent=_choice("sometimes")))
+    )
+    assert (await invalid.decide_turn(user_text="x", recent_messages=[])).self_checkin_intent == "none"
+
+
+async def test_self_checkin_intent_criteria_judge_meaning_not_phrases() -> None:
+    """The taxonomy names the intents, not example phrasings, with a safe default."""
+    question = build_turn_questions()["self_checkin_intent"]
+    assert question["type"] == "choice"
+    assert set(question["criteria"]) == {
+        "enable",
+        "disable",
+        "how_to_gps",
+        "how_to_schedule",
+        "how_to_gates",
+        "how_to_tanca",
+        "how_to_general",
+        "none",
+    }
+    instructions = question["instructions"]
+    assert "Ý ĐỊNH" in instructions
+    assert "không theo từ khóa" in instructions
+    assert "none" in instructions  # the safe answer for anything uncertain
 
 
 async def test_client_parses_job_seeking_answer() -> None:

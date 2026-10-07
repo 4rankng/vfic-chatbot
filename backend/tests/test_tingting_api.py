@@ -8,6 +8,7 @@ origin, one call path, an embedded guide, and truthful outcomes.
 
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from types import SimpleNamespace
@@ -21,8 +22,11 @@ from app.graph.tingting_guide import (
     TINGTING_FIELDS_ASK,
     TINGTING_INTENT_REDIRECT_REPLY,
     TINGTING_RESOLVED_CLOSER_REPLY,
-    TINGTING_SELF_CHECKIN_IMAGE_URL,
-    TINGTING_SELF_CHECKIN_REPLY,
+    TINGTING_SELF_CHECKIN_GATES_REPLY,
+    TINGTING_SELF_CHECKIN_GPS_REPLY,
+    TINGTING_SELF_CHECKIN_MEDIA,
+    TINGTING_SELF_CHECKIN_SCHEDULE_REPLY,
+    TINGTING_SELF_CHECKIN_TANCA_REPLY,
     TINGTING_WAGE_WAIT_REPLY,
     tingting_api_guide,
     tingting_api_prompt_block,
@@ -35,6 +39,11 @@ from app.graph.tools.tingting_api import (
     generate_simple_password,
     reset_tingting_password,
     send_tingting_otp,
+)
+from app.graph.tools.tingting_selfcheckin import (
+    confirm_self_checkin_otp,
+    send_self_checkin_otp,
+    update_self_checkin,
 )
 from app.services import tingting_api as mod
 from app.services.external_api_core import QuotaDecision
@@ -546,33 +555,106 @@ def test_payday_question_gets_the_wage_wait_reply_not_the_handoff() -> None:
         assert "KHÔNG dùng câu trả lời chờ dữ liệu tiền công" in prompt
 
 
-def test_self_checkin_question_gets_the_fixed_media_caption() -> None:
-    """Operator rules (2026-10-05/06): a self-check-in intent gets caption + image.
+def test_self_checkin_how_to_topics_get_their_fixed_lines() -> None:
+    """Operator rules (2026-10-07): each how-to topic gets its fixed one-liner.
 
-    Both prompt sections quote the fixed caption verbatim; the send layer
-    attaches the repo-hosted app-home screenshot when a TingTing OA reply
-    matches it exactly, so the prompt owns only the words. The rule classifies
-    the intent, not example phrasings — Jev's ``self_checkin`` judgment is the
-    primary trigger (the old phrase list missed "đăng ký tự chấm công") and
-    this is its degraded fallback. Like the payday rule, the media rule sits
-    before the out-of-scope catch-all.
+    The old single caption (punt-to-app) is replaced by four per-topic lines:
+    both prompt sections quote every line verbatim, the rule sits before the
+    out-of-scope catch-all, general self-check-in questions are answered
+    in-chat from the knowledge section with the LGD-only scoping, and no fixed
+    reply carries the hotline (the escalation reply is reserved for the
+    can't-help cases — a hotline line inside a real answer would end the
+    conversation on the first how-to question).
     """
+    topic_replies = (
+        TINGTING_SELF_CHECKIN_GPS_REPLY,
+        TINGTING_SELF_CHECKIN_SCHEDULE_REPLY,
+        TINGTING_SELF_CHECKIN_GATES_REPLY,
+        TINGTING_SELF_CHECKIN_TANCA_REPLY,
+    )
     for prompt in (TINGTING_SUPPORT_PERSONA, TINGTING_API_GUIDE):
-        assert TINGTING_SELF_CHECKIN_REPLY in prompt
+        for reply in topic_replies:
+            assert reply in prompt
         assert "TỰ CHẤM CÔNG trên ứng dụng TingTing" in prompt
         assert "không theo từ khóa" in prompt
-        assert "ảnh màn hình chính" in prompt
         assert "KHÔNG trả lời dòng hotline" in prompt
-    # the guide image is repo-hosted at the production frontend root — the
-    # send layer's asset, never a third-party host.
-    assert TINGTING_SELF_CHECKIN_IMAGE_URL == "https://bot.tingting.vip/tingting/tu-cham-cong.png"
-    # the escalation reply is reserved for the can't-help cases; the media
-    # caption is a real answer and never carries it.
-    assert TINGTING_HOTLINE_REPLY not in TINGTING_SELF_CHECKIN_REPLY
-    # precedence: the media rule sits before the out-of-scope catch-all.
-    assert TINGTING_SUPPORT_PERSONA.index(TINGTING_SELF_CHECKIN_REPLY) < TINGTING_SUPPORT_PERSONA.index(
+        # LGD-only scoping: the bot never promises self check-in elsewhere.
+        assert "dự án LGD" in prompt or "DỰ ÁN LGD" in prompt
+        assert "KHÔNG cam kết tự chấm công" in TINGTING_SUPPORT_PERSONA
+        # general self-check-in questions are answered in-chat from knowledge
+        assert "Hỏi CHUNG về tự chấm công" in TINGTING_SUPPORT_PERSONA
+    for reply in topic_replies:
+        assert TINGTING_HOTLINE_REPLY not in reply
+        assert "hotline" not in reply.lower()
+    # precedence: the topic rule sits before the out-of-scope catch-all.
+    assert TINGTING_SUPPORT_PERSONA.index(TINGTING_SELF_CHECKIN_GPS_REPLY) < TINGTING_SUPPORT_PERSONA.index(
         "MỌI việc khác"
     )
+
+
+def test_self_checkin_media_keys_on_the_exact_topic_captions() -> None:
+    """Each topic caption carries exactly its own screenshot, nothing else."""
+    assert set(TINGTING_SELF_CHECKIN_MEDIA) == {
+        TINGTING_SELF_CHECKIN_GPS_REPLY,
+        TINGTING_SELF_CHECKIN_SCHEDULE_REPLY,
+        TINGTING_SELF_CHECKIN_GATES_REPLY,
+    }
+    assert TINGTING_SELF_CHECKIN_MEDIA[TINGTING_SELF_CHECKIN_GPS_REPLY] == {
+        "media_url": "https://bot.tingting.vip/tingting/laygps.jpg",
+        "media_type": "image",
+    }
+    assert TINGTING_SELF_CHECKIN_MEDIA[TINGTING_SELF_CHECKIN_SCHEDULE_REPLY] == {
+        "media_url": "https://bot.tingting.vip/tingting/vaolamtanca.jpg",
+        "media_type": "image",
+    }
+    assert TINGTING_SELF_CHECKIN_MEDIA[TINGTING_SELF_CHECKIN_GATES_REPLY] == {
+        "media_url": "https://bot.tingting.vip/tingting/checkinlocation.jpg",
+        "media_type": "image",
+    }
+
+
+def test_the_old_punt_caption_is_gone_everywhere() -> None:
+    """The removed caption and its image rule must not survive in the prompt."""
+    removed_caption = 'bấm "Tư vấn ngay" hoặc "Nhóm hỗ trợ"'
+    assert removed_caption not in TINGTING_SUPPORT_PERSONA
+    assert removed_caption not in TINGTING_API_GUIDE
+    assert "bot.tingting.vip/tingting/tu-cham-cong.png" not in TINGTING_SUPPORT_PERSONA
+    assert "bot.tingting.vip/tingting/tu-cham-cong.png" not in TINGTING_API_GUIDE
+
+
+def test_self_checkin_api_section_documents_the_toggle_flow() -> None:
+    """The toggle trio gets its own API section mirroring the reset trio.
+
+    The section sits after the reset guide inside the rendered API guide, ends
+    in single braces when rendered (the endpoint shapes are doubled in source
+    so the f-string interpolates the fixed replies but renders literal braces),
+    and forbids echoing the assignments data raw.
+    """
+    guide = TINGTING_API_GUIDE
+    header = "=== API TINGTING: TỰ CHẤM CÔNG (BẬT/TẮT) ==="
+    assert header in guide
+    # after the reset guide: the reset endpoint block comes first
+    assert guide.index("/api/v1/integration/password-reset/reset") < guide.index(header)
+    positions = [
+        guide.index("/api/v1/integration/self-checkin/otp"),
+        guide.index("/api/v1/integration/self-checkin/verify"),
+        guide.index("/api/v1/integration/self-checkin/update"),
+    ]
+    assert positions == sorted(positions)
+    assert "send_self_checkin_otp" in guide
+    assert "confirm_self_checkin_otp" in guide
+    assert "update_self_checkin" in guide
+    # flow rules mirror the reset trio: verified identity first, one
+    # project question only when several are eligible, verdict relayed as-is
+    assert guide.index("verify_tingting_identity") < guide.index("send_self_checkin_otp")
+    assert "ĐÃ XÁC MINH" in guide
+    assert "hỏi đúng MỘT câu người dùng muốn bật/tắt cho dự án nào" in guide
+    assert "không tự nghĩ ra ngày hiệu lực khác" in guide
+    # assignments data is routing data, never chat content
+    assert "KHÔNG đọc nguyên văn ra tin nhắn" in guide
+    # the rendered guide must read as endpoint shapes, not doubled braces
+    assert "{{" not in guide
+    assert "{{" not in TINGTING_SUPPORT_PERSONA
 
 
 def test_login_trouble_after_resolution_re_engages_the_reset_flow() -> None:
@@ -891,6 +973,168 @@ async def test_reset_falls_back_when_the_policy_rejects_the_simple_password() ->
     assert "hệ thống tự sinh" in result
     assert "nv.dung" not in result
     assert "Nguyễn Việt Dũng" not in result
+
+
+# ── the self-check-in toggle flow: state lives server-side ──────────────────
+
+
+def _sc_otp_ok(session_id: str = "sc-sess-1", *, assignments: list | None = None):
+    payload = {"otp_sent": True, "session_id": session_id, "assignments": assignments or []}
+    return _outcome("ok", label="TingTing", text='{"data":' + json.dumps(payload) + "}")
+
+
+def _sc_verify_ok(action_token: str = "sc-tok-1"):
+    return _outcome(
+        "ok",
+        label="TingTing",
+        text=f'{{"data":{{"verified":true,"action_token":"{action_token}","expires_in":300}}}}',
+    )
+
+
+def _sc_update_ok(kind: str, *, immediate: bool, effective_from: str, cancelled: bool = False):
+    payload = {
+        "kind": kind,
+        "immediate": immediate,
+        "effective_from": effective_from,
+        "cancelled_pending_enable": cancelled,
+    }
+    return _outcome("ok", label="TingTing", text='{"data":' + json.dumps(payload) + "}")
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_otp_is_refused_until_the_phone_is_verified() -> None:
+    retrieval = _FlowRetrieval(_sc_otp_ok())
+    result = await send_self_checkin_otp(retrieval, phone="0987654321")
+    assert "chưa được xác minh" in result
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_otp_stores_session_and_project_names_only() -> None:
+    assignments = [
+        {"project_id": "7", "project_name": "LGD"},
+        {"project_id": "9", "project_name": "ABC"},
+    ]
+    retrieval = _FlowRetrieval(_sc_otp_ok("sc-sess-42", assignments=assignments), state={"verified": True})
+    result = await send_self_checkin_otp(retrieval, phone="0987654321")
+    assert retrieval.saved[-1]["sc_session_id"] == "sc-sess-42"
+    assert retrieval.saved[-1]["sc_assignments"] == assignments
+    # session id never surfaces; the project ask names the projects once
+    assert "sc-sess-42" not in result
+    assert "LGD" in result and "ABC" in result
+    assert "confirm_self_checkin_otp" in result
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_otp_with_one_project_skips_the_project_question() -> None:
+    retrieval = _FlowRetrieval(
+        _sc_otp_ok("sc-sess-1", assignments=[{"project_id": "7", "project_name": "LGD"}]),
+        state={"verified": True},
+    )
+    result = await send_self_checkin_otp(retrieval, phone="0987654321")
+    assert "thuộc nhiều dự án" not in result
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_confirm_requires_the_stored_session() -> None:
+    retrieval = _FlowRetrieval(_sc_verify_ok())
+    result = await confirm_self_checkin_otp(retrieval, phone="0987654321", code="123456")
+    assert "Chưa có phiên OTP tự chấm công" in result
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_confirm_stores_the_token_and_never_returns_it() -> None:
+    retrieval = _FlowRetrieval(_sc_verify_ok("sc-tok-9"), state={"sc_session_id": "sc-sess-42"})
+    result = await confirm_self_checkin_otp(retrieval, phone="0987654321", code="123456")
+    assert retrieval.calls == [
+        {
+            "method": "POST",
+            "path": "/api/v1/integration/self-checkin/verify",
+            "params": {"session_id": "sc-sess-42", "code": "123456"},
+        }
+    ]
+    assert retrieval.saved[-1] == {"sc_action_token": "sc-tok-9"}
+    assert "sc-tok-9" not in result
+    assert "update_self_checkin" in result
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_update_requires_the_verified_token() -> None:
+    retrieval = _FlowRetrieval(_sc_update_ok("enable", immediate=True, effective_from="2026-10-01"))
+    result = await update_self_checkin(retrieval, phone="0987654321", project_id="7", enable=True)
+    assert "Chưa xác thực được mã OTP" in result
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_update_relays_an_immediate_enable() -> None:
+    retrieval = _FlowRetrieval(
+        _sc_update_ok("enable", immediate=True, effective_from="2026-10-01"),
+        state={"sc_action_token": "sc-tok-9", "sc_assignments": [{"project_id": "7", "project_name": "LGD"}]},
+    )
+    result = await update_self_checkin(retrieval, phone="0987654321", project_id="7", enable=True)
+    sent = retrieval.calls[0]["params"]
+    assert sent == {"action_token": "sc-tok-9", "project_id": "7", "enable": "true"}
+    # the token is consumed single-use and the flow clears
+    assert retrieval.cleared == 1
+    assert "sc-tok-9" not in result
+    assert "Đã BẬT tự chấm công từ ngày 01/10, cả tháng tính tự chấm công" in result
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_update_relays_a_deferred_enable_and_disable() -> None:
+    deferred = _FlowRetrieval(
+        _sc_update_ok("enable", immediate=False, effective_from="2026-11-01"),
+        state={"sc_action_token": "sc-tok-9"},
+    )
+    result = await update_self_checkin(deferred, phone="0987654321", project_id="7", enable=True)
+    assert "SẼ BẬT từ ngày 01/11" in result
+
+    disabled = _FlowRetrieval(
+        _sc_update_ok("disable", immediate=False, effective_from="2026-11-01"),
+        state={"sc_action_token": "sc-tok-9"},
+    )
+    result = await update_self_checkin(disabled, phone="0987654321", project_id="7", enable=False)
+    assert "SẼ TẮT từ ngày 01/11; trước đó vẫn chấm công bình thường" in result
+    assert disabled.calls[0]["params"]["enable"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_update_mentions_a_cancelled_pending_enable() -> None:
+    retrieval = _FlowRetrieval(
+        _sc_update_ok("disable", immediate=False, effective_from="2026-11-01", cancelled=True),
+        state={"sc_action_token": "sc-tok-9"},
+    )
+    result = await update_self_checkin(retrieval, phone="0987654321", project_id="7", enable=False)
+    assert "Yêu cầu bật đang chờ trước đó đã được hủy" in result
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_update_fills_the_single_project_and_asks_when_ambiguous() -> None:
+    single = _FlowRetrieval(
+        _sc_update_ok("enable", immediate=True, effective_from="2026-10-01"),
+        state={
+            "sc_action_token": "sc-tok-9",
+            "sc_assignments": [{"project_id": "7", "project_name": "LGD"}],
+        },
+    )
+    result = await update_self_checkin(single, phone="0987654321", project_id="", enable=True)
+    assert single.calls[0]["params"]["project_id"] == "7"
+
+    many = _FlowRetrieval(
+        _sc_update_ok("enable", immediate=True, effective_from="2026-10-01"),
+        state={
+            "sc_action_token": "sc-tok-9",
+            "sc_assignments": [
+                {"project_id": "7", "project_name": "LGD"},
+                {"project_id": "9", "project_name": "ABC"},
+            ],
+        },
+    )
+    result = await update_self_checkin(many, phone="0987654321", project_id="", enable=True)
+    assert many.calls == []
+    assert "project_id" in result
 
 
 # ── the channel scope: the flow belongs to the TingTing Zalo OA ─────────────

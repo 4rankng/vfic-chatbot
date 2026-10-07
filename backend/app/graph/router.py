@@ -57,6 +57,7 @@ RouteReason = Literal[
     "employee_support_terms",
     "employee_support_continuation",
     "employee_support_clarify",
+    "self_checkin_action",
     "phone_number",
     "profile_terms",
     "not_job_seeking",
