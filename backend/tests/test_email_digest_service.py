@@ -18,7 +18,10 @@ from app.services.email_digest.service import (
     STATUS_SENT,
     STATUS_UNCONFIGURED,
     SUMMARY_SYSTEM_PROMPT,
-    _candidate_summary,
+    _candidate_reply,
+    _enrich_candidates,
+    _parse_reply,
+    _resolve_project,
     is_due,
     run_digest,
     send_test_digest,
@@ -177,11 +180,11 @@ async def test_run_digest_sends_and_advances_state(monkeypatch):
         assert attachment.content[:2] == b"PK"  # a real zip archive
         return "pid-1"
 
-    async def fake_summary(candidate, extractor=None):
-        return "Tóm tắt mẫu."
+    async def fake_enrich(candidates, summarizer=None):
+        return None
 
     monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
-    monkeypatch.setattr(digest_module, "_candidate_summary", fake_summary)
+    monkeypatch.setattr(digest_module, "_enrich_candidates", fake_enrich)
     monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)
 
     db = _StateDb()
@@ -418,9 +421,8 @@ async def test_run_digest_keeps_only_candidates_with_phone(monkeypatch):
             _candidate(lead_id=3, name="Spaces", phone="   "),
         ]
 
-    async def fake_summary(candidate, extractor=None):
-        summarized.append(candidate.lead_id)
-        return "Tóm tắt."
+    async def fake_enrich(candidates, summarizer=None):
+        summarized.extend(c.lead_id for c in candidates)
 
     async def fake_send(**kwargs):
         assert "1 ứng viên" in kwargs["subject"]
@@ -431,7 +433,7 @@ async def test_run_digest_keeps_only_candidates_with_phone(monkeypatch):
         return "pid-3"
 
     monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
-    monkeypatch.setattr(digest_module, "_candidate_summary", fake_summary)
+    monkeypatch.setattr(digest_module, "_enrich_candidates", fake_enrich)
     monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)
 
     now = datetime(2026, 10, 5, 2, 5, tzinfo=timezone.utc)
@@ -518,19 +520,22 @@ async def test_summary_input_carries_the_project_the_sheet_column_shows():
         seen["user"] = user_prompt
         return "Ứng viên hỏi về dự án LG Display về yêu cầu bằng cấp."
 
-    summary = await _candidate_summary(
-        _candidate(
-            project_name="LG Display",
-            channel_label="Zalo Chatbot",
-            candidate_messages=("giờ hạn tủi tuyển dụng và yêu cầu bằng cấp",),
-        ),
-        capture,
+    parsed = _parse_reply(
+        await _candidate_reply(
+            _candidate(
+                project_name="LG Display",
+                channel_label="Zalo Chatbot",
+                candidate_messages=("giờ hạn tủi tuyển dụng và yêu cầu bằng cấp",),
+            ),
+            capture,
+        )
     )
 
     assert "LG Display" in seen["user"]
     assert "Zalo Chatbot" in seen["user"]
     assert "giờ hạn tủi tuyển dụng" in seen["user"]
-    assert "LG Display" in summary
+    # A plain-prose reply (no JSON object) is still a usable summary.
+    assert "LG Display" in parsed.summary
 
 
 def test_the_summary_prompt_forbids_the_no_information_filler():
@@ -551,7 +556,7 @@ async def test_summary_input_marks_an_unknown_project_rather_than_inventing_one(
         seen["user"] = user_prompt
         return "Ứng viên hỏi về chính sách xe đưa đón."
 
-    await _candidate_summary(
+    await _candidate_reply(
         _candidate(project_name=None, candidate_messages=("xe đưa đón thế nào ạ",)),
         capture,
     )
@@ -577,11 +582,20 @@ def test_project_precedence_single_page_mapping_implies_project():
     assert _project_of_interest(None, {"p2": "LG Display"}, ["LG Display"]) == "LG Display"
 
 
-def test_project_precedence_multiple_mappings_guess_nothing():
+def test_project_precedence_lists_every_mapped_project_when_ambiguous():
+    """An ambiguous channel is real information; a blank cell hid all of it.
+
+    Migration 0054 maps the active Messenger Page to EVERY active project, so
+    "guess nothing" meant this column was blank for every Messenger candidate.
+    The column now names everything the channel could mean, sorted for a stable
+    sheet, and the summarizer may narrow it to one.
+    """
     from app.services.email_digest.repository import _project_of_interest
 
-    assert _project_of_interest(None, {"p2": "LG Display", "p3": "Rorze"}, []) is None
-    assert _project_of_interest(None, {"p2": "LG Display", "p3": "Rorze"}, ["LG Display", "Rorze"]) is None
+    assert (
+        _project_of_interest(None, {"p2": "Rorze", "p3": "LG Display"}, ["Rorze", "LG Display"])
+        == "LG Display, Rorze"
+    )
     assert _project_of_interest(None, {}, []) is None
 
 
@@ -600,3 +614,269 @@ def test_channel_label_canonicalizes_seeded_oa_label():
     assert channel_label("zalo_oa", "acc", "VietPhap OA") == "VietPhap OA"
     assert channel_label("facebook_messenger", "486833177846024", None) == "Messenger"
     assert channel_label("zalo_bot", "default:zalo_bot", None) == "Zalo Chatbot"
+
+
+# ── the preview must rehearse the real sheet (the reported defect) ────────────
+
+
+def _sheet_text(workbook) -> str:
+    """Every cell of the built workbook, one row per line, tabs between."""
+    import zipfile
+
+    with zipfile.ZipFile(__import__("io").BytesIO(workbook.content)) as archive:
+        sheet = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    return sheet
+
+
+async def test_preview_send_fills_the_summary_column(monkeypatch):
+    """The console preview produced a sheet whose "Tóm tắt hội thoại" column was
+    ALWAYS empty, because ``send_test_digest`` never built a summarizer — only
+    ``run_digest`` did. The operator rehearsed a sheet the real send would never
+    deliver, so they could not trust their own preview.
+
+    This is the direct regression: the preview's workbook now carries the same
+    summary the scheduled send would.
+    """
+    async def fake_collect(db, *, window_start, window_end):
+        return [_candidate(candidate_messages=("Hỏi lương và ca làm",))]
+
+    async def summarize(_system: str, _user: str) -> str:
+        return '{"project": null, "summary": "Ứng viên hỏi về lương và ca làm."}'
+
+    sent: dict = {}
+
+    async def fake_send(**kwargs):
+        sent.update(kwargs)
+        return "preview-pid"
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
+    monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)
+
+    result = await send_test_digest(
+        _StateDb(),
+        to_email="xem.truoc@congty.vn",
+        settings_service=_SettingsSvc(_config()),
+        summarizer=summarize,
+    )
+
+    assert result.ok is True
+    (attachment,) = sent["attachments"]
+    assert "Ứng viên hỏi về lương và ca làm." in _sheet_text(attachment)
+
+
+async def test_preview_send_without_a_summarizer_still_sends(monkeypatch):
+    """No provider available is a degradation, not a failure: the operator still
+    gets the sheet, with the deterministic project column and a blank summary."""
+
+    async def fake_collect(db, *, window_start, window_end):
+        return [
+            _candidate(
+                project_name="LG Display, Rorze",
+                mapped_projects=("LG Display", "Rorze"),
+                candidate_messages=("Hỏi lương",),
+            )
+        ]
+
+    async def fail_send(**kwargs):
+        raise AssertionError("a missing summarizer must never block the preview")
+
+    sent: dict = {}
+
+    async def capture_send(**kwargs):
+        sent.update(kwargs)
+        return "preview-pid"
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
+    monkeypatch.setattr(digest_module, "send_email_via_resend", capture_send)
+
+    result = await send_test_digest(
+        _StateDb(),
+        to_email="xem.truoc@congty.vn",
+        settings_service=_SettingsSvc(_config()),
+        summarizer=None,
+    )
+
+    assert result.ok is True
+    (attachment,) = sent["attachments"]
+    assert "LG Display, Rorze" in _sheet_text(attachment)
+    fail_send  # referenced for intent; the send above must have been reached
+
+
+# ── project narrowing: show the channel's list, let the LLM narrow it ─────────
+
+
+def _ambiguous(project: str | None = None) -> DigestCandidate:
+    mapped = ("LG Display", "Rorze")
+    return _candidate(
+        project_name=project if project is not None else "LG Display, Rorze",
+        mapped_projects=mapped,
+        candidate_messages=("Hỏi về lương",),
+    )
+
+
+def test_ambiguous_page_mapping_lists_every_project():
+    """The column names everything the channel could mean rather than going blank."""
+    candidate = _ambiguous()
+
+    assert _resolve_project(candidate, None) == "LG Display, Rorze"
+    assert _resolve_project(candidate, "") == "LG Display, Rorze"
+
+
+def test_llm_narrows_the_project_to_one_of_the_mapped_names():
+    candidate = _ambiguous()
+
+    assert _resolve_project(candidate, "Rorze") == "Rorze"
+    # Same project, written the way the sheet styles it.
+    assert _resolve_project(candidate, "LG-DISPLAY") == "LG Display"
+
+
+def test_llm_invented_project_is_discarded():
+    """A factory the channel never mapped must never reach a recruiter."""
+    candidate = _ambiguous()
+
+    assert _resolve_project(candidate, "Samsung") == "LG Display, Rorze"
+    assert _resolve_project(candidate, "Samsung") != "Samsung"
+
+
+def test_focused_project_beats_the_llm_and_the_joined_list():
+    """The bot established the focus from the conversation; an LLM guess — and
+    the channel's own multi-mapping — must not outrank it."""
+    candidate = DigestCandidate(
+        lead_id=1,
+        project_name="Rorze",
+        mapped_projects=("LG Display", "Rorze"),
+        candidate_messages=("Hỏi về lương",),
+    )
+
+    assert _resolve_project(candidate, "LG Display") == "Rorze"
+    assert _resolve_project(candidate, None) == "Rorze"
+
+
+def test_single_mapping_is_never_narrowed():
+    candidate = _candidate(
+        project_name="LG Display", mapped_projects=("LG Display",)
+    )
+
+    assert _resolve_project(candidate, "Rorze") == "LG Display"
+
+
+# ── reply parsing: fail-soft, never destroy a usable summary ─────────────────
+
+
+def test_json_reply_splits_summary_and_project():
+    parsed = _parse_reply(
+        '{"project": "Rorze", "summary": "  Ứng viên hỏi về lương.  "}'
+    )
+
+    assert parsed.summary == "Ứng viên hỏi về lương."
+    assert parsed.project == "Rorze"
+
+
+def test_unparseable_reply_keeps_the_prose_as_the_summary():
+    """A reasoning model that ignored the JSON contract still wrote a usable
+    summary; blanking that column would be worse than a missing project."""
+    parsed = _parse_reply("Ứng viên hỏi về chính sách xe đưa đón.")
+
+    assert parsed.summary == "Ứng viên hỏi về chính sách xe đưa đón."
+    assert parsed.project is None
+
+
+def test_malformed_json_reply_still_yields_the_summary():
+    """Malformed JSON degrades to the raw text rather than to a blank cell —
+    the recruiter keeps something readable and only loses the project field."""
+    parsed = _parse_reply('{"summary": "hỏi lương",}')
+
+    assert parsed.summary == '{"summary": "hỏi lương",}'
+    assert parsed.project is None
+
+
+def test_reasoning_blocks_are_stripped_before_json_parsing():
+    parsed = _parse_reply(
+        '<think>theo yêu cầu</think>{"project": null, "summary": "Ứng viên hỏi lương."}'
+    )
+
+    assert parsed.summary == "Ứng viên hỏi lương."
+    assert "think" not in (parsed.summary or "")
+
+
+def test_fenced_json_reply_parses():
+    parsed = _parse_reply(
+        '```json\n{"project": null, "summary": "Ứng viên hỏi lương."}\n```'
+    )
+
+    assert parsed.summary == "Ứng viên hỏi lương."
+
+
+def test_empty_reply_parses_to_nothing():
+    assert _parse_reply(None).summary is None
+    assert _parse_reply("").summary is None
+    assert _parse_reply("<think>chưa đóng").summary is None
+
+
+def test_json_summary_containing_braces_and_quotes_survives():
+    parsed = _parse_reply(
+        '{"summary": "Ứng viên nói {lương} ca làm \\"sáng\\" và hỏi ca {đêm}.",'
+        ' "project": null}'
+    )
+
+    assert parsed.summary == 'Ứng viên nói {lương} ca làm "sáng" và hỏi ca {đêm}.'
+
+
+# ── enrichment: fail-soft, and shared by both send paths ─────────────────────
+
+
+async def test_one_failing_candidate_does_not_blank_the_others(monkeypatch):
+    seen: list[int] = []
+
+    async def flaky(_system: str, user: str) -> str:
+        if "xung đột" in user:
+            raise RuntimeError("provider 429")
+        seen.append(1)
+        return '{"summary": "Ứng viên hỏi lương.", "project": null}'
+
+    candidates = [
+        _candidate(lead_id=1, candidate_messages=("Hỏi lương",)),
+        _candidate(lead_id=2, candidate_messages=("xung đột dữ liệu",)),
+        _candidate(lead_id=3, candidate_messages=("Hỏi ca làm",)),
+    ]
+    await _enrich_candidates(candidates, flaky)
+
+    assert [c.summary for c in candidates] == [
+        "Ứng viên hỏi lương.",
+        None,
+        "Ứng viên hỏi lương.",
+    ]
+    assert seen == [1, 1]
+
+
+async def test_enrichment_without_a_summarizer_is_a_no_op():
+    candidate = _ambiguous()
+    await _enrich_candidates([candidate], None)
+
+    assert candidate.summary is None
+    assert candidate.project_name == "LG Display, Rorze"
+
+
+async def test_ambiguous_candidates_receive_the_full_mapping_in_the_prompt():
+    """The LLM can only narrow to a name it was given."""
+    seen: dict[str, str] = {}
+
+    async def capture(_system: str, user: str) -> str:
+        seen["user"] = user
+        return '{"summary": "Ứng viên hỏi về lương.", "project": "Rorze"}'
+
+    candidate = _ambiguous()
+    parsed = _parse_reply(await _candidate_reply(candidate, capture))
+    candidate.project_name = _resolve_project(candidate, parsed.project)
+
+    assert "CÁC DỰ ÁN ỨNG VIÊN CÓ THỂ QUAN TÂM: LG Display, Rorze" in seen["user"]
+    assert candidate.project_name == "Rorze"
+
+
+def test_the_prompt_demands_a_json_object_and_a_mapped_project_only():
+    """The project field is the one place a model could invent a factory, so the
+    contract pins it to the channel's own mapping."""
+    assert "ĐỊNH DẠNG TRẢ LỜI" in SUMMARY_SYSTEM_PROMPT
+    assert '"project"' in SUMMARY_SYSTEM_PROMPT
+    assert '"summary"' in SUMMARY_SYSTEM_PROMPT
+    assert "CHỈ được lấy từ danh sách" in SUMMARY_SYSTEM_PROMPT

@@ -57,6 +57,7 @@ from app.schemas.integrations import (
     ZaloOaSignatureVerifyOut,
     ZaloOaSignatureVerifyRequest,
 )
+from app.composition.email_digest import build_digest_summarizer_for
 from app.services.email_digest import send_test_digest
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.tingting_oa import TingtingOaLinkError
@@ -397,7 +398,17 @@ async def test_email_digest(
 ) -> EmailDigestTestOut:
     """Preview send: the real pending digest to the typed address (no state
     write), exactly what a scheduled run would deliver to recipients."""
-    return await send_test_digest(db, to_email=str(body.to_email))
+    try:
+        summarizer = await build_digest_summarizer_for(db)
+    except Exception:  # noqa: BLE001 — a preview must still render without summaries
+        logger.warning(
+            "email digest preview: summarizer unavailable, sending without",
+            exc_info=True,
+        )
+        summarizer = None
+    return await send_test_digest(
+        db, to_email=str(body.to_email), summarizer=summarizer
+    )
 
 
 @router.get("/tingting", response_model=TingtingIntegrationSettingsOut)

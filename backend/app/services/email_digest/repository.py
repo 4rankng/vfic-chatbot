@@ -53,6 +53,10 @@ class DigestCandidate:
     expected_salary: str | None = None
     channel_label: str = ""
     project_name: str | None = None
+    # Every project the candidate's channel account maps to, sorted. Kept whole
+    # so the summarizer may narrow an ambiguous mapping to one project without
+    # the digest inventing a factory the channel never claimed.
+    mapped_projects: tuple[str, ...] = ()
     candidate_messages: tuple[str, ...] = ()
     summary: str | None = None
 
@@ -76,12 +80,21 @@ def _project_of_interest(
     project_names: dict,
     mapped_names: list[str],
 ) -> str | None:
-    """Project of interest for one candidate: the bot-confirmed focus wins;
-    a Page mapped to exactly one project implies it (the LG Display fanpage
-    case); with several mappings nothing is guessed."""
+    """Project of interest for one candidate, in descending strength.
+
+    The bot-confirmed focus wins; a Page mapped to exactly one project implies
+    it (the LG Display fanpage case); with SEVERAL mappings the column lists
+    every candidate the channel could mean rather than staying blank — an
+    ambiguous channel is real information the recruiter can act on, and a
+    blank cell hid all of it. The list is the honest fallback; the summarizer
+    may then narrow it to one project, but only to a name that is already in
+    this set.
+    """
     if focused_id is not None:
         return project_names.get(focused_id)
-    return mapped_names[0] if len(mapped_names) == 1 else None
+    if not mapped_names:
+        return None
+    return ", ".join(sorted(mapped_names))
 
 
 async def collect_new_candidates(
@@ -269,11 +282,11 @@ async def collect_new_candidates(
         messages = messages_by_conversation.get(conv.id, []) if conv is not None else []
         pair = (ident.provider, ident.account_key) if ident is not None else None
         focused_id = conv.focused_project_id if conv is not None else None
-        mapped_names = [
+        mapped_names = sorted(
             project_names[pid]
             for pid in mapped_projects_by_pair.get(pair, set())
             if pid in project_names
-        ]
+        )
         project_name = _project_of_interest(focused_id, project_names, mapped_names)
         candidates.append(
             DigestCandidate(
@@ -297,6 +310,7 @@ async def collect_new_candidates(
                     else ""
                 ),
                 project_name=project_name,
+                mapped_projects=tuple(mapped_names),
                 candidate_messages=tuple(messages[-MESSAGES_PER_CANDIDATE:]),
             )
         )

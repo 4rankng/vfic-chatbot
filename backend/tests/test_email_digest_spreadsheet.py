@@ -160,3 +160,21 @@ def test_data_cell_styles_and_banding():
     assert _cell_style(sheet, "A4") == "8"
     assert _cell_style(sheet, "A1") == "1"  # title banner
     assert _cell_style(sheet, "B2") == "2"  # header row
+
+
+def test_ambiguous_project_prints_every_mapped_name_in_one_cell():
+    """A Page mapped to several active projects renders as one joined cell, not
+    a blank one — the recruiter sees what the channel could mean."""
+    candidate = _full_candidate(
+        project_name="LG Display, Rorze",
+        summary="Ứng viên hỏi về lương và ca làm.",
+    )
+    text = _extract_xlsx_text(
+        build_lead_workbook([candidate], ict_date="03-10-2026").content
+    )
+    lines = [line for line in text.splitlines() if line.strip()]
+
+    assert "LG Display, Rorze" in lines[2]
+    # The joined value stays in its own column; the row does not grow a cell.
+    assert lines[2].count("\t") == 7
+    assert lines[2].split("\t")[5] == "LG Display, Rorze"

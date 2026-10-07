@@ -9,9 +9,11 @@ send-state row so the next window starts where this one ended.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
-from collections.abc import Awaitable, Callable
+import unicodedata
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -55,7 +57,15 @@ SUMMARY_SYSTEM_PROMPT = (
     "'yêu cầu bằng cấp' thì đó là câu hỏi về dự án đó).\n"
     "- Chỉ nói ứng viên MUỐN ứng tuyển khi ứng viên đã nói rõ. Câu hỏi tìm hiểu, dự án "
     "đang được xem và lời mời của chatbot không phải là ý định ứng tuyển.\n"
-    "- Không suy đoán thông tin không có trong nguồn; không dùng markdown."
+    "- Không suy đoán thông tin không có trong nguồn; không dùng markdown.\n"
+    "ĐỊNH DẠNG TRẢ LỜI (bắt buộc):\n"
+    "- Trả về DUY NHẤT một object JSON hợp lệ, không bọc trong ``` và không kèm chữ "
+    "nào khác, đúng hai khóa: \"summary\" và \"project\".\n"
+    "- \"summary\": chuỗi tiếng Việt 2-4 câu tóm tắt hội thoại.\n"
+    "- \"project\": tên dự án mà lời ứng viên thực sự hỏi về, CHỈ được lấy từ danh sách "
+    "\"CÁC DỰ ÁN ỨNG VIÊN CÓ THỂ QUAN TÂM\" trong phần thông tin hệ thống cung cấp, và "
+    "chỉ chọn khi danh sách đó có đúng một dự án mà lời ứng viên chỉ tới. Nếu không "
+    "chắc chắn, đặt null. Tuyệt đối không tự đặt tên dự án không có trong danh sách."
 )
 
 # Bounded human-readable statuses for the tick log line.
@@ -148,11 +158,15 @@ def _strip_reasoning(text: str) -> str:
     return _THINK_OPEN_RE.sub("", text).strip()
 
 
-async def _candidate_summary(
+async def _candidate_reply(
     candidate: DigestCandidate,
     extractor: Callable[[str, str], Awaitable[str]] | None,
 ) -> str | None:
-    """LLM summary of what the candidate said; None on any failure.
+    """One LLM call for a candidate: raw reply text, or None when not asked.
+
+    A single call returns BOTH the summary and the project decision, because a
+    second call would double the latency and cost of the whole digest for no
+    extra information.
 
     The transcript is the candidate's own words only, so a candidate who never
     types the project name — the LG Display case, where they say only "yêu cầu
@@ -163,34 +177,183 @@ async def _candidate_summary(
     focus and channel are passed as system-provided facts so the summary and the
     columns agree.
 
-    The extractor callable is INJECTED by the caller (the worker builds it
-    from the graph factories): a service must not import the graph layer, and
-    without a summarizer the renderer falls back to the candidate's verbatim
-    messages — the email still goes out.
+    The extractor callable is INJECTED by the caller (the worker and the
+    composition root build it): a service must not import the graph layer.
+    Without a summarizer the sheet still ships, with an empty summary cell.
     """
     if extractor is None or not candidate.candidate_messages:
         return None
     context_lines = [f"Kênh liên hệ: {candidate.channel_label or '—'}"]
+    single_project = _unambiguous_project(candidate)
     context_lines.append(
-        f"Dự án ứng viên đang quan tâm: {candidate.project_name}"
-        if candidate.project_name
+        f"Dự án ứng viên đang quan tâm: {single_project}"
+        if single_project
         else "Dự án ứng viên đang quan tâm: chưa xác định"
     )
+    if len(candidate.mapped_projects) > 1:
+        context_lines.append(
+            "CÁC DỰ ÁN ỨNG VIÊN CÓ THỂ QUAN TÂM: "
+            + ", ".join(candidate.mapped_projects)
+        )
     transcript = "\n".join(f"- {line[:300]}" for line in candidate.candidate_messages)
-    try:
-        text = await extractor(
-            SUMMARY_SYSTEM_PROMPT,
-            "THÔNG TIN HỘI THOẠI (do hệ thống xác nhận):\n"
-            + "\n".join(f"- {line}" for line in context_lines)
-            + "\n\nLỜI CỦA ỨNG VIÊN:\n"
-            + transcript,
-        )
-        return _strip_reasoning(text) or None
-    except Exception:  # noqa: BLE001 — a summary failure must not block the email
-        logger.warning(
-            "email digest summary failed lead_id=%s", candidate.lead_id, exc_info=True
-        )
+    return await extractor(
+        SUMMARY_SYSTEM_PROMPT,
+        "THÔNG TIN HỘI THOẠI (do hệ thống xác nhận):\n"
+        + "\n".join(f"- {line}" for line in context_lines)
+        + "\n\nLỜI CỦA ỨNG VIÊN:\n"
+        + transcript,
+    )
+
+
+@dataclass(frozen=True)
+class _DigestReply:
+    """What one summarizer reply yielded, already stripped and validated."""
+
+    summary: str | None = None
+    project: str | None = None
+
+
+def _first_json_object(text: str) -> str | None:
+    """The first balanced ``{ … }`` span, or None.
+
+    A stdlib scan rather than a regex: a summary may legitimately contain
+    braces or quotes, and a fenced ```json reply must parse without the caller
+    stripping the fence.
+    """
+    start = text.find("{")
+    if start < 0:
         return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return None
+
+
+def _clean_str(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _parse_reply(reply: str | None) -> _DigestReply:
+    """Split one summarizer reply into its summary and project decision.
+
+    Fail-soft at every step. Reasoning models sometimes answer in prose despite
+    the JSON contract, and that prose is still the summary the recruiter needs —
+    so a reply that is not a JSON object becomes the summary verbatim rather than
+    blanking a column that could have been filled. The project stays at its
+    deterministic value in that case, which is the safe direction: a guessed
+    factory is worse than an honest list.
+    """
+    text = _strip_reasoning(reply or "")
+    if not text:
+        return _DigestReply()
+    payload = _first_json_object(text)
+    if payload is not None:
+        try:
+            parsed = json.loads(payload)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, dict):
+            return _DigestReply(
+                summary=_clean_str(parsed.get("summary")),
+                project=_clean_str(parsed.get("project")),
+            )
+    return _DigestReply(summary=text)
+
+
+def _unambiguous_project(candidate: DigestCandidate) -> str | None:
+    """The project the channel or bot already agreed on, when there is one.
+
+    ``project_name`` is a single name unless it is the joined list of an
+    ambiguous mapping — so comparing against that exact join is what separates
+    "the bot confirmed LG-DISPLAY" from "the Page could mean two things".
+    """
+    name = (candidate.project_name or "").strip()
+    if not name:
+        return None
+    if len(candidate.mapped_projects) > 1 and name == ", ".join(candidate.mapped_projects):
+        return None
+    return name
+
+
+def _normalize_project(text: str) -> str:
+    """Loose key for project names: case, accents and hyphens are noise.
+
+    "LG Display" and "LG-DISPLAY" are the same project; a model that echoes the
+    name differently must still be matched to the channel's mapping.
+    """
+    decomposed = unicodedata.normalize("NFD", text)
+    plain = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return " ".join(plain.casefold().replace("-", " ").split())
+
+
+def _resolve_project(
+    candidate: DigestCandidate, llm_project: str | None
+) -> str | None:
+    """The project to print, after letting the LLM narrow an ambiguous mapping.
+
+    A confirmed single project is never overridden — the bot established it from
+    the conversation, and an LLM guess must not outrank that. Only an ambiguous
+    list may be narrowed, and only to a name the channel actually maps to, so
+    the digest cannot invent a factory the recruiter never ran.
+    """
+    if _unambiguous_project(candidate) is not None:
+        return candidate.project_name
+    if llm_project:
+        key = _normalize_project(llm_project)
+        for name in candidate.mapped_projects:
+            if _normalize_project(name) == key:
+                return name
+    return candidate.project_name
+
+
+async def _enrich_candidates(
+    candidates: Sequence[DigestCandidate],
+    summarizer: Callable[[str, str], Awaitable[str]] | None,
+) -> None:
+    """Fill each candidate's summary and narrow its project, in place.
+
+    Shared by the scheduled run and the console preview. The preview promises
+    the operator the sheet recipients actually get; when it skipped this step
+    its summary column was blank in a way the real send never is, so the
+    operator could not trust their own rehearsal.
+
+    Fail-soft per candidate: one dead provider leaves that row's summary empty
+    and the rest of the sheet — and the send — intact.
+    """
+    if summarizer is None:
+        return
+    for candidate in candidates:
+        try:
+            reply = await _candidate_reply(candidate, summarizer)
+        except Exception:  # noqa: BLE001 — a summary failure must not block the email
+            logger.warning(
+                "email digest summary failed lead_id=%s", candidate.lead_id, exc_info=True
+            )
+            continue
+        parsed = _parse_reply(reply)
+        candidate.summary = parsed.summary
+        candidate.project_name = _resolve_project(candidate, parsed.project)
 
 
 def _with_phone(candidates: list[DigestCandidate]) -> list[DigestCandidate]:
@@ -231,8 +394,7 @@ async def run_digest(
     if not candidates:
         return DigestRunResult(status=STATUS_EMPTY)
 
-    for candidate in candidates:
-        candidate.summary = await _candidate_summary(candidate, summarizer)
+    await _enrich_candidates(candidates, summarizer)
 
     ict_now = moment.astimezone(ICT)
     html = render_digest_html(candidates)
@@ -295,15 +457,21 @@ async def send_test_digest(
     to_email: str,
     settings_service: IntegrationSettingsService | None = None,
     now: datetime | None = None,
+    summarizer: Callable[[str, str], Awaitable[str]] | None = None,
 ) -> TestDigestResult:
     """Console preview send: the REAL pending digest to one typed address.
 
     Renders and sends exactly what a scheduled run would deliver — same
-    window, same subject, same body, same workbook — so the operator previews
-    the letter recipients get, without advancing the send state or marking any
-    lead processed. The cron toggle is ignored (explicit operator action); the
-    only required config is the Resend key, since the address comes from the
-    console input.
+    window, same subject, same body, same summaries, same workbook — so the
+    operator previews the letter recipients get, without advancing the send
+    state or marking any lead processed. The cron toggle is ignored (explicit
+    operator action); the only required config is the Resend key, since the
+    address comes from the console input.
+
+    ``summarizer`` is injected exactly as ``run_digest`` takes it, for the same
+    reason: services must not build the graph layer's provider chain. Omitting
+    it is a supported degradation (empty summary cells), never a failure — this
+    is an operator pressing a button, not a scheduled obligation.
     """
     service = settings_service or IntegrationSettingsService(db)
     config = await service.resolve_email_digest()
@@ -327,6 +495,8 @@ async def send_test_digest(
             missing=[],
             error="Không có ứng viên mới trong kỳ gửi.",
         )
+
+    await _enrich_candidates(candidates, summarizer)
 
     ict_now = moment.astimezone(ICT)
     try:
