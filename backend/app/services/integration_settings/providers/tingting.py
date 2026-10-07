@@ -10,19 +10,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from app.services.audit_service import record_audit
-
-# Admin kill switch for candidate-message processing on the TingTing OA
-# ("true"/"false"; absent row = enabled, so existing installs keep working).
-# When "false" the worker stands every turn on that OA down before the graph
-# runs: no LLM tokens, no reply (see ``app.services.tingting_oa``).
-TINGTING_OA_ENABLED = "tingting_oa_enabled"
-
-
-def _enabled_from_stored(raw: str | None) -> bool:
-    """The stored kill-switch value as a bool. Anything unparseable stays on."""
-    return (raw or "").strip().lower() not in {"false", "0", "no"}
-
 
 class TingtingSettingsMixin:
     """Resolve/admin/persist for the deployment-wide TingTing integration."""
@@ -54,11 +41,6 @@ class TingtingSettingsMixin:
         """The callable runtime (fixed origin + decrypted key), or ``None``."""
         return await self._tingting_service().runtime()
 
-    async def resolve_tingting_oa_enabled(self) -> bool:
-        """The TingTing OA processing kill switch (absent row = enabled)."""
-        stored = await self._stored_values((TINGTING_OA_ENABLED,))
-        return _enabled_from_stored(stored.get(TINGTING_OA_ENABLED))
-
     async def admin_tingting_view(self) -> dict:
         view = await self._tingting_service().admin_view()
         view.update(await self._tingting_oa_view())
@@ -73,7 +55,7 @@ class TingtingSettingsMixin:
         ).view()
 
     async def update_tingting(
-        self, values: dict[str, str | bool | None], *, actor_id
+        self, values: dict[str, str | None], *, actor_id
     ) -> dict:
         """Persist the API key, the escalation hotline, and/or the processing switch.
 
