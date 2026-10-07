@@ -174,24 +174,38 @@ async def _failed_send_attempts(db, conversation_id, *, since: datetime) -> int:
     return int((await db.scalar(statement)) or 0)
 
 
-async def _alert_stuck_conversation(db, conv, *, reason: str, attempts: int) -> None:  # noqa: ANN001
+async def _alert_stuck_conversation(
+    db, conv, *, reason: str, attempts: int, newest_error: str = ""
+) -> None:  # noqa: ANN001
     """Push the operator alert for a thread whose reply cannot be delivered.
 
-    Two shapes, both silent without this: the channel credential is dead
-    (nothing delivers until it is re-authorized), or the provider refused the
-    same reply twice and the sweep has given up. Deduped per conversation and
-    reason, so a thread that stays broken does not push on every tick.
-    Best-effort: the sweep must finish its lock bookkeeping even if the push
-    fails.
+    Three shapes, all silent without this: the channel credential is dead
+    (nothing delivers until it is re-authorized), the provider refused the
+    same reply twice and the sweep has given up, or — Messenger only — the
+    reply hit Meta's closed 24h window. ``newest_error`` disambiguates the
+    terminal_send copy per channel: a closed window is expected behavior for
+    an ad-entered thread (nothing to re-authorize), while anything else reads
+    as a dead credential. Deduped per conversation and reason, so a thread
+    that stays broken does not push on every tick. Best-effort: the sweep
+    must finish its lock bookkeeping even if the push fails.
     """
     from app.services.push import notify_admins
 
     if reason == "terminal_send":
-        title = "Kênh gửi tin đã hết hiệu lực"
-        body = (
-            "Không gửi được tin vì access token của kênh đã hết hạn. "
-            "Hãy cấp lại quyền cho OA trong Cài đặt → Zalo OA."
-        )
+        if "allowed window" in newest_error.lower():
+            title = "Messenger chưa mở cửa sổ trả lời"
+            body = (
+                "Ứng viên đến từ quảng cáo Messenger và chưa tự nhắn tin — "
+                "Meta chặn trang chủ động gửi tin tới khi ứng viên nhắn tin "
+                "thật. Không cần cấp lại quyền; bot sẽ tự trả lời khi ứng "
+                "viên nhắn tin."
+            )
+        else:
+            title = "Kênh gửi tin đã hết hiệu lực"
+            body = (
+                "Không gửi được tin vì access token của kênh đã hết hạn. "
+                "Hãy cấp lại quyền cho OA trong Cài đặt → Zalo OA."
+            )
     else:
         title = "Không gửi được tin nhắn cho ứng viên"
         body = (
@@ -415,7 +429,11 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                             # failed bubble the candidate can see.
                             terminal_send_skipped += 1
                             await _alert_stuck_conversation(
-                                db, conv_fresh, reason="terminal_send", attempts=0
+                                db,
+                                conv_fresh,
+                                reason="terminal_send",
+                                attempts=0,
+                                newest_error=str(newest.external_error or ""),
                             )
                             await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                             continue

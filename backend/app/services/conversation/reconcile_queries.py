@@ -169,6 +169,12 @@ class ReconcileQueriesMixin:
 
         SEMI_AUTO 30-min-inactivity is NOT in SQL — it is re-checked in Python
         inside the tick (depends on ``taken_over_at``/``updated_at``).
+
+        A thread flagged ``attribution.ad_prefill_pending`` is excluded too: its
+        newest inbound is a Click-to-Messenger ad prefill (page-initiated, so
+        Meta keeps the reply window closed and no recovery turn can deliver).
+        The flag clears on the candidate's first genuine (non-referral) message,
+        which reopens the standard window and rides the normal webhook path.
         """
         now_minus_grace = now - timedelta(seconds=grace_seconds)
         now_minus_max_age = now - timedelta(seconds=max_age_seconds)
@@ -183,6 +189,7 @@ class ReconcileQueriesMixin:
                     SELECT c.*
                       FROM conversations c
                      WHERE c.mode IN ('BOT', 'SEMI_AUTO')
+                       AND COALESCE(c.attribution ->> 'ad_prefill_pending', '') <> 'true'
                        AND (
                            c.bot_locked_until IS NULL
                            OR c.bot_locked_until < :now
