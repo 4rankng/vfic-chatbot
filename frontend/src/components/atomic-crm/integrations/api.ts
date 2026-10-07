@@ -112,20 +112,23 @@ export type TingtingSettings = {
    * Admin-editable; seeded backend-side, so the field always shows a value.
    */
   hotline: string;
-  /** The Zalo OA that serves the resets. Credentials are status-only. */
-  oa_app_id: string;
-  oa_secret_key: SecretStatus;
-  oa_access_token: SecretStatus;
-  oa_refresh_token: SecretStatus;
-  /** True once Zalo's `getoa` confirmed the credentials and returned an OA id. */
+  /**
+   * The Zalo OA that serves the resets. Payroll solely owns and rotates the
+   * token pair (push + pull), so there is no credential status to show — only
+   * the token's last update and the fixed ownership note.
+   */
   oa_linked: boolean;
   oa_id: string;
   oa_name: string;
   oa_label: string;
   oa_verified_at: string | null;
   oa_last_checked_at: string | null;
-  /** Redacted reason from the last failed probe ("" when it passed). */
+  /** Reason from the last failed probe of the pre-payroll link flow ("" otherwise). */
   oa_last_error: string;
+  /** When the payroll-owned access token last landed (push or pull), ISO. */
+  oa_token_updated_at: string | null;
+  /** Fixed label: the token is not an admin credential for this account. */
+  oa_token_managed_note: string;
   /**
    * Admin kill switch for candidate-message processing on the support OA.
    * Absent server-side row = enabled; off means inbound there is not
@@ -135,18 +138,14 @@ export type TingtingSettings = {
 };
 
 /**
- * PUT body. `api_key` and the four OA credentials are tri-state: omit to keep
- * the stored value, send a value to replace it. Posting any OA credential also
- * makes the backend probe Zalo (`getoa`) and re-derive the OA id.
+ * PUT body. `api_key` is tri-state: omit to keep the stored value, send a
+ * value to replace it. The OA's Zalo credentials are deliberately absent —
+ * payroll owns and rotates the token pair.
  */
 export type TingtingSettingsUpdate = {
   api_key?: string;
   reset_oa_id?: string;
   hotline?: string;
-  zalo_oa_app_id?: string;
-  zalo_oa_secret_key?: string;
-  zalo_oa_access_token?: string;
-  zalo_oa_refresh_token?: string;
   /** Omitted keeps the stored switch value. */
   tingting_oa_enabled?: boolean;
 };
@@ -446,15 +445,6 @@ export const zaloIntegrationGateway = {
     apiJson<EmailDigestTestResult>(
       `${ADMIN_INTEGRATIONS_BASE_PATH}/email-digest/test`,
       { method: "POST", body: { to_email: toEmail } },
-    ),
-
-  /** Re-probe the stored OA credentials without changing them. */
-  checkTingtingOa: async (): Promise<TingtingSettings> =>
-    apiJson<TingtingSettings>(
-      `${ADMIN_INTEGRATIONS_BASE_PATH}/tingting/oa/check`,
-      {
-        method: "POST",
-      },
     ),
 } as const;
 

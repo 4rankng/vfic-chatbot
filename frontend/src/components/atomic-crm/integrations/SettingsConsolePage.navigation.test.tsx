@@ -137,10 +137,6 @@ vi.mock("./api", () => ({
         base_url: "https://api.tingting.vn",
         auth_header: "X-API-Key",
         reset_oa_id: "",
-        oa_app_id: "",
-        oa_secret_key: { configured: false, preview: null },
-        oa_access_token: { configured: false, preview: null },
-        oa_refresh_token: { configured: false, preview: null },
         oa_linked: false,
         oa_id: "",
         oa_name: "",
@@ -148,10 +144,12 @@ vi.mock("./api", () => ({
         oa_verified_at: null,
         oa_last_checked_at: null,
         oa_last_error: "",
+        oa_token_updated_at: null,
+        oa_token_managed_note: "Payroll quản lý và tự gia hạn token Zalo OA",
+        tingting_oa_enabled: true,
       }),
     ),
     saveTingtingSettings: vi.fn(),
-    checkTingtingOa: vi.fn(),
   },
   facebookIntegrationGateway: {
     loadStatus: mocks.loadFacebookStatus,
@@ -882,14 +880,19 @@ describe("SettingsConsolePage provider sections", () => {
         }),
       )
       .toBeVisible();
-    // The card configures the API key and the four Zalo OA credentials. Blank
-    // fields mean "keep stored", so saving stays disabled until something is
-    // typed — and the save always checks the OA with Zalo.
+    // The card configures what the ADMIN owns: the API key and the hotline.
+    // The OA's Zalo credentials are not admin input — Payroll owns and
+    // rotates the token pair, so the card shows the ownership note and the
+    // token's last update instead of credential fields. Blank fields mean
+    // "keep stored", so saving stays disabled until something is typed.
     await expect
       .element(screen.getByRole("textbox", { name: "API key TingTing" }))
       .toBeVisible();
     await expect
-      .element(screen.getByRole("textbox", { name: "OA Access Token" }))
+      .element(screen.getByText("Payroll quản lý và tự gia hạn token Zalo OA"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText(/Chưa nhận được token Zalo OA từ Payroll/))
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Lưu & kiểm tra" }))

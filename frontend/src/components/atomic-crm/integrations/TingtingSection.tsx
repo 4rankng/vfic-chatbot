@@ -11,53 +11,33 @@ import {
   type TingtingSettings,
   type TingtingSettingsUpdate,
 } from "./api";
+import { formatVietnamDateTime } from "../vietnamTime";
 import { PlainField, SecretField } from "./SecretField";
 import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
 
-/** The one API key plus the four Zalo OA credentials this panel owns. */
-const TINGTING_FIELD_COUNT = 5;
+/** The admin-editable inputs this panel owns: the API key and the hotline. */
+const TINGTING_FIELD_COUNT = 2;
 
 /** One query key for the endpoint, so a save can write back its own response. */
 const tingtingSettingsKey = ["tingting-settings"] as const;
 
-/** The four Zalo credentials of the OA that serves the reset flow. */
-type TingtingOaForm = {
-  app_id: string;
-  secret_key: string;
-  access_token: string;
-  refresh_token: string;
-};
-
-const EMPTY_OA_FORM: TingtingOaForm = {
-  app_id: "",
-  secret_key: "",
-  access_token: "",
-  refresh_token: "",
-};
-
-const describeOaLink = (settings: TingtingSettings | undefined): string => {
+const describeToken = (settings: TingtingSettings | undefined): string => {
   if (!settings) return "Đang tải…";
-  if (settings.oa_linked) {
-    const name = settings.oa_name || settings.oa_label || "Zalo OA";
-    return `Đã liên kết: ${name} (${settings.oa_id})`;
+  if (settings.oa_token_updated_at) {
+    return `Token Zalo OA cập nhật lúc ${formatVietnamDateTime(settings.oa_token_updated_at)}.`;
   }
-  if (settings.oa_last_error) {
-    return `Chưa liên kết được OA: ${settings.oa_last_error}`;
-  }
-  if (settings.oa_last_checked_at) {
-    return "Chưa liên kết được OA.";
-  }
-  return "Chưa cấu hình Zalo OA cho TingTing.";
+  return "Chưa nhận được token Zalo OA từ Payroll — token sẽ tự có khi Payroll đẩy hoặc khi hệ thống kéo.";
 };
 
 /**
- * The TingTing view: the deployment-wide API key for the password-reset API and
- * the Zalo OA that serves it.
+ * The TingTing view: the deployment-wide API key, the escalation hotline, and
+ * the message-processing switch for the Zalo OA that serves the password
+ * resets.
  *
- * The OA is configured exactly like the recruiting OA card — the operator pastes
- * the four Zalo credentials and the backend checks them with Zalo (`getoa`),
- * which is what discovers the OA's own id. Nothing here asks for an account key
- * or an OA id; the flow is bound to whatever OA these credentials check out as.
+ * The OA's Zalo credentials are not admin input: Payroll solely owns and
+ * rotates the token pair and pushes it to the backend, so the card renders the
+ * token's last update and the fixed ownership note instead of four credential
+ * fields. The OA id/name still come from the verified link metadata.
  */
 export const TingtingSection = () => {
   const notify = useNotify();
@@ -65,7 +45,6 @@ export const TingtingSection = () => {
   const queryClient = useQueryClient();
   // Stored credentials never enter form state: a blank field means "keep stored".
   const [apiKey, setApiKey] = useState("");
-  const [oaForm, setOaForm] = useState<TingtingOaForm>(EMPTY_OA_FORM);
   // The hotline field pre-fills with the stored value (it is not a secret), so
   // its draft holds the EDIT only; saving keeps the stored number when the
   // field is untouched or cleared — the backend never loses the seed by accident.
@@ -96,113 +75,43 @@ export const TingtingSection = () => {
     onSuccess: (data) => {
       // Back to "keep stored": the response is the section's new truth.
       setApiKey("");
-      setOaForm(EMPTY_OA_FORM);
       setHotlineDraft("");
       setOaEnabledDraft(null);
       queryClient.setQueryData(tingtingSettingsKey, data);
-      if (data.oa_linked) {
-        notify(`Đã liên kết Zalo OA: ${data.oa_name || data.oa_id}.`, {
-          type: "success",
-        });
-      } else if (data.oa_last_error) {
-        // The values are stored, but Zalo did not accept them — the flow stays off.
-        notify(`Zalo OA chưa liên kết được: ${data.oa_last_error}`, {
-          type: "error",
-        });
-      } else {
-        notify("Đã lưu cấu hình TingTing.", { type: "success" });
-      }
+      notify("Đã lưu cấu hình TingTing.", { type: "success" });
     },
     onError: () => {
       notify("Không thể lưu cấu hình TingTing.", { type: "error" });
     },
   });
 
-  const checkOa = useMutation<TingtingSettings, Error, void>({
-    mutationFn: () => zaloIntegrationGateway.checkTingtingOa(),
-    onSuccess: (data) => {
-      queryClient.setQueryData(tingtingSettingsKey, data);
-      notify(
-        data.oa_linked
-          ? `Zalo OA hoạt động: ${data.oa_name || data.oa_id}.`
-          : `Zalo OA chưa liên kết được: ${data.oa_last_error || "không rõ lý do"}`,
-        { type: data.oa_linked ? "success" : "error" },
-      );
-    },
-    onError: () => {
-      notify("Không kiểm tra được Zalo OA.", { type: "error" });
-    },
-  });
-
-  const setOaField = (key: keyof TingtingOaForm, value: string) =>
-    setOaForm((current) => ({ ...current, [key]: value }));
-
   const trimmedApiKey = apiKey.trim();
   const storedHotline = settings?.hotline ?? "";
   const trimmedHotline = hotlineDraft.trim();
   const hotlineChanged =
     Boolean(trimmedHotline) && trimmedHotline !== storedHotline;
-  const oaPost: TingtingSettingsUpdate = {};
-  const trimmedOa = {
-    zalo_oa_app_id: oaForm.app_id.trim(),
-    zalo_oa_secret_key: oaForm.secret_key.trim(),
-    zalo_oa_access_token: oaForm.access_token.trim(),
-    zalo_oa_refresh_token: oaForm.refresh_token.trim(),
-  } as const;
-  for (const key of [
-    "zalo_oa_app_id",
-    "zalo_oa_secret_key",
-    "zalo_oa_access_token",
-    "zalo_oa_refresh_token",
-  ] as const) {
-    const value = trimmedOa[key];
-    if (value) {
-      oaPost[key] = value;
-    }
-  }
 
-  // Optional chaining on the credential objects too: a payload cached before
-  // this card grew the OA fields must not crash the section.
-  const oaConfigured = Boolean(
-    settings?.oa_access_token?.configured ||
-      settings?.oa_refresh_token?.configured ||
-      settings?.oa_secret_key?.configured,
-  );
   // The switch falls back to on while the settings are loading, so the toggle
   // never renders a disabled-looking half state before the truth arrives.
   const oaEnabled = oaEnabledDraft ?? settings?.tingting_oa_enabled ?? true;
   const dirty =
-    Boolean(trimmedApiKey) ||
-    hotlineChanged ||
-    oaEnabledDraft !== null ||
-    Object.keys(oaPost).length > 0;
+    Boolean(trimmedApiKey) || hotlineChanged || oaEnabledDraft !== null;
 
-  // The badge counts the five visible credentials, so "3/5" names which are
-  // still missing instead of restating the backend's overall readiness flag.
+  // The badge counts the admin-editable inputs, so the section reports how
+  // much of what the ADMIN owns is configured — the OA token is Payroll's.
   const configuredFields = [
     settings?.api_key?.configured,
-    settings?.oa_app_id,
-    settings?.oa_secret_key?.configured,
-    settings?.oa_access_token?.configured,
-    settings?.oa_refresh_token?.configured,
+    Boolean(storedHotline),
   ].filter(Boolean).length;
 
   const submit = () => {
-    if (
-      !settings ||
-      isError ||
-      saveSettings.isPending ||
-      checkOa.isPending ||
-      !dirty
-    )
-      return;
+    if (!settings || isError || saveSettings.isPending || !dirty) return;
     saveSettings.mutate({
       ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
       ...(hotlineChanged ? { hotline: trimmedHotline } : {}),
       ...(oaEnabledDraft !== null
         ? { tingting_oa_enabled: oaEnabledDraft }
         : {}),
-      ...oaPost,
     });
   };
 
@@ -225,15 +134,13 @@ export const TingtingSection = () => {
       ) : null}
       <fieldset
         className="contents"
-        disabled={
-          !settings || isError || saveSettings.isPending || checkOa.isPending
-        }
-        aria-busy={saveSettings.isPending || checkOa.isPending}
+        disabled={!settings || isError || saveSettings.isPending}
+        aria-busy={saveSettings.isPending}
       >
         <legend className="sr-only">Thông tin kết nối TingTing</legend>
         {/* One integration, so one full-width card: the page header already
           carries the title and the purpose. The card names the integration,
-          reports how much of it is configured, and lays the credentials out in
+          reports how much of it is configured, and lays the fields out in
           pairs instead of a single tall column. */}
         <SettingsGroup
           className="settings-tingting-card"
@@ -280,73 +187,16 @@ export const TingtingSection = () => {
 
           <div className="settings-tingting-subhead">
             <h3>Zalo OA</h3>
-            <p>Lấy trong Zalo OA Console (Cài đặt → API).</p>
-          </div>
-
-          <div className="settings-tingting-grid">
-            <PlainField
-              id="tingting_oa_app_id"
-              label="Zalo App ID"
-              value={oaForm.app_id || settings?.oa_app_id || ""}
-              onChange={(value) => setOaField("app_id", value)}
-              configured={Boolean(settings?.oa_app_id)}
-              statusState={statusState}
-              showMissingStatus={false}
-            />
-            <SecretField
-              id="tingting_oa_secret_key"
-              label="OA Secret Key"
-              placeholder="Nhập Secret Key"
-              configured={settings?.oa_secret_key?.configured ?? false}
-              statusState={statusState}
-              preview={settings?.oa_secret_key?.preview ?? null}
-              value={oaForm.secret_key}
-              onChange={(value) => setOaField("secret_key", value)}
-              notify={notify}
-              hint="Tự gia hạn Access Token (Zalo cấp cùng App ID)."
-            />
-            <SecretField
-              id="tingting_oa_access_token"
-              label="OA Access Token"
-              placeholder="Nhập Access Token"
-              configured={settings?.oa_access_token?.configured ?? false}
-              statusState={statusState}
-              preview={settings?.oa_access_token?.preview ?? null}
-              value={oaForm.access_token}
-              onChange={(value) => setOaField("access_token", value)}
-              notify={notify}
-              hint="Bắt buộc — hệ thống kiểm tra với Zalo và tự nhận diện OA khi lưu."
-            />
-            <SecretField
-              id="tingting_oa_refresh_token"
-              label="OA Refresh Token"
-              placeholder="Nhập Refresh Token"
-              configured={settings?.oa_refresh_token?.configured ?? false}
-              statusState={statusState}
-              preview={settings?.oa_refresh_token?.preview ?? null}
-              value={oaForm.refresh_token}
-              onChange={(value) => setOaField("refresh_token", value)}
-              notify={notify}
-              hint="Nên có — Access Token hết hạn sau ~25 giờ."
-            />
+            <p>
+              {settings?.oa_token_managed_note ||
+                "Payroll quản lý và tự gia hạn token Zalo OA."}
+            </p>
           </div>
 
           <div className="settings-tingting-link">
             <span className="settings-tingting-link-copy" role="status">
-              {describeOaLink(settings)}
+              {describeToken(settings)}
             </span>
-            {oaConfigured ? (
-              <Button
-                type="button"
-                color="secondary"
-                className="uu-scope settings-test-button tt-btn-touch"
-                onClick={() => checkOa.mutate()}
-                isDisabled={checkOa.isPending}
-                aria-busy={checkOa.isPending}
-              >
-                {checkOa.isPending ? "Đang kiểm tra…" : "Kiểm tra lại OA"}
-              </Button>
-            ) : null}
           </div>
 
           <div className="settings-tingting-subhead">
@@ -408,7 +258,7 @@ export const TingtingSection = () => {
           <span className="settings-llm-footer-note">
             {dirty
               ? translate("crm.common.unsaved_changes")
-              : oaConfigured
+              : settings?.oa_linked
                 ? "Đặt lại mật khẩu chỉ chạy trên Zalo OA đã liên kết."
                 : "Chưa liên kết Zalo OA nên chức năng đặt lại mật khẩu đang tắt."}
           </span>
