@@ -183,6 +183,9 @@ def test_tools_registry_exposes_expected_tools():
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
+        "send_self_checkin_otp",
+        "confirm_self_checkin_otp",
+        "update_self_checkin",
     }
     assert all(callable(fn) for fn in TOOLS_REGISTRY.values())
 

@@ -61,6 +61,9 @@ _DISPATCHED = {
     "send_tingting_otp",
     "confirm_tingting_otp",
     "reset_tingting_password",
+    "send_self_checkin_otp",
+    "confirm_self_checkin_otp",
+    "update_self_checkin",
 }
 
 
