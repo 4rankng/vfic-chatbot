@@ -35,14 +35,18 @@ def test_runtime_policy_resolves_only_capability_owned_tools_and_neutral_prompt(
     policy = build_resolved_runtime_policy(active, persona_body=persona)
 
     assert policy is not None
-    # The knowledge capability grants the TingTing reset tool alongside
-    # retrieval: the map is not part of pack_contract_hash, so no re-pin.
+    # The knowledge capability grants the TingTing flow tools (reset + the
+    # self-check-in toggle) alongside retrieval: the map is not part of
+    # pack_contract_hash, so no re-pin.
     assert policy.tool_registry.names == {
         "search_knowledge",
         "verify_tingting_identity",
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
+        "send_self_checkin_otp",
+        "confirm_self_checkin_otp",
+        "update_self_checkin",
     }
     assert not policy.tool_registry.allows("list_active_jobs")
     assert not policy.tool_registry.allows("recommend_jobs")
@@ -231,6 +235,9 @@ async def test_manifest_composed_agent_passes_the_immutable_tool_registry():
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
+        "send_self_checkin_otp",
+        "confirm_self_checkin_otp",
+        "update_self_checkin",
         "search_knowledge",
     }
 
