@@ -61,32 +61,28 @@ class TingtingSettingsMixin:
 
     async def admin_tingting_view(self) -> dict:
         view = await self._tingting_service().admin_view()
-        view.update(await self._tingting_oa_link_service().view())
+        view.update(await self._tingting_oa_view())
         view["tingting_oa_enabled"] = await self.resolve_tingting_oa_enabled()
         return view
 
-    def _tingting_oa_link_service(self):
+    def _tingting_oa_view(self):
         from app.services.tingting_oa import TingtingOaLinkService
 
-        return TingtingOaLinkService(self.db, settings=self.settings, cipher=self.cipher)
-
-    async def link_tingting_oa(self, values: dict[str, str | None], *, actor_id) -> dict:
-        """Store the TingTing OA credentials, probe Zalo, register the account."""
-        service = self._tingting_oa_link_service()
-        view = await service.link(values, actor_id=actor_id)
-        merged = await self._tingting_service().admin_view()
-        merged.update(view)
-        return merged
+        return TingtingOaLinkService(
+            self.db, settings=self.settings, cipher=self.cipher
+        ).view()
 
     async def update_tingting(
         self, values: dict[str, str | bool | None], *, actor_id
     ) -> dict:
-        """Persist the API key, the escalation hotline, the processing switch,
-        and/or the support-OA credentials.
+        """Persist the API key, the escalation hotline, and/or the processing switch.
 
         ``reset_oa_id`` is no longer an admin field — it follows the verified
         link (see :mod:`app.services.tingting_oa`) — but the key stays accepted
-        so existing callers and tests keep their meaning.
+        so existing callers and tests keep their meaning. The support OA's Zalo
+        credentials are likewise not admin input: payroll owns and rotates the
+        token pair (push + pull), so the ``zalo_oa_*`` keys the schema once
+        accepted are rejected at the boundary.
         """
         service = self._tingting_service()
         if "api_key" in values:
@@ -112,25 +108,6 @@ class TingtingSettingsMixin:
                 payload={"tingting_oa_enabled": enabled},
             )
             await self.db.commit()
-        oa_values = {
-            base: values[base]
-            for base in (
-                "zalo_oa_app_id",
-                "zalo_oa_secret_key",
-                "zalo_oa_access_token",
-                "zalo_oa_refresh_token",
-            )
-            if base in values
-        }
-        if oa_values:
-            link_service = self._tingting_oa_link_service()
-            if all(not str(value or "").strip() for value in oa_values.values()):
-                # Every field cleared: the operator is removing the OA, so drop
-                # the credentials and the binding instead of probing an empty
-                # token (which would just report "cần OA Access Token").
-                await link_service.unlink(actor_id=actor_id)
-            else:
-                await link_service.link(oa_values, actor_id=actor_id)
         return await self.admin_tingting_view()
 
 

@@ -331,20 +331,23 @@ class TingtingIntegrationSettingsOut(BaseModel):
     # (operator rule 2026-09-29). Admin-editable; seeded with the approved
     # number, so the settings page shows the live value.
     hotline: str = ""
-    # The Zalo OA that serves the reset flow. Credentials are status-only; the
-    # OA id and name come from Zalo's `getoa` at link time, never from typing.
-    oa_app_id: str = ""
-    oa_secret_key: SecretStatus = SecretStatus(configured=False)
-    oa_access_token: SecretStatus = SecretStatus(configured=False)
-    oa_refresh_token: SecretStatus = SecretStatus(configured=False)
+    # The Zalo OA that serves the reset flow. Payroll solely owns and rotates
+    # the account's token pair (push + pull), so there is no credential status
+    # to show — only the token's last update and the fixed ownership note.
     oa_linked: bool = False
     oa_id: str = ""
     oa_name: str = ""
     oa_label: str = ""
     oa_verified_at: str | None = None
     oa_last_checked_at: str | None = None
-    # Redacted reason from the last failed `getoa` probe ("" when it passed).
+    # Reason from the last failed `getoa` probe of the pre-payroll link flow
+    # ("" otherwise; no new probe ever writes it).
     oa_last_error: str = ""
+    # When the payroll-owned access token last landed (push or pull), as ISO —
+    # a timestamp only, never the token.
+    oa_token_updated_at: str | None = None
+    # Fixed label: the token is not an admin credential for this account.
+    oa_token_managed_note: str = ""
     # Admin kill switch for candidate-message processing on the support OA.
     # Absent row = enabled; "false" makes the worker stand turns down before
     # the graph runs (no LLM tokens, no reply).
@@ -359,15 +362,10 @@ class TingtingIntegrationSettingsUpdate(BaseModel):
     # Stored as sent (after strip); length-capped only, matching the other
     # settings fields — the operator copies the owner-approved number.
     hotline: str | None = Field(default=None, max_length=32)
-    # The support OA's four Zalo credentials. Posting any of them (with the API
-    # key, or alone) stores what was sent and probes Zalo with the effective
-    # access token: on success the OA id/name are discovered and the account is
-    # registered; on failure the values are still stored, the response carries
-    # `oa_last_error`, and the reset flow stays off.
-    zalo_oa_app_id: str | None = Field(default=None, max_length=128)
-    zalo_oa_secret_key: str | None = Field(default=None, max_length=2048)
-    zalo_oa_access_token: str | None = Field(default=None, max_length=4096)
-    zalo_oa_refresh_token: str | None = Field(default=None, max_length=4096)
+    # The support OA's Zalo credentials are deliberately absent: payroll owns
+    # and rotates the token pair (push to /webhooks/zalo-oa-token + pull from
+    # its GET endpoint), and `extra="forbid"` makes any posted `zalo_oa_*`
+    # field a 422 instead of a silently ignored credential.
     # The processing kill switch; omitted keeps the stored value.
     tingting_oa_enabled: bool | None = None
 

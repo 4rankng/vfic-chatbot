@@ -3,6 +3,7 @@ from __future__ import annotations
 import types
 import uuid
 
+import pytest
 
 from app.api import integrations
 from app.core.config import ZALO_BOT_WEBHOOK_URL, Settings
@@ -10,6 +11,7 @@ from app.services.integrations import llm_diagnostics, zalo_diagnostics
 from app.schemas.integrations import ZaloIntegrationSettingsUpdate
 from app.services.integration_settings import ZaloRuntimeConfig
 from app.services.zalo_bot_service import SendResult
+from pydantic import ValidationError
 
 
 class _Service:
@@ -623,27 +625,30 @@ async def test_tingting_settings_put_stores_the_key_for_the_actor(monkeypatch):
     }
 
 
-async def test_tingting_settings_put_saves_the_support_oa_credentials(monkeypatch):
-    """The admin pastes the four Zalo credentials; the pin follows the check.
+async def test_tingting_settings_put_rejects_oa_credentials(monkeypatch):
+    """The four Zalo credential fields are gone from the schema, not ignored.
 
-    `reset_oa_id` is no longer an admin field — a typed account key was exactly
-    the confusion this replaced (ADR-0013 / the TingTing card UX).
+    Payroll owns and rotates the support OA's token pair (push + pull), so
+    `extra="forbid"` makes a posted credential a visible 422 — the admin can
+    no longer paste a token the runtime will never refresh.
     """
     monkeypatch.setattr(integrations, "IntegrationSettingsService", _TingtingService)
     _TingtingService.stored = None
     admin = types.SimpleNamespace(id=uuid.uuid4())
 
-    result = await integrations.update_tingting_integration_settings(
-        body=integrations.TingtingIntegrationSettingsUpdate(
+    with pytest.raises(ValidationError) as excinfo:
+        integrations.TingtingIntegrationSettingsUpdate(
             zalo_oa_app_id="app-1",
             zalo_oa_access_token="access-1",
-        ),
+        )
+    assert "zalo_oa_app_id" in str(excinfo.value)
+    assert "zalo_oa_access_token" in str(excinfo.value)
+
+    # And a normal save keeps working without the credential fields.
+    result = await integrations.update_tingting_integration_settings(
+        body=integrations.TingtingIntegrationSettingsUpdate(hotline="+84 914 827 988"),
         admin=admin,
         db=object(),
     )
-
-    assert result.reset_oa_id == "tingting"
-    assert _TingtingService.last_update["values"] == {
-        "zalo_oa_app_id": "app-1",
-        "zalo_oa_access_token": "access-1",
-    }
+    assert _TingtingService.last_update["values"] == {"hotline": "+84 914 827 988"}
+    assert result.reset_oa_id == ""

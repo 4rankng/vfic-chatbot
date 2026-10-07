@@ -60,7 +60,6 @@ from app.schemas.integrations import (
 from app.composition.email_digest import build_digest_summarizer_for
 from app.services.email_digest import send_test_digest
 from app.services.integration_settings import IntegrationSettingsService
-from app.services.tingting_oa import TingtingOaLinkError
 from app.services.integrations.facebook_oauth_flow import (
     FacebookOAuthCallbackOutcome,
     complete_page_selection,
@@ -428,39 +427,14 @@ async def update_tingting_integration_settings(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> TingtingIntegrationSettingsOut:
-    """Save the TingTing API key and/or the support OA's four Zalo credentials.
+    """Save the TingTing API key, hotline, and/or the processing switch.
 
-    Posting any OA credential also probes Zalo (`getoa`) with the effective
-    access token: on success the OA's own id and name are discovered and the
-    reset flow is bound to it; on failure the values are still stored and the
-    response reports `oa_last_error`, so the flow stays off rather than serving
-    employees from a broken link.
+    The support OA's Zalo credentials are not admin input any more: payroll
+    solely owns and rotates that token pair (push to
+    /webhooks/zalo-oa-token + pull from its GET endpoint).
     """
     service = IntegrationSettingsService(db)
-    try:
-        await service.update_tingting(body.model_dump(exclude_unset=True), actor_id=admin.id)
-    except TingtingOaLinkError as exc:
-        raise ValidationError(str(exc)) from exc
-    return TingtingIntegrationSettingsOut.model_validate(
-        await service.admin_tingting_view()
-    )
-
-
-@router.post("/tingting/oa/check", response_model=TingtingIntegrationSettingsOut)
-async def check_tingting_oa(
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> TingtingIntegrationSettingsOut:
-    """Re-probe the stored support-OA credentials and refresh the link status.
-
-    Same probe the save runs, without touching the stored values — for the admin
-    who fixed the token in the Zalo console and wants the link (re)established.
-    """
-    service = IntegrationSettingsService(db)
-    try:
-        await service.link_tingting_oa({}, actor_id=admin.id)
-    except TingtingOaLinkError as exc:
-        raise ValidationError(str(exc)) from exc
+    await service.update_tingting(body.model_dump(exclude_unset=True), actor_id=admin.id)
     return TingtingIntegrationSettingsOut.model_validate(
         await service.admin_tingting_view()
     )

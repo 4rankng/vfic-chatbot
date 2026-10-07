@@ -251,6 +251,21 @@ class ZaloSettingsMixin:
             "refresh_token": _secret_status(cfg.oa_refresh_token),
         }
 
+    async def oa_account_token_updated_at(self, account_key: str) -> str | None:
+        """The stored per-account access token's last update (ISO, non-secret).
+
+        The one credential fact the console may show for the TingTing account:
+        WHEN the payroll-owned token last landed (push or pull), never the
+        token itself.
+        """
+        row = await self.db.get(
+            IntegrationSetting,
+            oa_account_setting_key(ZALO_OA_ACCESS_TOKEN, account_key),
+        )
+        if row is None or row.updated_at is None:
+            return None
+        return row.updated_at.isoformat()
+
     async def write_oa_account_credentials(
         self, account_key: str, values: dict[str, str | None], *, actor_id
     ) -> list[str]:
