@@ -9,6 +9,7 @@ named the account (e.g. "VietPhap OA"), falling back to a code map.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -57,6 +58,11 @@ class DigestCandidate:
     # so the summarizer may narrow an ambiguous mapping to one project without
     # the digest inventing a factory the channel never claimed.
     mapped_projects: tuple[str, ...] = ()
+    # Which campaign/ad brought the candidate in, as recorded on the
+    # conversation's first touch: the Messenger ad's title, the operator's
+    # ``ref`` code, or the raw Meta ad id. None when the entry carried no
+    # source. This is the recruiter's "which ad did this lead click" answer.
+    campaign: str | None = None
     candidate_messages: tuple[str, ...] = ()
     summary: str | None = None
 
@@ -75,23 +81,67 @@ def channel_label(provider: str, account_key: str, account_label: str | None) ->
     return _LABEL_CANONICALIZATION.get(label, label)
 
 
+def _attribution_project_id(attribution: object) -> object:
+    """The project a conversation's campaign resolved to, if any.
+
+    ``conversations.attribution`` is the candidate's first-touch source, and
+    ``ingress`` already resolves its ``ref`` / ``ad_title`` to a project
+    (see ``services/lead/interest.py``). It arrives as a UUID string, so it is
+    normalised here rather than trusted into the Project lookup as-is.
+    """
+    if not isinstance(attribution, dict):
+        return None
+    raw = attribution.get("project_id")
+    if not raw:
+        return None
+    try:
+        return uuid.UUID(str(raw))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def _campaign_label(attribution: object) -> str | None:
+    """A recruiter-readable name for the campaign a candidate entered from.
+
+    ``conversations.attribution`` carries several keys because Meta sends
+    several: the ad's creative ``ad_title`` reads best, then the operator's own
+    ``ref`` code, then the raw Meta ``ad_id``. ``project_id`` is derived, not a
+    campaign name, and never shown here. None when the entry had no source —
+    an organic or QR-code conversation honestly says nothing about an ad.
+    """
+    if not isinstance(attribution, dict):
+        return None
+    for key in ("ad_title", "post_code", "ad_id"):
+        value = attribution.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def _project_of_interest(
     focused_id: object,
     project_names: dict,
     mapped_names: list[str],
+    attributed_id: object = None,
 ) -> str | None:
     """Project of interest for one candidate, in descending strength.
 
-    The bot-confirmed focus wins; a Page mapped to exactly one project implies
-    it (the LG Display fanpage case); with SEVERAL mappings the column lists
-    every candidate the channel could mean rather than staying blank — an
-    ambiguous channel is real information the recruiter can act on, and a
-    blank cell hid all of it. The list is the honest fallback; the summarizer
-    may then narrow it to one project, but only to a name that is already in
-    this set.
+    The bot-confirmed focus wins; then the project the candidate's CAMPAIGN
+    resolved to (an operator-typed ``ref`` or an ad creative title matched
+    against the catalog) — the system had already resolved that from the thread
+    before the candidate typed a word, so it says more about why this person is
+    here than the Page they happened to message; a Page mapped to exactly one
+    project implies it (the LG Display fanpage case); with SEVERAL mappings the
+    column lists every candidate the channel could mean rather than staying
+    blank — an ambiguous channel is real information the recruiter can act on,
+    and a blank cell hid all of it. The list is the honest fallback; the
+    summarizer may then narrow it to one project, but only to a name that is
+    already in this set.
     """
     if focused_id is not None:
         return project_names.get(focused_id)
+    if attributed_id is not None and attributed_id in project_names:
+        return project_names[attributed_id]
     if not mapped_names:
         return None
     return ", ".join(sorted(mapped_names))
@@ -243,6 +293,13 @@ async def collect_new_candidates(
         for conv in latest_conversation.values()
         if conv.focused_project_id is not None
     }
+    # A campaign-resolved project must be loadable too, or the column would
+    # silently fall back to the channel mapping for exactly the ad-sourced
+    # leads the recruiter most wants to attribute.
+    for conv in latest_conversation.values():
+        attributed_id = _attribution_project_id(getattr(conv, "attribution", None))
+        if attributed_id is not None:
+            project_ids.add(attributed_id)
     for project_set in mapped_projects_by_pair.values():
         project_ids.update(project_set)
     project_names: dict = {}
@@ -282,12 +339,16 @@ async def collect_new_candidates(
         messages = messages_by_conversation.get(conv.id, []) if conv is not None else []
         pair = (ident.provider, ident.account_key) if ident is not None else None
         focused_id = conv.focused_project_id if conv is not None else None
+        attribution = getattr(conv, "attribution", None) if conv is not None else None
+        attributed_id = _attribution_project_id(attribution)
         mapped_names = sorted(
             project_names[pid]
             for pid in mapped_projects_by_pair.get(pair, set())
             if pid in project_names
         )
-        project_name = _project_of_interest(focused_id, project_names, mapped_names)
+        project_name = _project_of_interest(
+            focused_id, project_names, mapped_names, attributed_id
+        )
         candidates.append(
             DigestCandidate(
                 lead_id=lead.id,
@@ -311,6 +372,7 @@ async def collect_new_candidates(
                 ),
                 project_name=project_name,
                 mapped_projects=tuple(mapped_names),
+                campaign=_campaign_label(attribution),
                 candidate_messages=tuple(messages[-MESSAGES_PER_CANDIDATE:]),
             )
         )

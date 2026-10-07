@@ -26,6 +26,7 @@ import { channelIcon } from "../channel-icons";
 import { ConversationShowContent } from "./ConversationShow";
 import { InboxIcons } from "../InboxIcons";
 import { EmptyState } from "../../kit";
+import { formatVietnamDateTime } from "../../vietnamTime";
 import { Badge } from "@/components/base/badges/badges";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { loadConversationSnippets } from "../application/conversation-runtime";
@@ -237,7 +238,7 @@ const ConversationListItem = memo(
               <time
                 className="conv-time"
                 dateTime={timestamp}
-                title={new Date(timestamp).toLocaleString("vi-VN")}
+                title={formatVietnamDateTime(timestamp)}
               >
                 {time}
               </time>

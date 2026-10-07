@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNotify } from "ra-core";
 import { Mail } from "lucide-react";
 
+import { formatVietnamDateTime } from "../vietnamTime";
+
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -344,10 +346,9 @@ export const EmailDigestSection = () => {
             <span className="settings-tingting-link-copy" role="status">
               {enabled
                 ? `Email đang bật. Lần gửi gần nhất: ${
-                    settings?.last_sent_at
-                      ? new Date(settings.last_sent_at).toLocaleString("vi-VN")
-                      : "chưa gửi lần nào"
-                  }.`
+                    formatVietnamDateTime(settings?.last_sent_at) ||
+                    "chưa gửi lần nào"
+                  } (giờ VN).`
                 : enabledDraft === false
                   ? "Email sẽ tắt sau khi bấm Lưu cấu hình."
                   : storedRecipients.length === 0

@@ -1,15 +1,15 @@
-const timeFormatter = new Intl.DateTimeFormat("vi-VN", {
+import { vietnamFormatter } from "../vietnamTime";
+
+const timeFormatter = vietnamFormatter({
   hour: "2-digit",
   minute: "2-digit",
-  timeZone: "Asia/Ho_Chi_Minh",
 });
 
-const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
+const dateTimeFormatter = vietnamFormatter({
   day: "2-digit",
   month: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
-  timeZone: "Asia/Ho_Chi_Minh",
 });
 
 /**

@@ -880,3 +880,106 @@ def test_the_prompt_demands_a_json_object_and_a_mapped_project_only():
     assert '"project"' in SUMMARY_SYSTEM_PROMPT
     assert '"summary"' in SUMMARY_SYSTEM_PROMPT
     assert "CHỈ được lấy từ danh sách" in SUMMARY_SYSTEM_PROMPT
+
+
+# ── campaign attribution: which ad brought the candidate in ──────────────────
+
+
+def test_campaign_project_beats_the_channel_mapping():
+    """A candidate who clicked the LG-DISPLAY ad should read LG-DISPLAY — not
+    the Page's ambiguous "LG Electronics, LG-DISPLAY" — because the campaign
+    resolved to one project from the thread's first touch."""
+    from app.services.email_digest.repository import _project_of_interest
+
+    assert (
+        _project_of_interest(
+            None,
+            {"p1": "LG-DISPLAY", "p2": "LG Electronics"},
+            ["LG Electronics", "LG-DISPLAY"],
+            "p1",
+        )
+        == "LG-DISPLAY"
+    )
+
+
+def test_focused_project_still_beats_the_campaign():
+    """Conversation focus is the strongest signal and is unaffected."""
+    from app.services.email_digest.repository import _project_of_interest
+
+    assert (
+        _project_of_interest(
+            "p3",
+            {"p1": "LG-DISPLAY", "p3": "Rorze"},
+            ["LG-DISPLAY"],
+            "p1",
+        )
+        == "Rorze"
+    )
+
+
+def test_an_unloadable_campaign_id_falls_back_to_the_mapping():
+    """A campaign pointing at a project this window did not load must degrade
+    to the channel mapping, never to an empty cell."""
+    from app.services.email_digest.repository import _project_of_interest
+
+    assert (
+        _project_of_interest(
+            None, {"p2": "LG Electronics"}, ["LG Electronics"], "missing-id"
+        )
+        == "LG Electronics"
+    )
+
+
+def test_attribution_project_id_is_normalised_from_a_uuid_string():
+    """`ingress` writes the project as a UUID string; the digest looks it up
+    against a UUID-typed Project.id column."""
+    import uuid
+
+    from app.services.email_digest.repository import _attribution_project_id
+
+    value = uuid.uuid4()
+    assert _attribution_project_id({"project_id": str(value)}) == value
+
+
+def test_attribution_project_id_ignores_junk():
+    from app.services.email_digest.repository import _attribution_project_id
+
+    assert _attribution_project_id(None) is None
+    assert _attribution_project_id({}) is None
+    assert _attribution_project_id({"project_id": ""}) is None
+    assert _attribution_project_id({"project_id": "not-a-uuid"}) is None
+
+
+def test_campaign_label_prefers_the_ad_title_then_the_code_then_the_id():
+    """Meta sends several keys; the recruiter-facing one is the ad's own title."""
+    from app.services.email_digest.repository import _campaign_label
+
+    assert (
+        _campaign_label(
+            {"ad_title": "Tuyển dụng LGD — Hải Phòng", "post_code": "LGD", "ad_id": "9"}
+        )
+        == "Tuyển dụng LGD — Hải Phòng"
+    )
+    assert _campaign_label({"post_code": "LGD", "ad_id": "9"}) == "LGD"
+    assert _campaign_label({"ad_id": "9"}) == "9"
+
+
+def test_campaign_label_is_blank_for_an_organic_entry():
+    """No source recorded means no ad claim — inventing one would be a lie."""
+    from app.services.email_digest.repository import _campaign_label
+
+    assert _campaign_label(None) is None
+    assert _campaign_label({}) is None
+    assert _campaign_label({"project_id": "p1"}) is None
+
+
+def test_a_resolved_campaign_project_is_not_re_narrowed_by_the_llm():
+    """The ad already named the project; a guess must not override it."""
+    candidate = DigestCandidate(
+        lead_id=1,
+        project_name="LG-DISPLAY",
+        mapped_projects=("LG Electronics", "LG-DISPLAY"),
+        candidate_messages=("Hỏi về lương",),
+    )
+
+    assert _resolve_project(candidate, "LG Electronics") == "LG-DISPLAY"

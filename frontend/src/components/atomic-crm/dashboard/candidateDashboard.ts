@@ -1,4 +1,5 @@
 import type { Conversation, Lead } from "../types";
+import { VIETNAM_TIME_ZONE, vietnamFormatter } from "../vietnamTime";
 import { buildRecruitmentContextIdentity } from "../leads/domain/recruitmentPresentation";
 import {
   getDashboardCandidates,
@@ -58,8 +59,9 @@ export const CANDIDATES_QUERY_KEY = [
   "dashboard-candidates-with-phone",
 ] as const;
 
-const VIETNAM_TIME_ZONE = "Asia/Ho_Chi_Minh";
-
+// "en" deliberately: `dayKey` reads numeric parts to build a sortable
+// YYYY-MM-DD key, and "en" keeps those parts Latin-numeric. The timezone is
+// still Vietnam's — only the locale differs from `vietnamFormatter`.
 const dayKey = (value: Date): string => {
   const parts = new Intl.DateTimeFormat("en", {
     timeZone: VIETNAM_TIME_ZONE,
@@ -79,8 +81,7 @@ const dayLabel = (value: Date, now: Date): string => {
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   if (key === dayKey(yesterday)) return "Hôm qua";
 
-  const label = new Intl.DateTimeFormat("vi-VN", {
-    timeZone: VIETNAM_TIME_ZONE,
+  const label = vietnamFormatter({
     weekday: "long",
     day: "2-digit",
     month: "2-digit",
