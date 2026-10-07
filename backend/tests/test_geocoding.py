@@ -145,7 +145,7 @@ async def test_geocode_caches_a_hop_hit_under_the_normalized_query(geo_env):
     assert fake.calls[0]["url"] == "/maps/api/geocode/json"
     assert fake.calls[0]["params"]["address"] == "KCN Tràng Duệ, An Dương"
     key, value, ttl = cache.writes[-1]
-    assert key.startswith("geo:geocode:v7:")
+    assert key.startswith("geo:geocode:v8:")
     assert value == {"lat": 20.865, "lng": 106.683}
     assert ttl == 2_592_000
 
@@ -501,13 +501,14 @@ def test_cache_prefix_retired_the_previous_chain_entries():
     """Every semantic change to the chain retires what it produced.
 
     v3→v4 was the Vietmap reorder, v4→v5 the ``precision="point"`` gate, v5→v6
-    the measured reorder that put Google ahead of Vietmap, and v6→v7 the
-    keyed-only chain: a v6 entry could have been resolved by the removed
-    relaxation ladder at ward or city precision. A coordinate is only as good as
-    the chain that produced it, so an entry from the old chain must not be served
-    for another 30 days.
+    the measured reorder that put Google ahead of Vietmap, v6→v7 the keyed-only
+    chain, and v7→v8 the point-precision cross-check: a v7 entry was resolved
+    by a single hop with no second opinion, so it does not mean what a
+    cross-checked v8 entry means. A coordinate is only as good as the chain
+    that produced it, so an entry from the old chain must not be served for
+    another 30 days.
     """
-    assert geocoding._CACHE_PREFIX == "geo:geocode:v7:"
+    assert geocoding._CACHE_PREFIX == "geo:geocode:v8:"
 
 
 def test_the_durable_mapping_is_versioned_too():
@@ -515,7 +516,7 @@ def test_the_durable_mapping_is_versioned_too():
     raw query text with no version, so a coordinate admitted by the old chain
     would survive every prefix bump and keep answering. The durable key carries
     the same version."""
-    assert geocoding._DB_KEY_VERSION == "v7:"
+    assert geocoding._DB_KEY_VERSION == "v8:"
 
 
 # --- precision: what an answer is allowed to be -------------------------------
@@ -652,3 +653,109 @@ def test_viewbox_focus_ignores_absent_or_malformed_boxes():
     assert geocoding._viewbox_focus("") is None
     assert geocoding._viewbox_focus("106.15,21.35") is None
     assert geocoding._viewbox_focus("a,b,c,d") is None
+
+
+# --- the point-precision second opinion (2026-10-07 Cầu Bính incident) --------
+
+
+_HP_VIEWBOX = "106.1500,21.3500,107.2500,20.4500"  # the active-project region
+_WRONG_BINH = (20.8757959, 106.3235695)  # Gia Lộc, Hải Dương — Google's answer
+_RIGHT_BINH = (20.8767415, 106.6688351)  # Cầu Bính, Thủy Nguyên, Hải Phòng
+
+
+@pytest.mark.asyncio
+async def test_point_precision_adopts_the_catchment_nearer_second_opinion(geo_env):
+    """The incident replay: Google answers a same-named "Cầu Bính" in Hải
+    Dương, 35 km west of every project. A point-precision lookup cross-checks
+    with Vietmap (focused on the project region), the two disagree far past the
+    tolerance, and the catchment-nearer answer is the one quoted."""
+    cache, _settings = geo_env
+    _register_google(_google_payload(*_WRONG_BINH))
+    vietmap = _vietmap_hit(*_RIGHT_BINH)
+
+    result = await geocoding.geocode(
+        "cau binh, hai phong",
+        viewbox=_HP_VIEWBOX,
+        providers=GeoRuntimeConfig(vietmap_api_key="vk", google_maps_api_key="gk"),
+        precision="point",
+    )
+
+    assert result == _RIGHT_BINH
+    assert vietmap.calls
+    # The adopted answer is the one cached and stored, under the adopting hop.
+    assert cache.writes[-1][1] == {"lat": _RIGHT_BINH[0], "lng": _RIGHT_BINH[1]}
+
+
+@pytest.mark.asyncio
+async def test_point_precision_keeps_the_first_hit_when_the_hops_agree(geo_env):
+    """Agreement inside the tolerance is the normal case: the second opinion
+    changes nothing and costs nothing but the call."""
+    _cache, _settings = geo_env
+    _register_google(_google_payload(20.87, 106.66))
+    _vietmap_hit(20.876, 106.668)
+
+    result = await geocoding.geocode(
+        "cau binh, hai phong",
+        viewbox=_HP_VIEWBOX,
+        providers=GeoRuntimeConfig(vietmap_api_key="vk", google_maps_api_key="gk"),
+        precision="point",
+    )
+
+    assert result == (20.87, 106.66)
+
+
+@pytest.mark.asyncio
+async def test_point_precision_keeps_the_first_hit_when_it_is_the_catchment_nearer_one(
+    geo_env,
+):
+    """Disagreement alone does not demote the first hop: when the second
+    opinion lands FARTHER from the project region, the first answer stands."""
+    _cache, _settings = geo_env
+    _register_google(_google_payload(20.9, 106.7))
+    _vietmap_hit(20.0, 106.0)
+
+    result = await geocoding.geocode(
+        "some place",
+        viewbox=_HP_VIEWBOX,
+        providers=GeoRuntimeConfig(vietmap_api_key="vk", google_maps_api_key="gk"),
+        precision="point",
+    )
+
+    assert result == (20.9, 106.7)
+
+
+@pytest.mark.asyncio
+async def test_area_precision_skips_the_cross_check(geo_env):
+    """Ranking callers only need a rough area: no second opinion, no extra
+    provider call."""
+    _cache, _settings = geo_env
+    _register_google(_google_payload(*_WRONG_BINH))
+    vietmap = _vietmap_hit(*_RIGHT_BINH)
+
+    result = await geocoding.geocode(
+        "cau binh, hai phong",
+        viewbox=_HP_VIEWBOX,
+        providers=GeoRuntimeConfig(vietmap_api_key="vk", google_maps_api_key="gk"),
+        precision="area",
+    )
+
+    assert result == _WRONG_BINH
+    assert vietmap.calls == []
+
+
+@pytest.mark.asyncio
+async def test_point_precision_without_a_focus_skips_the_cross_check(geo_env):
+    """No focus, no tiebreaker: without a region to judge catchment-nearness
+    the first answer stands rather than an arbitrary pick."""
+    _cache, _settings = geo_env
+    _register_google(_google_payload(*_WRONG_BINH))
+    vietmap = _vietmap_hit(*_RIGHT_BINH)
+
+    result = await geocoding.geocode(
+        "cau binh, hai phong",
+        providers=GeoRuntimeConfig(vietmap_api_key="vk", google_maps_api_key="gk"),
+        precision="point",
+    )
+
+    assert result == _WRONG_BINH
+    assert vietmap.calls == []

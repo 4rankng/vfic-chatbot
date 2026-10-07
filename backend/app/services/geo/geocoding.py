@@ -22,7 +22,7 @@ provider's own ranking does the work instead, and a region bias — the
 candidate's viewbox, converted to Vietmap's ``focus`` — steers it.
 
 Caching: two tiers keyed by the accent-insensitive normalized query.
-``geo:geocode:v7:<sha256[:32]>`` holds either ``{"lat": …, "lng": …}`` for
+``geo:geocode:v8:<sha256[:32]>`` holds either ``{"lat": …, "lng": …}`` for
 ``geocoder_cache_ttl_seconds`` (30 days) or ``{"miss": true}`` for
 ``geocoder_negative_ttl_seconds`` (6 hours). The negative tier is why a repeated
 unresolvable area costs no network call. The key carries its version because
@@ -47,6 +47,7 @@ tool) treat ``None`` as "no coordinates", which degrades to today's behavior.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import UTC, datetime
 from hashlib import sha256
 from typing import TYPE_CHECKING, Literal
@@ -66,19 +67,35 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# v7: the chain became keyed-only. A coordinate is only as good as the chain
-# that produced it, so a v6 entry — which could have been resolved by
-# Nominatim's relaxation ladder, at ward or city precision — no longer means the
-# same thing as one resolved by Google or Vietmap on the caller's exact text.
-# v6 was the measured hop reorder (Google ahead of Vietmap); v5 was the
-# ``precision="point"`` gate; v4 the Vietmap reorder.
-_CACHE_PREFIX = "geo:geocode:v7:"
+# Two providers answering the same query with points more than this far apart
+# are not both right: one of them matched a different place with the same name.
+_CROSS_HOP_DISAGREE_KM = 5.0
+
+
+def _straight_line_km(a: tuple[float, float], b: tuple[float, float]) -> float:
+    """Great-circle distance in kilometres (the canonical copy lives in
+    ``app.recruitment.domain.recommendation.haversine_km``; inlined here so the
+    geo package stays dependency-free)."""
+    lat_a, lng_a = math.radians(a[0]), math.radians(a[1])
+    lat_b, lng_b = math.radians(b[0]), math.radians(b[1])
+    dlat = lat_b - lat_a
+    dlng = lng_b - lng_a
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat_a) * math.cos(lat_b) * math.sin(dlng / 2) ** 2
+    return 2 * 6371.0088 * math.asin(min(1.0, math.sqrt(h)))
+
+# v8: point-precision answers are cross-checked against the next keyed hop
+# before being quoted. A coordinate is only as good as the chain that produced
+# it, so a v7 entry — resolved by a single hop with no second opinion — no
+# longer means the same thing as one that survived the cross-check. History:
+# v7 made the chain keyed-only; v6 was the measured hop reorder (Google ahead
+# of Vietmap); v5 the ``precision="point"`` gate; v4 the Vietmap reorder.
+_CACHE_PREFIX = "geo:geocode:v8:"
 # The DURABLE mapping (``geocode_cache``) is keyed by query text alone, so the
 # Redis prefix bump above does not retire it — a coordinate admitted by the old
 # chain would keep answering for as long as the row exists. The durable key
 # therefore carries the same version, which retires the old rows' meaning with
 # no data migration: the key is opaque text. Keep in step with _CACHE_PREFIX.
-_DB_KEY_VERSION = "v7:"
+_DB_KEY_VERSION = "v8:"
 
 
 def _cache_key(text: str) -> str:
@@ -177,6 +194,81 @@ async def _db_store(
         logger.warning("geocode db store failed", exc_info=True)
 
 
+async def _second_opinion(
+    resolved: tuple[str, tuple[float, float]],
+    text: str,
+    focus: tuple[float, float],
+    providers: "GeoRuntimeConfig | None",
+    settings,
+) -> tuple[str, tuple[float, float]] | None:  # noqa: ANN001
+    """Cross-check a point-precision hit against the next keyed hop.
+
+    The 2026-10-07 incident: a candidate asked "cầu bính hải phòng" and Google
+    answered a "Cầu Bính" in Gia Lộc, Hải Dương — 35 km west of every project,
+    and a place whose own reverse-geocoded names contain both "cầu binh" and
+    "hai phong", so no name-based verification can separate it. What separates
+    it is a second provider: asked the same question with the project region
+    as its focus, Vietmap answered the actual bridge in Thủy Nguyên, Hải Phòng.
+
+    So a point-precision first hit (a number is about to be quoted from it)
+    gets one second opinion from the next keyed hop. Agreement within
+    ``_CROSS_HOP_DISAGREE_KM`` ends the check; a disagreement is resolved in
+    favour of the answer nearer ``focus`` (the active-project region — a
+    candidate asking about a project overwhelmingly sits in its catchment, and
+    the alternative is quoting a confident wrong number). Any hop error keeps
+    the first answer: fail-open, like the rest of the chain.
+
+    Returns the ``(provider, point)`` to quote — the original when the hops
+    agree, the catchment-nearer one when they disagree. Never ``None`` when
+    handed a resolved hit.
+    """
+    name, point = resolved
+    for index, hop in enumerate(KEYED_GEO_HOPS):
+        if hop.name == name:
+            later_hops = KEYED_GEO_HOPS[index + 1 :]
+            break
+    else:
+        return resolved
+    for hop in later_hops:
+        api_key = getattr(providers, hop.key_field, "") if providers is not None else ""
+        if not api_key:
+            continue
+        extra: dict[str, object] = {}
+        if hop.accepts_focus:
+            extra["focus"] = focus
+        if hop.rejects_coarse:
+            extra["require_point"] = True
+        try:
+            hit = await hop.fetch(
+                text,
+                api_key=api_key,
+                timeout_seconds=settings.geocoder_timeout_seconds,
+                **extra,
+            )
+        except Exception:  # noqa: BLE001 — a second opinion is optional
+            logger.warning("geocode cross-check hop failed provider=%s", hop.name, exc_info=True)
+            continue
+        if hit is None:
+            continue
+        if _straight_line_km(point, hit) <= _CROSS_HOP_DISAGREE_KM:
+            return resolved  # the hops agree — the first answer stands
+        if _straight_line_km(hit, focus) < _straight_line_km(point, focus):
+            logger.warning(
+                "geocode cross-check overrode provider=%s (%.4f,%.4f) with %s "
+                "(%.4f,%.4f) for query %r — the hops disagree past the tolerance",
+                name,
+                point[0],
+                point[1],
+                hop.name,
+                hit[0],
+                hit[1],
+                text,
+            )
+            return (hop.name, hit)
+        return resolved  # they disagree, but the first answer is the catchment-nearer one
+    return resolved
+
+
 async def geocode(
     query: str,
     *,
@@ -212,7 +304,11 @@ async def geocode(
     resolve to the middle of a city (the 2026-10-03 incident). Vietmap's payload
     exposes no equivalent flag, so a ``"point"`` caller gets the guard from the
     first hop only; the factory path does not rely on it either way, because
-    every candidate there must survive the containment check.
+    every candidate there must survive the containment check. A ``"point"``
+    answer that survives also gets one second opinion from the next keyed hop:
+    when the two providers place the query more than ``_CROSS_HOP_DISAGREE_KM``
+    apart, the answer nearer ``focus`` wins (the 2026-10-07 "Cầu Bính"
+    incident — see ``_second_opinion``).
     """
     text = query.strip()
     if not text:
@@ -251,6 +347,7 @@ async def geocode(
     # Trần Phú, Hà Tĩnh), so dropping components would trade a miss for a wrong
     # answer.
     focus = _viewbox_focus(viewbox)
+    resolved: tuple[str, tuple[float, float]] | None = None
     for hop in KEYED_GEO_HOPS:
         api_key = getattr(providers, hop.key_field, "") if providers is not None else ""
         if not api_key:
@@ -272,7 +369,16 @@ async def geocode(
             continue
         if hit is None:
             continue
-        await _db_store(db_query, hit, hop.name)
+        resolved = (hop.name, hit)
+        break
+    if resolved is not None and precision == "point" and focus is not None:
+        # A road distance is about to be quoted from this point (the
+        # point-precision contract), so a second provider sanity-checks it —
+        # see ``_second_opinion`` for the incident that bought this hop.
+        resolved = await _second_opinion(resolved, text, focus, providers, settings)
+    if resolved is not None:
+        provider_name, hit = resolved
+        await _db_store(db_query, hit, provider_name)
         await cache_set_json(
             key, {"lat": hit[0], "lng": hit[1]}, settings.geocoder_cache_ttl_seconds
         )
