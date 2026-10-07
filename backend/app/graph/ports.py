@@ -132,6 +132,13 @@ class TurnDecisions:
     # 2026-10-06). Login trouble outranks it (intent ``employee_support``), and
     # off the support account the flag never fires.
     self_checkin: bool = False
+    # The self-check-in SUB-INTENT, judged only when ``self_checkin`` is true:
+    # "enable" | "disable" | "how_to_gps" | "how_to_schedule" | "how_to_gates" |
+    # "how_to_tanca" | "how_to_general" | "none". "none" covers every missing,
+    # invalid, or degraded answer and never routes anything — on any account
+    # other than the TingTing support OA, or when the gate flag is false, this
+    # field is inert (the lane reads it inside that conjunctive guard only).
+    self_checkin_intent: str = "none"
     # True when Jev reads this turn's message as a payday-status question —
     # asking whether/when salary or wages have arrived ("có lương chưa",
     # "ứng lương được chưa"), judged by meaning, not by example phrases. On the

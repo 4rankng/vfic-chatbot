@@ -111,6 +111,30 @@ _JOB_SEEKING_CRITERIA = {
 
 _NOUL_CRITERIA = {"true": "Có", "false": "Không"}
 
+# The self-check-in sub-intent taxonomy — mirrors ``TurnDecisions.
+# self_checkin_intent`` (ports.py). The ``self_checkin`` noul flag stays the
+# GATE; this choice names WHAT the employee wants inside that gate, so the lane
+# can route enable/disable to the transactional flow and return one fixed
+# how-to line per topic. "none" is the inert default: off the support account,
+# or wherever the gate is false, nothing reads this field.
+_SELF_CHECKIN_INTENT_CRITERIA = {
+    "enable": "Người gửi MUỐN BẬT/ĐĂNG KÝ tự chấm công cho bản thân trên ứng dụng TingTing "
+    "(ví dụ 'đăng ký tự chấm công', 'bật tự chấm công cho em')",
+    "disable": "Người gửi MUỐN TẮT/hủy tự chấm công của bản thân (ví dụ 'tắt tự chấm công', "
+    "'hủy chế độ tự chấm công')",
+    "how_to_gps": "Hỏi cách BẬT QUYỀN VỊ TRÍ (GPS/vị trí) để tự chấm công được trên ứng dụng "
+    "hay trình duyệt",
+    "how_to_schedule": "Hỏi THỜI ĐIỂM được phép bấm 'Vào làm'/'Tan ca' (khung giờ, mấy giờ "
+    "được bấm, sao bấm không được)",
+    "how_to_gates": "Hỏi về ĐIỂM/KHU VỰC chấm công — chấm ở đâu, bao xa thì được, báo 'Ngoài "
+    "khu vực' là sao",
+    "how_to_tanca": "Hỏi về việc BẤM 'TAN CA' — tan ca để làm gì, quên bấm tan ca, báo 'Ca này "
+    "sẽ không tính lương' là sao",
+    "how_to_general": "Hỏi CHUNG về tự chấm công (cách dùng, ý nghĩa, bot có hỗ trợ không) mà "
+    "không rơi vào các mục trên",
+    "none": "Không liên quan đến tự chấm công, hoặc không xếp chắc chắn được — hướng xếp an toàn",
+}
+
 # Profile display labels are provider data the candidate typed themselves: they
 # range from clean full names to shop names, mottos, or keyboard mash. Jev is
 # the judge; persistence stays in code and only ever fills a blank lead name.
@@ -299,6 +323,24 @@ def build_turn_questions(
             ),
             "criteria": _NOUL_CRITERIA,
         },
+        # The self-check-in SUB-INTENT (plan §2.2): the ``self_checkin`` noul
+        # flag above stays the gate; this ONE choice question names WHAT the
+        # employee wants inside that gate, so the lane can route enable/disable
+        # into the transactional toggle flow and return one fixed line per
+        # how-to topic. Judged by meaning like every other judgment here; the
+        # safe answer for anything uncertain or unrelated is "none".
+        "self_checkin_intent": {
+            "type": "choice",
+            "instructions": (
+                "Nếu người gửi quan tâm TỰ CHẤM CÔNG trên ứng dụng TingTing (đọc "
+                "`message` kèm `recent`): xếp ý định cụ thể — muốn bật/đăng ký, muốn "
+                "tắt/hủy, hỏi cách bật quyền vị trí GPS, hỏi khung giờ bấm Vào làm/Tan "
+                "ca, hỏi điểm/khu vực chấm công, hỏi về bấm Tan ca, hay hỏi chung. "
+                "Không liên quan tự chấm công hoặc không rõ thì chọn none, không đoán. "
+                "Phán theo Ý ĐỊNH, không theo từ khóa."
+            ),
+            "criteria": _SELF_CHECKIN_INTENT_CRITERIA,
+        },
     }
     if include_profile_name:
         questions["profile_name_is_name"] = {
@@ -431,12 +473,22 @@ class JevDecisionClient:
         self_checkin = self._noul(answers.get("self_checkin"))
         wage_wait = self._noul(answers.get("wage_wait"))
 
+        # Missing/invalid reads stay "none" — the sub-intent only routes turns
+        # inside the self_checkin gate on the support account, so an unusable
+        # answer must never fire a fixed reply or open the toggle flow.
+        self_checkin_intent = str(
+            (answers.get("self_checkin_intent") or {}).get("choice") or "none"
+        ).strip().lower()
+        if self_checkin_intent not in _SELF_CHECKIN_INTENT_CRITERIA:
+            self_checkin_intent = "none"
+
         return TurnDecisions(
             intent=intent,
             intent_confidence=self._confidence(answers.get("intent")),
             job_seeking=job_seeking,
             login_problem=login_problem,
             self_checkin=self_checkin,
+            self_checkin_intent=self_checkin_intent,
             wage_wait=wage_wait,
             vacancy_listing=self._noul(answers.get("vacancy_listing")),
             pleasantry=self._noul(answers.get("pleasantry")),

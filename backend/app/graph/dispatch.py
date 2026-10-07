@@ -44,10 +44,7 @@ from app.graph.think_strip import (
     strip_markdown_decorations,
     strip_provider_artifacts,
 )
-from app.graph.tingting_guide import (
-    TINGTING_SELF_CHECKIN_IMAGE_URL,
-    TINGTING_SELF_CHECKIN_REPLY,
-)
+from app.graph.tingting_guide import TINGTING_SELF_CHECKIN_MEDIA
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
 from app.recruitment.domain.provider import (
     provider_from_conversation,
@@ -159,9 +156,13 @@ def _build_outbox_payload(
     payload: dict = {"chat_id": chat_id, "text": text}
     if quote_message_id:
         payload["quote_message_id"] = quote_message_id
-    if account_key == TINGTING_OA_ACCOUNT_KEY and text == TINGTING_SELF_CHECKIN_REPLY:
-        payload["media_url"] = TINGTING_SELF_CHECKIN_IMAGE_URL
-        payload["media_type"] = "image"
+    media = (
+        TINGTING_SELF_CHECKIN_MEDIA.get(text)
+        if account_key == TINGTING_OA_ACCOUNT_KEY
+        else None
+    )
+    if media:
+        payload.update(media)
     return payload
 
 

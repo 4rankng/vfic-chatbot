@@ -51,7 +51,10 @@ from app.graph.runtime_policy import TINGTING_TOOL_NAMES
 from app.graph.schemas import ROUTE_CONFIDENCE_FLOOR
 from app.graph.tingting_guide import (
     TINGTING_RESET_REDIRECT_REPLY,
-    TINGTING_SELF_CHECKIN_REPLY,
+    TINGTING_SELF_CHECKIN_GATES_REPLY,
+    TINGTING_SELF_CHECKIN_GPS_REPLY,
+    TINGTING_SELF_CHECKIN_SCHEDULE_REPLY,
+    TINGTING_SELF_CHECKIN_TANCA_REPLY,
     TINGTING_WAGE_WAIT_REPLY,
     tingting_hotline_reply,
     tingting_support_system_prompt,
@@ -460,16 +463,36 @@ async def _agent_turn(
         and not decisions.pleasantry
         and route.intent != "employee_support"
     ):
-        # Operator rule (2026-10-06): Jev classifies this turn's intent BY
-        # MEANING — asking how to / wanting to / registering for tự chấm công
-        # on the app — and the approved caption IS the reply; the send layer
-        # attaches the home-screen guide image to it (media keys on the exact
+        # Operator rule (2026-10-07): the self-check-in gate (Jev's
+        # ``self_checkin``, judged by meaning) plus the sub-intent choice
+        # (``self_checkin_intent``) route the turn three ways. (1) enable/disable
+        # is a MUTATION: it takes the employee-support route (reason
+        # ``self_checkin_action``) so the toggle tools bind, and falls through —
+        # the agent lane runs the OTP flow from the API guide below. (2) The four
+        # how-to topics return their operator-approved fixed line (the send layer
+        # attaches the topic's screenshot to the exact caption, media keys on
         # caption + account, so a sweep re-dispatch rebuilds the same payload).
-        # This replaced the old example-phrase prompt rule as the TRIGGER,
-        # which missed phrasings like "đăng ký tự chấm công" and fell to the
-        # redirect. Login trouble (employee_support) and closers (pleasantry)
-        # outrank it; off this account the flag never fires.
-        return TINGTING_SELF_CHECKIN_REPLY
+        # (3) A general how-to falls through to the model, which composes the
+        # answer from the persona's knowledge section. This branch sits BEFORE
+        # the wage_wait branch (a self-check-in phrasing can light both flags)
+        # and after the redirect above; login trouble (employee_support) and
+        # closers (pleasantry) outrank it; off this account the flags never fire.
+        if decisions.self_checkin_intent in ("enable", "disable"):
+            if tingting_reset_allowed:
+                route = employee_support_route(
+                    reason="self_checkin_action",
+                    confidence=max(route.confidence, ROUTE_CONFIDENCE_FLOOR),
+                )
+            # Without the reset pin the flow cannot run: fall through so the
+            # persona answers honestly instead of a fixed reply promising it.
+        elif decisions.self_checkin_intent == "how_to_gps":
+            return TINGTING_SELF_CHECKIN_GPS_REPLY
+        elif decisions.self_checkin_intent == "how_to_schedule":
+            return TINGTING_SELF_CHECKIN_SCHEDULE_REPLY
+        elif decisions.self_checkin_intent == "how_to_gates":
+            return TINGTING_SELF_CHECKIN_GATES_REPLY
+        elif decisions.self_checkin_intent == "how_to_tanca":
+            return TINGTING_SELF_CHECKIN_TANCA_REPLY
     if (
         tingting_support_account
         and decisions.wage_wait
@@ -779,6 +802,9 @@ async def _agent_turn(
                     "send_tingting_otp",
                     "confirm_tingting_otp",
                     "reset_tingting_password",
+                    "send_self_checkin_otp",
+                    "confirm_self_checkin_otp",
+                    "update_self_checkin",
                     # Project knowledge rides along only when the turn is NOT the
                     # employee-support OA: that OA answers the reset flow and
                     # nothing else, so it never reaches the recruiting catalog.
