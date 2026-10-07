@@ -40,6 +40,10 @@
       ],
       "files": [
         {
+          "path": "src/components/atomic-crm/vietnamTime.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/types.ts",
           "type": "registry:component"
         },
