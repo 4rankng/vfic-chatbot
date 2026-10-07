@@ -4,8 +4,12 @@ Before a staged category revision becomes the project's active knowledge, this
 module checks a bounded sample of records against their own declared query.
 Each sampled record's most query-like field (``question`` → ``title`` →
 ``name``) is embedded and cosine-compared against that record's aligned unit
-vector. A different record's high similarity cannot hide an unreachable answer.
-This is a necessary sanity check, not proof of production ranking or factual
+vector, with a per-field floor: 0.50 for recruiter-written questions, 0.45 for
+title labels, 0.30 for place-name labels (the transportation bus routes, whose
+short names measure systematically lower against long stops-and-notes records
+— measured, not guessed; see ``RETRIEVAL_SELFTEST_NAME_FLOOR``). A different
+record's high similarity cannot hide an unreachable answer. This is a
+necessary sanity check, not proof of production ranking or factual
 correctness; cross-project noise and retrieval policies still matter.
 
 A failure indicates that a sampled query and its own answer are poorly aligned.
@@ -50,6 +54,19 @@ RETRIEVAL_SELFTEST_FLOOR = 0.50
 # queries keep the calibrated 0.50; label fallbacks get 0.45, which still
 # rejects genuinely broken records (4P's mangled "KHO [MAT" measured 0.43).
 RETRIEVAL_SELFTEST_TITLE_FLOOR = 0.45
+
+# Name-fallback queries carry the lowest floor. Measured on the production
+# LG-DISPLAY transportation catalog (2026-10-07, n=17 sampled legacy route
+# names, first-25 window): every real, daily-running route label — "An
+# Dương", "An Lão", "Hồ Sen", "Kiến Thụy", "Cầu Rào"... — embeds 0.33-0.45
+# against its own stops-and-notes record, because a short place-name query is
+# systematically weak against a long record. None of them is a broken record;
+# they are the live bus catalog candidates ask about, and at the 0.45 title
+# floor ANY update to the category fails activation over them. 0.30 still
+# rejects near-orthogonal answers (random drift measures 0.0-0.2) while
+# letting every measured real label through. Question stays 0.50; title stays
+# 0.45.
+RETRIEVAL_SELFTEST_NAME_FLOOR = 0.30
 
 # Bound the extra embedding spend per activation. The first records are the
 # ones recruiters wrote first; a gate over a bounded sample still catches a
@@ -165,6 +182,8 @@ async def retrieval_selftest_failures(
             RETRIEVAL_SELFTEST_FLOOR
             if field == "question"
             else RETRIEVAL_SELFTEST_TITLE_FLOOR
+            if field == "title"
+            else RETRIEVAL_SELFTEST_NAME_FLOOR
         )
         similarity = _cosine(query_vector, record_vector)
         if not math.isfinite(similarity) or similarity < floor:

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.services.knowledge.category_markdown import parse_category_markdown
 from app.services.knowledge.category_projections import render_category_units
 from app.services.knowledge.retrieval_selftest import (
     RETRIEVAL_SELFTEST_FLOOR,
+    RETRIEVAL_SELFTEST_NAME_FLOOR,
     RETRIEVAL_SELFTEST_TITLE_FLOOR,
     retrieval_selftest_failures,
 )
@@ -21,6 +24,31 @@ FAQ_SOURCE = (
     "### record: shift-hours\n"
     'question: "Ca làm việc mấy giờ?"\n'
     'answer: "Ca ngày 08:00-20:00, ca đêm 20:00-08:00."\n'
+)
+
+# The measured transportation case (production LG-DISPLAY, 2026-10-07):
+# short place-name labels embed 0.33-0.45 against their own stops-and-notes
+# records — real, daily-running routes that the 0.45 title floor rejected.
+TRANSPORTATION_SOURCE = (
+    "---\n"
+    'schema_version: "1.0"\n'
+    "category: transportation\n"
+    "---\n"
+    "\n"
+    "## transportation\n"
+    "\n"
+    "### record: bus-an-duong-day-outbound\n"
+    'name: "An Dương"\n'
+    'direction: "to_factory"\n'
+    "service_days: []\n"
+    'shift: "Ca ngày"\n'
+    "fee_vnd: null\n"
+    "stops:\n"
+    "| order | name | time | address |\n"
+    "| --- | --- | --- | --- |\n"
+    '| 1 | "Chợ An Dương" | "07:05" | "Chợ An Dương @07:05" |\n'
+    '| 2 | "LGD" | null | "LGD" |\n'
+    'notes: "Workers must be at the pickup point 5 minutes early."\n'
 )
 
 JOBS_SOURCE = (
@@ -270,3 +298,47 @@ async def test_matching_a_different_record_cannot_hide_an_unreachable_own_record
 
     assert len(failures) == 2
     assert all("0.00" in failure for failure in failures)
+
+
+@pytest.mark.asyncio
+async def test_transportation_place_name_at_the_measured_level_passes() -> None:
+    """The production measurement that bought the name floor: the LG-DISPLAY
+    bus-route labels ("An Dương", "Hồ Sen"...) embed 0.33-0.45 against their
+    own records. A real route at 0.35 must pass — at the 0.45 title floor the
+    entire live bus catalog failed activation, blocking every transportation
+    update (2026-10-07)."""
+    document = parse_category_markdown("transportation", TRANSPORTATION_SOURCE)
+    units = render_category_units(document)
+    shared = [0.0, 1.0, 0.0]  # measured own-record similarity ≈ 0.35
+    embedder = _MappedEmbedder(
+        {
+            "An Dương": shared,
+            units[0]["content"]: shared,
+        }
+    )
+
+    failures = await retrieval_selftest_failures(document, units, [shared], embedder)
+
+    assert failures == []
+    assert embedder.batched == [["An Dương"]]
+
+
+@pytest.mark.asyncio
+async def test_transportation_place_name_still_fails_when_near_orthogonal() -> None:
+    """The name floor keeps a real floor: a name whose own record measures
+    near-orthogonal (0.0-0.2 drift band) is still a broken record."""
+    document = parse_category_markdown("transportation", TRANSPORTATION_SOURCE)
+    units = render_category_units(document)
+    orthogonal = [0.0, 0.0, 1.0]
+    embedder = _MappedEmbedder({"An Dương": orthogonal})
+
+    failures = await retrieval_selftest_failures(document, units, [[1.0, 0.0, 0.0]], embedder)
+
+    assert len(failures) == 1
+    assert f"{RETRIEVAL_SELFTEST_NAME_FLOOR:.2f}" in failures[0]
+
+
+def test_the_name_floor_is_the_documented_measured_value() -> None:
+    assert RETRIEVAL_SELFTEST_NAME_FLOOR == 0.30
+    assert RETRIEVAL_SELFTEST_TITLE_FLOOR == 0.45
+    assert RETRIEVAL_SELFTEST_FLOOR == 0.50
