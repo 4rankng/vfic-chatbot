@@ -348,10 +348,6 @@ class TingtingIntegrationSettingsOut(BaseModel):
     oa_token_updated_at: str | None = None
     # Fixed label: the token is not an admin credential for this account.
     oa_token_managed_note: str = ""
-    # Admin kill switch for candidate-message processing on the support OA.
-    # Absent row = enabled; "false" makes the worker stand turns down before
-    # the graph runs (no LLM tokens, no reply).
-    tingting_oa_enabled: bool = True
 
 
 class TingtingIntegrationSettingsUpdate(BaseModel):
@@ -366,8 +362,6 @@ class TingtingIntegrationSettingsUpdate(BaseModel):
     # and rotates the token pair (push to /webhooks/zalo-oa-token + pull from
     # its GET endpoint), and `extra="forbid"` makes any posted `zalo_oa_*`
     # field a 422 instead of a silently ignored credential.
-    # The processing kill switch; omitted keeps the stored value.
-    tingting_oa_enabled: bool | None = None
 
 
 # ─── Facebook / Messenger (Phase 4) ─────────────────────────────────────────

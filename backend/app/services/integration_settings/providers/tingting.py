@@ -44,7 +44,6 @@ class TingtingSettingsMixin:
     async def admin_tingting_view(self) -> dict:
         view = await self._tingting_service().admin_view()
         view.update(await self._tingting_oa_view())
-        view["tingting_oa_enabled"] = await self.resolve_tingting_oa_enabled()
         return view
 
     def _tingting_oa_view(self):
@@ -73,23 +72,6 @@ class TingtingSettingsMixin:
             await service.replace_reset_oa_id(values.get("reset_oa_id"), actor_id=actor_id)
         if "hotline" in values:
             await service.replace_hotline(values.get("hotline"), actor_id=actor_id)
-        if "tingting_oa_enabled" in values:
-            enabled = bool(values.get("tingting_oa_enabled"))
-            await self._write_setting(
-                TINGTING_OA_ENABLED,
-                "true" if enabled else "false",
-                actor_id=actor_id,
-                is_secret=False,
-            )
-            await record_audit(
-                self.db,
-                action="update_tingting_integration_settings",
-                actor_id=actor_id,
-                target_type="integration_settings",
-                target_id="tingting",
-                payload={"tingting_oa_enabled": enabled},
-            )
-            await self.db.commit()
         return await self.admin_tingting_view()
 
 
