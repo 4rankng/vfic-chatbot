@@ -1726,10 +1726,10 @@ async def test_messenger_ad_prefill_message_is_flagged_and_skipped(monkeypatch):
     monkeypatch.setattr("app.channels.ingress.ChannelIngressService", FakeIngress)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
     monkeypatch.setattr(webhooks, "enqueue_messenger_profile_enrichment", MagicMock())
-    flagging = AsyncMock(return_value=True)
-    monkeypatch.setattr(webhooks, "flag_messenger_ad_entry", flagging)
-    enqueue = MagicMock()
-    monkeypatch.setattr(webhooks, "enqueue_chat_turn", enqueue)
+    flagged = AsyncMock(return_value=False)
+    monkeypatch.setattr(webhooks, "messenger_ad_entry_flagged", flagged)
+    turn = AsyncMock()
+    monkeypatch.setattr(webhooks, "enqueue_facebook_turn", turn)
     monkeypatch.setattr(webhooks, "record_webhook_ack_ms", AsyncMock())
 
     payload = json.dumps({
@@ -1751,8 +1751,10 @@ async def test_messenger_ad_prefill_message_is_flagged_and_skipped(monkeypatch):
     )
 
     assert response.status_code == 200
-    flagging.assert_awaited_once()
-    enqueue.assert_not_called()
+    flagged.assert_awaited_once()
+    # The marker rides genuine first messages too, so the turn runs and the
+    # attempt itself is the test.
+    turn.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -1800,8 +1802,8 @@ async def test_messenger_genuine_message_clears_the_flag_and_rides_the_normal_pa
     monkeypatch.setattr("app.channels.ingress.ChannelIngressService", FakeIngress)
     monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
     monkeypatch.setattr(webhooks, "enqueue_messenger_profile_enrichment", MagicMock())
-    flagging = AsyncMock(return_value=False)
-    monkeypatch.setattr(webhooks, "flag_messenger_ad_entry", flagging)
+    flagged = AsyncMock(return_value=False)
+    monkeypatch.setattr(webhooks, "messenger_ad_entry_flagged", flagged)
     cleared = AsyncMock(return_value=False)
     monkeypatch.setattr(webhooks, "clear_messenger_ad_entry_flag", cleared)
     turn = AsyncMock()
@@ -1823,6 +1825,82 @@ async def test_messenger_genuine_message_clears_the_flag_and_rides_the_normal_pa
     )
 
     assert response.status_code == 200
-    flagging.assert_not_awaited()
+    flagged.assert_not_awaited()
     cleared.assert_awaited_once()
     turn.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_messenger_referral_message_on_a_flagged_thread_is_skipped(monkeypatch):
+    """Once a send has been refused with the closed-window error the thread is
+    flagged; the next ad-referral message (a re-click prefill) is skipped
+    quietly instead of burning another doomed turn. A genuine message has no
+    marker, so it never reaches this branch — it clears the flag instead."""
+
+    from app.api import webhooks
+
+    conversation_id = uuid.uuid4()
+    persisted = SimpleNamespace(
+        conversation_id=str(conversation_id),
+        body="Công ty có xe đưa đón không?",
+        provider_message_id="mid-ad-2",
+        created_at=None,
+        id=19,
+    )
+    outcome = SimpleNamespace(
+        status="persisted", message=persisted, conversation_id=str(conversation_id)
+    )
+
+    class FakeIngress:
+        def __init__(self, db) -> None:
+            pass
+
+        async def ingest(self, _message):
+            return outcome
+
+    monkeypatch.setattr(webhooks, "enforce_webhook_rate_limit", AsyncMock())
+    monkeypatch.setattr(webhooks, "IntegrationSettingsService",
+                        lambda _db: SimpleNamespace(
+                            resolve_facebook_oauth=AsyncMock(return_value=SimpleNamespace(app_secret="s"))))
+    monkeypatch.setattr(
+        "app.channels.providers.facebook_signature.verify_messenger_signature",
+        lambda **_kwargs: SimpleNamespace(verified=True, reason=None),
+    )
+    monkeypatch.setattr(
+        webhooks,
+        "_resolve_active_facebook_page",
+        AsyncMock(return_value=(SimpleNamespace(), SimpleNamespace(account_key="page-1"))),
+    )
+    monkeypatch.setattr("app.channels.ingress.ChannelIngressService", FakeIngress)
+    monkeypatch.setattr(webhooks, "_runtime_authority_or_inactive", AsyncMock(return_value=None))
+    monkeypatch.setattr(webhooks, "enqueue_messenger_profile_enrichment", MagicMock())
+    flagged = AsyncMock(return_value=True)
+    monkeypatch.setattr(webhooks, "messenger_ad_entry_flagged", flagged)
+    cleared = AsyncMock()
+    monkeypatch.setattr(webhooks, "clear_messenger_ad_entry_flag", cleared)
+    turn = AsyncMock()
+    monkeypatch.setattr(webhooks, "enqueue_facebook_turn", turn)
+    monkeypatch.setattr(webhooks, "record_webhook_ack_ms", AsyncMock())
+
+    payload = json.dumps({
+        "entry": [{
+            "messaging": [{
+                "sender": {"id": "psid-1"},
+                "recipient": {"id": "page-1"},
+                "message": {
+                    "mid": "mid-ad-2",
+                    "text": "Công ty có xe đưa đón không?",
+                    "referral": {"source": "ADS", "ad_id": "ad-1"},
+                },
+            }]
+        }]
+    }).encode()
+
+    response = await webhooks.facebook_webhook(
+        FakeRequest(payload), db=MagicMock()
+    )
+
+    assert response.status_code == 200
+    flagged.assert_awaited_once()
+    cleared.assert_not_awaited()
+    turn.assert_not_awaited()

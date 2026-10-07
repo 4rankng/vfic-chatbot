@@ -82,22 +82,20 @@ async def apply_messenger_referral(
     await service.stamp_attribution(conversation, attribution)
 
 
-async def flag_messenger_ad_entry(db: AsyncSession, outcome) -> bool:
-    """Flag an ad-entry Messenger thread so the bot skips the ad's prefill.
+async def messenger_ad_entry_flagged(db: AsyncSession, conversation_id: str) -> bool:
+    """Whether a thread is flagged to skip ad-prefill turns (window was closed).
 
-    Meta's Click-to-Messenger prefill is page-initiated content: the 24h reply
-    window never opens, so an automated reply is always refused (code 10,
-    subcode 2018278) and every ad re-click would pile on another failed
-    bubble. The conversation stays in BOT mode; the flag makes the webhook and
-    the reconcile sweep skip the prefill until the candidate's first genuine
-    message clears it and reopens the standard window. Best-effort by
-    contract — callers must never fail the webhook ack on this.
+    The flag is stamped by the bot-outcome recorder when Meta refuses a send
+    with the closed-window error, and cleared on the candidate's first genuine
+    (non-referral) message — the act that reopens the standard window.
     """
-    persisted = outcome.message
-    if persisted is None:
-        return False
-    service = ConversationService(db)
-    return await service.flag_ad_entry_prefill(uuid.UUID(persisted.conversation_id))
+    conversation = await db.scalar(
+        select(Conversation).where(Conversation.id == uuid.UUID(conversation_id))
+    )
+    return bool(
+        conversation is not None
+        and (conversation.attribution or {}).get("ad_prefill_pending") == "true"
+    )
 
 
 async def clear_messenger_ad_entry_flag(db: AsyncSession, conversation_id: str) -> bool:

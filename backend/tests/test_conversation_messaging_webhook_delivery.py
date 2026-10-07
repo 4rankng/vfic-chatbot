@@ -69,41 +69,33 @@ async def test_facebook_turn_uses_exact_persisted_message(monkeypatch) -> None:
     assert not hasattr(db, "scalars")
 
 
-async def test_ad_entry_prefill_flags_the_thread_and_reports(monkeypatch) -> None:
-    """The webhook flags the thread so the bot skips the ad prefill while the
-    conversation stays in BOT mode."""
+async def test_messenger_ad_entry_flagged_reads_the_thread_flag(monkeypatch) -> None:
+    """The flag is what skips an ad thread's next referral message — stamped
+    by the outcome recorder when Meta refuses a send with the closed-window
+    error, cleared by the candidate's first genuine message."""
     conversation_id = uuid.uuid4()
-    flagged: list[uuid.UUID] = []
+    flagged_conv = SimpleNamespace(
+        id=conversation_id,
+        attribution={"ad_prefill_pending": "true", "ad_id": "ad-1"},
+    )
+    clean_conv = SimpleNamespace(id=uuid.uuid4(), attribution={})
 
-    class Service:
-        def __init__(self, db) -> None:
-            pass
-
-        async def flag_ad_entry_prefill(self, conversation_id):
-            flagged.append(conversation_id)
-            return True
-
-    monkeypatch.setattr(webhook_delivery, "ConversationService", Service)
-    db = SimpleNamespace()
+    async def scalar(_stmt):
+        return flagged_conv
 
     assert (
-        await webhook_delivery.flag_messenger_ad_entry(db, _persisted_outcome(conversation_id))
+        await webhook_delivery.messenger_ad_entry_flagged(
+            SimpleNamespace(scalar=AsyncMock(side_effect=scalar)), str(conversation_id)
+        )
         is True
     )
-    assert flagged == [conversation_id]
 
-
-async def test_ad_entry_prefill_flag_ignores_an_outcome_without_a_message(monkeypatch) -> None:
-    class Service:
-        def __init__(self, db) -> None:
-            raise AssertionError("an outcome without a message must not reach the service")
-
-    monkeypatch.setattr(webhook_delivery, "ConversationService", Service)
-    db = SimpleNamespace()
+    async def scalar_clean(_stmt):
+        return clean_conv
 
     assert (
-        await webhook_delivery.flag_messenger_ad_entry(
-            db, InboundIngressResult(status="duplicate")
+        await webhook_delivery.messenger_ad_entry_flagged(
+            SimpleNamespace(scalar=AsyncMock(side_effect=scalar_clean)), str(clean_conv.id)
         )
         is False
     )

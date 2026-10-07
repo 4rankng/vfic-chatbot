@@ -26,7 +26,11 @@ from app.models.conversation import (
     Message,
     MessageSender,
 )
-from app.services.conversation._shared import affected_rows, utcnow
+from app.services.conversation._shared import (
+    AD_ENTRY_PREFILL_SYSTEM_NOTE,
+    affected_rows,
+    utcnow,
+)
 from app.services.lead.interest import record_conversation_project_interest
 
 
@@ -206,6 +210,23 @@ class BotOutcomeMixin:
         # touches conv in Python below; the owner branch bumped via SQL above.
         if owner is None:
             conv.conversation_seq = (conv.conversation_seq or 1) + 1
+        # A Messenger send refused with Meta's closed-window error (code 10
+        # subcode 2018278) is the one reliable signal that an ad thread's
+        # pre-filled message never opened the 24h window: stamp the skip flag
+        # + the explainer note so the webhook and the reconcile sweep stop
+        # spending turns on it (2026-10-07). Rides this transaction; the flag
+        # is its own dedupe, so the note lands once per thread.
+        if external_error and "allowed window" in external_error.lower():
+            attribution = conv.attribution or {}
+            if attribution.get("ad_prefill_pending") != "true":
+                conv.attribution = {**attribution, "ad_prefill_pending": "true"}
+                self.db.add(
+                    Message(
+                        conversation_id=conv.id,
+                        sender=MessageSender.SYSTEM,
+                        body=AD_ENTRY_PREFILL_SYSTEM_NOTE,
+                    )
+                )
         # Transactional outbox (Tech-Lead Directive §14): record the dispatch
         # outcome in the same transaction as the message. Best-effort — outbox
         # failures never block the turn (logged in outbox_service).

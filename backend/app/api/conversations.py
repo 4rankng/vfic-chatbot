@@ -33,6 +33,7 @@ from app.schemas.dashboard import AttentionReason
 from app.shared.domain.errors import ConflictError, NotFoundError, ValidationError
 from app.shared.infrastructure.db import get_request_db
 from app.shared.infrastructure.rate_limits import enforce_web_chat_turn_rate_limit
+from app.services.conversation.scheduler import enqueue_latest_unanswered_worker_message
 from app.services.conversation import ConversationConflict, ConversationService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -304,6 +305,37 @@ async def release(
         raise ConflictError(
             f"Cần tiếp quản hội thoại trước khi trả lại ChatBot ({who})."
         )
+    return ConversationOut.model_validate(conv)
+
+
+@router.post("/{conv_id}/force-bot-reply", response_model=ConversationOut)
+async def force_bot_reply(
+    conv_id: uuid.UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
+) -> ConversationOut:
+    """Nudge the bot to answer the latest unanswered candidate message now.
+
+    The recruiter's lever on the two shapes that leave a candidate hanging
+    without a recruiter takeover: an ad-prefill thread the bot skipped
+    (Meta's closed window), and a turn that died before its reply went out.
+    Clears the ad-prefill skip flag (the recruiter deciding to answer is the
+    operator override) and enqueues a bot turn for the pending inbound. The
+    turn itself still obeys the mode guard, so a taken-over thread is refused
+    here — release it to Chatbot instead.
+    """
+    conv = await _load(conv_id, db, user)
+    if conv.mode == ConversationMode.HUMAN or conv.status != ConversationStatus.OPEN:
+        raise ConflictError(
+            "Hội thoại đang do nhân viên xử lý — trả lại Chatbot để bot trả lời."
+        )
+    svc = ConversationService(db)
+    await svc.clear_ad_entry_prefill_flag(conv.id)
+    enqueued = await enqueue_latest_unanswered_worker_message(
+        svc, conv, enqueue=enqueue_chat_turn
+    )
+    if not enqueued:
+        raise ConflictError("Không có tin nhắn ứng viên nào đang chờ bot trả lời.")
     return ConversationOut.model_validate(conv)
 
 

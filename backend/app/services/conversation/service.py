@@ -145,16 +145,6 @@ class ConversationService:
             preserve_turn_ownership=preserve_turn_ownership,
         )
 
-    async def flag_ad_entry_prefill(self, conversation_id: uuid.UUID) -> bool:
-        """Mark a thread's newest inbound as the ad prefill — bot skips it.
-
-        See :meth:`BotConversationState.flag_ad_entry_prefill`: Meta refuses
-        every automated reply on a Click-to-Messenger prefill (the 24h window
-        never opens), so the flag makes webhook and reconcile skip it while the
-        conversation stays in BOT mode.
-        """
-        return await self.state.flag_ad_entry_prefill(conversation_id)
-
     async def clear_ad_entry_prefill_flag(self, conversation_id: uuid.UUID) -> bool:
         """Clear the ad-prefill skip flag on the candidate's first real message.
 

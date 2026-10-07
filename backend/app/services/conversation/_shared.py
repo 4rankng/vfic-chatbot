@@ -26,6 +26,18 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# The human-visible note left when a Click-to-Messenger ad thread's reply is
+# refused with Meta's closed-window error: the ad's pre-filled message is
+# page-initiated, so the 24h window never opened for that PSID and the thread
+# waits for the candidate's first genuine message. Lives here because both
+# halves stamp it — the bot-outcome recorder (on the refused send) and the
+# bot-path flag writer.
+AD_ENTRY_PREFILL_SYSTEM_NOTE = (
+    "Ứng viên đến từ quảng cáo Messenger và chưa tự nhắn tin nào. Meta chặn "
+    "trang chủ động gửi tin trước — chờ ứng viên nhắn tin thật để tiếp tục."
+)
+
+
 def affected_rows(result: Result[Any]) -> int:
     """How many rows a DML statement actually touched.
 

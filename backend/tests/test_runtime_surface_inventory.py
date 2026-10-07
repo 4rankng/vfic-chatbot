@@ -40,7 +40,9 @@ EXPECTED_ROUTE_COUNTS = {
     # Endpoint-level snapshot: adding a decorator inside an existing module must
     # fail this gate and force an explicit authority-classification review.
     "auth": 7,  # +1 server-side logout (SEC-03)
-    "conversations": 19,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
+    "conversations": 20,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
+    # +1 POST /{id}/force-bot-reply — the recruiter's nudge that answers the
+    # latest unanswered candidate message (clears the ad-prefill skip flag).
     # +1 GET /by-contact-ids — batch contact→conversations lookup (max 200),
     # viewer-scoped, behind the dashboard candidate-card consolidation.
     "dashboard": 2,
@@ -84,7 +86,10 @@ EXPECTED_ROUTE_COUNTS = {
 # 2026-10-07: +1 knowledge route (POST /documents/extract-text,
 # capability.knowledge — the stateless single-page .docx pre-fill extraction);
 # digest recomputed from the post-change scan.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "a75b26cdcc4bde4d8f9a62b1f92fbca38006b4984a2b2b40ad08d7b1396fc50b"
+# 2026-10-07 (later): +1 conversations route (POST /{id}/force-bot-reply,
+# active_kernel — the recruiter's nudge answering the latest unanswered
+# candidate message); digest recomputed from the post-change scan.
+EXPECTED_ROUTE_INVENTORY_SHA256 = "f0193909ec25833e58fdf8a5ee7fa280461d13f3f4fd58787af5cb48b9b10a79"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -220,7 +225,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # provider files to their pre-change state reproduces the prior digest
     # byte-for-byte, so this single site is the whole difference. (The adapter's
     # new logging is scan-neutral.)
-    "provider_boundary": 101,
+    "provider_boundary": 102,  # +1 the TingTing self check-in toggle's payroll egress site (3ab65a44)
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -260,7 +265,7 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: a turn that held the per-chat mutex hands the conversation to a newer
     # inbound the ingress guard dropped, via chatbot_worker._handoff_to_newer_inbound
     # -> enqueue_latest_unanswered_worker_message.
-    "queue_producer": 29,  # -3 legacy KB-version lane; -8 Google Sheet sync producers (0067)
+    "queue_producer": 30,  # -3 legacy KB-version lane; -8 Google Sheet sync producers (0067); +1 force-bot-reply
     # -1: the custom provider stopped reading a stored context-window row (the
     # field left the settings UI), so resolve_custom_llm._load's `get` count
     # drops 7→6 at the same site.
@@ -370,7 +375,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # 2026-10-06 (later): the new `_error_detail_from_envelope` transport helper
 # (+1 provider_boundary at the annotated count above), so the digest was
 # recomputed from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "ff771697e2873ff34cb9587eb5465d2b3e3b095ac2da0bd1e417b16dfcfe35dd"
+# 2026-10-07: +1 provider_boundary — the TingTing self check-in toggle tools
+# (commit 3ab65a44) add a payroll-side egress site; +1 queue_producer — the
+# force-bot-reply endpoint enqueues via enqueue_latest_unanswered_worker_message.
+# Digest recomputed from the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "3f85d93a2be38c6e9580ffe5255ffb67f4fd43b076ebe5c2d7691431b83ec224"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

@@ -40,7 +40,10 @@ from app.models.conversation import (
 )
 from app.recruitment.domain.proactive_policy import PROACTIVE_OPTOUT_PHRASES
 from app.services.audit_service import record_audit
-from app.services.conversation._shared import merge_attribution, utcnow
+from app.services.conversation._shared import (
+    merge_attribution,
+    utcnow,
+)
 from app.services.conversation.bot_outcome import BotOutcomeMixin
 from app.services.conversation.locking import LockingMixin
 from app.services.conversation.reconcile import ReconcileMixin
@@ -55,17 +58,6 @@ _SEMI_AUTO_INACTIVITY = timedelta(minutes=30)
 # handoff reply. Kept as a constant so the deploy smoke gate can assert the
 # operator-visible artifact without duplicating the literal.
 ESCALATION_SYSTEM_NOTE = "Luồng trích xuất đề nghị nhân viên xác minh ý định liên hệ."
-
-# The human-visible note left when a Click-to-Messenger ad thread's only
-# "inbound" is the ad's own pre-filled question. Meta counts the prefill as
-# page-initiated, so the 24h reply window never opens and every automated
-# reply is refused (code 10, subcode 2018278) — production 2026-10-07. The
-# thread parks for a human; the candidate's first real message opens the
-# standard window and recruiter replies deliver normally.
-AD_ENTRY_PREFILL_SYSTEM_NOTE = (
-    "Ứng viên đến từ quảng cáo Messenger và chưa tự nhắn tin nào. Meta chặn "
-    "trang chủ động gửi tin trước — chờ ứng viên nhắn tin thật để tiếp tục."
-)
 
 logger = logging.getLogger(__name__)
 
@@ -276,63 +268,6 @@ class BotConversationState(
                 await self.db.rollback()
             except Exception:  # noqa: BLE001 — rollback failure must stay silent too
                 logger.debug("attribution stamp rollback failed", exc_info=True)
-
-    async def flag_ad_entry_prefill(
-        self,
-        conversation_id: uuid.UUID,
-    ) -> bool:
-        """Record that a thread's newest inbound is the ad prefill — bot skips it.
-
-        Meta counts a Click-to-Messenger ad's pre-filled message as
-        page-initiated, so the 24h messaging window never opens and any reply
-        is refused (``code 10, subcode 2018278``). The conversation stays in
-        BOT mode: the flag makes the reconcile sweep skip it (so the unanswered
-        prefill never triggers a recovery turn) while the webhook skips the
-        immediate turn. The candidate's first genuine message clears the flag
-        (:meth:`clear_ad_entry_prefill_flag`), reopens the standard window, and
-        the bot answers it through the normal path.
-
-        Writes the explainer note once, on the first flag. Idempotent: a thread
-        already flagged reports without rewriting. Unknown ids report False.
-        """
-        conv = await self.db.get(Conversation, conversation_id)
-        if conv is None:
-            return False
-        attribution = conv.attribution or {}
-        merged = merge_attribution(attribution, {"ad_prefill_pending": "true"})
-        if merged == attribution:
-            return True
-
-        conv.attribution = merged
-        system_note = Message(
-            conversation_id=conv.id,
-            sender=MessageSender.SYSTEM,
-            body=AD_ENTRY_PREFILL_SYSTEM_NOTE,
-        )
-        self.db.add(system_note)
-        await record_audit(
-            self.db,
-            action="ad_entry_prefill_flagged",
-            target_type="conversation",
-            target_id=str(conv.id),
-            payload={"first_flag": bool(system_note)},
-        )
-
-        await self.db.commit()
-        await self.db.refresh(system_note)
-        await self.db.refresh(conv)
-        # Post-commit bookkeeping must never fail the webhook ack (same
-        # contract as record_inbound's realtime events).
-        try:
-            await self.events.message_created(system_note, conv)
-            await self.events.conversation_updated(conv)
-        except Exception:  # noqa: BLE001 — a UI update never breaks the ack
-            logger.warning(
-                "ad-entry prefill realtime events failed conversation=%s",
-                conv.id,
-                exc_info=True,
-            )
-        return True
 
     async def clear_ad_entry_prefill_flag(
         self,
