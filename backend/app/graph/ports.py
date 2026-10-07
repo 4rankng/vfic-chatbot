@@ -257,9 +257,13 @@ class GraphRetrievalPort(
 
     # The conversation channel's linked projects: the catalog's starting
     # point (ranked first), never a filter — every active project stays
-    # consultable. Class-attribute default so fakes without it still satisfy
-    # the port; the retrieval repository derives it from the page scope.
-    channel_priority_project_ids: frozenset[str] = frozenset()
+    # consultable. Read-only on purpose: a plain protocol attribute would be
+    # invariant, so the retrieval repository's derived @property could never
+    # satisfy it. The default keeps fakes without the member structurally
+    # valid; the repository derives it from the page scope.
+    @property
+    def channel_priority_project_ids(self) -> frozenset[str]:
+        return frozenset()
 
     async def match_memories(self, emb: str, top_k: int, filter_json: str) -> list[Any]: ...
 
