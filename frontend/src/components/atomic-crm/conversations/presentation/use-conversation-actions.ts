@@ -67,7 +67,10 @@ const hasAuthoritativeModeUpdate = (
  * state again. Writes are serialized and cannot complete into another thread.
  */
 export const useConversationActions = (record?: Conversation) => {
-  const modeWriter = useDataProvider<DataProvider & ConversationModeWriter>();
+  const modeWriter = useDataProvider<
+    DataProvider &
+      ConversationModeWriter & { forceBotReply(id: string): Promise<unknown> }
+  >();
   const notify = useNotify();
   const refresh = useRefresh();
   const [localState, setLocalState] = useState<LocalModeState>();
@@ -180,6 +183,31 @@ export const useConversationActions = (record?: Conversation) => {
     await setConversationMode("bot");
   };
 
+  /** Nudge the bot to answer the latest unanswered candidate message now —
+   *  the recruiter's lever on an ad-prefill thread the bot skipped or a turn
+   *  that died before its reply went out. */
+  const handleForceBotReply = async () => {
+    if (!record || pendingRequestRef.current) return;
+    const request = { conversationId: record.id };
+    pendingRequestRef.current = request;
+    setPendingConversationId(record.id);
+    try {
+      await modeWriter.forceBotReply(record.id);
+      if (pendingRequestRef.current !== request) return;
+      notify("conversations.force_reply.success", { type: "success" });
+      refresh();
+    } catch {
+      if (pendingRequestRef.current === request) {
+        notify("conversations.force_reply.error", { type: "error" });
+      }
+    } finally {
+      if (pendingRequestRef.current === request) {
+        pendingRequestRef.current = undefined;
+        setPendingConversationId(undefined);
+      }
+    }
+  };
+
   return {
     effectiveMode,
     isBotMode,
@@ -189,5 +217,6 @@ export const useConversationActions = (record?: Conversation) => {
     setConversationMode,
     handleTakeover,
     handleRelease,
+    handleForceBotReply,
   };
 };

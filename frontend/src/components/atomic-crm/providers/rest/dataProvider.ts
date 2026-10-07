@@ -260,6 +260,8 @@ export interface CrmDataProviderMethods {
   retryHumanReply(conversationId: string, messageId: string): Promise<void>;
   takeOverConversation(conversationId: string): Promise<ApiRecord>;
   releaseConversation(conversationId: string): Promise<ApiRecord>;
+  /** Nudge the bot to answer the latest unanswered candidate message now. */
+  forceBotReply(conversationId: string): Promise<ApiRecord>;
   setConversationMode(
     conversationId: string,
     mode: EditableConversationMode,
@@ -317,6 +319,13 @@ const getDataProviderWithCustomMethods = (): CrmDataProvider => ({
   async releaseConversation(conversationId: string) {
     return apiJson<ApiRecord>(
       `${BASE}/conversations/${encodeURIComponent(conversationId)}/release`,
+      { method: "POST" },
+    ).then((r) => normalize("conversations", r));
+  },
+
+  async forceBotReply(conversationId: string) {
+    return apiJson<ApiRecord>(
+      `${BASE}/conversations/${encodeURIComponent(conversationId)}/force-bot-reply`,
       { method: "POST" },
     ).then((r) => normalize("conversations", r));
   },

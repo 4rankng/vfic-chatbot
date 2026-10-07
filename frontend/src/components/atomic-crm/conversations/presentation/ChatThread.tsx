@@ -147,15 +147,28 @@ export const ChatThread = ({
     needsClaim: internalNeedsClaim,
     canHumanReply: internalCanHumanReply,
     handleTakeover: internalHandleTakeover,
+    handleForceBotReply: internalHandleForceBotReply,
     isChangingMode: internalIsChangingMode,
   } = useConversationActions(conversation);
   const isBotMode = isBotModeOverride ?? internalIsBotMode;
   const needsClaim = needsClaimOverride ?? internalNeedsClaim;
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
+  const handleForceBotReply = internalHandleForceBotReply;
   const isChangingMode = Boolean(
     isChangingModeOverride ?? internalIsChangingMode,
   );
+  const [isForcingBotReply, setIsForcingBotReply] = useState(false);
+
+  const handleForceBotReplyClick = async () => {
+    if (isForcingBotReply) return;
+    setIsForcingBotReply(true);
+    try {
+      await handleForceBotReply();
+    } finally {
+      setIsForcingBotReply(false);
+    }
+  };
   // Footer is always present for a selected conversation so the bottom row is a
   // stable boundary in every mode. Content is derived from existing state only.
   const showTakeoverNotice =
@@ -678,6 +691,20 @@ export const ChatThread = ({
                 ? "Hội thoại cần nhân viên xác minh trước khi trả lời."
                 : "Chatbot tự động trả lời."}
             </span>
+            {isBotMode ? (
+              <Button
+                type="button"
+                size="sm"
+                color="primary"
+                className="uu-scope inline-takeover-btn tt-btn tt-btn-sm tt-btn-outline"
+                isDisabled={isForcingBotReply || isChangingMode}
+                isLoading={isForcingBotReply}
+                showTextWhileLoading
+                onPress={handleForceBotReplyClick}
+              >
+                Cho bot trả lời
+              </Button>
+            ) : null}
             <Button
               type="button"
               size="sm"

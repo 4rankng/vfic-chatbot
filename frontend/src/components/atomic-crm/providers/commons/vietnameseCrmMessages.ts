@@ -141,6 +141,10 @@ export const vietnameseCrmMessages = {
       success: "Đã chuyển sang ChatBot",
       error: "Trả hội thoại về ChatBot thất bại",
     },
+    force_reply: {
+      success: "Bot đang soạn trả lời cho tin nhắn chờ.",
+      error: "Không tìm thấy tin nhắn ứng viên nào đang chờ trả lời.",
+    },
   },
   crm: {
     navigation: {
