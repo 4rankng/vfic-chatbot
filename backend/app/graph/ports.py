@@ -255,6 +255,12 @@ class GraphRetrievalPort(
 ):
     """Graph-owned query surface composed from bounded-context read ports."""
 
+    # The conversation channel's linked projects: the catalog's starting
+    # point (ranked first), never a filter — every active project stays
+    # consultable. Class-attribute default so fakes without it still satisfy
+    # the port; the retrieval repository derives it from the page scope.
+    channel_priority_project_ids: frozenset[str] = frozenset()
+
     async def match_memories(self, emb: str, top_k: int, filter_json: str) -> list[Any]: ...
 
     # Whole-category deep loads for the agent's ``load_project_knowledge``

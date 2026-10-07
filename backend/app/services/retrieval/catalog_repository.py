@@ -14,7 +14,7 @@ import uuid
 from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company, Project
@@ -130,15 +130,17 @@ class CatalogRepository:
         self.page_project_ids: tuple[str, ...] | None = page_project_ids
 
     async def project_id_by_slug(self, slug: str, *, active_only: bool = False) -> uuid.UUID | None:
-        """Resolve a project id from its (unique) slug; optionally require ``is_active``."""
+        """Resolve a project id from its (unique) slug; optionally require ``is_active``.
+
+        Deliberately NOT scoped to the Page's linked projects: a candidate who
+        names a project is making an explicit request, and the bot must be able
+        to consult (and measure distances to) any active project — the linked
+        set is the starting point, not the ceiling (2026-10-07).
+        """
         sql = "SELECT p.id FROM projects p WHERE p.slug = :s AND p.knowledge_base_id IS NOT NULL"
         if active_only:
             sql += " AND p.is_active"
         pid = (await self.db.execute(text(sql), {"s": slug})).scalar_one_or_none()
-        if pid is None:
-            return None
-        if self.page_project_ids is not None and str(pid) not in self.page_project_ids:
-            return None
         return pid
 
     async def load_category_knowledge(self, project_ids: list[str], category_key: str) -> list[Any]:
@@ -233,10 +235,11 @@ class CatalogRepository:
             Project.is_active.is_(True),
             Project.knowledge_base_id.is_not(None),
         ]
-        if self.page_project_ids is not None:
-            project_predicates.append(
-                Project.id.in_([uuid.UUID(pid) for pid in self.page_project_ids])
-            )
+        linked_ids = (
+            [uuid.UUID(pid) for pid in self.page_project_ids]
+            if self.page_project_ids is not None
+            else None
+        )
         project_rows = (
             await self.db.execute(
                 select(
@@ -251,7 +254,15 @@ class CatalogRepository:
                     Project.longitude,
                 )
                 .where(*project_predicates)
-                .order_by(Project.name.asc(), Project.id.asc())
+                # Page-linked projects are the STARTING POINT of the catalog,
+                # never its ceiling (operator directive 2026-10-07): the whole
+                # active catalog is returned so the bot can consult other
+                # projects when asked, with the linked ones ranked first.
+                .order_by(
+                    case((Project.id.in_(linked_ids or []), 0), else_=1),
+                    Project.name.asc(),
+                    Project.id.asc(),
+                )
             )
         ).all()
         if not project_rows:

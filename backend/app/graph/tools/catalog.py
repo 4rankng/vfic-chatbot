@@ -393,6 +393,9 @@ async def list_active_projects(
         sort_by=sort_by,  # type: ignore[arg-type]
         strict_criteria=strict_criteria,
         origin=origin,
+        priority_ids=getattr(
+            retrieval, "channel_priority_project_ids", frozenset()
+        ) or None,
     )
     if lookup.status == "catalog_empty":
         return _project_tool_result("catalog_empty", [], _CATALOG_EMPTY_REPLY, total=0)

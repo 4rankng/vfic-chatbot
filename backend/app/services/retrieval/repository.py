@@ -73,6 +73,13 @@ class RetrievalRepository:
         self._timetable = TimetableRepository(db)
 
     @property
+    def channel_priority_project_ids(self) -> frozenset[str]:
+        """The conversation channel's linked projects: ranked first in the
+        catalog, but never a filter — every active project stays consultable
+        (operator directive 2026-10-07)."""
+        return frozenset(self.page_project_ids or ())
+
+    @property
     def last_match_degraded(self) -> str | None:
         """Degradation reason from the most recent ``match_documents`` call."""
         return self._documents.last_match_degraded

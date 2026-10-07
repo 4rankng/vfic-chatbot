@@ -26,6 +26,12 @@ SortBy = Literal["updated_at", "salary_desc", "salary_asc", "created_at"]
 # needs.
 _EARTH_RADIUS_KM = 6371.0088
 
+# Score nudge for the conversation channel's linked projects: breaks ties and
+# orders them first without ever outranking a materially better fit (one
+# dimension's honest half-match is worth 0.5). The linked set is the catalog's
+# starting point, never a filter (operator directive 2026-10-07).
+CHANNEL_PRIORITY_BONUS = 0.05
+
 _TRIEU_RE = re.compile(r"(\d[\d.]*)\s*trieu|\b(\d[\d.]*)\s*tr", re.IGNORECASE)
 _NGHIN_RE = re.compile(r"(\d[\d.]*)\s*nghin|\b(\d[\d.]*)\s*k\b", re.IGNORECASE)
 _PLAIN_RE = re.compile(r"(\d{6,})")
@@ -363,6 +369,7 @@ def rank_projects(
     sort_by: SortBy | None = None,
     strict_criteria: bool = False,
     origin: tuple[float, float] | None = None,
+    priority_ids: frozenset[str] | None = None,
 ) -> FitLookup:
     """Fit every active project against the stated preferences, best fit first.
 
@@ -407,6 +414,21 @@ def rank_projects(
         )
         for project in candidates
     ]
+    if priority_ids:
+        # The channel's linked projects are the starting point of the catalog,
+        # never its ceiling (operator directive 2026-10-07): they rank first
+        # among EQUAL fits, and a 0.05 nudge breaks those ties without ever
+        # outranking a materially better-fitting project (one dimension's
+        # honest half-match is worth 0.5).
+        fits = [
+            replace(
+                fit,
+                score=min(1.0, fit.score + CHANNEL_PRIORITY_BONUS)
+                if str(fit.project.project_id) in priority_ids
+                else fit.score,
+            )
+            for fit in fits
+        ]
     if strict_criteria:
         scope_terms = _filter_terms(job_scope)
         fits = [
