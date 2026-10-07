@@ -36,6 +36,11 @@ from app.graph.tools.tingting_api import (
     send_tingting_otp,
 )
 from app.graph.tools.tingting_identity import verify_tingting_identity
+from app.graph.tools.tingting_selfcheckin import (
+    confirm_self_checkin_otp,
+    send_self_checkin_otp,
+    update_self_checkin,
+)
 from app.graph.tools.income import compare_income
 from app.graph.tools.knowledge import (
     _format_knowledge_row,
@@ -59,6 +64,9 @@ TOOLS_REGISTRY = {
     "send_tingting_otp": send_tingting_otp,
     "confirm_tingting_otp": confirm_tingting_otp,
     "reset_tingting_password": reset_tingting_password,
+    "send_self_checkin_otp": send_self_checkin_otp,
+    "confirm_self_checkin_otp": confirm_self_checkin_otp,
+    "update_self_checkin": update_self_checkin,
 }
 
 __all__ = [
@@ -76,6 +84,9 @@ __all__ = [
     "send_tingting_otp",
     "confirm_tingting_otp",
     "reset_tingting_password",
+    "send_self_checkin_otp",
+    "confirm_self_checkin_otp",
+    "update_self_checkin",
     "_cache_digest",
     "cached_embed",
     "_format_knowledge_row",

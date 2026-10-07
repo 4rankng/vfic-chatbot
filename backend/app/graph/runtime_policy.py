@@ -20,6 +20,9 @@ _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
             "send_tingting_otp",
             "confirm_tingting_otp",
             "reset_tingting_password",
+            "send_self_checkin_otp",
+            "confirm_self_checkin_otp",
+            "update_self_checkin",
         }
     ),
     "candidate_intake": frozenset({"search_user_memory"}),
@@ -35,14 +38,18 @@ _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
 }
 
 
-# The tools that make up the TingTing reset flow. Named once: the capability map,
-# the per-channel gate in the runner and the channel tests all read this set.
+# The tools that make up the TingTing flows (reset + self-check-in toggle).
+# Named once: the capability map, the per-channel gate in the runner and the
+# channel tests all read this set.
 TINGTING_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "verify_tingting_identity",
         "send_tingting_otp",
         "confirm_tingting_otp",
         "reset_tingting_password",
+        "send_self_checkin_otp",
+        "confirm_self_checkin_otp",
+        "update_self_checkin",
     }
 )
 

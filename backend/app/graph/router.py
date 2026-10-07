@@ -219,7 +219,9 @@ _INTENT_ROUTES: dict[
         "job_detail_terms",
     ),
     # Employees locked out of the TingTing app (forgot/reset password, no OTP)
-    # must reach the reset API, never a refusal. ``search_knowledge`` rides along
+    # must reach the reset API, never a refusal; an employee wanting their self
+    # check-in toggled lands on the same route (reason ``self_checkin_action``,
+    # lanes.py) and reaches the toggle trio. ``search_knowledge`` rides along
     # so the turn can still cite published policy alongside the mechanic.
     "employee_support": (
         "knowledge_lookup",
@@ -228,6 +230,9 @@ _INTENT_ROUTES: dict[
             "send_tingting_otp",
             "confirm_tingting_otp",
             "reset_tingting_password",
+            "send_self_checkin_otp",
+            "confirm_self_checkin_otp",
+            "update_self_checkin",
             "search_knowledge",
         ),
         "employee_support_terms",

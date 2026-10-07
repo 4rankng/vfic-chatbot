@@ -14,6 +14,9 @@ from app.graph.tools import (
     reset_tingting_password,
     send_tingting_otp,
     verify_tingting_identity,
+    confirm_self_checkin_otp,
+    send_self_checkin_otp,
+    update_self_checkin,
     compare_income,
     get_product_features,
     get_project_distance,
@@ -362,6 +365,86 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_self_checkin_otp",
+            "description": (
+                "Gửi mã OTP cho quy trình BẬT/TẮT tự chấm công tới số điện thoại đã đăng ký. "
+                "Chỉ gọi sau khi verify_tingting_identity trả về ĐÃ XÁC MINH — hệ thống từ chối "
+                "nếu số chưa được xác minh. Phiên và danh sách dự án của hồ sơ do hệ thống giữ: "
+                "không hỏi, không truyền mã phiên, và chỉ nêu TÊN dự án khi hỏi người dùng chọn."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": "Số điện thoại đã đăng ký với TingTing của nhân viên.",
+                    },
+                },
+                "required": ["phone"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "confirm_self_checkin_otp",
+            "description": (
+                "Xác thực mã OTP 6 số cho quy trình tự chấm công (mã nhận qua Zalo). Dùng phiên "
+                "mà hệ thống đã lưu cho số điện thoại này; không truyền và không đọc mã phiên."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": "Số điện thoại đã đăng ký với TingTing của nhân viên.",
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "Đúng 6 chữ số nhân viên nhận được trong Zalo.",
+                    },
+                },
+                "required": ["phone", "code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_self_checkin",
+            "description": (
+                "BẬT hoặc TẮT tự chấm công cho nhân viên sau khi mã OTP đã xác thực đúng. "
+                "project_id là mã dự án do send_self_checkin_otp liệt kê; enable=true để BẬT, "
+                "enable=false để TẮT, đúng nhu cầu người dùng nói. Nói lại đúng ý kết quả tool "
+                "trả về (ngày hiệu lực); không tự nghĩ ra ngày khác. Không truyền mã phiên hay "
+                "action token."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": "Số điện thoại đã đăng ký với TingTing của nhân viên.",
+                    },
+                    "project_id": {
+                        "type": "string",
+                        "description": (
+                            "Mã dự án nhân viên muốn bật/tắt tự chấm công (tool OTP đã liệt kê). "
+                            "Bỏ trống khi hồ sơ chỉ thuộc một dự án duy nhất."
+                        ),
+                    },
+                    "enable": {
+                        "type": "boolean",
+                        "description": "true để BẬT tự chấm công, false để TẮT.",
+                    },
+                },
+                "required": ["phone", "enable"],
+            },
+        },
+    },
 ]
 
 
@@ -500,6 +583,28 @@ async def _dispatch_tool(
         elif name == "reset_tingting_password":
             result = await reset_tingting_password(
                 retrieval, phone=str(args.get("phone") or "").strip()
+            )
+        elif name == "send_self_checkin_otp":
+            result = await send_self_checkin_otp(
+                retrieval, phone=str(args.get("phone") or "").strip()
+            )
+        elif name == "confirm_self_checkin_otp":
+            result = await confirm_self_checkin_otp(
+                retrieval,
+                phone=str(args.get("phone") or "").strip(),
+                code=str(args.get("code") or "").strip(),
+            )
+        elif name == "update_self_checkin":
+            raw_enable = args.get("enable")
+            enable = (
+                raw_enable if isinstance(raw_enable, bool)
+                else str(raw_enable).strip().lower() in {"true", "1", "on", "bật"}
+            )
+            result = await update_self_checkin(
+                retrieval,
+                phone=str(args.get("phone") or "").strip(),
+                project_id=str(args.get("project_id") or "").strip(),
+                enable=enable,
             )
         else:
             logger.warning("unknown tool dispatched: %s", name)
