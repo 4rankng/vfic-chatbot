@@ -33,6 +33,7 @@ from app.services.retrieval.timetable_repository import TimetableRepository
 from app.services.tingting_api import (
     TingtingApiService,
     TingtingFlowStore,
+    TingtingIdentityStore,
     TingtingVerifyAttemptsStore,
 )
 
@@ -251,6 +252,14 @@ class RetrievalRepository:
     async def clear_tingting_flow_state(self, phone: str) -> None:
         """Drop the flow state once the password has been reset."""
         await TingtingFlowStore().clear(phone)
+
+    async def tingting_identity_verified(self, phone: str) -> bool:
+        """Whether this phone proved ownership within the 30-day window."""
+        return await TingtingIdentityStore().is_verified(phone)
+
+    async def mark_tingting_identity_verified(self, phone: str) -> None:
+        """Record that this phone proved ownership (30-day memory)."""
+        await TingtingIdentityStore().mark_verified(phone)
 
     async def tingting_verify_attempts(self, scope: str) -> int:
         """Failed verification tries spent in this conversation so far."""

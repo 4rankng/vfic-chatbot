@@ -254,7 +254,9 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # inventoried request call), and the per-account token-age read in
     # providers/zalo.py::oa_account_token_updated_at (one db.get in the same
     # provider-transport module). Delta verified against a HEAD-worktree scan.
-    "provider_boundary": 104,  # +1 the TingTing self check-in toggle's payroll egress site (3ab65a44)
+    # +1: the self check-in status query (POST /integration/self-checkin/status
+    # egress in tingting_selfcheckin.update_self_checkin pre-check).
+    "provider_boundary": 105,  # +1 the TingTing self check-in toggle's payroll egress site (3ab65a44)
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -413,7 +415,10 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # 2026-10-08: +2 queue_producer — the recruiter's review turn (POST
 # /{id}/bot-reply) adds the route's call into enqueue_manual_bot_turn plus that
 # scheduler's own enqueue(...) site; digest recomputed from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "a2ab5ea5a1e7448d1abbb8faa02e617e922e2c49c25dd60c85a561c9e749d70a"
+# 2026-10-08 (later): +1 provider_boundary — update_self_checkin consults payroll's
+# read-only status endpoint before mutating (state-matching toggles are answered
+# without an update call); digest recomputed from the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "8c53cbda7a63965afd9bfcce08d6e3c42ce4d88a092dfa32cc4c6052826f74f7"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

@@ -14,6 +14,7 @@ from app.graph.tools import (
     reset_tingting_password,
     send_tingting_otp,
     verify_tingting_identity,
+    check_self_checkin_status,
     confirm_self_checkin_otp,
     send_self_checkin_otp,
     update_self_checkin,
@@ -445,6 +446,26 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_self_checkin_status",
+            "description": (
+                "Xem trạng thái tự chấm công hiện tại của nhân viên (BẬT/TẮT cho từng dự án, "
+                "ngày hiệu lực nếu có). Chỉ đọc, không thay đổi gì."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": "Số điện thoại đã đăng ký với TingTing của nhân viên.",
+                    },
+                },
+                "required": ["phone"],
+            },
+        },
+    },
 ]
 
 
@@ -605,6 +626,11 @@ async def _dispatch_tool(
                 phone=str(args.get("phone") or "").strip(),
                 project_id=str(args.get("project_id") or "").strip(),
                 enable=enable,
+            )
+        elif name == "check_self_checkin_status":
+            result = await check_self_checkin_status(
+                retrieval,
+                phone=str(args.get("phone") or "").strip(),
             )
         else:
             logger.warning("unknown tool dispatched: %s", name)

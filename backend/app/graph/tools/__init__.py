@@ -39,6 +39,7 @@ from app.graph.tools.tingting_identity import verify_tingting_identity
 from app.graph.tools.tingting_selfcheckin import (
     confirm_self_checkin_otp,
     send_self_checkin_otp,
+    check_self_checkin_status,
     update_self_checkin,
 )
 from app.graph.tools.income import compare_income
@@ -67,6 +68,7 @@ TOOLS_REGISTRY = {
     "send_self_checkin_otp": send_self_checkin_otp,
     "confirm_self_checkin_otp": confirm_self_checkin_otp,
     "update_self_checkin": update_self_checkin,
+    "check_self_checkin_status": check_self_checkin_status,
 }
 
 __all__ = [
@@ -87,6 +89,7 @@ __all__ = [
     "send_self_checkin_otp",
     "confirm_self_checkin_otp",
     "update_self_checkin",
+    "check_self_checkin_status",
     "_cache_digest",
     "cached_embed",
     "_format_knowledge_row",

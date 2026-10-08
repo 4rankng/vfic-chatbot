@@ -177,7 +177,7 @@ async def send_tingting_otp(retrieval: GraphRetrievalPort, *, phone: str) -> str
     if not clean_phone:
         return _NO_PHONE
     state = await retrieval.tingting_flow_state(clean_phone)
-    if not state.get("verified"):
+    if not state.get("verified") and not await retrieval.tingting_identity_verified(clean_phone):
         return _NOT_VERIFIED
     outcome = await retrieval.call_tingting_api(
         method="POST", path=OTP_PATH, params={"phone": clean_phone}
@@ -231,6 +231,8 @@ async def confirm_tingting_otp(
             clean_phone,
             {"reset_token": reset_token, "otp_verified": True, "otp_code": clean_code},
         )
+        # The OTP landed on the registered number — 30 days of identity memory.
+        await retrieval.mark_tingting_identity_verified(clean_phone)
         return (
             "Mã đúng. Hãy gọi reset_tingting_password(phone) để đặt lại mật khẩu cho nhân viên; "
             "không xin thêm thông tin nào nữa."

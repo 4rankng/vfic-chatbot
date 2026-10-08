@@ -295,6 +295,18 @@ async def verify_tingting_identity(
     clean_phone = (phone or "").strip()
     if not clean_phone:
         return _MISSING_PHONE
+    # 30-day memory: this phone already proved ownership (fields matched, or an
+    # OTP landed on it). Do not re-interrogate the employee — confirm and move
+    # on. The flow-store flag (15-minute window) is checked first because it
+    # also feeds the OTP tools' gate.
+    state = await retrieval.tingting_flow_state(clean_phone)
+    if state.get("verified") or await retrieval.tingting_identity_verified(clean_phone):
+        if not state.get("verified"):
+            await retrieval.save_tingting_flow_state(clean_phone, {"verified": True})
+        return (
+            "Đã xác minh danh tính (số điện thoại này đã được xác minh trước đó trong 30 ngày). "
+            "Tiếp tục bước tiếp theo của quy trình mà không hỏi lại họ tên/CCCD."
+        )
     outcome = await retrieval.call_tingting_api(
         method="POST", path=LOOKUP_PATH, params={"phone": clean_phone}
     )
@@ -321,6 +333,9 @@ async def verify_tingting_identity(
         # reset steps that follow, so the model never has to re-prove identity to
         # resend a code. ``send_tingting_otp`` reads this flag as its gate.
         await retrieval.save_tingting_flow_state(clean_phone, {"verified": True})
+        # Long-lived memory: the matched fields prove the phone is the
+        # employee's — 30 days of not re-asking, across sessions.
+        await retrieval.mark_tingting_identity_verified(clean_phone)
         if conversation_scope:
             await retrieval.clear_tingting_verify_attempts(conversation_scope)
         return render_verdict(verdict)

@@ -826,6 +826,12 @@ class _FlowRetrieval:
         self.cleared += 1
         self.state = {}
 
+    async def tingting_identity_verified(self, _phone: str) -> bool:
+        return False
+
+    async def mark_tingting_identity_verified(self, _phone: str) -> None:
+        self.identity_marked = True
+
 
 def _otp_ok(session_id: str = "sess-1"):
     return _outcome(
@@ -1065,8 +1071,8 @@ async def test_self_checkin_otp_is_refused_until_the_phone_is_verified() -> None
 @pytest.mark.asyncio
 async def test_self_checkin_otp_stores_session_and_project_names_only() -> None:
     assignments = [
-        {"project_id": "7", "project_name": "LGD"},
-        {"project_id": "9", "project_name": "ABC"},
+        {"project_id": "7", "project_name": "LGD", "check_in_enabled": False},
+        {"project_id": "9", "project_name": "ABC", "check_in_enabled": True},
     ]
     retrieval = _FlowRetrieval(_sc_otp_ok("sc-sess-42", assignments=assignments), state={"verified": True})
     result = await send_self_checkin_otp(retrieval, phone="0987654321")
@@ -1139,9 +1145,10 @@ async def test_self_checkin_update_relays_an_immediate_enable() -> None:
         state={"sc_action_token": "sc-tok-9", "sc_assignments": [{"project_id": "7", "project_name": "LGD"}]},
     )
     result = await update_self_checkin(retrieval, phone="0987654321", project_id="7", enable=True)
-    sent = retrieval.calls[0]["params"]
-    # payroll binds project_id as a number and enable as a boolean — the egress
-    # payload must carry native JSON types, not the tool layer's strings.
+    sent = retrieval.calls[-1]["params"]
+    # the status pre-check runs first; the update call carries the verdict of
+    # payroll bound as a number and a boolean — native JSON types.
+    assert retrieval.calls[0]["path"] == "/api/v1/integration/self-checkin/status"
     assert sent == {"action_token": "sc-tok-9", "project_id": 7, "enable": True}
     # the token is consumed single-use and the flow clears
     assert retrieval.cleared == 1
@@ -1170,7 +1177,7 @@ async def test_self_checkin_update_relays_a_deferred_enable_and_disable() -> Non
     )
     result = await update_self_checkin(disabled, phone="0987654321", project_id="7", enable=False)
     assert "SẼ TẮT từ ngày 01/11; trước đó vẫn chấm công bình thường" in result
-    assert disabled.calls[0]["params"]["enable"] is False
+    assert disabled.calls[-1]["params"]["enable"] is False
 
 
 @pytest.mark.asyncio
@@ -1222,7 +1229,7 @@ async def test_self_checkin_update_fills_the_single_project_and_asks_when_ambigu
         },
     )
     result = await update_self_checkin(single, phone="0987654321", project_id="", enable=True)
-    assert single.calls[0]["params"]["project_id"] == 7
+    assert single.calls[-1]["params"]["project_id"] == 7
 
     many = _FlowRetrieval(
         _sc_update_ok("enable", immediate=True, effective_from="2026-10-01"),
@@ -1250,7 +1257,7 @@ async def test_self_checkin_update_maps_the_project_name_to_the_stored_id() -> N
         },
     )
     result = await update_self_checkin(retrieval, phone="0987654321", project_id="LGD", enable=True)
-    assert retrieval.calls[0]["params"]["project_id"] == 7
+    assert retrieval.calls[-1]["params"]["project_id"] == 7
     assert "Đã BẬT tự chấm công từ ngày 01/10" in result
 
 

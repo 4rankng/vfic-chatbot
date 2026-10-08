@@ -47,6 +47,7 @@ def test_runtime_policy_resolves_only_capability_owned_tools_and_neutral_prompt(
         "send_self_checkin_otp",
         "confirm_self_checkin_otp",
         "update_self_checkin",
+        "check_self_checkin_status",
     }
     assert not policy.tool_registry.allows("list_active_jobs")
     assert not policy.tool_registry.allows("recommend_jobs")
@@ -238,6 +239,7 @@ async def test_manifest_composed_agent_passes_the_immutable_tool_registry():
         "send_self_checkin_otp",
         "confirm_self_checkin_otp",
         "update_self_checkin",
+        "check_self_checkin_status",
         "search_knowledge",
     }
 

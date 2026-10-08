@@ -98,6 +98,11 @@ TINGTING_ZALO_TOKEN_PATH = "/api/v1/integration/zalo/token"
 # of the flow. 15 minutes covers a 600 s session plus the employee's reading time.
 TINGTING_FLOW_TTL_SECONDS = 900
 TINGTING_FLOW_KEY_PREFIX = "tingting:flow"
+# Identity memory outlives the 15-minute flow window: one successful identity
+# check (or a received OTP) proves the phone for 30 days, so the bot stops
+# re-asking employees who already verified on this Zalo account.
+TINGTING_IDENTITY_TTL_SECONDS = 30 * 24 * 3600
+TINGTING_IDENTITY_KEY_PREFIX = "tingting:identity"
 
 
 def _flow_key(phone: str) -> str:
@@ -112,6 +117,33 @@ def _flow_key(phone: str) -> str:
     if len(digits) > 9 and digits.startswith("84"):
         digits = "0" + digits[2:]
     return f"{TINGTING_FLOW_KEY_PREFIX}:{hashlib.sha256(digits.encode('utf-8')).hexdigest()[:32]}"
+
+
+def _identity_key(phone: str) -> str:
+    """Same phone digest convention as the flow key, own namespace."""
+    return f"{TINGTING_IDENTITY_KEY_PREFIX}:{_flow_key(phone).split(':')[-1]}"
+
+
+class TingtingIdentityStore:
+    """30-day per-phone memory that the employee proved this Zalo number is
+    theirs (identity fields matched, or an OTP arrived on it). Fail-open like
+    the flow store: a Redis outage degrades to "not remembered", which just
+    means the normal identity question runs again."""
+
+    async def is_verified(self, phone: str) -> bool:
+        try:
+            return bool(await get_redis().get(_identity_key(phone)))
+        except Exception as exc:  # noqa: BLE001 — state read must not break a turn
+            logger.warning("tingting identity read skipped error_type=%s", type(exc).__name__)
+            return False
+
+    async def mark_verified(self, phone: str) -> None:
+        try:
+            await get_redis().set(
+                _identity_key(phone), "1", ex=TINGTING_IDENTITY_TTL_SECONDS
+            )
+        except Exception as exc:  # noqa: BLE001 — a cache write must not 500 a turn
+            logger.warning("tingting identity write skipped error_type=%s", type(exc).__name__)
 
 
 class TingtingFlowStore:

@@ -23,6 +23,7 @@ _CAPABILITY_TOOLS: dict[str, frozenset[str]] = {
             "send_self_checkin_otp",
             "confirm_self_checkin_otp",
             "update_self_checkin",
+            "check_self_checkin_status",
         }
     ),
     "candidate_intake": frozenset({"search_user_memory"}),
@@ -50,6 +51,7 @@ TINGTING_TOOL_NAMES: frozenset[str] = frozenset(
         "send_self_checkin_otp",
         "confirm_self_checkin_otp",
         "update_self_checkin",
+        "check_self_checkin_status",
     }
 )
 
