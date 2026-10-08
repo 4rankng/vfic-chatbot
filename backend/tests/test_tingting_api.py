@@ -701,7 +701,7 @@ def test_self_checkin_media_keys_on_the_exact_topic_captions() -> None:
         "media_type": "image",
     }
     assert TINGTING_SELF_CHECKIN_MEDIA[TINGTING_SELF_CHECKIN_SCHEDULE_REPLY] == {
-        "media_url": "https://bot.tingting.vip/tingting/vaolamtanca.jpg",
+        "media_url": "https://bot.tingting.vip/tingting/giochamcong.jpg",
         "media_type": "image",
     }
     assert TINGTING_SELF_CHECKIN_MEDIA[TINGTING_SELF_CHECKIN_GATES_REPLY] == {

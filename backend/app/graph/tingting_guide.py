@@ -146,7 +146,7 @@ TINGTING_SELF_CHECKIN_MEDIA: dict[str, dict[str, str]] = {
         "media_type": "image",
     },
     TINGTING_SELF_CHECKIN_SCHEDULE_REPLY: {
-        "media_url": "https://bot.tingting.vip/tingting/vaolamtanca.jpg",
+        "media_url": "https://bot.tingting.vip/tingting/giochamcong.jpg",
         "media_type": "image",
     },
     TINGTING_SELF_CHECKIN_GATES_REPLY: {
