@@ -315,7 +315,7 @@ async def update_self_checkin(
                     if pending_type == "enable":
                         return f"Tự chấm công SẼ BẬT từ ngày {pending_date} rồi, không cần bật lại."
                     return (
-                        f"Tự chấm công của bạn đang BẬT"
+                        "Tự chấm công của bạn đang BẬT"
                         + (f" (từ ngày {will_date})" if will_date else "")
                         + ", không cần bật lại."
                     )

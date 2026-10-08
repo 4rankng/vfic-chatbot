@@ -2373,6 +2373,7 @@ async def test_support_oa_turn_injects_the_guide_and_only_the_reset_tools(monkey
         "send_self_checkin_otp",
         "confirm_self_checkin_otp",
         "update_self_checkin",
+        "check_self_checkin_status",
     }
 
 
@@ -2798,6 +2799,7 @@ async def test_an_unclear_message_on_the_support_oa_makes_the_bot_ask_first(
         "send_self_checkin_otp",
         "confirm_self_checkin_otp",
         "update_self_checkin",
+        "check_self_checkin_status",
     }
     # The turn is served as the reset flow (so the next message can continue it)…
     assert timings["intent"] == "employee_support"
@@ -3187,6 +3189,7 @@ async def test_focused_support_turn_drops_the_project_knowledge_tool(monkeypatch
         "send_self_checkin_otp",
         "confirm_self_checkin_otp",
         "update_self_checkin",
+        "check_self_checkin_status",
     }
     assert "search_knowledge" not in captured["allowed_tools"]
 
