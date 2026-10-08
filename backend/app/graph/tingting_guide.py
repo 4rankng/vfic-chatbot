@@ -119,15 +119,16 @@ TINGTING_SELF_CHECKIN_GPS_REPLY = (
     "Vị trí (Android) đang bật nhé ạ."
 )
 TINGTING_SELF_CHECKIN_SCHEDULE_REPLY = (
-    "Dạ giờ bấm tự chấm công dự án LGD như sau ạ: «Vào làm» mở từ 1 tiếng trước đến 1 tiếng "
-    "sau giờ bắt đầu ca; «Tan ca» mở từ 1 tiếng trước đến 4 tiếng sau giờ kết thúc ca. "
-    "Ca ngày vào 07-09, tan 17-22; Ca đêm vào 19-21, tan 05-10. Ngoài khung máy sẽ báo "
+    "Dạ dự án LGD có ca ngày 08:00–18:00 và ca đêm 20:00–06:00 hôm sau ạ. "
+    "Bấm «Vào làm» từ 1 tiếng trước đến 1 tiếng sau giờ vào ca: ca ngày 07:00–09:00, "
+    "ca đêm 19:00–21:00. Bấm «Tan ca» từ 1 tiếng trước đến 4 tiếng sau giờ tan ca: "
+    "ca ngày 17:00–22:00, ca đêm 05:00–10:00 hôm sau. Ngoài khung máy sẽ báo "
     "«Chưa đến giờ» hoặc «Đã quá giờ» ạ."
 )
 TINGTING_SELF_CHECKIN_GATES_REPLY = (
     "Dạ dự án LGD có 7 điểm chấm công quanh nhà máy, anh/chị đứng trong bán kính 150 m là "
     "bấm được ạ. Vị trí GPS phải chính xác trong 50 m; nếu máy báo «Ngoài khu vực» thì "
-    "anh/chị di chuyển đến gần cổng rồi bấm lại nhé ạ."
+    "anh/chị mở bản đồ chấm công, di chuyển đến điểm chấm công gần nhất rồi bấm lại nhé ạ."
 )
 TINGTING_SELF_CHECKIN_TANCA_REPLY = (
     "Dạ tan ca để hệ thống ghi nhận công và tính lương ạ. Kết thúc ca anh/chị bấm «Tan ca» "
@@ -227,12 +228,14 @@ liệt kê "các chức năng em có thể hỗ trợ".
     hỏi về bấm Tan ca / tan ca không tính lương: «{TINGTING_SELF_CHECKIN_TANCA_REPLY}»
   - Hỏi CHUNG về tự chấm công (không rõ ý cụ thể): trả lời trong chat từ kiến thức sau — Tự
     chấm công hiện áp dụng cho DỰ ÁN LGD (chưa có dự án khác): GPS phải chính xác dưới 50 m;
-    đứng trong bán kính 150 m quanh điểm chấm; máy báo «Ngoài khu vực» thì di chuyển đến gần
-    cổng rồi bấm lại. Giờ bấm: «Vào làm» mở 1 tiếng trước đến 1 tiếng sau giờ bắt đầu ca,
-    «Tan ca» mở 1 tiếng trước đến 4 tiếng sau giờ kết thúc ca; ngoài khung máy báo «Chưa đến
-    giờ»/«Đã quá giờ». Bấm «Tan ca» ngoài giờ làm hợp lệ sẽ được hỏi xác nhận «Ca này sẽ không
-    tính lương» — chỉ xác nhận khi thật sự không cần công ca đó. KHÔNG cam kết tự chấm công
-    cho dự án khác và không hẹn ai sẽ nhắn lại.
+    đứng trong bán kính 150 m quanh điểm chấm; máy báo «Ngoài khu vực» thì mở bản đồ chấm
+    công, di chuyển đến điểm chấm công gần nhất rồi bấm lại (KHÔNG nói "gần cổng"). Giờ ca:
+    ca ngày 08:00–18:00, ca đêm 20:00–06:00 hôm sau. Giờ bấm: «Vào làm» mở 1 tiếng trước đến
+    1 tiếng sau giờ vào ca (ngày 07:00–09:00, đêm 19:00–21:00), «Tan ca» mở 1 tiếng trước đến
+    4 tiếng sau giờ tan ca (ngày 17:00–22:00, đêm 05:00–10:00 hôm sau); ngoài khung máy báo
+    «Chưa đến giờ»/«Đã quá giờ». Bấm «Tan ca» ngoài giờ làm hợp lệ sẽ được hỏi xác nhận «Ca này
+    sẽ không tính lương» — chỉ xác nhận khi thật sự không cần công ca đó.
+    KHÔNG cam kết tự chấm công cho dự án khác và không hẹn ai sẽ nhắn lại.
 - MỌI việc khác (tuyển dụng, việc làm, mức lương/phúc lợi, lịch xe, nghỉ việc, hỏi thông tin của
   nhân viên khác, hoặc yêu cầu rõ ràng về một chủ đề khác không phải đặt lại mật khẩu): trả lời
   ĐÚNG NGUYÊN VĂN một dòng, không thêm bớt chữ, không Markdown, không emoji:
