@@ -97,8 +97,14 @@ def normalize_method(value: str) -> str:
     return method
 
 
-def sanitize_params(params: object) -> dict[str, str] | None:
-    """Coerce model-supplied params into a flat ``str -> str`` mapping.
+def sanitize_params(params: object) -> dict[str, Any] | None:
+    """Coerce model-supplied params into a flat JSON-safe mapping.
+
+    JSON scalars keep their native types: a Go/Gin endpoint binds ``uint`` and
+    ``bool`` fields from JSON numbers and booleans and rejects the string
+    forms, so flattening ``58`` to ``"58"`` would turn a correct call into a
+    binding 400 (production hit exactly this on .../self-checkin/update).
+    Strings stay strings, are stripped, and carry the length cap.
 
     ``None`` means "reject": a container value, an over-long value, or more
     parameters than the ceiling. Empty/``None`` values are dropped rather than
@@ -108,8 +114,14 @@ def sanitize_params(params: object) -> dict[str, str] | None:
         return {}
     if not isinstance(params, dict):
         return None
-    clean: dict[str, str] = {}
+    clean: dict[str, Any] = {}
     for raw_key, raw_value in params.items():
+        name = str(raw_key).strip()
+        if not name:
+            continue
+        if isinstance(raw_value, (bool, int, float)):
+            clean[name] = raw_value
+            continue
         if isinstance(raw_value, (dict, list, tuple, set, frozenset)):
             return None
         text = "" if raw_value is None else str(raw_value).strip()
@@ -117,9 +129,6 @@ def sanitize_params(params: object) -> dict[str, str] | None:
             continue
         if len(text) > EXTERNAL_API_MAX_PARAM_CHARS:
             return None
-        name = str(raw_key).strip()
-        if not name:
-            continue
         clean[name] = text
     if len(clean) > EXTERNAL_API_MAX_PARAMS:
         return None

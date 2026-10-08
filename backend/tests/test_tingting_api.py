@@ -459,6 +459,50 @@ async def test_repeated_lookup_succeeds_while_repeated_otp_is_a_duplicate(monkey
     assert len(http.calls) == 3
 
 
+@pytest.mark.asyncio
+async def test_invoke_body_keeps_native_json_scalars(monkeypatch) -> None:
+    """A Go/Gin endpoint binds ``uint``/``bool`` fields from JSON numbers and
+    booleans; the egress layer re-stringifying every scalar turned a correct
+    self-checkin update into a binding 400 in production (the service never
+    even ran — the log shows only the API-key query before the 400)."""
+    http = _FakeHttp(text='{"status":"success","success":true}')
+    service = TingtingApiService(_FakeSession(_stored_row()))
+
+    async def _client(_name, timeout=None):  # noqa: ANN001, ARG001
+        return http
+
+    monkeypatch.setattr(mod, "get_http_client", _client)
+    outcome = await service.invoke(
+        await service.runtime(),
+        method="POST",
+        path="/api/v1/integration/self-checkin/update",
+        params={"action_token": "tok", "project_id": 58, "enable": True},
+    )
+
+    assert outcome.state == "ok"
+    body = http.calls[-1]["json"]
+    assert body == {"action_token": "tok", "project_id": 58, "enable": True}
+    assert isinstance(body["project_id"], int)
+    assert isinstance(body["enable"], bool)
+
+
+def test_sanitize_params_preserves_scalars_and_keeps_guards() -> None:
+    from app.services.external_api_core import sanitize_params
+
+    # Native JSON scalars survive; strings are stripped.
+    assert sanitize_params({"a": 58, "b": True, "c": " x ", "d": 1.5}) == {
+        "a": 58,
+        "b": True,
+        "c": "x",
+        "d": 1.5,
+    }
+    # Containers are still rejected outright.
+    assert sanitize_params({"a": {"nested": 1}}) is None
+    assert sanitize_params({"a": [1, 2]}) is None
+    # Empty values are still dropped, key whitespace still trimmed.
+    assert sanitize_params({"  p ": 0, "q": None, "": "x"}) == {"p": 0}
+
+
 # ── the embedded guide ──────────────────────────────────────────────────────
 
 def test_guide_documents_every_reset_endpoint_in_order() -> None:
