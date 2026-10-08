@@ -51,7 +51,7 @@ The application registers the API routers in `backend/app/main.py` under
 |---|---|---|---|---|
 | `auth` | `/api/v1/auth` | `auth` | Public (login/refresh); JWT (`/me`, `/change-password`) | Login, refresh, profile, password |
 | `users` | `/api/v1/users` | `users` | JWT (self); `require_admin` (CRUD) | User management |
-| `conversations` | `/api/v1/conversations` | `conversations` | JWT; `require_admin` (history clear) | Inbox, messages, takeover, release |
+| `conversations` | `/api/v1/conversations` | `conversations` | JWT; `require_admin` (history clear) | Inbox, messages, takeover, release, bot-reply nudges |
 | `leads` | `/api/v1/leads` | `leads` | JWT | Lead CRM pipeline |
 | `knowledge` | `/api/v1/knowledge` | `knowledge` | `require_admin` | KB documents, chunks, versions |
 | `projects` | `/api/v1/knowledge/projects` | `projects` | `require_recruiter` (list/get); `require_admin` (create/delete) | Product/project knowledge CRUD, direct-context sync, FAQ, features |

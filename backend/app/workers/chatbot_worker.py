@@ -491,6 +491,7 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                 pass
 
         from app.core.config import get_settings
+        from app.graph.manual_reply import manual_instruction_for
 
         received_at_epoch = float(job.get("received_at_epoch") or 0.0)
         sla = get_settings().sla_seconds
@@ -518,6 +519,10 @@ async def _run_job_async_inner(job: dict, *, source: str = "recovery") -> None:
                 else None
             ),
             runtime_fingerprint=str(job.get("runtime_fingerprint") or ""),
+            # A recruiter-requested review turn carries no inbound; the flag is
+            # resolved into the agent's directive here so the scheduler never
+            # has to import the turn runtime to describe a turn.
+            manual_instruction=manual_instruction_for(job.get("manual_turn")),
         )
         heartbeat_task = asyncio.create_task(_renew_direct_lock(job)) if source == "direct" else None
         # Set the trace contextvar inside the try so the finally always resets

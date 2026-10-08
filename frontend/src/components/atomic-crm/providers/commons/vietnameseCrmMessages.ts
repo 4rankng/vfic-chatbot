@@ -145,6 +145,10 @@ export const vietnameseCrmMessages = {
       success: "Bot đang soạn trả lời cho tin nhắn chờ.",
       error: "Không tìm thấy tin nhắn ứng viên nào đang chờ trả lời.",
     },
+    bot_reply: {
+      success: "Bot đang đọc hội thoại và sẽ trả lời nếu cần.",
+      error: "Không yêu cầu bot trả lời được. Thử lại sau.",
+    },
   },
   crm: {
     navigation: {

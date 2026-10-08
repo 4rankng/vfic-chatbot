@@ -33,7 +33,10 @@ from app.schemas.dashboard import AttentionReason
 from app.shared.domain.errors import ConflictError, NotFoundError, ValidationError
 from app.shared.infrastructure.db import get_request_db
 from app.shared.infrastructure.rate_limits import enforce_web_chat_turn_rate_limit
-from app.services.conversation.scheduler import enqueue_latest_unanswered_worker_message
+from app.services.conversation.scheduler import (
+    enqueue_latest_unanswered_worker_message,
+    enqueue_manual_bot_turn,
+)
 from app.services.conversation import ConversationConflict, ConversationService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -336,6 +339,39 @@ async def force_bot_reply(
     )
     if not enqueued:
         raise ConflictError("Không có tin nhắn ứng viên nào đang chờ bot trả lời.")
+    return ConversationOut.model_validate(conv)
+
+
+@router.post("/{conv_id}/bot-reply", response_model=ConversationOut)
+async def bot_reply(
+    conv_id: uuid.UUID,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_request_db),
+) -> ConversationOut:
+    """Ask the bot to read the conversation and answer only if it should.
+
+    The lever for the threads ``force-bot-reply`` cannot reach: every inbound
+    already carries a reply, yet the candidate is still waiting on a real answer
+    (the bot's last message was a bare emoji, for instance). The turn runs the
+    normal pipeline over the conversation with no inbound of its own; the model
+    reads the history and may decide to stay silent, which sends nothing and
+    records a ``manual_skip`` outcome.
+
+    Still bound by the mode guard — a taken-over thread is refused here, and the
+    turn itself re-checks ownership before sending. The lock is per-conversation,
+    so one review runs at a time and a second click is refused while it does.
+    """
+    conv = await _load(conv_id, db, user)
+    if conv.mode == ConversationMode.HUMAN or conv.status != ConversationStatus.OPEN:
+        raise ConflictError(
+            "Hội thoại đang do nhân viên xử lý — trả lại Chatbot để bot trả lời."
+        )
+    if not await enqueue_manual_bot_turn(
+        ConversationService(db), conv, enqueue=enqueue_chat_turn
+    ):
+        raise ConflictError(
+            "Bot đang xử lý hội thoại này. Đợi một chút rồi thử lại."
+        )
     return ConversationOut.model_validate(conv)
 
 

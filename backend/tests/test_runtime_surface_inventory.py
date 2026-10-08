@@ -40,9 +40,11 @@ EXPECTED_ROUTE_COUNTS = {
     # Endpoint-level snapshot: adding a decorator inside an existing module must
     # fail this gate and force an explicit authority-classification review.
     "auth": 7,  # +1 server-side logout (SEC-03)
-    "conversations": 20,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
+    "conversations": 21,  # -1 the conversation-scoped bot-run trace list (decision-trace removal)
     # +1 POST /{id}/force-bot-reply — the recruiter's nudge that answers the
     # latest unanswered candidate message (clears the ad-prefill skip flag).
+    # +1 POST /{id}/bot-reply — the recruiter's "read the conversation and answer
+    # if it should" turn, for threads where every inbound already has a reply.
     # +1 GET /by-contact-ids — batch contact→conversations lookup (max 200),
     # viewer-scoped, behind the dashboard candidate-card consolidation.
     "dashboard": 2,
@@ -106,7 +108,10 @@ EXPECTED_ROUTE_COUNTS = {
 # owns and rotates) and -1 integrations route (POST /tingting/oa/check — the
 # four-credential link flow is gone); digest recomputed from the post-change
 # scan, delta verified against a HEAD-worktree scan (exactly those two rows).
-EXPECTED_ROUTE_INVENTORY_SHA256 = "0c0b76034300f3b1d6d966b05795a256fdc8966fcf229fc85f17afe78b7e2c8d"
+# 2026-10-08: +1 conversations route (POST /{id}/bot-reply, active_kernel — the
+# recruiter's review turn that reads the conversation and answers only if
+# warranted); digest recomputed from the post-change scan.
+EXPECTED_ROUTE_INVENTORY_SHA256 = "085ae6c794ec7e44e2c6368dd275e54a529b6fced090f9463a3900f6c6d0fd60"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -289,7 +294,9 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # +1: a turn that held the per-chat mutex hands the conversation to a newer
     # inbound the ingress guard dropped, via chatbot_worker._handoff_to_newer_inbound
     # -> enqueue_latest_unanswered_worker_message.
-    "queue_producer": 30,  # -3 legacy KB-version lane; -8 Google Sheet sync producers (0067); +1 force-bot-reply
+    "queue_producer": 32,  # -3 legacy KB-version lane; -8 Google Sheet sync producers (0067); +1 force-bot-reply
+    # +2 the recruiter's review turn (POST /{id}/bot-reply): the route's call
+    # into enqueue_manual_bot_turn and that scheduler's own enqueue(...) site.
     # -1: the custom provider stopped reading a stored context-window row (the
     # field left the settings UI), so resolve_custom_llm._load's `get` count
     # drops 7→6 at the same site.
@@ -403,7 +410,10 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # (commit 3ab65a44) add a payroll-side egress site; +1 queue_producer — the
 # force-bot-reply endpoint enqueues via enqueue_latest_unanswered_worker_message.
 # Digest recomputed from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "e67005c7453805fa7e2c13c3da47bc666bdb5aa74a2cee1ebb7105088fce4931"
+# 2026-10-08: +2 queue_producer — the recruiter's review turn (POST
+# /{id}/bot-reply) adds the route's call into enqueue_manual_bot_turn plus that
+# scheduler's own enqueue(...) site; digest recomputed from the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "a2ab5ea5a1e7448d1abbb8faa02e617e922e2c49c25dd60c85a561c9e749d70a"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

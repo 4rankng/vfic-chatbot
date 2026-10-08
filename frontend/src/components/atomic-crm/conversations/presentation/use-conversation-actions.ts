@@ -69,7 +69,10 @@ const hasAuthoritativeModeUpdate = (
 export const useConversationActions = (record?: Conversation) => {
   const modeWriter = useDataProvider<
     DataProvider &
-      ConversationModeWriter & { forceBotReply(id: string): Promise<unknown> }
+      ConversationModeWriter & {
+        forceBotReply(id: string): Promise<unknown>;
+        botReply(id: string): Promise<unknown>;
+      }
   >();
   const notify = useNotify();
   const refresh = useRefresh();
@@ -208,6 +211,31 @@ export const useConversationActions = (record?: Conversation) => {
     }
   };
 
+  /** Ask the bot to read the conversation and answer only if it should —
+   *  the lever for threads where every inbound already has a reply but the
+   *  candidate is still waiting on a real answer. */
+  const handleBotReply = async () => {
+    if (!record || pendingRequestRef.current) return;
+    const request = { conversationId: record.id };
+    pendingRequestRef.current = request;
+    setPendingConversationId(record.id);
+    try {
+      await modeWriter.botReply(record.id);
+      if (pendingRequestRef.current !== request) return;
+      notify("conversations.bot_reply.success", { type: "success" });
+      refresh();
+    } catch {
+      if (pendingRequestRef.current === request) {
+        notify("conversations.bot_reply.error", { type: "error" });
+      }
+    } finally {
+      if (pendingRequestRef.current === request) {
+        pendingRequestRef.current = undefined;
+        setPendingConversationId(undefined);
+      }
+    }
+  };
+
   return {
     effectiveMode,
     isBotMode,
@@ -218,5 +246,6 @@ export const useConversationActions = (record?: Conversation) => {
     handleTakeover,
     handleRelease,
     handleForceBotReply,
+    handleBotReply,
   };
 };

@@ -688,6 +688,27 @@ handler swallowed every exception and reported `Job OK`, which is how a model
 or queue failure used to drop a candidate's details silently. An enqueue
 failure is logged at ERROR with the chat id (the turn itself still succeeds).
 
+### Recruiter-requested review turns
+
+Besides an inbound message and reconcile recovery, a recruiter can ask the bot to
+read a conversation from the console (`POST /api/v1/conversations/{id}/bot-reply`).
+The turn enters the same pipeline and obeys the same gates, with two differences:
+
+- **No inbound of its own.** The job carries empty `user_text`, so the agent reads
+  the conversation history as its input and the prompt is marked as a review turn
+  ("no new message") instead of asking the agent to answer a message that does
+  not exist.
+- **Silence is a valid answer.** The agent may return `NO_REPLY`; the lane turns
+  that into a `manual_skip` suppression, so nothing is sent and the outcome row
+  separates "the bot chose not to reply" from a failure. The per-conversation
+  lock still applies (a second click is refused while a turn runs), progressive
+  send is disabled for these turns so nothing can be delivered before the
+  decision, and the mode guard still refuses a recruiter-owned thread.
+
+It exists because the pending-inbound nudge cannot reach every stuck thread: a
+candidate can be waiting on a real answer after the bot already replied (an
+emoji, say), where there is no unanswered inbound left to re-run.
+
 ### Durable outbound delivery states
 
 The message delivery state and its one-to-one outbox command advance together:

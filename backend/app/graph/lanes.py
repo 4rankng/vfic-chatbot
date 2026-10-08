@@ -33,6 +33,7 @@ from app.graph.direct_context import (
     build_direct_system,
 )
 from app.graph.llm_semaphore import LLMThrottled
+from app.graph.manual_reply import is_manual_turn, manual_skip_requested
 from app.graph.message_values import sender_is
 from app.graph.ports import TurnDecisions
 from app.shared.domain.vietnamese_gender import infer_gender_from_name
@@ -814,6 +815,7 @@ async def _agent_turn(
                     "send_self_checkin_otp",
                     "confirm_self_checkin_otp",
                     "update_self_checkin",
+                    "check_self_checkin_status",
                     # Project knowledge rides along only when the turn is NOT the
                     # employee-support OA: that OA answers the reset flow and
                     # nothing else, so it never reaches the recruiting catalog.
@@ -950,6 +952,7 @@ async def _agent_turn(
         lead_profile=lead_profile,
         lead_collection_instruction=lead_collection_instruction,
         route_hint=route_hint,
+        manual_review=is_manual_turn(state),
     )
     # LLM stage timing is captured inside ``MiniMaxAgent.agent`` (clients.py) as
     # the split ``llm_queue_ms`` (semaphore wait) + ``llm_model_ms`` (inference)
@@ -1105,8 +1108,14 @@ async def _resolve_lane(
     # A message that matches several projects is ambiguous: the retired
     # clarification lane returned a code-built question. The agent now authors
     # that question, driven by a mandatory instruction that wins the route hint.
+    manual_turn = is_manual_turn(state)
     mandatory_instruction = ""
-    if (
+    if manual_turn:
+        # The recruiter's review replaces the inbound-driven clarification ask.
+        # There is no candidate message to disambiguate projects against, and
+        # deciding whether to answer at all is the turn's whole job.
+        mandatory_instruction = state.manual_instruction
+    elif (
         project_context is not None
         and project_context.clarification
         and not tingting_reset_allowed
@@ -1170,6 +1179,40 @@ async def _resolve_lane(
             state.user_text,
             **agent_kwargs,
         )
+        if manual_turn and manual_skip_requested(raw):
+            # A deliberate silence, not a failure: the recruiter asked the bot to
+            # review the thread and the model judged there is nothing to answer.
+            # Stand down before finalize so the sentinel can never be sent, and
+            # record it as its own reason so the dashboard separates "the bot
+            # chose not to reply" from "the bot broke".
+            logger.info(
+                "manual review: bot chose to stay silent conversation=%s trace=%s",
+                state.conversation_id,
+                state.trace_id or "-",
+            )
+            # The agent path may have left an aborted transaction on deps.db;
+            # clear it before the terminal reuses the session, exactly as the
+            # agent-error path below does.
+            try:
+                await deps.db.rollback()
+            except Exception:  # noqa: BLE001 — best-effort; worker_session also rolls back
+                logger.debug("manual-skip recovery rollback failed", exc_info=True)
+            timings["total_ms"] = int(round((time.monotonic() - t0) * 1000))
+            return _LaneResolution(
+                lane="agent",
+                terminal=await _authority_gate(
+                    state=state,
+                    deps=deps,
+                    conv=conv,
+                    svc=svc,
+                    reason="manual_skip",
+                    lock_owner=lock_owner,
+                    started=started,
+                    timings=timings,
+                    status_task=status_task,
+                    refresh_conv=True,
+                ),
+            )
     except LLMThrottled:
         raise  # let worker handle degradation msg (no LLM call)
     except Exception as exc:  # noqa: BLE001 — agent blew up -> stay silent

@@ -33,7 +33,12 @@ import {
 import { ChatMessageRow } from "./ChatMessageRow";
 import { LoadingState } from "../../misc/LoadingState";
 import { Button } from "@/components/base/buttons/button";
-import { Bot } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Bot, WandSparkles } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 // ChatThread is the reusable message thread + composer. It owns the realtime
@@ -148,6 +153,7 @@ export const ChatThread = ({
     canHumanReply: internalCanHumanReply,
     handleTakeover: internalHandleTakeover,
     handleForceBotReply: internalHandleForceBotReply,
+    handleBotReply: internalHandleBotReply,
     isChangingMode: internalIsChangingMode,
   } = useConversationActions(conversation);
   const isBotMode = isBotModeOverride ?? internalIsBotMode;
@@ -155,6 +161,7 @@ export const ChatThread = ({
   const canHumanReply = canHumanReplyOverride ?? internalCanHumanReply;
   const handleTakeover = onTakeoverOverride ?? internalHandleTakeover;
   const handleForceBotReply = internalHandleForceBotReply;
+  const handleBotReply = internalHandleBotReply;
   const isChangingMode = Boolean(
     isChangingModeOverride ?? internalIsChangingMode,
   );
@@ -167,6 +174,20 @@ export const ChatThread = ({
       await handleForceBotReply();
     } finally {
       setIsForcingBotReply(false);
+    }
+  };
+
+  // The review turn is the recruiter's read-the-thread lever: it works even when
+  // every inbound already has a reply, and the bot may decide to stay silent.
+  const [isReviewingBot, setIsReviewingBot] = useState(false);
+
+  const handleBotReplyClick = async () => {
+    if (isReviewingBot) return;
+    setIsReviewingBot(true);
+    try {
+      await handleBotReply();
+    } finally {
+      setIsReviewingBot(false);
     }
   };
   // Footer is always present for a selected conversation so the bottom row is a
@@ -666,6 +687,28 @@ export const ChatThread = ({
                   <span className="composer-claim-hint">
                     Cần tiếp quản để trả lời.
                   </span>
+                ) : null}
+                {isBotMode ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        color="primary"
+                        size="sm"
+                        className="uu-scope composer-bot-review-btn"
+                        aria-label="Cho bot đọc hội thoại và trả lời nếu cần"
+                        isDisabled={isReviewingBot || isChangingMode}
+                        isLoading={isReviewingBot}
+                        onPress={handleBotReplyClick}
+                        iconLeading={
+                          <WandSparkles className="icon" aria-hidden="true" />
+                        }
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      Cho bot đọc hội thoại và trả lời nếu cần
+                    </TooltipContent>
+                  </Tooltip>
                 ) : null}
                 <Button
                   type="button"

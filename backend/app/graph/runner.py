@@ -74,6 +74,7 @@ from app.graph.lanes import (
     run_manifest_composed_agent,
     tingting_hotline_reply,
 )
+from app.graph.manual_reply import is_manual_turn
 from app.graph.ports import TurnDecisions
 from app.graph.progressive import (
     _await_first_bubble,
@@ -628,7 +629,15 @@ async def _run_turn(
         # concurrent sender waits for the first complete, useful bubble; a lane
         # that finishes first — or any non-agent lane — keeps the pre-existing
         # single-message path exactly as it was.
-        stream = _ProgressiveStream() if _progressive_send_enabled(deps, svc) else None
+        # A recruiter-requested review turn never streams: its contract is that
+        # nothing reaches the candidate unless the model decides an answer is
+        # warranted, and the early sender would put a bubble out before that
+        # decision exists.
+        stream = (
+            _ProgressiveStream()
+            if _progressive_send_enabled(deps, svc) and not is_manual_turn(state)
+            else None
+        )
         lane_kwargs = {
             "state": state,
             "deps": deps,

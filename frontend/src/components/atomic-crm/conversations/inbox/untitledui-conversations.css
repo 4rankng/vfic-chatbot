@@ -762,6 +762,34 @@
     color-mix(in srgb, var(--uu-inbox-brand) 62%, transparent);
 }
 
+/* The recruiter's "let the bot read the thread" lever, beside Tiếp quản in the
+   console controls. Icon-only square: the tooltip and aria-label carry the
+   meaning, and it stays a secondary action next to the filled takeover button.
+   Declared after .inline-takeover-btn so the outline treatment wins. */
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .composer-bot-review-btn {
+  width: 40px;
+  min-width: 40px;
+  padding-left: 0;
+  padding-right: 0;
+  border-color: var(--uu-inbox-line);
+  background: var(--uu-inbox-surface);
+  color: var(--uu-inbox-brand);
+  box-shadow: none;
+}
+
+.inbox-bg-container:where(
+    .conversation-workspace,
+    .conversation-context-sheet-body
+  )
+  .composer-bot-review-btn:hover:not(:disabled) {
+  border-color: var(--uu-inbox-brand);
+  color: var(--uu-inbox-brand-hover);
+}
+
 .inbox-bg-container:where(.conversation-workspace) .composer-keyboard-hint {
   margin: 6px 2px 0;
   color: var(--uu-inbox-muted);

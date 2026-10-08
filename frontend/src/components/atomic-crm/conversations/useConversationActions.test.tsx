@@ -9,6 +9,7 @@ const dataProvider = {
   setConversationMode: vi.fn<ConversationModeWriter["setConversationMode"]>(
     () => Promise.resolve(),
   ),
+  botReply: vi.fn(() => Promise.resolve()),
 };
 const notify = vi.fn();
 const refresh = vi.fn();
@@ -40,6 +41,7 @@ const Harness = ({
     canHumanReply,
     isChangingMode,
     handleTakeover,
+    handleBotReply,
   } = useConversationActions(conversation);
   return (
     <div>
@@ -50,6 +52,9 @@ const Harness = ({
       <button type="button" onClick={() => void handleTakeover()}>
         Tiếp quản
       </button>
+      <button type="button" onClick={() => void handleBotReply()}>
+        Bot đọc hội thoại
+      </button>
     </div>
   );
 };
@@ -57,6 +62,7 @@ const Harness = ({
 beforeEach(() => {
   vi.clearAllMocks();
   dataProvider.setConversationMode.mockResolvedValue(undefined);
+  dataProvider.botReply.mockResolvedValue(undefined);
 });
 
 const deferred = () => {
@@ -324,5 +330,37 @@ describe("useConversationActions — unassigned HUMAN", () => {
     await expect.element(screen.getByText("can-reply")).toBeVisible();
     expect(dataProvider.setConversationMode).toHaveBeenCalledOnce();
     expect(notify).toHaveBeenCalledOnce();
+  });
+});
+
+describe("useConversationActions — bot review", () => {
+  const botConversation = {
+    ...unassignedHuman,
+    mode: "bot",
+    assigned_recruiter_id: null,
+  } as Conversation;
+
+  it("asks the bot to review the thread and refreshes on success", async () => {
+    const screen = await render(<Harness conversation={botConversation} />);
+
+    await screen.getByRole("button", { name: "Bot đọc hội thoại" }).click();
+
+    expect(dataProvider.botReply).toHaveBeenCalledWith("conv-1");
+    expect(notify).toHaveBeenCalledWith("conversations.bot_reply.success", {
+      type: "success",
+    });
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("reports a refused review and refreshes nothing", async () => {
+    dataProvider.botReply.mockRejectedValueOnce(new Error("conflict"));
+    const screen = await render(<Harness conversation={botConversation} />);
+
+    await screen.getByRole("button", { name: "Bot đọc hội thoại" }).click();
+
+    expect(notify).toHaveBeenCalledWith("conversations.bot_reply.error", {
+      type: "error",
+    });
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

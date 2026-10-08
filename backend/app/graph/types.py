@@ -74,6 +74,12 @@ class BotRunState:
     runtime_revision_id: str = ""
     authority_generation: int | None = None
     runtime_fingerprint: str = ""
+    # Non-empty when a recruiter asked the bot to review the conversation from
+    # the console and answer only if an answer is warranted (``manual_reply``).
+    # Such a turn has no inbound of its own (``user_text`` is empty): the agent
+    # reads the history and may return ``NO_REPLY`` to stay silent. Empty for
+    # every ordinary inbound-driven turn.
+    manual_instruction: str = ""
 
 
 class TurnOutcome(TypedDict):

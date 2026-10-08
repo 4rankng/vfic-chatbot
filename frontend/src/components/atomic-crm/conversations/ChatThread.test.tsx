@@ -89,6 +89,10 @@ vi.mock("./presentation/use-conversation-realtime", () => ({
   useConversationRealtime: () => realtimeControls,
 }));
 
+const actionHandlers = vi.hoisted(() => ({
+  handleBotReply: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("./presentation/use-conversation-actions", () => ({
   useConversationActions: (_record?: Conversation) => ({
     effectiveMode: "human",
@@ -98,6 +102,7 @@ vi.mock("./presentation/use-conversation-actions", () => ({
     setConversationMode: vi.fn(),
     handleTakeover: vi.fn(),
     handleRelease: vi.fn(),
+    handleBotReply: actionHandlers.handleBotReply,
   }),
 }));
 
@@ -379,6 +384,41 @@ describe("ChatThread — mode-gated footer", () => {
     expect(screen.container.querySelector("textarea")).toBeNull();
     await screen.getByRole("button", { name: "Tiếp quản" }).click();
     expect(takeover).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers the recruiter's bot-review button beside Tiếp quản in bot mode", async () => {
+    const screen = await mountThread({
+      isBotModeOverride: true,
+      canHumanReplyOverride: false,
+      composerToolbar: <button type="button">Chế độ: Chatbot</button>,
+    });
+
+    const review = screen.getByRole("button", {
+      name: "Cho bot đọc hội thoại và trả lời nếu cần",
+    });
+    await expect.element(review).toBeVisible();
+    // Icon-only: the meaning lives in the tooltip, not in a second text button.
+    expect(
+      screen.container.querySelector(".composer-bot-review-btn")!.textContent,
+    ).toBe("");
+
+    await review.click();
+    expect(actionHandlers.handleBotReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the bot-review button once a recruiter owns the conversation", async () => {
+    const screen = await mountThread({
+      isBotModeOverride: false,
+      needsClaimOverride: true,
+      canHumanReplyOverride: false,
+      composerToolbar: <button type="button">Chế độ: Tư vấn viên</button>,
+    });
+
+    expect(
+      screen.container.querySelector(".composer-bot-review-btn"),
+    ).toBeNull();
+    await screen.getByRole("button", { name: "Tiếp quản" }).click();
+    expect(actionHandlers.handleBotReply).not.toHaveBeenCalled();
   });
 
   it("disables takeover during a pending mode change and keeps unclaimed conversations read-only", async () => {
