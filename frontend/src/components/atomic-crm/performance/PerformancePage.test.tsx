@@ -42,8 +42,12 @@ describe("PerformanceMetrics", () => {
       )
       .toBeVisible();
 
-    // p95 in seconds (Vietnamese decimal comma), p50 on the sub-line.
-    await expect.element(screen.getByText("3,2 giây")).toBeVisible();
+    // p95 in seconds (Vietnamese decimal comma), p50 on the sub-line. Exact:
+    // the chart tooltip ("3,2 giây · 12 lượt") shares the substring when it
+    // happens to be mounted, and the default substring match would collide.
+    await expect
+      .element(screen.getByText("3,2 giây", { exact: true }))
+      .toBeVisible();
     await expect.element(screen.getByText("p50 1,5 giây")).toBeVisible();
     // The rate and the two raw counters that produced it.
     await expect.element(screen.getByText("25%")).toBeVisible();
