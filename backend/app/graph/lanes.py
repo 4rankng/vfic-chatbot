@@ -15,6 +15,7 @@ to it.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from inspect import Parameter, signature
 from typing import Any, NamedTuple
@@ -93,6 +94,58 @@ _INCOME_COMPARE_HINT = (
     "trả lời theo từng dự án bằng đúng cơ sở dữ liệu (thu nhập tháng, bình quân năm chia 12, "
     "thưởng, kỳ lương), không gộp các cơ sở tính thành một con số duy nhất."
 )
+_AGE_ELIGIBILITY_HINT = (
+    "Ý định: câu hỏi ĐỦ ĐIỀU KIỆN THEO TUỔI. KHÔNG hỏi lại ứng viên muốn xem dự án nào. "
+    "Bắt buộc: gọi list_active_projects trước (không bộ lọc) để có toàn bộ danh mục đang "
+    "hoạt động, rồi tra yêu cầu độ tuổi của từng dự án trong KB của dự án đó "
+    "(search_knowledge với slug dự án). Trả lời bằng danh sách các dự án nhận độ tuổi "
+    "ứng viên nêu, mỗi dự án một khối ngắn (kèm nơi làm việc, thu nhập); dự án không nhận "
+    "thì ghi đúng yêu cầu tuổi của nó; dự án chưa ghi rõ yêu cầu tuổi thì nói thật là chưa "
+    "ghi rõ, không suy đoán."
+)
+# "60 tuổi có làm được không?" on the normalized text: an age number plus a
+# question marker (question mark, or the casual "khong/k/dc/duoc"). A message
+# that only STATES an age ("em 25 tuổi, ở Hải Phòng") is a profile fact, not
+# an eligibility question, and stays on the normal route.
+_AGE_ELIGIBILITY_RE = re.compile(r"(?<!\d)\d{1,2}\s*tuoi\b")
+_AGE_QUESTION_MARKERS = frozenset({"khong", "k", "dc", "duoc"})
+_ELIGIBILITY_ROUTE_INTENTS = frozenset({"faq_detail", "general", "recommend"})
+
+
+def _age_eligibility_catalog_gate(
+    user_text: str,
+    *,
+    route_intent: str,
+    focused_project: bool,
+    tingting_support_account: bool,
+    tingting_reset_allowed: bool,
+) -> bool:
+    """Whether an age-eligibility question must run the whole project catalog.
+
+    "60 tuổi có làm được không?" asks which factories accept the stated age.
+    Each factory's age limit lives in its own KB and the catalog payload
+    carries no age field, so a turn without the catalog (and the KB search)
+    has no evidence at hand — the model filled the gap with a clarifying
+    filler question instead of an answer (owner report 2026-10-08). The gate
+    is deterministic, mirroring the income-compare gate: detect the question
+    shape, force the catalog authority plus the KB search, and override the
+    route hint with the checked-list contract. Skipped on a focused project
+    (its own KB answers directly) and on the TingTing accounts, which never
+    touch the recruitment catalog.
+    """
+    if (
+        route_intent not in _ELIGIBILITY_ROUTE_INTENTS
+        or focused_project
+        or tingting_support_account
+        or tingting_reset_allowed
+    ):
+        return False
+    normalized = normalize_vietnamese_text(user_text or "")
+    if not _AGE_ELIGIBILITY_RE.search(normalized):
+        return False
+    return "?" in normalized or any(
+        token in _AGE_QUESTION_MARKERS for token in normalized.split()
+    )
 
 # The support OA itself serves the reset flow only. Operator rule (2026-09-29):
 # no human works this OA, so nothing here queues one — every would-be
@@ -587,6 +640,14 @@ async def _agent_turn(
         focused_project=focused_project,
     )
     vacancy_catalog_required = requires_project_catalog(route, decisions)
+    age_eligibility_required = _age_eligibility_catalog_gate(
+        user_text,
+        route_intent=route.intent,
+        focused_project=focused_project,
+        tingting_support_account=tingting_support_account,
+        tingting_reset_allowed=tingting_reset_allowed,
+    )
+    vacancy_catalog_required = vacancy_catalog_required or age_eligibility_required
     compare_income_required_args = _compare_income_required_args(
         user_text,
         route_intent=route.intent,
@@ -597,6 +658,7 @@ async def _agent_turn(
         # not force `list_active_projects` onto a turn whose only bound tools are the
         # reset ones.
         vacancy_catalog_required = False
+        age_eligibility_required = False
         compare_income_required_args = None
     required_authority_tool = (
         "list_active_projects"
@@ -608,7 +670,11 @@ async def _agent_turn(
     if manifest_policy is not None and manifest_policy.pack_key != "recruitment":
         allowed_tools = route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
         if vacancy_catalog_required:
-            allowed_tools = ("list_active_projects",)
+            allowed_tools = (
+                ("list_active_projects", "search_knowledge")
+                if age_eligibility_required
+                else ("list_active_projects",)
+            )
         elif compare_income_required_args is not None:
             allowed_tools = ("compare_income",)
         if allowed_tools is not None:
@@ -754,7 +820,11 @@ async def _agent_turn(
     # returns the whole registry when allowed is empty/None).
     allowed_tools = route.tools if route.confidence >= ROUTE_CONFIDENCE_FLOOR else None
     if vacancy_catalog_required:
-        allowed_tools = ("list_active_projects",)
+        allowed_tools = (
+            ("list_active_projects", "search_knowledge")
+            if age_eligibility_required
+            else ("list_active_projects",)
+        )
     elif compare_income_required_args is not None:
         allowed_tools = ("compare_income",)
     resolved_tool_registry = None
@@ -938,6 +1008,8 @@ async def _agent_turn(
         if mandatory_instruction
         else _INCOME_COMPARE_HINT
         if compare_income_required_args is not None
+        else _AGE_ELIGIBILITY_HINT
+        if age_eligibility_required
         else routing_instruction(
             TurnRoute("recommend", "structured_lookup", reason="vacancy_listing")
         )

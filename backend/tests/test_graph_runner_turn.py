@@ -2068,6 +2068,127 @@ async def test_cross_project_salary_target_requires_compare_income(monkeypatch):
     assert "forced_project_slug" not in captured
 
 
+@pytest.mark.asyncio
+async def test_age_eligibility_question_requires_catalog_and_kb_search(monkeypatch):
+    """An age question runs the checked catalog list, not a filler ask-back.
+
+    Owner report 2026-10-08 ("60 tuổi có làm được không?"): each factory's age
+    limit lives in its own KB and the catalog payload carries no age field, so
+    with no tool authority the model answered a straight eligibility question
+    by asking the candidate which project they meant. The gate now forces the
+    catalog authority plus the KB search and overrides the route hint with the
+    checked-list contract.
+    """
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str] = {}
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            captured["prompt"] = user_text
+            return "Dạ các dự án nhận đủ 60 tuổi gồm..."
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(
+        lanes,
+        "build_agent_user_text",
+        lambda **kwargs: f"{kwargs['current_user_text']}\n{kwargs.get('route_hint') or ''}",
+    )
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    reply = await _agent_turn(
+        BotRunState(
+            conversation_id=CONV_ID, version_at_start=1, user_text="60 tuổi có làm được không?"
+        ),
+        deps,
+        "60 tuổi có làm được không?",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        project_context=SimpleNamespace(
+            state="EXPLORE", knowledge_mode=None, project_slug=None, project_name=None
+        ),
+        decisions=TurnDecisions(intent="general", intent_confidence=0.8),
+    )
+
+    assert reply.startswith("Dạ các dự án nhận đủ 60 tuổi")
+    assert captured["allowed_tools"] == ("list_active_projects", "search_knowledge")
+    assert captured["required_tool"] == "list_active_projects"
+    assert "ĐỦ ĐIỀU KIỆN THEO TUỔI" in captured["prompt"]
+    assert "KHÔNG hỏi lại" in captured["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_age_statement_without_question_keeps_the_normal_route(monkeypatch):
+    """A candidate stating their age is a profile fact, not an eligibility gate.
+
+    "em 25 tuổi, ở Hải Phòng ạ" carries no question marker: no forced catalog,
+    no eligibility hint — the normal route (and its own hint) applies.
+    """
+    from app.graph.runner import _agent_turn
+
+    captured: dict[str] = {}
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured.update(kwargs)
+            captured["prompt"] = user_text
+            return "Dạ em đã ghi nhận ạ."
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    await _agent_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=1,
+            user_text="em 25 tuổi, ở Hải Phòng ạ",
+        ),
+        deps,
+        "em 25 tuổi, ở Hải Phòng ạ",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        project_context=SimpleNamespace(
+            state="EXPLORE", knowledge_mode=None, project_slug=None, project_name=None
+        ),
+        decisions=TurnDecisions(intent="profile_update", intent_confidence=0.9),
+    )
+
+    assert captured.get("required_tool") != "list_active_projects"
+    assert "ĐỦ ĐIỀU KIỆN THEO TUỔI" not in captured["prompt"]
+
+
 @pytest.mark.parametrize("mode", ["RAG", "DIRECT_CONTEXT"])
 @pytest.mark.parametrize("decisions", [
     TurnDecisions(intent="general", intent_confidence=0.8, recent_vacancy=True),
