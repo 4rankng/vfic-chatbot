@@ -104,26 +104,23 @@ _FAILED_SEND_RETRY_BACKOFF_SECONDS = 900
 # the conversation waits for a recruiter (the console shows the failed bubbles).
 _FAILED_SEND_MAX_ATTEMPTS = 2
 
-# Provider errors that no retry can fix. Two shapes, one consequence: the send
-# cannot succeed until a human intervenes, so the sweep must stop rather than
-# re-generating the same undeliverable reply.
+# Provider errors that no retry can fix. Two shapes:
 #
 # 1. Dead credentials — the Zalo OA refresh token was refused with ``-14014
 #    Invalid refresh token`` (the app secret was re-issued), so every send on
-#    that OA came back "Access token has expired".
+#    that OA came back "Access token has expired". The send cannot succeed
+#    until a human re-authorizes the channel, so the sweep skips the retry and
+#    pushes the operator alert.
 # 2. A closed Messenger window — Meta answers code 10 subcode 2018278
 #    "This message is sent outside of allowed window". The Standard Messaging
-#    Window only reopens when the person writes to the Page again, so a
-#    recovery turn minutes later is rejected identically. Observed on the
-#    Messenger channel 2026-10-07: one conversation produced five failed
-#    bubbles in 13 minutes because ``conversations.last_inbound_at`` said the
-#    window was open (the local gate let the send out) while Meta disagreed for
-#    that PSID. Bypassing the window needs ``pages_utility_messaging`` plus an
-#    approved message tag — a Meta App Review item, not a retry.
+#    Window only reopens when the person writes to the Page again. Owner rule
+#    (2026-10-08): give the send ONE recovery attempt (two attempts total),
+#    then the thread stands down SILENTLY — no operator push, because nothing
+#    an operator does can open the window; the bot simply answers when the
+#    candidate messages for real. (Previously: never retried, always pushed —
+#    one ad campaign then buzzed the owner per failed lead.)
 #
-# Either way the retry burns a full LLM turn and adds another failed bubble to
-# the candidate's thread. Matched case-insensitively against
-# ``messages.external_error``.
+# Matched case-insensitively against ``messages.external_error``.
 _TERMINAL_SEND_ERROR_MARKERS = (
     "access token has expired",
     "invalid access token",
@@ -132,6 +129,8 @@ _TERMINAL_SEND_ERROR_MARKERS = (
     "outside of allowed window",
 )
 
+_WINDOW_CLOSED_MARKER = "outside of allowed window"
+
 
 def _is_terminal_send_failure(message) -> bool:  # noqa: ANN001 (Message ORM row)
     """Whether the recorded send failure is unfixable by a retry, not a blip."""
@@ -139,6 +138,17 @@ def _is_terminal_send_failure(message) -> bool:  # noqa: ANN001 (Message ORM row
     if not text:
         return False
     return any(marker in text for marker in _TERMINAL_SEND_ERROR_MARKERS)
+
+
+def _is_window_closed_failure(message) -> bool:  # noqa: ANN001 (Message ORM row)
+    """Whether the recorded send failure is Meta's closed messaging window.
+
+    Only the candidate's own next message can change this state, so the owner
+    rule (2026-10-08) gives it one recovery attempt and then a SILENT stand-down
+    — unlike dead credentials, where the operator alert is the action.
+    """
+    text = str(getattr(message, "external_error", "") or "").strip().lower()
+    return _WINDOW_CLOSED_MARKER in text
 
 
 def _within_failed_send_backoff(newest, *, now: datetime) -> bool:
@@ -176,52 +186,29 @@ async def _failed_send_attempts(db, conversation_id, *, since: datetime) -> int:
 
 
 async def _alert_stuck_conversation(
-    db, conv, *, reason: str, attempts: int, newest_error: str = "",
-    failure_id: Any = None,
+    db, conv, *, reason: str, attempts: int, failure_id: Any = None,
 ) -> None:  # noqa: ANN001
     """Push the operator alert for a thread whose reply cannot be delivered.
 
-    Three shapes, all silent without this: the channel credential is dead
-    (nothing delivers until it is re-authorized), the provider refused the
-    same reply twice and the sweep has given up, or — Messenger only — the
-    reply hit Meta's closed 24h window. ``newest_error`` disambiguates the
-    terminal_send copy per channel: the ad-prefill copy only fits ad threads
-    (``attribution.referral_source == 'ADS'`` — the pre-filled first message
-    never opened the window); an organic thread's window simply expired, and
-    telling the operator it "came from an ad" reads as false (owner report
-    2026-10-08). The dedupe key carries ``failure_id`` (the failed message's
-    id): the 6h ``notify_admins`` window then re-alerts only when a NEW
-    failure row appears, not every 6h for the same unchanged newest row —
-    the same stuck thread buzzed the owner again 7h after its failure
-    (03:43/04:03 alerts for the 20:38 refusals). Best-effort: the sweep must
-    finish its lock bookkeeping even if the push fails.
+    Two shapes, both silent without this: the channel credential is dead
+    (nothing delivers until it is re-authorized), or the provider refused the
+    same reply twice and the sweep has given up. A closed Messenger window is
+    deliberately NOT alerted (owner rule 2026-10-08): only the candidate's own
+    next message changes that state, the bot answers it automatically, and the
+    pushes read as noise (one ad campaign buzzed the owner per failed lead).
+    The dedupe key carries ``failure_id`` (the failed message's id): the 6h
+    ``notify_admins`` window then re-alerts only when a NEW failure row
+    appears, not every 6h for the same unchanged newest row. Best-effort: the
+    sweep must finish its lock bookkeeping even if the push fails.
     """
     from app.services.push import notify_admins
 
     if reason == "terminal_send":
-        if "allowed window" in newest_error.lower():
-            attribution = getattr(conv, "attribution", None) or {}
-            if str(attribution.get("referral_source") or "").upper() == "ADS":
-                title = "Messenger chưa mở cửa sổ trả lời"
-                body = (
-                    "Ứng viên đến từ quảng cáo Messenger và chưa tự nhắn tin — "
-                    "Meta chặn trang chủ động gửi tin tới khi ứng viên nhắn tin "
-                    "thật. Không cần cấp lại quyền; bot sẽ tự trả lời khi ứng "
-                    "viên nhắn tin."
-                )
-            else:
-                title = "Cửa sổ 24h của Messenger đã đóng"
-                body = (
-                    "Tin nhắn bị Meta từ chối vì đã quá 24 giờ kể từ lần cuối "
-                    "ứng viên nhắn tin. Không cần cấp lại quyền; bot sẽ tự "
-                    "trả lời khi ứng viên nhắn lại."
-                )
-        else:
-            title = "Kênh gửi tin đã hết hiệu lực"
-            body = (
-                "Không gửi được tin vì access token của kênh đã hết hạn. "
-                "Hãy cấp lại quyền cho OA trong Cài đặt → Zalo OA."
-            )
+        title = "Kênh gửi tin đã hết hiệu lực"
+        body = (
+            "Không gửi được tin vì access token của kênh đã hết hạn. "
+            "Hãy cấp lại quyền cho OA trong Cài đặt → Zalo OA."
+        )
     else:
         title = "Không gửi được tin nhắn cho ứng viên"
         body = (
@@ -439,24 +426,33 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                             await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                             continue
                         if _is_terminal_send_failure(newest):
-                            # Nothing a retry can change: the channel credential
-                            # is dead (expired OA access token, refused refresh
-                            # token), or Meta's messaging window is closed for
-                            # this person (code 10 subcode 2018278) and only
-                            # reopens when they write again. A recovery turn
-                            # cannot deliver anything; it only adds another
-                            # failed bubble the candidate can see.
-                            terminal_send_skipped += 1
-                            await _alert_stuck_conversation(
-                                db,
-                                conv_fresh,
-                                reason="terminal_send",
-                                attempts=0,
-                                newest_error=str(newest.external_error or ""),
-                                failure_id=newest.id,
-                            )
-                            await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
-                            continue
+                            if _is_window_closed_failure(newest):
+                                # Owner rule (2026-10-08): Meta's closed window
+                                # earns ONE recovery attempt (two send attempts
+                                # total) through the capped failed_send path
+                                # below, then the thread stands down SILENTLY
+                                # and waits for the candidate's next message —
+                                # which the normal flow answers. No operator
+                                # push: nothing an operator does opens the
+                                # window, and per-lead alerts read as noise.
+                                reason = "failed_send"
+                            else:
+                                # Nothing a retry can change: the channel
+                                # credential is dead (expired OA access token,
+                                # refused refresh token) and only a human can
+                                # re-authorize it. A recovery turn cannot
+                                # deliver anything; it only adds another failed
+                                # bubble the candidate can see.
+                                terminal_send_skipped += 1
+                                await _alert_stuck_conversation(
+                                    db,
+                                    conv_fresh,
+                                    reason="terminal_send",
+                                    attempts=0,
+                                    failure_id=newest.id,
+                                )
+                                await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
+                                continue
                         reason = "failed_send"
                     elif newest.delivery_status.name == "SEND_UNKNOWN":
                         # Ambiguous send (transport timeout after Zalo may have
@@ -489,12 +485,20 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     # conversation stays visible to a recruiter with its failed
                     # replies, and a candidate who writes again starts a fresh
                     # attempt counter (their new inbound is a newer ``since``).
+                    # A closed Messenger window stands down QUIETLY (owner rule
+                    # 2026-10-08): only the candidate's next message changes the
+                    # state and the bot answers it automatically, so there is no
+                    # operator action to buzz anyone about.
                     await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                     failed_send_exhausted += 1
-                    await _alert_stuck_conversation(
-                        db, conv_fresh, reason="failed_send_exhausted", attempts=_FAILED_SEND_MAX_ATTEMPTS,
-                        failure_id=newest.id,
-                    )
+                    if not _is_window_closed_failure(newest):
+                        await _alert_stuck_conversation(
+                            db,
+                            conv_fresh,
+                            reason="failed_send_exhausted",
+                            attempts=_FAILED_SEND_MAX_ATTEMPTS,
+                            failure_id=newest.id,
+                        )
                     continue
 
                 if not user_text:
