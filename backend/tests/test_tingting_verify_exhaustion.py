@@ -43,14 +43,30 @@ class _CountingRetrieval:
         self.text = text
         self.failures = 0
         self.cleared = 0
+        self.flow: dict[str, dict] = {}
+        self.verified_phones: set[str] = set()
 
     async def call_tingting_api(self, *, method, path, params):  # noqa: ANN001
         from app.services.external_api_core import ExternalApiOutcome
 
         return ExternalApiOutcome("ok", "TingTing", path, 200, self.text)
 
-    async def save_tingting_flow_state(self, _phone: str, state: dict) -> dict:
-        return dict(state)
+    async def tingting_flow_state(self, phone: str) -> dict:
+        return dict(self.flow.get(phone, {}))
+
+    async def save_tingting_flow_state(self, phone: str, state: dict) -> dict:
+        merged = {**self.flow.get(phone, {}), **state}
+        self.flow[phone] = merged
+        return dict(merged)
+
+    async def clear_tingting_flow_state(self, phone: str) -> None:
+        self.flow.pop(phone, None)
+
+    async def tingting_identity_verified(self, phone: str) -> bool:
+        return phone in self.verified_phones
+
+    async def mark_tingting_identity_verified(self, phone: str) -> None:
+        self.verified_phones.add(phone)
 
     async def tingting_verify_attempts(self, scope: str) -> int:  # noqa: ARG002
         return self.failures

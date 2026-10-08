@@ -145,6 +145,8 @@ class _StubRetrieval:
         self.text = text
         self.calls: list[dict] = []
         self.saved: list[dict] = []
+        self.flow: dict[str, dict] = {}
+        self.verified_phones: set[str] = set()
 
     async def call_tingting_api(self, *, method, path, params):  # noqa: ANN001
         from app.services.external_api_core import ExternalApiOutcome
@@ -152,9 +154,23 @@ class _StubRetrieval:
         self.calls.append({"method": method, "path": path, "params": params})
         return ExternalApiOutcome("ok", "TingTing", path, 200, self.text)
 
-    async def save_tingting_flow_state(self, _phone: str, state: dict) -> dict:
+    async def tingting_flow_state(self, phone: str) -> dict:
+        return dict(self.flow.get(phone, {}))
+
+    async def save_tingting_flow_state(self, phone: str, state: dict) -> dict:
         self.saved.append(dict(state))
-        return dict(state)
+        merged = {**self.flow.get(phone, {}), **state}
+        self.flow[phone] = merged
+        return dict(merged)
+
+    async def clear_tingting_flow_state(self, phone: str) -> None:
+        self.flow.pop(phone, None)
+
+    async def tingting_identity_verified(self, phone: str) -> bool:
+        return phone in self.verified_phones
+
+    async def mark_tingting_identity_verified(self, phone: str) -> None:
+        self.verified_phones.add(phone)
 
 
 @pytest.mark.asyncio
