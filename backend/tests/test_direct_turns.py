@@ -259,15 +259,26 @@ async def test_typing_bridge_never_falls_back_to_stale_environment_token(monkeyp
 
     resolve = AsyncMock(return_value=SimpleNamespace(bot_token=None))
     emit = AsyncMock()
+    # Signal-driven, not wall-clock: the full test lane runs this under load and
+    # a fixed sleep only guaranteed ~1 beat in 65ms (2026-10-08 flake). Wait for
+    # the third resolve, then cancel — the assertion stays ≥ 3 beats.
+    third_beat = asyncio.Event()
+
+    async def _resolve(*args, **kwargs):
+        result = await resolve(*args, **kwargs)
+        if resolve.await_count >= 3:
+            third_beat.set()
+        return result
+
     monkeypatch.setattr("app.core.config.get_settings", lambda: SimpleNamespace(
         typing_heartbeat_seconds=0.02, zalo_bot_token="stale-environment-token",
     ))
     monkeypatch.setattr(core_db, "async_session", _session_factory, raising=False)
-    monkeypatch.setattr(IntegrationSettingsService, "resolve_zalo", resolve)
+    monkeypatch.setattr(IntegrationSettingsService, "resolve_zalo", _resolve)
     monkeypatch.setattr(webhook, "_fire_typing", emit)
     task = asyncio.create_task(direct_turn.bridge_typing("candidate"))
     try:
-        await asyncio.sleep(0.065)
+        await asyncio.wait_for(third_beat.wait(), timeout=5)
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
