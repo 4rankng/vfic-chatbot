@@ -236,7 +236,11 @@ def build_turn_questions(
             "type": "noul",
             "instructions": (
                 "Tin nhắn `message` CHỈ là lời chào/cảm ơn/tạm biệt/xã giao, "
-                "hoàn toàn không chứa câu hỏi hay yêu cầu nội dung"
+                "hoàn toàn không chứa câu hỏi hay yêu cầu nội dung. LƯU Ý: khi "
+                "`bot_last_message` đang ĐỢI người gửi trả lời (họ tên, tuổi, "
+                "nơi ở, số điện thoại, chọn một dự án/phương án...), một câu "
+                "TRẢ LỜI ngắn cho câu hỏi đó — kể cả chỉ vài từ như một tên "
+                "địa danh hay một con số — là NỘI DUNG, không phải xã giao: trả về sai."
             ),
             "criteria": _NOUL_CRITERIA,
         },

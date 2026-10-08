@@ -5683,6 +5683,58 @@ async def test_pleasantry_gets_a_smile_not_a_generation(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pleasantry_ack_never_fires_on_a_content_answer(monkeypatch):
+    """A short answer to the bot's own question runs the agent, not a smile.
+
+    The 2026-10-08 incident: "Đồng triều ạ" answered the bot's "anh/chị ở
+    thành phố/thị xã nào của Quảng Ninh?" — but Jev's probabilistic pleasantry
+    vote scored it above the gate and the lane shipped a bare "😊" while the
+    candidate waited for the bus-route check. ``is_known_pleasantry`` is the
+    fail-closed backstop: a message that is not a KNOWN pleasantry form never
+    acks, whatever Jev said.
+    """
+    from app.graph.runner import _agent_turn
+    from types import SimpleNamespace as _Msg
+
+    class _FakeAgent:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            self.calls += 1
+            return "Dạ Đồng Triều thì em kiểm tra tuyến xe ngay ạ."
+
+    agent = _FakeAgent()
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = agent
+    deps.retrieval = SimpleNamespace(
+        tingting_api_configured=AsyncMock(return_value=False),
+        tingting_hotline=AsyncMock(return_value="+84 914 827 988"),
+    )
+    monkeypatch.setattr(
+        lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"]
+    )
+    from app.models.conversation import MessageSender
+    prior = [_Msg(sender=MessageSender.BOT, body="Anh/chị ở thị xã nào của Quảng Ninh?")]
+
+    reply = await _agent_turn(
+        BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="Đồng triều ạ"),
+        deps,
+        "Đồng triều ạ",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=prior,
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(
+            intent="profile_update", intent_confidence=0.7, pleasantry=True
+        ),
+    )
+
+    assert reply == "Dạ Đồng Triều thì em kiểm tra tuyến xe ngay ạ."
+    assert agent.calls == 1
+
+
+@pytest.mark.asyncio
 async def test_pleasantry_ack_never_fires_on_a_cold_open(monkeypatch):
     """A bare "hi" as the FIRST message keeps the greeting flow, not a smile."""
     from app.graph.runner import _agent_turn

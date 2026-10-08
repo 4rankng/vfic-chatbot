@@ -71,6 +71,7 @@ from app.recruitment.domain.recommendation import (
     parse_salary_band,
 )
 from app.shared.domain.addressing import address_form
+from app.shared.domain.politeness import is_known_pleasantry
 
 from app.shared.domain.text import normalize_vietnamese_text
 
@@ -79,7 +80,11 @@ logger = logging.getLogger(__name__)
 # The politeness-only acknowledgment: a smile, nothing else. Jev's pleasantry
 # judgment gates it (see the ack lane in `_agent_turn`) — a message that is
 # only a greeting/thanks/ack carries nothing to answer, and generating on it
-# is how the 252-second "cam on" turn happened.
+# is how the 252-second "cam on" turn happened. The judgment is probabilistic,
+# so the closed lexicon in ``app.shared.domain.politeness`` is the fail-closed
+# backstop: a message that is not a KNOWN pleasantry form never acks (the
+# 2026-10-08 incident — "Đồng triều ạ", a district answer to the bot's own
+# question, scored above Jev's gate and shipped a bare smile).
 POLITE_ACK_REPLY = "😊"
 DIRECT_HISTORY_TOKEN_BUDGET = 12_000
 _INCOME_COMPARE_HINT = (
@@ -545,6 +550,7 @@ async def _agent_turn(
         return vfic_hotline_reply()
     if (
         decisions.pleasantry
+        and is_known_pleasantry(user_text)
         and not decisions.contact_info
         and not tingting_support_account
         and not tingting_reset_allowed
@@ -562,6 +568,9 @@ async def _agent_turn(
         # opener four times, while follow-up messages queued behind the chat
         # lock. The prior-bot-reply guard keeps a cold open ("hi") on the
         # normal greeting path; the TingTing accounts keep their own flows.
+        # ``is_known_pleasantry`` is the deterministic backstop on Jev's
+        # probabilistic vote: a content answer misjudged as a pleasantry ("Đồng
+        # triều ạ", 2026-10-08) runs the agent instead of shipping a bare smile.
         if timings is not None:
             timings.setdefault("intent", route.intent)
             timings.setdefault("route_strategy", route.strategy)
