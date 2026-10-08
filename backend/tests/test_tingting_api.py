@@ -1140,7 +1140,9 @@ async def test_self_checkin_update_relays_an_immediate_enable() -> None:
     )
     result = await update_self_checkin(retrieval, phone="0987654321", project_id="7", enable=True)
     sent = retrieval.calls[0]["params"]
-    assert sent == {"action_token": "sc-tok-9", "project_id": "7", "enable": "true"}
+    # payroll binds project_id as a number and enable as a boolean — the egress
+    # payload must carry native JSON types, not the tool layer's strings.
+    assert sent == {"action_token": "sc-tok-9", "project_id": 7, "enable": True}
     # the token is consumed single-use and the flow clears
     assert retrieval.cleared == 1
     assert "sc-tok-9" not in result
@@ -1168,7 +1170,7 @@ async def test_self_checkin_update_relays_a_deferred_enable_and_disable() -> Non
     )
     result = await update_self_checkin(disabled, phone="0987654321", project_id="7", enable=False)
     assert "SẼ TẮT từ ngày 01/11; trước đó vẫn chấm công bình thường" in result
-    assert disabled.calls[0]["params"]["enable"] == "false"
+    assert disabled.calls[0]["params"]["enable"] is False
 
 
 @pytest.mark.asyncio
@@ -1220,7 +1222,7 @@ async def test_self_checkin_update_fills_the_single_project_and_asks_when_ambigu
         },
     )
     result = await update_self_checkin(single, phone="0987654321", project_id="", enable=True)
-    assert single.calls[0]["params"]["project_id"] == "7"
+    assert single.calls[0]["params"]["project_id"] == 7
 
     many = _FlowRetrieval(
         _sc_update_ok("enable", immediate=True, effective_from="2026-10-01"),
@@ -1235,6 +1237,21 @@ async def test_self_checkin_update_fills_the_single_project_and_asks_when_ambigu
     result = await update_self_checkin(many, phone="0987654321", project_id="", enable=True)
     assert many.calls == []
     assert "project_id" in result
+
+
+@pytest.mark.asyncio
+async def test_self_checkin_update_maps_the_project_name_to_the_stored_id() -> None:
+    """Candidates answer in names ("LGD"); payroll wants the numeric id."""
+    retrieval = _FlowRetrieval(
+        _sc_update_ok("enable", immediate=True, effective_from="2026-10-01"),
+        state={
+            "sc_action_token": "sc-tok-9",
+            "sc_assignments": [{"project_id": "7", "project_name": "LGD"}],
+        },
+    )
+    result = await update_self_checkin(retrieval, phone="0987654321", project_id="LGD", enable=True)
+    assert retrieval.calls[0]["params"]["project_id"] == 7
+    assert "Đã BẬT tự chấm công từ ngày 01/10" in result
 
 
 # ── the channel scope: the flow belongs to the TingTing Zalo OA ─────────────

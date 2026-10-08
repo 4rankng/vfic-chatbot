@@ -261,15 +261,31 @@ async def update_self_checkin(
             clean_project = assignments[0]["project_id"]
         else:
             return _NO_PROJECT
-    if clean_project not in {item["project_id"] for item in assignments}:
+    # Payroll binds project_id as a number and enable as a boolean, so the
+    # egress payload must carry native JSON types — the string forms 400 at
+    # Go's binding no matter how correct the values are. The model may pass
+    # the project NAME (candidates answer in names); map it to the stored id
+    # before the type conversion rather than refusing the whole turn.
+    matched = [item for item in assignments if item["project_id"] == clean_project]
+    if not matched:
+        matched = [
+            item
+            for item in assignments
+            if item["project_name"].strip().lower() == clean_project.lower()
+        ]
+        if not matched:
+            return _PROJECT_NOT_LISTED
+    try:
+        project_id_num = int(matched[0]["project_id"])
+    except ValueError:
         return _PROJECT_NOT_LISTED
     outcome = await retrieval.call_tingting_api(
         method="POST",
         path=SC_UPDATE_PATH,
         params={
             "action_token": action_token,
-            "project_id": clean_project,
-            "enable": "true" if enable else "false",
+            "project_id": project_id_num,
+            "enable": bool(enable),
         },
     )
     if outcome.state != "ok":
