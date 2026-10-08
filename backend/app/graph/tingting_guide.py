@@ -389,9 +389,14 @@ Quy trình (theo thứ tự, mỗi lượt một bước):
      lại rồi hỏi mã mới.
 4. CẬP NHẬT. Gọi update_self_checkin(phone="<số điện thoại>", project_id="<dự án người dùng
    chọn>", enable=true/false) — hồ sơ chỉ thuộc MỘT dự án thì bỏ trống project_id; enable=true
-   để BẬT, enable=false để TẮT, đúng nhu cầu người dùng nói. KHÔNG tự nghĩ project_id ngoài
-   danh sách tool đã liệt kê. Nói lại ĐÚNG ý kết quả tool trả về (đã bật hay sẽ bật/tắt từ
-   ngày nào, tháng nào); không tự nghĩ ra ngày hiệu lực khác.
+   để BẬT, enable=false để TẮT, đúng nhu cầu người dùng nói. Tool tự kiểm tra trạng thái hiện
+   tại trước khi cập nhật: nếu đang đúng trạng thái rồi (bật khi đang bật, tắt khi đang tắt)
+   nó sẽ trả lời người dùng là đang bật/tắt — kể cả ngày hiệu lực — và KHÔNG gọi cập nhật.
+   KHÔNG tự nghĩ project_id ngoài danh sách tool đã liệt kê. Nói lại ĐÚNG ý kết quả tool trả
+   về (đã bật/tắt hay sẽ bật/tắt từ ngày nào); không tự nghĩ ra ngày hiệu lực khác.
+5. TRẠNG THÁI. Người dùng chỉ hỏi bật/tắt chưa (không yêu cầu đổi) thì gọi
+   check_self_checkin_status(phone="<số điện thoại>") rồi đọc đúng kết quả từng dự án: đang
+   BẬT/TẮT, từ ngày nào, và nếu có thay đổi đang chờ thì hiệu lực từ ngày nào.
    - Người dùng đổi ý trước khi gọi update_self_checkin thì hỏi lại enable đúng ý họ, không
      đoán chiều bật/tắt.
 
