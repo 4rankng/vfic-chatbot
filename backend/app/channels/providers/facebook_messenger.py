@@ -6,8 +6,10 @@ consume the neutral ports (:class:`TextChannelAdapter`, receipt capability);
 they never import this module or branch on a Messenger-specific value.
 
 V1 scope (per the deep-interview spec):
-- Inbound: candidate ``message.text`` only. Echoes, postbacks, quick replies
-  without plain text, attachments, stickers, reactions → acknowledged and
+- Inbound: candidate ``message.text`` plus the composer thumbs-up (the like
+  sticker, normalized to an annotated text inbound so the bot answers it —
+  owner rule 2026-10-08). Echoes, postbacks, quick replies
+  without plain text, attachments, other stickers, reactions → acknowledged and
   ignored, with an ignored-reason counter. No media download or persistence.
 - Outbound: text only. No buttons/media/templates.
 - Policy: enforce the 24-hour Standard Messaging Window via
@@ -81,6 +83,23 @@ def _rejection_detail(exc: FacebookOAuthError) -> str:
     line = f"messenger send rejected ({', '.join(parts)})"
     detail = getattr(exc, "detail", None)
     return f"{line}: {detail}" if detail else line
+
+
+# Meta's composer thumbs-up ships as a sticker with one of these ids and no
+# ``text`` field — small / medium / large like (public Messenger Platform ids).
+_LIKE_STICKER_IDS = frozenset({369239263222822, 369239343222814, 369239383222810})
+# The annotated text inbound a like press becomes. Parenthesized so a recruiter
+# reading the console thread sees the gesture for what it was, and the agent
+# reads a description of the nudge instead of a bare emoji.
+_LIKE_STICKER_BODY = "(thả like 👍)"
+
+
+def _is_like_sticker(message: dict) -> bool:
+    """Whether this text-less message is the composer thumbs-up."""
+    try:
+        return int(message.get("sticker_id")) in _LIKE_STICKER_IDS
+    except (TypeError, ValueError):
+        return False
 
 
 def attribution_from_referral(referral: object) -> dict | None:
@@ -187,9 +206,16 @@ class FacebookMessengerNormalizer:
             ignored["postback"] = ignored.get("postback", 0) + 1
             return
         if not isinstance(message, dict) or "text" not in message:
-            # Attachment-only, sticker, reaction, etc.
-            ignored["non_text"] = ignored.get("non_text", 0) + 1
-            return
+            if isinstance(message, dict) and _is_like_sticker(message):
+                # The composer thumbs-up arrives as a sticker with no text.
+                # Owner rule (2026-10-08): a like is a candidate nudge, not
+                # silence — it becomes the annotated text inbound below so the
+                # normal turn pipeline runs and the bot answers it.
+                message = {**message, "text": _LIKE_STICKER_BODY}
+            else:
+                # Attachment-only, other stickers, reaction, etc.
+                ignored["non_text"] = ignored.get("non_text", 0) + 1
+                return
 
         text = message.get("text")
         if not text or not str(text).strip():

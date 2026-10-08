@@ -174,6 +174,71 @@ def test_normalizer_ignores_attachment_only():
     assert ignored.get("non_text") == 1
 
 
+_LIKE_STICKER_IDS = (369239263222822, 369239343222814, 369239383222810)
+
+
+def test_normalizer_like_sticker_becomes_annotated_inbound():
+    """The composer thumbs-up gets a bot reply like any other inbound.
+
+    Owner rule 2026-10-08: pressing like shipped as Meta's like sticker with
+    no text and was dropped as ``non_text``, so the candidate nudged the page
+    and heard silence. All three like sticker sizes normalize to the annotated
+    text inbound; other stickers keep being ignored.
+    """
+    for index, sticker_id in enumerate(_LIKE_STICKER_IDS):
+        norm = FacebookMessengerNormalizer()
+        msgs, ignored = norm.normalize(
+            {
+                "entry": [
+                    {
+                        "messaging": [
+                            _msg_event(mid=f"m.like.{index}", sticker_id=sticker_id)
+                        ]
+                    }
+                ]
+            }
+        )
+        assert len(msgs) == 1, sticker_id
+        assert msgs[0].text == "(thả like 👍)"
+        assert msgs[0].external_message_id == f"m.like.{index}"
+        assert ignored == {}
+
+
+def test_normalizer_like_sticker_id_as_string_is_accepted():
+    """Meta ships sticker_id as a number; tolerate the string shape too."""
+    norm = FacebookMessengerNormalizer()
+    msgs, ignored = norm.normalize(
+        {
+            "entry": [
+                {"messaging": [_msg_event(mid="m.like.str", sticker_id="369239263222822")]}
+            ]
+        }
+    )
+    assert len(msgs) == 1
+    assert msgs[0].text == "(thả like 👍)"
+    assert ignored == {}
+
+
+def test_normalizer_ignores_non_like_sticker():
+    """A real sticker (a smiley, a gif) is not a like nudge — still ignored."""
+    norm = FacebookMessengerNormalizer()
+    msgs, ignored = norm.normalize(
+        {
+            "entry": [
+                {
+                    "messaging": [
+                        _msg_event(mid="m.sticker", sticker_id=7673344762900),
+                        _msg_event(mid="m.sticker.str", sticker_id="1"),
+                        _msg_event(mid="m.sticker.none", sticker_id=None),
+                    ]
+                }
+            ]
+        }
+    )
+    assert msgs == []
+    assert ignored.get("non_text") == 3
+
+
 def test_normalizer_ignores_empty_text():
     norm = FacebookMessengerNormalizer()
     msgs, ignored = norm.normalize(
