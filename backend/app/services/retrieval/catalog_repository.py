@@ -275,6 +275,8 @@ class CatalogRepository:
                     Job.title,
                     Job.salary_min,
                     Job.salary_max,
+                    Job.age_min,
+                    Job.age_max,
                     Job.province,
                     Job.district,
                     Job.address,
@@ -318,6 +320,8 @@ class CatalogRepository:
                     title=str(row.title or ""),
                     salary_min=row.salary_min,
                     salary_max=row.salary_max,
+                    age_min=row.age_min,
+                    age_max=row.age_max,
                 )
             )
             meta = meta_by_project.setdefault(row.project_id, {})

@@ -287,6 +287,8 @@ def _project_payload(fit: ProjectFit) -> dict[str, object]:
                     "title_plain": _plain_title(_single_line(item.title)),
                     "salary_min": item.salary_min,
                     "salary_max": item.salary_max,
+                    "age_min": item.age_min,
+                    "age_max": item.age_max,
                 }.items()
                 if value not in (None, "")
             }

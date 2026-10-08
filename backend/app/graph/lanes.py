@@ -96,12 +96,11 @@ _INCOME_COMPARE_HINT = (
 )
 _AGE_ELIGIBILITY_HINT = (
     "Ý định: câu hỏi ĐỦ ĐIỀU KIỆN THEO TUỔI. KHÔNG hỏi lại ứng viên muốn xem dự án nào. "
-    "Bắt buộc: gọi list_active_projects trước (không bộ lọc) để có toàn bộ danh mục đang "
-    "hoạt động, rồi tra yêu cầu độ tuổi của từng dự án trong KB của dự án đó "
-    "(search_knowledge với slug dự án). Trả lời bằng danh sách các dự án nhận độ tuổi "
-    "ứng viên nêu, mỗi dự án một khối ngắn (kèm nơi làm việc, thu nhập); dự án không nhận "
-    "thì ghi đúng yêu cầu tuổi của nó; dự án chưa ghi rõ yêu cầu tuổi thì nói thật là chưa "
-    "ghi rõ, không suy đoán."
+    "Bắt buộc: gọi list_active_projects trước (không bộ lọc). Kết quả tool nêu age_min/age_max "
+    "của từng vị trí — đó là căn cứ chính: liệt kê các dự án có vị trí nhận độ tuổi ứng viên "
+    "nêu, mỗi dự án một khối ngắn (nơi làm việc, thu nhập, khoảng tuổi); dự án không nhận thì "
+    "ghi đúng khoảng tuổi của nó. Chỉ dùng search_knowledge khi một dự án chưa nêu age_min/"
+    "age_max; nếu vẫn không có dữ liệu tuổi thì nói thật là chưa ghi rõ, không suy đoán."
 )
 # "60 tuổi có làm được không?" on the normalized text: an age number plus a
 # question marker (question mark, or the casual "khong/k/dc/duoc"). A message

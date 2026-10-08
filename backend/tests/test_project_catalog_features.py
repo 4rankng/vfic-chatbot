@@ -50,11 +50,15 @@ def _job_row(
     address: str = "",
     salary_min=None,
     salary_max=None,
+    age_min=None,
+    age_max=None,
 ):
     return SimpleNamespace(
         title=title,
         salary_min=salary_min,
         salary_max=salary_max,
+        age_min=age_min,
+        age_max=age_max,
         province=province,
         district=district,
         address=address,
@@ -177,6 +181,8 @@ async def test_structured_scope_aggregates_item_salaries_and_first_locations():
                     province="Hải Phòng",
                     salary_min=6_300_000,
                     salary_max=10_000_000,
+                    age_min=18,
+                    age_max=35,
                 ),
                 _job_row(
                     project_id=project.id,
@@ -194,6 +200,9 @@ async def test_structured_scope_aggregates_item_salaries_and_first_locations():
         ("Nhân viên lắp ráp", 6_300_000, 10_000_000),
         ("Nhân viên vận hành máy CNC", 7_000_000, 11_000_000),
     ]
+    # Structured age eligibility rides the scope row (owner scan 2026-10-08:
+    # age is a top candidate concern, answerable from the catalog alone).
+    assert [(item.age_min, item.age_max) for item in row.scope] == [(18, 35), (None, None)]
     assert (row.salary_min, row.salary_max) == (6_300_000, 11_000_000)
     assert (row.province, row.district, row.address) == ("Hải Phòng", "", "KCN Nội Bài")
 

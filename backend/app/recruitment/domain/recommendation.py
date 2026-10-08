@@ -123,6 +123,12 @@ class ProjectScopeItem:
     title: str
     salary_min: int | None = None
     salary_max: int | None = None
+    # Structured age eligibility from the job row. Age is a top candidate
+    # concern (owner scan 2026-10-08: 9% of conversations ask an age question)
+    # and must be answerable from the catalog alone, not a per-project KB
+    # search per turn.
+    age_min: int | None = None
+    age_max: int | None = None
 
 
 @dataclass(frozen=True)
