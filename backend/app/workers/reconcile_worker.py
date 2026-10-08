@@ -29,6 +29,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +176,8 @@ async def _failed_send_attempts(db, conversation_id, *, since: datetime) -> int:
 
 
 async def _alert_stuck_conversation(
-    db, conv, *, reason: str, attempts: int, newest_error: str = ""
+    db, conv, *, reason: str, attempts: int, newest_error: str = "",
+    failure_id: Any = None,
 ) -> None:  # noqa: ANN001
     """Push the operator alert for a thread whose reply cannot be delivered.
 
@@ -183,23 +185,37 @@ async def _alert_stuck_conversation(
     (nothing delivers until it is re-authorized), the provider refused the
     same reply twice and the sweep has given up, or — Messenger only — the
     reply hit Meta's closed 24h window. ``newest_error`` disambiguates the
-    terminal_send copy per channel: a closed window is expected behavior for
-    an ad-entered thread (nothing to re-authorize), while anything else reads
-    as a dead credential. Deduped per conversation and reason, so a thread
-    that stays broken does not push on every tick. Best-effort: the sweep
-    must finish its lock bookkeeping even if the push fails.
+    terminal_send copy per channel: the ad-prefill copy only fits ad threads
+    (``attribution.referral_source == 'ADS'`` — the pre-filled first message
+    never opened the window); an organic thread's window simply expired, and
+    telling the operator it "came from an ad" reads as false (owner report
+    2026-10-08). The dedupe key carries ``failure_id`` (the failed message's
+    id): the 6h ``notify_admins`` window then re-alerts only when a NEW
+    failure row appears, not every 6h for the same unchanged newest row —
+    the same stuck thread buzzed the owner again 7h after its failure
+    (03:43/04:03 alerts for the 20:38 refusals). Best-effort: the sweep must
+    finish its lock bookkeeping even if the push fails.
     """
     from app.services.push import notify_admins
 
     if reason == "terminal_send":
         if "allowed window" in newest_error.lower():
-            title = "Messenger chưa mở cửa sổ trả lời"
-            body = (
-                "Ứng viên đến từ quảng cáo Messenger và chưa tự nhắn tin — "
-                "Meta chặn trang chủ động gửi tin tới khi ứng viên nhắn tin "
-                "thật. Không cần cấp lại quyền; bot sẽ tự trả lời khi ứng "
-                "viên nhắn tin."
-            )
+            attribution = getattr(conv, "attribution", None) or {}
+            if str(attribution.get("referral_source") or "").upper() == "ADS":
+                title = "Messenger chưa mở cửa sổ trả lời"
+                body = (
+                    "Ứng viên đến từ quảng cáo Messenger và chưa tự nhắn tin — "
+                    "Meta chặn trang chủ động gửi tin tới khi ứng viên nhắn tin "
+                    "thật. Không cần cấp lại quyền; bot sẽ tự trả lời khi ứng "
+                    "viên nhắn tin."
+                )
+            else:
+                title = "Cửa sổ 24h của Messenger đã đóng"
+                body = (
+                    "Tin nhắn bị Meta từ chối vì đã quá 24 giờ kể từ lần cuối "
+                    "ứng viên nhắn tin. Không cần cấp lại quyền; bot sẽ tự "
+                    "trả lời khi ứng viên nhắn lại."
+                )
         else:
             title = "Kênh gửi tin đã hết hiệu lực"
             body = (
@@ -212,6 +228,9 @@ async def _alert_stuck_conversation(
             f"Đã thử gửi {attempts} lần và đều bị nhà cung cấp từ chối. "
             "Mở hội thoại để kiểm tra và nhắn thủ công."
         )
+    dedupe_key = f"reconcile-stuck:{conv.id}:{reason}"
+    if failure_id:
+        dedupe_key = f"{dedupe_key}:{failure_id}"
     try:
         await notify_admins(
             db,
@@ -219,7 +238,7 @@ async def _alert_stuck_conversation(
             body=body,
             url=f"/conversations?id={conv.id}",
             tag=f"conversation-{conv.id}",
-            dedupe_key=f"reconcile-stuck:{conv.id}:{reason}",
+            dedupe_key=dedupe_key,
         )
     except Exception:  # noqa: BLE001 — an alert must not break the sweep
         logger.warning("reconcile push alert failed conversation=%s", conv.id, exc_info=True)
@@ -434,6 +453,7 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                                 reason="terminal_send",
                                 attempts=0,
                                 newest_error=str(newest.external_error or ""),
+                                failure_id=newest.id,
                             )
                             await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                             continue
@@ -472,7 +492,8 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
                     await svc.state.release_lock(conv_fresh, lock_owner=lock_owner)
                     failed_send_exhausted += 1
                     await _alert_stuck_conversation(
-                        db, conv_fresh, reason="failed_send_exhausted", attempts=_FAILED_SEND_MAX_ATTEMPTS
+                        db, conv_fresh, reason="failed_send_exhausted", attempts=_FAILED_SEND_MAX_ATTEMPTS,
+                        failure_id=newest.id,
                     )
                     continue
 

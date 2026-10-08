@@ -657,6 +657,99 @@ async def test_closed_messenger_window_is_never_retried(mock_session_cls, mock_e
     assert conv.bot_locked_until is None
 
 
+_PATCH_NOTIFY = "app.services.push.notify_admins"
+
+_WINDOW_ERROR = (
+    "messenger send rejected (code=10, subcode=2018278): (#10) This message "
+    "is sent outside of allowed window."
+)
+
+
+def _window_closed_sweep_mocks(conv, failed_bot_msg, worker_msg):
+    """One sweep's [scan db, process db] session pair for a refused bubble."""
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, latest_msg=failed_bot_msg)
+    return mock_db_scan, mock_db_proc
+
+
+@patch(_PATCH_NOTIFY, new_callable=AsyncMock)
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_window_alert_dedupe_key_pins_the_failed_row(
+    mock_session_cls, mock_enqueue, mock_notify
+):
+    """The 6h dedupe window must not re-buzz an unchanged failure.
+
+    Production 2026-10-08: the owner was re-alerted at 03:43 and 04:03 for
+    refusals first reported at 20:38 the previous evening — the dedupe key
+    was per conversation, so every 6h expiry re-pushed the same newest
+    FAILED row. The key now carries the failed message's id, so only a NEW
+    failure row can alert again.
+    """
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    failed_bot_msg = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    failed_bot_msg.created_at = datetime.now(timezone.utc) - timedelta(minutes=13)
+    failed_bot_msg.external_error = _WINDOW_ERROR
+    scan1, proc1 = _window_closed_sweep_mocks(conv, failed_bot_msg, worker_msg)
+    scan2, proc2 = _window_closed_sweep_mocks(conv, failed_bot_msg, worker_msg)
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [scan1, proc1, scan2, proc2]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+    await _sweep(mock_redis)
+
+    assert mock_notify.await_count == 2
+    keys = [call.kwargs["dedupe_key"] for call in mock_notify.await_args_list]
+    assert keys[0] == keys[1]
+    assert f"terminal_send:{failed_bot_msg.id}" in keys[0]
+
+
+@patch(_PATCH_NOTIFY, new_callable=AsyncMock)
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+async def test_window_alert_ad_copy_only_for_ad_threads(
+    mock_session_cls, mock_enqueue, mock_notify
+):
+    """The ad-prefill narrative is only true for ad threads.
+
+    An organic thread whose 24h window expired never came from an ad — the
+    owner read that copy as "not accurate" against a console where the bot
+    clearly can send. Same refusal, two truths: the ad copy keeps the ad
+    explanation, everything else gets the neutral 24h-window wording.
+    """
+    mock_redis = _mock_redis()
+    ad_conv = _make_conv()
+    ad_conv.attribution = {"referral_source": "ADS"}
+    worker_msg = _make_worker_msg("bạn ăn tối chưa?")
+    ad_failed = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    ad_failed.created_at = datetime.now(timezone.utc) - timedelta(minutes=13)
+    ad_failed.external_error = _WINDOW_ERROR
+    scan, proc = _window_closed_sweep_mocks(ad_conv, ad_failed, worker_msg)
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [scan, proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+    assert mock_notify.await_args.kwargs["title"] == "Messenger chưa mở cửa sổ trả lời"
+
+    mock_notify.reset_mock()
+    organic_redis = _mock_redis()
+    organic_conv = _make_conv()
+    organic_failed = _make_bot_msg(status=DeliveryStatus.FAILED, body="Không gửi được")
+    organic_failed.created_at = datetime.now(timezone.utc) - timedelta(minutes=13)
+    organic_failed.external_error = _WINDOW_ERROR
+    scan, proc = _window_closed_sweep_mocks(organic_conv, organic_failed, worker_msg)
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [scan, proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(organic_redis)
+    assert mock_notify.await_args.kwargs["title"] == "Cửa sổ 24h của Messenger đã đóng"
+
+
 @patch(_PATCH_ENQUEUE, return_value=True)
 @patch(_PATCH_SESSION)
 async def test_transient_send_failure_keeps_its_retry(mock_session_cls, mock_enqueue):
