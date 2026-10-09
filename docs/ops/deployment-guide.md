@@ -332,9 +332,15 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0073_map_lgd_messenger_ad` (7 Oct 2026). This line is grepped by the
+- **HEAD:** `0074_map_lg_ads_album_tuoi` (8 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0073` maps the
+  new migration that does not update it blocks the release. `0074` curates the
+  three confirmed album-tuổi Click-to-Messenger ad ids
+  (`120255327713950496`, `120255221579150496`, `120255206846290496`) into
+  `lg-display.aliases` — additive and idempotent, same shape as `0073`, so
+  `resolve_project_from_attribution` stamps the lead's dự án on the first
+  click; `downgrade()` removes only the aliases this migration added.
+  `0073` maps the
   live LG-DISPLAY Click-to-Messenger ad by resolving ``ad_id`` against the
   project catalog alongside ``ref`` (the ads ship no ``utm_*``/``ref``); the
   mapping is stored **additively** in ``projects.aliases`` — idempotent, never
