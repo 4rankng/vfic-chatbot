@@ -281,8 +281,12 @@ class BotConversationState(
                 "bot pause lookup failed identity=%s", identity_id, exc_info=True
             )
             return False
-        # SQLAlchemy Row is a tuple subclass; anything else (a stubbed session)
-        # reads as "not paused" rather than silencing the bot.
+        # SQLAlchemy 2.x ``Row`` is NOT a tuple subclass: an earlier
+        # ``isinstance(row, (tuple, list))`` guard read every real row as
+        # "not paused", so the pause failed open everywhere. Honor the row
+        # when present; a non-row (stubbed session) still fails open below.
+        if row is None:
+            return False
         return isinstance(row, (tuple, list)) and row[0] is True
 
     async def stamp_attribution(
