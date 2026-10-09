@@ -41,6 +41,8 @@ async def test_facebook_turn_uses_exact_persisted_message(monkeypatch) -> None:
         def run_start_guard(self, candidate) -> bool:
             return True
 
+        bot_paused = AsyncMock(return_value=False)
+
     monkeypatch.setattr(webhook_delivery, "ConversationService", Service)
     db = SimpleNamespace(scalar=AsyncMock(return_value=conversation))
     persisted_at = datetime(2026, 7, 23, 3, 4, 5, tzinfo=UTC)
@@ -67,6 +69,43 @@ async def test_facebook_turn_uses_exact_persisted_message(monkeypatch) -> None:
     assert enqueued[0]["reply_to_message_id"] == "facebook-mid-17"
     assert enqueued[0]["received_at"] == persisted_at.isoformat()
     assert not hasattr(db, "scalars")
+
+
+async def test_paused_page_keeps_the_persisted_message_but_enqueues_no_turn(monkeypatch) -> None:
+    """Owner pause switch (2026-10-08): the Messenger webhook persists every
+    candidate message BEFORE calling this — a paused Page keeps the thread in
+    the console for manual replies, but no turn is enqueued and no per-chat
+    lock is taken (same guard order as the Zalo path: guard -> paused -> lock).
+    """
+    conversation_id = uuid.uuid4()
+    conversation = SimpleNamespace(id=conversation_id, version=11)
+
+    class Service:
+        def __init__(self, db) -> None:
+            pass
+
+        get = AsyncMock(return_value=conversation)
+        acquire_lock = AsyncMock()
+
+        def run_start_guard(self, candidate) -> bool:
+            return True
+
+        bot_paused = AsyncMock(return_value=True)
+
+    monkeypatch.setattr(webhook_delivery, "ConversationService", Service)
+    db = SimpleNamespace(scalar=AsyncMock(return_value=conversation))
+    enqueued: list[dict] = []
+
+    await webhook_delivery.enqueue_facebook_turn(
+        db,
+        _persisted_outcome(conversation_id),
+        runtime_authority=None,
+        enqueue=lambda job: enqueued.append(job) or True,
+    )
+
+    assert enqueued == []
+    Service.acquire_lock.assert_not_called()
+    Service.bot_paused.assert_awaited_once_with(conversation)
 
 
 async def test_messenger_ad_entry_flagged_reads_the_thread_flag(monkeypatch) -> None:

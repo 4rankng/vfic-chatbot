@@ -128,6 +128,12 @@ async def enqueue_facebook_turn(
     conversation = await service.get(conversation.id)
     if conversation is None or not service.run_start_guard(conversation):
         return
+    # Owner pause switch (2026-10-08): the message is already persisted above
+    # the webhook caller — a paused Page keeps the thread for manual replies
+    # but no turn is enqueued, mirroring the Zalo path's guard order
+    # (run_start_guard -> bot_paused -> acquire_lock).
+    if await service.bot_paused(conversation):
+        return
     version_at_start = conversation.version
     lock_owner = await service.acquire_lock(conversation.id)
     if lock_owner is None:

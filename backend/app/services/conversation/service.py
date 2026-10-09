@@ -158,6 +158,15 @@ class ConversationService:
     def run_start_guard(self, conv: Conversation) -> bool:
         return self.state.run_start_guard(conv)
 
+    async def bot_paused(self, conv: Conversation) -> bool:
+        """Whether the conversation's account has the bot paused (state port).
+
+        The run_turn backstop reaches this as ``svc.bot_paused`` — the
+        delegation must exist on the service or that getattr guard silently
+        skips the check and a paused Page keeps answering.
+        """
+        return await self.state.bot_paused(conv)
+
     async def acquire_lock(
         self,
         conv_id: uuid.UUID,

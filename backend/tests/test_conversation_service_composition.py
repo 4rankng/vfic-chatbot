@@ -106,6 +106,22 @@ async def test_claim_send_still_delegates_to_the_state_seam():
 
 
 @pytest.mark.asyncio
+async def test_bot_paused_is_reachable_on_the_service_for_the_runner_backstop():
+    """run_turn's pause backstop calls ``svc.bot_paused`` under a getattr.
+
+    The delegation must exist on the real service: if only the state port has
+    it, getattr returns None and the backstop silently skips the check — a
+    paused Page keeps answering with no error anywhere.
+    """
+    conv = SimpleNamespace(id=uuid.uuid4())
+    svc = ConversationService(AsyncMock())
+    svc.state.bot_paused = AsyncMock(return_value=True)
+
+    assert await svc.bot_paused(conv) is True
+    svc.state.bot_paused.assert_awaited_once_with(conv)
+
+
+@pytest.mark.asyncio
 async def test_release_and_enqueue_releases_through_state_then_enqueues_the_result():
     """The release orchestration: state transition first, enqueue on the RELEASED row.
 
