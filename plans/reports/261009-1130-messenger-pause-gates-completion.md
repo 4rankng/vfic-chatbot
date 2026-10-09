@@ -26,7 +26,28 @@
 | Documentation impact handled | PASS | Pause behavior docs already describe the intended semantics; this makes them true. No agent-routing change (doc-link check green in release-check). |
 | No new unlinked `TODO`, `FIXME`, or `HACK` | PASS | None added. |
 
-## Post-deploy verification
+## Post-deploy verification (tag `9c520c13`, web-green, 2026-10-09 ~10:05 UTC)
 
-- Prod image tag matches this commit; `bot_paused=t` page receives messages but enqueues no `run_chat_turn_job` (worker log) and creates no BOT messages (DB) while paused.
-- Known follow-up (out of scope here): Meta `code=10 subcode=2018300` ("another app is controlling this thread") when an admin acts from the Meta Business Suite inbox — TingTing has no handover-protocol integration, so bot sends are refused until control returns. Separate decision needed.
+- A third root cause surfaced after the first deploy (`0ca2bbc8`): the lookup's
+  `isinstance(row, (tuple, list))` guard assumed SQLAlchemy Row is a tuple
+  subclass; on SQLAlchemy 2.0.51 Row extends Sequence, so every real lookup read
+  as "not paused" — proven in-container (identical ORM query returned `(True,)`
+  while `bot_paused()` returned False). Fixed in `a12eb373` + `9c520c13`.
+- Prod probe: signed Messenger webhook POST for the paused Page (`486833177846024`)
+  → `200 {"status":"processed"}`; message row persisted (sender WORKER);
+  **zero** `run_chat_turn_job` enqueues in worker logs; **zero** new bot_runs;
+  **zero** BOT messages. Runner backstop and reconcile sweep share the now-fixed
+  lookup. Evidence: worker-chatbot logs (empty enqueue grep), conversations
+  table counts before/after, probe mid `qa_pause_gate_a8d1281eef8d`.
+- QA artifacts removed: the probe conversation was deleted from prod
+  (`DELETE 1`, 0 QA conversations left); probe scripts removed from host and
+  container.
+- Known follow-up (out of scope here): Meta `code=10 subcode=2018300` ("another
+  app is controlling this thread") when an admin acts from the Meta Business
+  Suite inbox — TingTing has no handover-protocol integration, so bot sends are
+  refused until control returns. Separate decision needed.
+- Process note: a parallel session committed `a12eb373` (same fix, minus the
+  guard completion) 30s before `9c520c13`; final code is the completed version.
+  A `git stash pop` misfire during the bite-test briefly pulled an unrelated
+  pre-existing stash into the tree; it was fully unwound and `stash@{0}` is
+  preserved untouched.
