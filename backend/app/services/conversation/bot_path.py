@@ -31,6 +31,8 @@ from app.channels.types import ZALO_OA_DEFAULT_ACCOUNT_KEY, oa_user_id
 from app.conversation_messaging.application.ports import (
     ConversationEventsPort,
 )
+from app.models.channel_account import ChannelAccount
+from app.models.contact import ContactChannelIdentity
 from app.models.conversation import (
     Conversation,
     ConversationMode,
@@ -234,13 +236,54 @@ class BotConversationState(
         """True only when the bot may run.
 
         BOT is always eligible. SEMI_AUTO is eligible after the assigned human has
-        been inactive for thirty minutes. HUMAN/CLOSED starve the bot.
+        been inactive for thirty minutes. HUMAN/CLOSED starve the bot. The
+        per-account pause switch (``channel_bot_paused``) is checked separately
+        because it needs a lookup this sync guard cannot make.
         """
         if conv.mode == ConversationMode.BOT:
             return True
         if conv.mode == ConversationMode.SEMI_AUTO:
             return self.semi_auto_inactive(conv)
         return False
+
+    async def bot_paused(self, conv: Conversation) -> bool:
+        """Whether the conversation's channel account has the bot paused.
+
+        Owner request 2026-10-08: a Page-level switch that keeps the connection
+        and inbound persistence but stops the bot from answering. Checked at
+        every turn entry — inbound scheduling, the reconcile sweep, and the
+        run_turn backstop — so a toggle flip cannot race a queued turn into a
+        send. A lookup failure answers False (fail-open): an infrastructure
+        hiccup must not silently silence the bot.
+        """
+        identity_id = getattr(conv, "channel_identity_id", None)
+        if identity_id is None:
+            return False
+        try:
+            row = (
+                await self.db.execute(
+                    select(ChannelAccount.bot_paused)
+                    .join(
+                        ContactChannelIdentity,
+                        and_(
+                            ContactChannelIdentity.provider == ChannelAccount.provider,
+                            ContactChannelIdentity.account_key == ChannelAccount.account_key,
+                        ),
+                    )
+                    .where(
+                        ContactChannelIdentity.id == identity_id,
+                        ChannelAccount.status == "ACTIVE",
+                    )
+                )
+            ).first()
+        except Exception:  # noqa: BLE001 — a guard read must not break the turn path
+            logger.warning(
+                "bot pause lookup failed identity=%s", identity_id, exc_info=True
+            )
+            return False
+        # SQLAlchemy Row is a tuple subclass; anything else (a stubbed session)
+        # reads as "not paused" rather than silencing the bot.
+        return isinstance(row, (tuple, list)) and row[0] is True
 
     async def stamp_attribution(
         self, conv: Conversation, attribution: dict | None

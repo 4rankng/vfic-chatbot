@@ -414,6 +414,17 @@ class FacebookAccountStatusOut(BaseModel):
     page_id_suffix: str  # last 4 chars only
     label: str  # safe Page name
     status: str  # "ACTIVE" | "INACTIVE"
+    # Operator pause switch (2026-10-08): True = the Page is connected and
+    # keeps receiving candidate messages, but the bot sends nothing on it.
+    bot_paused: bool = False
+
+
+class FacebookPageBotPauseUpdate(BaseModel):
+    """POST /facebook/pages/{page_id}/bot-pause — set the pause switch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    paused: bool
 
 
 class FacebookIntegrationOut(BaseModel):

@@ -114,6 +114,10 @@ class ChannelAccountRef:
     label: str
     status: str
     generation: int
+    # Operator pause switch (2026-10-08): the Page is connected and messages
+    # keep arriving, but the bot does not answer. False when the row predates
+    # the flag or the reader does not select it.
+    bot_paused: bool = False
 
     def __post_init__(self) -> None:
         if not self.id:

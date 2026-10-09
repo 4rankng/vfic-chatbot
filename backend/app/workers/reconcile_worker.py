@@ -324,6 +324,13 @@ async def _sweep(conn) -> None:  # noqa: ANN001 (sync Redis client)
             if not svc.state.run_start_guard(conv_fresh):
                 continue
 
+            # ── Guard: per-Page bot pause (owner switch 2026-10-08) ──
+            # A paused Page keeps its unanswered messages visible to a
+            # recruiter on purpose: the bot must not "recover" them, which is
+            # exactly what this sweep would otherwise keep doing forever.
+            if await svc.state.bot_paused(conv_fresh):
+                continue
+
             # ── Guard: acquire per-chat lock (atomic; None = already in-flight) ──
             lock_owner = await svc.state.acquire_lock(conv_fresh.id)
             if lock_owner is None:

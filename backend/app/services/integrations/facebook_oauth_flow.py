@@ -383,6 +383,49 @@ async def probe_facebook_connection(db: AsyncSession) -> FacebookChannelTestOut:
     return FacebookChannelTestOut(healthy=True, app_subscribed=True)
 
 
+async def set_bot_pause(
+    db: AsyncSession, admin: User, page_id: str, paused: bool
+) -> FacebookAccountStatusOut:
+    """Set the per-Page bot pause switch (owner request 2026-10-08).
+
+    Paused keeps the Page fully connected — webhooks accepted, every candidate
+    message persisted — while the bot stops answering: the inbound scheduler
+    does not enqueue a turn, the reconcile sweep skips the Page, and any turn
+    already in flight suppresses itself at the run_turn backstop. The action
+    is audit-logged by actor like the other Page lifecycle mutations.
+    """
+    from sqlalchemy import select as sa_select
+
+    from app.channels.accounts import ChannelAccountStatus
+    from app.models.channel_account import ChannelAccount
+
+    account = await db.scalar(
+        sa_select(ChannelAccount).where(
+            ChannelAccount.provider == "facebook_messenger",
+            ChannelAccount.account_key == page_id,
+            ChannelAccount.status == ChannelAccountStatus.ACTIVE,
+        )
+    )
+    if account is None:
+        raise NotFoundError("Không tìm thấy Trang Facebook đang hoạt động.")
+    if account.bot_paused != paused:
+        account.bot_paused = paused
+        await db.commit()
+    logger.warning(
+        "facebook bot pause set: page_id=%s paused=%s admin=%s",
+        page_id,
+        paused,
+        admin.id,
+    )
+    return FacebookAccountStatusOut(
+        page_id=page_id,
+        page_id_suffix=page_id[-4:],
+        label=account.label,
+        status=account.status,
+        bot_paused=account.bot_paused,
+    )
+
+
 async def disconnect_page(
     page_id: str | None, admin: User, db: AsyncSession
 ) -> FacebookAccountStatusOut:

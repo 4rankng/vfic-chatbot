@@ -286,6 +286,13 @@ class ZaloWebhookService:
         if not state.run_start_guard(conv):  # HUMAN/active SEMI_AUTO/CLOSED -> starve the bot
             return {"status": "starved_human_mode", "conversation_id": str(conv.id)}
 
+        # Owner pause switch (2026-10-08): a paused Page keeps receiving and
+        # persisting candidate messages (everything above already committed),
+        # but no turn is enqueued — the thread waits for a human reply. The
+        # reconcile sweep skips the Page too, so nothing "recovers" it later.
+        if await state.bot_paused(conv):
+            return {"status": "bot_paused", "conversation_id": str(conv.id)}
+
         version_at_start = conv.version
         lock_owner = await state.acquire_lock(conv.id)
         if lock_owner is None:  # another run holds the per-chat mutex

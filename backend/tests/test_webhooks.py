@@ -297,6 +297,7 @@ async def test_webhook_copies_active_runtime_authority_to_inbound_and_queued_tur
     service.repo.get = AsyncMock(return_value=conv)
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=True)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock(return_value=uuid.UUID("00000000-0000-0000-0000-000000000002"))
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
     monkeypatch.setattr(
@@ -329,6 +330,61 @@ async def test_webhook_copies_active_runtime_authority_to_inbound_and_queued_tur
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_paused_page_persists_the_message_but_enqueues_no_turn(monkeypatch):
+    """The owner pause switch receives data and sends nothing.
+
+    2026-10-08: a paused Page must keep the full candidate thread (the message
+    is persisted like any inbound) while no bot turn is enqueued — the thread
+    waits for a human reply, and the reconcile sweep skips it too, so nothing
+    "recovers" it into a bot reply later.
+    """
+    import uuid
+
+    from app.services.webhook import ZaloWebhookService
+
+    conv = SimpleNamespace(
+        id=uuid.uuid4(),
+        zalo_chat_id="bot-paused-1",
+        zalo_channel="bot",
+        version=1,
+        mode="BOT",
+    )
+    enqueued: list[dict] = []
+    service = MagicMock()
+    service.state.ensure = AsyncMock(return_value=conv)
+    service.state.record_inbound = AsyncMock()
+    service.repo.get = AsyncMock(return_value=conv)
+    service.repo.inbound_is_answered = AsyncMock(return_value=False)
+    service.state.run_start_guard = MagicMock(return_value=True)
+    service.state.bot_paused = AsyncMock(return_value=True)
+    service.state.acquire_lock = AsyncMock(return_value=uuid.uuid4())
+    service.state.release_lock = AsyncMock()
+
+    import app.services.webhook as wh_mod
+
+    monkeypatch.setattr(wh_mod, "ConversationService", lambda _db: service)
+    monkeypatch.setattr(
+        "app.services.webhook.MessageDedupService.claim",
+        AsyncMock(return_value=True),
+    )
+    db = MagicMock()
+    db.refresh = AsyncMock()
+
+    result = await ZaloWebhookService.handle(
+        db,
+        {"message": {"text": "con người ơi", "chat": {"id": "bot-paused-1"}, "message_id": 9}},
+        enqueue=enqueued.append,
+        channel="bot",
+        bot_token="token",
+    )
+
+    assert result["status"] == "bot_paused"
+    assert service.state.record_inbound.await_count == 1
+    assert enqueued == []
+    service.state.acquire_lock.assert_not_awaited()
+
+
 async def test_failed_rq_enqueue_releases_webhook_lock(monkeypatch):
     import uuid
 
@@ -348,6 +404,7 @@ async def test_failed_rq_enqueue_releases_webhook_lock(monkeypatch):
     service.repo.get = AsyncMock(return_value=conv)
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=True)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock(return_value=lock_owner)
     service.state.release_lock = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
@@ -400,6 +457,7 @@ async def test_inbound_while_the_mutex_is_held_is_stored_but_not_queued(monkeypa
     service.repo.get = AsyncMock(return_value=conv)
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=True)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock(return_value=None)  # a turn is in flight
     service.state.release_lock = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
@@ -457,6 +515,7 @@ async def test_webhook_persists_explicit_name_before_queuing_turn(monkeypatch):
     service.repo.get = AsyncMock(return_value=conv)
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=True)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock(return_value=uuid.uuid4())
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
     monkeypatch.setattr(
@@ -514,6 +573,7 @@ async def test_future_human_review_inbound_is_stored_without_extraction_or_bot(m
     service.repo.get = AsyncMock(return_value=conv)
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=False)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
     monkeypatch.setattr(
@@ -565,6 +625,7 @@ async def test_active_semi_auto_still_captures_name_before_bot_guard(monkeypatch
     service.repo.get = AsyncMock(return_value=conv)
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=False)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
     monkeypatch.setattr(
@@ -621,6 +682,7 @@ async def test_webhook_rolls_back_profile_failure_then_queues_turn(monkeypatch, 
     service.repo.get = AsyncMock(return_value=conv)
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=True)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock(return_value=uuid.uuid4())
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
     monkeypatch.setattr(
@@ -972,6 +1034,7 @@ async def test_oa_text_message_starts_bot_turn(monkeypatch):
     svc.repo.get = AsyncMock(return_value=conv)
     svc.repo.inbound_is_answered = AsyncMock(return_value=False)
     svc.state.run_start_guard = MagicMock(return_value=True)
+    svc.state.bot_paused = AsyncMock(return_value=False)
     lock_owner = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
     svc.state.acquire_lock = AsyncMock(return_value=lock_owner)
     svc.state.release_lock = AsyncMock()
@@ -1160,6 +1223,7 @@ async def test_ingress_delegates_status_to_the_owned_turn_without_orphan_request
         service.repo.get = AsyncMock(return_value=conv)
         service.repo.inbound_is_answered = AsyncMock(return_value=False)
         service.state.run_start_guard = MagicMock(return_value=True)
+        service.state.bot_paused = AsyncMock(return_value=False)
         service.state.acquire_lock = AsyncMock(
             return_value=uuid.UUID("00000000-0000-0000-0000-000000000002")
         )
@@ -1297,6 +1361,7 @@ async def test_phase3_queued_job_carries_no_provider_token(monkeypatch):
     svc.repo.inbound_is_answered = AsyncMock(return_value=False)
     svc.state.record_inbound = AsyncMock()
     svc.state.run_start_guard = lambda c: True
+    svc.state.bot_paused = AsyncMock(return_value=False)
     svc.state.acquire_lock = AsyncMock(return_value=uuid.uuid4())
     svc.state.release_lock = AsyncMock()
     # ConversationService + CandidateExtractionService + dedup are imported
@@ -1416,6 +1481,7 @@ async def test_async_enqueue_wrapper_preserves_backpressure_start_failed(monkeyp
     service.repo.get = AsyncMock(return_value=conv)
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=True)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock(return_value=lock_owner)
     service.state.release_lock = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
@@ -1467,6 +1533,7 @@ async def test_zalo_route_awaits_async_enqueue_and_maps_backpressure_to_503(monk
     service.repo.get = AsyncMock(return_value=conv)
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=True)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock(return_value=lock_owner)
     service.state.release_lock = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda _db: service)
@@ -1514,6 +1581,7 @@ def _ack_path_service(conv):
     service.state.record_inbound = AsyncMock()
     service.repo.inbound_is_answered = AsyncMock(return_value=False)
     service.state.run_start_guard = MagicMock(return_value=True)
+    service.state.bot_paused = AsyncMock(return_value=False)
     service.state.acquire_lock = AsyncMock(
         return_value=uuid.UUID("00000000-0000-0000-8000-000000000002")
     )

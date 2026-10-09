@@ -757,6 +757,39 @@ async def test_dead_credential_still_pushes_the_reauthorize_alert(
     mock_redis.incrby.assert_any_call("reconcile_terminal_send_skipped_total", 1)
 
 
+@patch(_PATCH_NOTIFY, new_callable=AsyncMock)
+@patch(_PATCH_ENQUEUE, return_value=True)
+@patch(_PATCH_SESSION)
+@patch(
+    "app.services.conversation.state.ConversationState.bot_paused",
+    new_callable=AsyncMock,
+    return_value=True,
+)
+async def test_paused_page_is_never_recovered_by_the_sweep(
+    mock_paused, mock_session_cls, mock_enqueue, mock_notify
+):
+    """Owner switch 2026-10-08: a paused Page keeps its unanswered thread.
+
+    Paused means the bot is silent ON PURPOSE — the sweep must not "recover"
+    the unanswered inbound into a bot reply (and must not alert anyone): the
+    candidate's messages stay in the console for a human to answer.
+    """
+    mock_redis = _mock_redis()
+    conv = _make_conv()
+    worker_msg = _make_worker_msg("còn tuyển không ad?")
+    mock_db_scan = _mock_db_for_scan([conv])
+    mock_db_proc = _mock_db_for_process(conv, worker_msg, worker_msg)
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.side_effect = [mock_db_scan, mock_db_proc]
+    mock_session_cls.return_value = mock_cm
+
+    await _sweep(mock_redis)
+
+    mock_enqueue.assert_not_called()
+    assert mock_notify.await_count == 0
+    assert conv.bot_locked_until is None
+
+
 @patch(_PATCH_ENQUEUE, return_value=True)
 @patch(_PATCH_SESSION)
 async def test_transient_send_failure_keeps_its_retry(mock_session_cls, mock_enqueue):

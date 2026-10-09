@@ -27,6 +27,7 @@ from app.schemas.integrations import (
     FacebookIntegrationOut,
     FacebookOAuthCompleteRequest,
     FacebookOAuthStartOut,
+    FacebookPageBotPauseUpdate,
     FacebookPageListOut,
     FacebookPageProjectAdd,
     FacebookPageProjectAssignmentOut,
@@ -580,10 +581,31 @@ async def get_facebook_status(
                 page_id_suffix=(a.account_key[-4:] if a.account_key else ""),
                 label=a.label,
                 status=a.status,
+                bot_paused=bool(getattr(a, "bot_paused", False)),
             )
             for a in accounts
         ],
     )
+
+
+@router.post("/facebook/pages/{page_id}/bot-pause", response_model=FacebookAccountStatusOut)
+async def set_facebook_bot_pause(
+    page_id: str,
+    body: FacebookPageBotPauseUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> FacebookAccountStatusOut:
+    """Pause or resume the bot on one connected Page.
+
+    Paused means exactly: the Page stays connected, webhooks keep being
+    accepted and every candidate message is still persisted — but no bot turn
+    is enqueued, recovered, or sent on that Page, so threads wait for a human
+    reply (or for the operator to resume the bot). The action is audit-logged
+    like the other Page lifecycle mutations.
+    """
+    from app.services.integrations.facebook_oauth_flow import set_bot_pause
+
+    return await set_bot_pause(db, admin, page_id, body.paused)
 
 
 @router.post("/facebook/test", response_model=FacebookChannelTestOut)

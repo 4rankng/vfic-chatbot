@@ -575,6 +575,7 @@ async def test_facebook_endpoints_require_admin(monkeypatch):
         "/admin/integrations/facebook/test",
         "/admin/integrations/facebook/pages/{page_id}/projects",
         "/admin/integrations/facebook/pages/{page_id}/projects/{project_id}",
+        "/admin/integrations/facebook/pages/{page_id}/bot-pause",
     }
     # The callback is authenticated by its single-use state because Meta's
     # browser redirect cannot carry the application's Authorization header.

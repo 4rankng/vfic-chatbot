@@ -128,6 +128,7 @@ def _to_ref(row: ChannelAccount | None) -> ct.ChannelAccountRef | None:
         label=row.label,
         status=row.status,
         generation=int(row.generation or 0),
+        bot_paused=bool(getattr(row, "bot_paused", False)),
     )
 
 

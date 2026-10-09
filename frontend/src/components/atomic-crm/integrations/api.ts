@@ -208,6 +208,8 @@ export type FacebookAccountStatus = {
   page_id_suffix: string;
   label: string;
   status: "ACTIVE" | "INACTIVE";
+  /** Operator pause switch: Page connected + messages received, bot silent. */
+  bot_paused?: boolean;
 };
 
 /** Per-Page Project assignment list (GET /facebook/pages/{page_id}/projects). */
@@ -517,5 +519,18 @@ export const facebookIntegrationGateway = {
     apiJson<FacebookAccountStatus>(
       `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook?page_id=${encodeURIComponent(pageId)}`,
       { method: "DELETE" },
+    ),
+
+  /**
+   * Pause or resume the bot on one Page. Paused = the Page stays connected and
+   * every candidate message is still received, but the bot sends nothing.
+   */
+  setBotPause: async (
+    pageId: string,
+    paused: boolean,
+  ): Promise<FacebookAccountStatus> =>
+    apiJson<FacebookAccountStatus>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/facebook/pages/${encodeURIComponent(pageId)}/bot-pause`,
+      { method: "POST", body: { paused } },
     ),
 } as const;

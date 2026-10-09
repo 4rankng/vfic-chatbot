@@ -287,6 +287,24 @@ async def _run_turn(
         if not ok:
             return {"outcome": "suppressed", "reason": "lock_owner_lost"}
 
+    # Owner pause switch (2026-10-08) backstop: a job enqueued just before the
+    # Page's pause flipped suppresses here instead of sending. The inbound
+    # scheduler and the reconcile sweep already skip paused accounts; this is
+    # the guarantee that nothing in flight can answer either. getattr guards
+    # the service doubles in tests that predate the port (the
+    # ``_optional_policy_kwargs`` precedent).
+    pause_check = getattr(svc, "bot_paused", None)
+    if pause_check is not None and await pause_check(conv):
+        return await _authority_gate(
+            state=state,
+            deps=deps,
+            conv=conv,
+            svc=svc,
+            reason="bot_paused",
+            lock_owner=lock_owner,
+            status_task=preamble_status_task,
+        )
+
     settings = get_settings()
 
     # Fetch the OA display name/avatar only after runtime + lock ownership are

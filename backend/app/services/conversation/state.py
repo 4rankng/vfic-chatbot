@@ -102,6 +102,10 @@ class ConversationState:
             conv,
         )
 
+    async def bot_paused(self, conv: Conversation) -> bool:
+        """Whether the conversation's channel account has the bot paused."""
+        return await self._bot.bot_paused(conv)
+
     async def record_inbound(
         self,
         conv: Conversation,

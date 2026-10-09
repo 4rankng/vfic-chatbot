@@ -194,6 +194,29 @@ const FacebookPageCard = ({ account, projects }: FacebookPageCardProps) => {
     onError: () => notify("Ngắt kết nối Trang thất bại.", { type: "error" }),
   });
 
+  // Owner pause switch (2026-10-08): the Page stays connected and keeps
+  // receiving candidate messages, but the bot sends nothing on it.
+  const setPause = useMutation({
+    mutationFn: (paused: boolean) =>
+      facebookIntegrationGateway.setBotPause(account.page_id, paused),
+    onSuccess: (_, paused) => {
+      queryClient.invalidateQueries({
+        queryKey: ["facebook-integration-status"],
+      });
+      notify(
+        paused
+          ? "Đã tạm dừng bot trên Trang. Tin nhắn vẫn được nhận."
+          : "Đã bật lại bot trên Trang.",
+        { type: "success" },
+      );
+    },
+    onError: () =>
+      notify("Không thể đổi trạng thái bot. Vui lòng thử lại.", {
+        type: "error",
+      }),
+  });
+  const botPaused = account.bot_paused === true;
+
   return (
     <li className="settings-facebook-page-item">
       <div className="settings-facebook-page-card">
@@ -204,14 +227,26 @@ const FacebookPageCard = ({ account, projects }: FacebookPageCardProps) => {
               (…{account.page_id_suffix})
             </span>
           </div>
-          <Badge
-            type="pill-color"
-            size="sm"
-            color={account.status === "ACTIVE" ? "success" : "warning"}
-            className="uu-scope"
-          >
-            {PAGE_STATUS_LABELS[account.status]}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {botPaused ? (
+              <Badge
+                type="pill-color"
+                size="sm"
+                color="warning"
+                className="uu-scope"
+              >
+                Bot tạm dừng
+              </Badge>
+            ) : null}
+            <Badge
+              type="pill-color"
+              size="sm"
+              color={account.status === "ACTIVE" ? "success" : "warning"}
+              className="uu-scope"
+            >
+              {PAGE_STATUS_LABELS[account.status]}
+            </Badge>
+          </div>
         </div>
         {assignmentsQuery.isPending ? (
           <p role="status" className="settings-field-hint">
@@ -242,7 +277,29 @@ const FacebookPageCard = ({ account, projects }: FacebookPageCardProps) => {
             onCommit={(ids) => saveAssignments.mutate(ids)}
           />
         )}
+        {botPaused ? (
+          <p className="settings-field-hint">
+            Bot đang tạm dừng: tin nhắn ứng viên vẫn được nhận và lưu, nhưng bot
+            không tự trả lời — trả lời thủ công hoặc bấm «Chạy lại bot».
+          </p>
+        ) : null}
         <div className="settings-facebook-page-actions">
+          {account.status === "ACTIVE" ? (
+            <Button
+              type="button"
+              color="tertiary"
+              className="uu-scope settings-test-button tt-btn-touch"
+              onClick={() => setPause.mutate(!botPaused)}
+              isDisabled={setPause.isPending}
+              aria-busy={setPause.isPending}
+            >
+              {setPause.isPending
+                ? "Đang lưu…"
+                : botPaused
+                  ? "Chạy lại bot"
+                  : "Tạm dừng bot"}
+            </Button>
+          ) : null}
           <Button
             type="button"
             color="secondary"

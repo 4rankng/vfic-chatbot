@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Index, String, text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -62,6 +62,13 @@ class ChannelAccount(Base):
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE")
     generation: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    # Operator pause switch (2026-10-08): True = the Page stays connected and
+    # every candidate message is still persisted, but the bot neither enqueues
+    # nor sends a turn on it — the thread waits for a human reply. Distinct
+    # from status: INACTIVE is a disconnected Page, bot_paused is a resting bot.
+    bot_paused: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     # Provider-safe metadata only: e.g. Facebook Page category, last health
     # check status. Never tokens, raw webhook payloads, or PII.
     provider_metadata: Mapped[dict] = mapped_column(
