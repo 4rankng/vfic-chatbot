@@ -287,7 +287,10 @@ class BotConversationState(
         # when present; a non-row (stubbed session) still fails open below.
         if row is None:
             return False
-        return isinstance(row, (tuple, list)) and row[0] is True
+        try:
+            return row[0] is True
+        except (TypeError, IndexError, KeyError):
+            return False
 
     async def stamp_attribution(
         self, conv: Conversation, attribution: dict | None
