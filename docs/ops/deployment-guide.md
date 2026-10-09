@@ -332,9 +332,14 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0074_map_lg_ads_album_tuoi` (8 Oct 2026). This line is grepped by the
+- **HEAD:** `0075_channel_account_bot_pause` (8 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0074` curates the
+  new migration that does not update it blocks the release. `0075` adds the
+  per-Page bot pause switch (`channel_accounts.bot_paused`, default false):
+  the Page stays connected and every candidate message is still persisted,
+  but no bot turn is enqueued, recovered by the reconcile sweep, or sent —
+  the Messenger settings card toggles it. `downgrade()` drops the column.
+  `0074` curates the
   three confirmed album-tuổi Click-to-Messenger ad ids
   (`120255327713950496`, `120255221579150496`, `120255206846290496`) into
   `lg-display.aliases` — additive and idempotent, same shape as `0073`, so
