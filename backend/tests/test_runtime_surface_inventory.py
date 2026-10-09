@@ -57,7 +57,9 @@ EXPECTED_ROUTE_COUNTS = {
     # +2 Meta App credentials UI; +4 multi-Page per-Page project CRUD
     # +1 admin-only credentials reveal (audited, no-store)
     # +3 candidate email digest: GET/PUT /email-digest config + POST test send
-    "integrations": 38,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints; +2 geocoder credential endpoints (settings page)
+    # +1 POST /facebook/pages/{page_id}/bot-pause — the per-Page bot pause
+    # switch (2026-10-08): Page stays connected, bot sends nothing.
+    "integrations": 39,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints; +2 geocoder credential endpoints (settings page)
     # +2 the TingTing support OA: save-and-check the four credentials (PUT /tingting)
     # and a re-probe endpoint (POST /tingting/oa/check)
     # +2 deployment-wide TingTing app API key (GET / PUT, secrets status-only)
@@ -111,7 +113,8 @@ EXPECTED_ROUTE_COUNTS = {
 # 2026-10-08: +1 conversations route (POST /{id}/bot-reply, active_kernel — the
 # recruiter's review turn that reads the conversation and answers only if
 # warranted); digest recomputed from the post-change scan.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "085ae6c794ec7e44e2c6368dd275e54a529b6fced090f9463a3900f6c6d0fd60"
+# 2026-10-08: +1 POST /facebook/pages/{page_id}/bot-pause (per-Page pause switch).
+EXPECTED_ROUTE_INVENTORY_SHA256 = "7cf1af29bf1790929f418e2305cbd2a473080aab6176c53d65c24075b3e912f7"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

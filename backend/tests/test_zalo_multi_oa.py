@@ -388,6 +388,7 @@ async def test_handle_scopes_the_conversation_to_the_receiving_oa(monkeypatch):
     # repo method or the handler raises TypeError mid-handle.
     svc.repo.inbound_is_answered = AsyncMock(return_value=False)
     svc.state.run_start_guard = MagicMock(return_value=True)
+    svc.state.bot_paused = AsyncMock(return_value=False)
     svc.state.acquire_lock = AsyncMock(return_value=_uuid.uuid4())
     svc.state.release_lock = AsyncMock()
     monkeypatch.setattr("app.services.webhook.ConversationService", lambda db: svc)

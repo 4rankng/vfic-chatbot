@@ -182,6 +182,10 @@ async def test_webhook_ack_guards_run_through_state_and_the_inbound_read_through
         order.append("run_start_guard")
         return True
 
+    async def _not_paused(_c):
+        order.append("bot_paused")
+        return False
+
     async def _acquire_lock(_conv_id):
         order.append("acquire_lock")
         return uuid.uuid4()
@@ -189,6 +193,7 @@ async def test_webhook_ack_guards_run_through_state_and_the_inbound_read_through
     svc.state.ensure = AsyncMock(side_effect=_ensure)
     svc.state.record_inbound = AsyncMock(side_effect=_record_inbound)
     svc.state.run_start_guard = MagicMock(side_effect=_guard)
+    svc.state.bot_paused = AsyncMock(side_effect=_not_paused)
     svc.state.acquire_lock = AsyncMock(side_effect=_acquire_lock)
     svc.repo.last_messages = AsyncMock(return_value=[])
     # Not a redelivery of an already-answered inbound: the turn must proceed.
@@ -214,4 +219,10 @@ async def test_webhook_ack_guards_run_through_state_and_the_inbound_read_through
         )
 
     assert result == {"status": "processing", "conversation_id": str(conv.id)}
-    assert order == ["ensure", "record_inbound", "run_start_guard", "acquire_lock"]
+    assert order == [
+        "ensure",
+        "record_inbound",
+        "run_start_guard",
+        "bot_paused",
+        "acquire_lock",
+    ]
