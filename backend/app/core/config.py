@@ -459,6 +459,15 @@ class Settings(BaseSettings):
     # hourly check itself; "8 * * * *" = :08 past every hour UTC. The container
     # TZ must stay UTC for the expression to mean what it says.
     email_digest_tick_cron: str = "8 * * * *"
+    # The digest enriches every candidate through the LLM one at a time before
+    # it sends, so a busy candidate day makes the run take minutes. RQ's default
+    # job timeout is 180s and killed the 2026-10-10 run mid-enrichment, which
+    # cost the whole day's email. The tick therefore carries its own ceiling,
+    # and the enrichment phase its own smaller budget inside it: when the budget
+    # runs out the remaining rows keep an empty summary and the send still
+    # happens, because a late summary is worth less than no letter at all.
+    email_digest_job_timeout_seconds: int = 900
+    email_digest_enrich_budget_seconds: int = 600
 
     @field_validator("email_digest_tick_cron")
     @classmethod

@@ -38,7 +38,9 @@ def register_unique_tick(scheduler, func, interval: int) -> None:
     )
 
 
-def register_unique_cron_tick(scheduler, func, cron_string: str) -> None:
+def register_unique_cron_tick(
+    scheduler, func, cron_string: str, *, job_timeout_seconds: int | None = None
+) -> None:
     """Register exactly one cron-based rq-scheduler job for *func*.
 
     Mirror of :func:`register_unique_tick` but for wall-clock-pinned schedules.
@@ -48,6 +50,11 @@ def register_unique_cron_tick(scheduler, func, cron_string: str) -> None:
     (rq-scheduler parses with python-crontab); e.g. ``"0 20 * * *"`` = 03:00
     ICT daily. UTC depends on the container TZ being unset/UTC — re-express
     the cron in local time or pin TZ=UTC if the container ever sets one.
+
+    ``job_timeout_seconds`` overrides RQ's 180s default death penalty, which is
+    shorter than a real run of some ticks (the email digest summarizes every
+    candidate through the LLM before sending) and silently killed the
+    2026-10-10 digest mid-enrichment. Left unset, the job keeps the default.
     """
     func_name = f"{func.__module__}.{func.__name__}"
     # Best-effort cleanup of prior duplicates; failure must not block (re)register.
@@ -64,4 +71,5 @@ def register_unique_cron_tick(scheduler, func, cron_string: str) -> None:
         func=func,
         repeat=None,
         id=f"vfic-tick-{func.__name__}",
+        **({"job_timeout": job_timeout_seconds} if job_timeout_seconds else {}),
     )

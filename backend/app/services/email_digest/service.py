@@ -9,6 +9,7 @@ send-state row so the next window starts where this one ended.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -20,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.services.email_digest.renderer import (
     DIGEST_FROM_EMAIL,
     digest_subject,
@@ -330,6 +332,8 @@ def _resolve_project(
 async def _enrich_candidates(
     candidates: Sequence[DigestCandidate],
     summarizer: Callable[[str, str], Awaitable[str]] | None,
+    *,
+    budget_seconds: float | None = None,
 ) -> None:
     """Fill each candidate's summary and narrow its project, in place.
 
@@ -338,12 +342,26 @@ async def _enrich_candidates(
     its summary column was blank in a way the real send never is, so the
     operator could not trust their own rehearsal.
 
-    Fail-soft per candidate: one dead provider leaves that row's summary empty
-    and the rest of the sheet — and the send — intact.
+    Fail-soft twice over. Per candidate: one dead provider leaves that row's
+    summary empty and the rest of the sheet — and the send — intact. Per run:
+    ``budget_seconds`` caps the whole phase, so a slow provider on a busy
+    candidate day stops enriching instead of running the job into RQ's death
+    penalty, which cost the 2026-10-10 digest its send entirely. The rows past
+    the budget keep an empty summary and the letter still goes out.
     """
     if summarizer is None:
         return
+    loop = asyncio.get_running_loop()
+    deadline = None if budget_seconds is None else loop.time() + budget_seconds
     for candidate in candidates:
+        if deadline is not None and loop.time() >= deadline:
+            logger.warning(
+                "email digest summary budget exhausted after %d/%d leads; "
+                "remaining summaries left empty and the send continues",
+                sum(1 for c in candidates if c.summary),
+                len(candidates),
+            )
+            return
         try:
             reply = await _candidate_reply(candidate, summarizer)
         except Exception:  # noqa: BLE001 — a summary failure must not block the email
@@ -394,7 +412,11 @@ async def run_digest(
     if not candidates:
         return DigestRunResult(status=STATUS_EMPTY)
 
-    await _enrich_candidates(candidates, summarizer)
+    await _enrich_candidates(
+        candidates,
+        summarizer,
+        budget_seconds=float(get_settings().email_digest_enrich_budget_seconds),
+    )
 
     ict_now = moment.astimezone(ICT)
     html = render_digest_html(candidates)

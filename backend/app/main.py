@@ -134,6 +134,7 @@ async def lifespan(app: FastAPI):
                 maintenance_sched,
                 run_email_digest_tick,
                 settings.email_digest_tick_cron,
+                job_timeout_seconds=settings.email_digest_job_timeout_seconds,
             )
             logger.info(
                 "email digest tick registered: cron=%s queue=maintenance",

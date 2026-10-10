@@ -180,7 +180,7 @@ async def test_run_digest_sends_and_advances_state(monkeypatch):
         assert attachment.content[:2] == b"PK"  # a real zip archive
         return "pid-1"
 
-    async def fake_enrich(candidates, summarizer=None):
+    async def fake_enrich(candidates, summarizer=None, *, budget_seconds=None):
         return None
 
     monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
@@ -421,7 +421,7 @@ async def test_run_digest_keeps_only_candidates_with_phone(monkeypatch):
             _candidate(lead_id=3, name="Spaces", phone="   "),
         ]
 
-    async def fake_enrich(candidates, summarizer=None):
+    async def fake_enrich(candidates, summarizer=None, *, budget_seconds=None):
         summarized.extend(c.lead_id for c in candidates)
 
     async def fake_send(**kwargs):
@@ -855,6 +855,69 @@ async def test_enrichment_without_a_summarizer_is_a_no_op():
 
     assert candidate.summary is None
     assert candidate.project_name == "LG Display, Rorze"
+
+
+async def test_enrichment_budget_stops_the_phase_and_keeps_the_run_alive():
+    """The 2026-10-10 regression: a busy candidate day made the serial LLM
+    enrichment outlast RQ's 180s death penalty, which killed the job before the
+    send. Past the budget the loop stops instead — the untouched rows keep an
+    empty summary and the caller's send still happens."""
+    import asyncio
+
+    summarized: list[int] = []
+
+    async def slow(_system: str, user: str) -> str:
+        await asyncio.sleep(0.2)
+        summarized.append(1)
+        return '{"summary": "Tóm tắt.", "project": null}'
+
+    candidates = [
+        _candidate(lead_id=n, candidate_messages=("Hỏi lương",)) for n in range(4)
+    ]
+    await _enrich_candidates(candidates, slow, budget_seconds=0.25)
+
+    # The first row fits inside the budget; the loop then stops rather than
+    # grinding through every remaining candidate.
+    assert len(summarized) < len(candidates)
+    assert candidates[0].summary == "Tóm tắt."
+    assert any(c.summary is None for c in candidates)
+
+
+async def test_run_digest_sends_even_when_enrichment_budget_is_exhausted(monkeypatch):
+    """The letter is the product; a summary column is not worth losing it."""
+
+    async def fake_collect(db, *, window_start, window_end):
+        return [_candidate(lead_id=n) for n in range(3)]
+
+    sends: list[dict] = []
+
+    async def fake_send(**kwargs):
+        sends.append(kwargs)
+        return "pid-budget"
+
+    class _BudgetSettings:
+        email_digest_enrich_budget_seconds = 0
+
+    monkeypatch.setattr(digest_module, "collect_new_candidates", fake_collect)
+    monkeypatch.setattr(digest_module, "send_email_via_resend", fake_send)
+    monkeypatch.setattr(digest_module, "get_settings", lambda: _BudgetSettings())
+
+    async def never_called(_system: str, user: str) -> str:
+        raise AssertionError("a zero budget must not call the summarizer")
+
+    db = _StateDb()
+    now = datetime(2026, 10, 5, 2, 5, tzinfo=timezone.utc)
+    result = await run_digest(
+        db,
+        settings_service=_SettingsSvc(_config()),
+        now=now,
+        summarizer=never_called,
+    )
+
+    assert result.status == STATUS_SENT
+    assert result.candidate_count == 3
+    assert len(sends) == 1
+    assert db.commit_count == 1
 
 
 async def test_ambiguous_candidates_receive_the_full_mapping_in_the_prompt():

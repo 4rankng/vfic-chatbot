@@ -126,6 +126,31 @@ def test_cron_no_prior_jobs_registers_cleanly():
     assert sched.cron.call_args.kwargs["id"].startswith("vfic-tick-")
 
 
+def test_cron_registers_the_requested_job_timeout():
+    """The digest tick outgrew RQ's 180s default and was killed mid-run on
+    2026-10-10; the caller must be able to hand the job a longer ceiling, and
+    omitting it must leave RQ's default in place."""
+    sched = MagicMock()
+    tick = lambda: None  # noqa: E731
+    tick.__module__ = "test_cron_timeout"
+    sched.get_jobs.return_value = []
+
+    register_unique_cron_tick(sched, tick, cron_string="8 * * * *", job_timeout_seconds=900)
+
+    assert sched.cron.call_args.kwargs["job_timeout"] == 900
+
+
+def test_cron_without_a_timeout_keeps_the_default():
+    sched = MagicMock()
+    tick = lambda: None  # noqa: E731
+    tick.__module__ = "test_cron_default_timeout"
+    sched.get_jobs.return_value = []
+
+    register_unique_cron_tick(sched, tick, cron_string="8 * * * *")
+
+    assert "job_timeout" not in sched.cron.call_args.kwargs
+
+
 def test_cron_idempotent_after_first_registration():
     """A second boot that finds the stable-id job still leaves exactly one."""
     sched = MagicMock()
