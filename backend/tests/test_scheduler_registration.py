@@ -1,6 +1,9 @@
 """Tests for register_unique_tick / register_unique_cron_tick — mock-based, no Redis/DB required."""
 
+import inspect
 from unittest.mock import MagicMock
+
+from rq_scheduler import Scheduler
 
 from app.workers.scheduler_utils import register_unique_cron_tick, register_unique_tick
 
@@ -137,7 +140,9 @@ def test_cron_registers_the_requested_job_timeout():
 
     register_unique_cron_tick(sched, tick, cron_string="8 * * * *", job_timeout_seconds=900)
 
-    assert sched.cron.call_args.kwargs["job_timeout"] == 900
+    # rq-scheduler names it ``timeout``; ``job_timeout`` is not a parameter
+    # of Scheduler.cron and raises TypeError at boot.
+    assert sched.cron.call_args.kwargs["timeout"] == 900
 
 
 def test_cron_without_a_timeout_keeps_the_default():
@@ -148,7 +153,27 @@ def test_cron_without_a_timeout_keeps_the_default():
 
     register_unique_cron_tick(sched, tick, cron_string="8 * * * *")
 
-    assert "job_timeout" not in sched.cron.call_args.kwargs
+    assert "timeout" not in sched.cron.call_args.kwargs
+
+
+def test_cron_kwargs_are_accepted_by_the_real_scheduler_signature():
+    """A MagicMock accepts any keyword, so the mock tests above cannot catch a
+    keyword rq-scheduler does not have. Shipping `job_timeout` instead of
+    `timeout` raised TypeError at every web boot on 2026-10-10 and silently
+    unregistered the digest tick; bind against the real signature instead."""
+
+    def _tick() -> None:
+        return None
+
+    bound = inspect.signature(Scheduler.cron).bind(
+        object(),
+        "8 * * * *",
+        _tick,
+        repeat=None,
+        id="vfic-tick-probe",
+        timeout=900,
+    )
+    assert bound.arguments["timeout"] == 900
 
 
 def test_cron_idempotent_after_first_registration():

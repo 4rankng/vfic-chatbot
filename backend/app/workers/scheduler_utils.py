@@ -71,5 +71,5 @@ def register_unique_cron_tick(
         func=func,
         repeat=None,
         id=f"vfic-tick-{func.__name__}",
-        **({"job_timeout": job_timeout_seconds} if job_timeout_seconds else {}),
+        **({"timeout": job_timeout_seconds} if job_timeout_seconds else {}),
     )
