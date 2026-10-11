@@ -44,12 +44,14 @@ import sys
 from datetime import UTC, datetime, timedelta
 
 import redis as redis_lib
-from sqlalchemy import func, select
+from sqlalchemy import and_, exists, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.conversation_messaging.domain.statuses import ConversationMode, MessageSender
 from app.core.redis import sync_value
 from app.core.config import get_settings
+from app.models.channel_account import ChannelAccount
+from app.models.contact import ContactChannelIdentity
 from app.models.conversation import BotRun, Conversation, Message
 from app.models.outbox import OutboundOutbox, OutboxStatus
 
@@ -116,6 +118,11 @@ async def _stalled_conversations(
       * conversations the bot is not supposed to answer (HUMAN / CLOSED /
         SEMI_AUTO-with-active-human starve the bot by design), so only ``BOT``
         mode is considered;
+      * conversations on a channel account whose bot is PAUSED (operator switch,
+        migration 0075): the inbound is still persisted, but the bot is
+        deliberately not answering, so an unanswered inbound there is the
+        configured behaviour, not a stall. Counting it made every deploy
+        roll back while the Messenger account sat paused (2026-10-11);
       * turns that are still in flight — a conversation with an open
         ``bot_runs`` row started after its newest inbound is being worked on;
       * inbounds younger than ``min_age_seconds`` — the webhook writes the
@@ -173,6 +180,24 @@ async def _stalled_conversations(
             (reply.c.last_bot.is_(None)) | (reply.c.last_bot < inbound.c.last_inbound),
             (running.c.last_started.is_(None))
             | (running.c.last_started < inbound.c.last_inbound),
+            # A paused account answers nothing by design; the same
+            # (provider, account_key) join the turn path uses to read
+            # ``bot_paused`` (services/conversation/bot_path.py).
+            ~exists(
+                select(ChannelAccount.id)
+                .join(
+                    ContactChannelIdentity,
+                    and_(
+                        ContactChannelIdentity.provider == ChannelAccount.provider,
+                        ContactChannelIdentity.account_key == ChannelAccount.account_key,
+                    ),
+                )
+                .where(
+                    ContactChannelIdentity.id == Conversation.channel_identity_id,
+                    ChannelAccount.status == "ACTIVE",
+                    ChannelAccount.bot_paused.is_(True),
+                )
+            ),
         )
     )
     return [

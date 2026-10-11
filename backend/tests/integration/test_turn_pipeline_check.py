@@ -8,6 +8,8 @@ just as importantly — the false positives that must NOT fail a deploy:
   * a conversation with an in-flight turn (open ``bot_runs`` row started after
     the inbound) is not a stall — it is being worked on;
   * a HUMAN-mode conversation is not a stall — the bot is silent by design;
+  * a conversation on a channel account whose bot is PAUSED is not a stall
+    either — the operator switch keeps persistence on and answers off;
   * a ``PENDING`` outbound row is a stall only once it is older than the
     dispatch tolerance; recent ``PENDING`` and terminal rows are not.
 """
@@ -24,10 +26,15 @@ from app.conversation_messaging.domain.statuses import (
     DeliveryStatus,
     MessageSender,
 )
+from app.models.channel_account import ChannelAccount
 from app.models.conversation import BotRun, Message
 from app.models.outbox import OutboxStatus, OutboundOutbox
-from scripts.turn_pipeline_check import _stale_pending, _stalled_conversations
-from tests.integration._conv_factory import make_zalo_conversation
+from scripts.turn_pipeline_check import (
+    DEFAULT_MIN_AGE_SECONDS,
+    _stale_pending,
+    _stalled_conversations,
+)
+from tests.integration._conv_factory import make_conversation, make_zalo_conversation
 
 pytestmark = pytest.mark.integration
 
@@ -70,7 +77,9 @@ async def test_flags_bot_conversation_without_a_reply(integration_session) -> No
     )
     await integration_session.commit()
 
-    stalled = await _stalled_conversations(integration_session, WINDOW_SECONDS)
+    stalled = await _stalled_conversations(
+        integration_session, WINDOW_SECONDS, DEFAULT_MIN_AGE_SECONDS
+    )
 
     assert [conv_id for conv_id, _ in stalled] == [str(conversation.id)]
 
@@ -97,7 +106,9 @@ async def test_accepts_bot_conversation_with_a_reply(integration_session) -> Non
     )
     await integration_session.commit()
 
-    stalled = await _stalled_conversations(integration_session, WINDOW_SECONDS)
+    stalled = await _stalled_conversations(
+        integration_session, WINDOW_SECONDS, DEFAULT_MIN_AGE_SECONDS
+    )
 
     assert stalled == []
 
@@ -126,7 +137,9 @@ async def test_accepts_conversation_with_an_in_flight_turn(integration_session) 
     )
     await integration_session.commit()
 
-    stalled = await _stalled_conversations(integration_session, WINDOW_SECONDS)
+    stalled = await _stalled_conversations(
+        integration_session, WINDOW_SECONDS, DEFAULT_MIN_AGE_SECONDS
+    )
 
     assert stalled == []
 
@@ -148,7 +161,9 @@ async def test_ignores_conversations_the_bot_must_not_answer(
     )
     await integration_session.commit()
 
-    stalled = await _stalled_conversations(integration_session, WINDOW_SECONDS)
+    stalled = await _stalled_conversations(
+        integration_session, WINDOW_SECONDS, DEFAULT_MIN_AGE_SECONDS
+    )
 
     assert stalled == []
 
@@ -168,9 +183,96 @@ async def test_ignores_inbound_outside_the_window(integration_session) -> None:
     )
     await integration_session.commit()
 
-    stalled = await _stalled_conversations(integration_session, WINDOW_SECONDS)
+    stalled = await _stalled_conversations(
+        integration_session, WINDOW_SECONDS, DEFAULT_MIN_AGE_SECONDS
+    )
 
     assert stalled == []
+
+
+async def test_ignores_a_conversation_on_a_paused_account(integration_session) -> None:
+    """A paused account is silent BY DESIGN — that is not a stalled pipeline.
+
+    Operator switch (migration 0075): the account stays connected and every
+    inbound is still persisted, but the bot never answers. The 2026-10-11 deploy
+    rolled back twice because this query counted those inbounds as stalls while
+    the Messenger account sat paused.
+    """
+    account = ChannelAccount(
+        provider="facebook_messenger",
+        account_key="pipeline-paused",
+        label="pipeline-paused",
+        status="ACTIVE",
+        bot_paused=True,
+    )
+    integration_session.add(account)
+    await integration_session.flush()
+
+    conversation = await make_conversation(
+        integration_session,
+        provider="facebook_messenger",
+        account_key="pipeline-paused",
+        external_id="pipeline-paused-candidate",
+        zalo_channel="facebook_messenger",
+        mode=ConversationMode.BOT,
+    )
+    await _add_message(
+        integration_session,
+        conversation=conversation,
+        sender=MessageSender.WORKER,
+        body="Mai có lịch pv ko bạn",
+        age_seconds=60,
+    )
+    await integration_session.commit()
+
+    stalled = await _stalled_conversations(
+        integration_session, WINDOW_SECONDS, DEFAULT_MIN_AGE_SECONDS
+    )
+
+    assert stalled == []
+
+
+async def test_still_flags_the_same_inbound_once_the_account_is_unpaused(
+    integration_session,
+) -> None:
+    """The exclusion must follow the switch, not blank the whole channel.
+
+    A conversation on a LIVE account (or on no registered account at all) with an
+    unanswered inbound is still a real stall — the 2026-09-26 failure this gate
+    exists to catch.
+    """
+    account = ChannelAccount(
+        provider="facebook_messenger",
+        account_key="pipeline-live",
+        label="pipeline-live",
+        status="ACTIVE",
+        bot_paused=False,
+    )
+    integration_session.add(account)
+    await integration_session.flush()
+
+    conversation = await make_conversation(
+        integration_session,
+        provider="facebook_messenger",
+        account_key="pipeline-live",
+        external_id="pipeline-live-candidate",
+        zalo_channel="facebook_messenger",
+        mode=ConversationMode.BOT,
+    )
+    await _add_message(
+        integration_session,
+        conversation=conversation,
+        sender=MessageSender.WORKER,
+        body="Mai có lịch pv ko bạn",
+        age_seconds=60,
+    )
+    await integration_session.commit()
+
+    stalled = await _stalled_conversations(
+        integration_session, WINDOW_SECONDS, DEFAULT_MIN_AGE_SECONDS
+    )
+
+    assert [conv_id for conv_id, _ in stalled] == [str(conversation.id)]
 
 
 async def test_flags_only_old_pending_outbound_rows(integration_session) -> None:
