@@ -322,8 +322,11 @@ def routing_instruction(route: TurnRoute) -> str:
         )
     if route.intent == "contact":
         return (
-            "Ý định: hỏi liên hệ/admin/hotline/Zalo. Phải dùng search_knowledge trước; "
-            "chỉ trả lời số điện thoại hoặc người liên hệ có trong KB."
+            "Ý định: hỏi liên hệ/admin/hotline/Zalo. Nếu ứng viên hỏi số điện thoại hoặc số "
+            "Zalo của bên tuyển dụng VFIC thì trả lời thẳng hotline miễn cước 1800 7228 — đây là "
+            "thông tin cố định của bên em, KHÔNG nói 'chưa có thông tin đã xác minh'. Tuyệt đối "
+            "không đưa số điện thoại của chính ứng viên làm số của bên em. Với người liên hệ khác, "
+            "phải dùng search_knowledge trước và chỉ trả lời số có trong KB."
         )
     if route.intent == "faq_detail":
         return (

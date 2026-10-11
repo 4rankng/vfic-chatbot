@@ -26,7 +26,9 @@ _RUNTIME_RETRIEVAL_RULES = f"""
 === QUY TẮC TRA CỨU BẮT BUỘC ===
 - Với câu hỏi về liên hệ, admin, số điện thoại, hotline, Zalo, hoặc "đến công ty liên hệ ai": phải tra search_knowledge trước khi kết luận.
 - Nếu search_knowledge trả về liên hệ/số điện thoại từ KB VFIC/LG Display, trả lời trực tiếp theo dữ liệu đó.
-- Nếu tool/KB không trả về liên hệ cần hỏi, nói rõ "chưa có thông tin này trong dữ liệu" thay vì suy đoán.
+- Khi ứng viên hỏi số điện thoại/số Zalo của bên tuyển dụng VFIC (kể cả hỏi "có số Zalo tuyển dụng VFIC không"), PHẢI đưa hotline miễn cước VFIC {VFIC_HOTLINE} — đây là SỰ THẬT CỐ ĐỊNH của bên em, không cần tra KB, và TUYỆT ĐỐI KHÔNG nói "chưa có thông tin đã xác minh" cho câu hỏi này.
+- TUYỆT ĐỐI KHÔNG nói số điện thoại của chính ứng viên (số họ đã gửi) là số của bên em, số để bên em gọi lại, hay là số tuyển dụng/hotline: ứng viên hỏi số của bên em thì trả lời bằng hotline {VFIC_HOTLINE}. Số ứng viên đưa chỉ là thông tin liên hệ của họ, không phải thông tin liên hệ của công ty.
+- Nếu tool/KB không trả về liên hệ cần hỏi (trường hợp khác, không phải hotline của VFIC), nói rõ "chưa có thông tin này trong dữ liệu" thay vì suy đoán.
 - DỰ ÁN LÀ ĐƠN VỊ TUYỂN DỤNG (operator rule 2026-10-01): mọi dự án trong DANH MỤC SẢN PHẨM/DỰ ÁN ĐANG HOẠT ĐỘNG đều là bằng chứng dự án đang tuyển — chủ động giới thiệu, tư vấn và thuyết phục ứng viên ứng tuyển vào dự án (mục tiêu: ứng viên nộp hồ sơ và để lại SĐT cho chuyên viên). list_active_projects là nguồn kiểm tra các dự án đang hoạt động và ghép theo tiêu chí; Không bắt phải có vị trí Job riêng mới tư vấn dự án đang hoạt động.
 - Xác nhận "đang tuyển" phải dựa trên tool hiện tại hoặc KB đã xuất bản; Không được suy ra tình trạng tuyển dụng từ danh mục tên trong prompt.
 - Khi danh mục Job trống hoặc không có dòng nào khớp khu vực/ngành nghề của một dự án, HÃY giới thiệu dự án đó theo đúng thông tin trong DANH MỤC (địa điểm, tóm tắt, điểm nổi bật) và tra search_knowledge theo dự án để bổ sung chi tiết — KHÔNG trả lời "dữ liệu không có" khi DANH MỤC vẫn đang liệt kê dự án.
@@ -63,7 +65,7 @@ _RECRUITMENT_CONTACT_RULES = """
 # 10-min TTL window. DB-side card/persona writes used to invalidate independently
 # via the NS_PREAMBLE version bump; there is no persona row any more, so this
 # revision is the only lever for persona/rules text.
-_PROMPT_TEXT_REVISION = "11"
+_PROMPT_TEXT_REVISION = "12"
 
 
 def resolve_effective_persona() -> str:

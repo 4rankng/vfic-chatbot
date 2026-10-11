@@ -583,6 +583,27 @@ async def _agent_turn(
             )
         else:
             return tingting_hotline_reply(await _tingting_hotline(deps))
+    if (
+        not tingting_support_account
+        and not tingting_reset_allowed
+        and route.intent == "contact"
+        and route.confidence >= ROUTE_CONFIDENCE_FLOOR
+        and (manifest_policy is None or manifest_policy.pack_key == "recruitment")
+    ):
+        # Operator rule (2026-10-11): "có số Zalo/số điện thoại tuyển dụng VFIC
+        # không" is answered with the VFIC hotline, which this OA already owns.
+        # The prod case answered "chưa có thông tin đã xác minh" and then quoted
+        # the CANDIDATE's own number back as a callback hotline — a number the
+        # grounding guard cannot flag, because the candidate typed it. The
+        # hotline is a fixed fact, so the model does not author this turn at
+        # all. Below the floor a reading means "cannot tell" and the agent still
+        # answers normally.
+        if timings is not None:
+            timings.setdefault("intent", route.intent)
+            timings.setdefault("route_strategy", route.strategy)
+            timings.setdefault("route_reason", route.reason)
+            timings.setdefault("route_confidence", round(route.confidence, 2))
+        return vfic_hotline_reply()
     if not tingting_support_account and (
         route.reason == "not_job_seeking"
         or (route.intent == "out_of_scope" and route.confidence >= ROUTE_CONFIDENCE_FLOOR)

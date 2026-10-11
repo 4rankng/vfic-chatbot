@@ -2781,6 +2781,104 @@ async def test_a_not_job_seeker_never_reaches_the_model():
 
 
 @pytest.mark.asyncio
+async def test_a_recruiting_contact_question_answers_with_the_vfic_hotline():
+    """Operator rule (2026-10-11): a contact turn on this OA gets the hotline.
+
+    Pins the prod screenshot: "có số zalo của tuyển dụng VFIC không ạ" answered
+    "chưa có thông tin đã xác minh" and then quoted the CANDIDATE's own number
+    back as the callback number. The hotline is a fixed fact this OA owns, so a
+    confident contact turn ships it verbatim and the model never runs.
+    """
+    from app.graph.runner import _agent_turn
+    from app.prompts.vfic_persona import vfic_hotline_reply
+
+    captured: dict[str, object] = {}
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):
+            captured["user_text"] = user_text
+            return "Dạ số Zalo tuyển dụng VFIC hiện em chưa có thông tin đã xác minh ạ."
+
+    class _Conversations:
+        async def get(self, _conversation_id):
+            return SimpleNamespace(id=CONV_ID, version=7)
+
+        async def escalate_extracted_intent(self, conv, **kwargs):  # noqa: ARG001
+            return True
+
+    deps = _deps(_FakeZalo(), conversation=_Conversations())
+    deps.agent = _FakeAgent()
+
+    reply = await _agent_turn(
+        BotRunState(
+            conversation_id=CONV_ID,
+            version_at_start=7,
+            user_text="có số zalo của tuyển dụng VFIC không ạ",
+        ),
+        deps,
+        "có số zalo của tuyển dụng VFIC không ạ",
+        provider="zalo_bot",
+        chat_id="z1",
+        recent_messages=[],
+        timings={"lane": "agent"},
+        decisions=TurnDecisions(intent="contact", intent_confidence=0.9),
+    )
+
+    assert reply == vfic_hotline_reply()
+    assert "1800 7228" in reply
+    assert captured == {}  # the model never authors a contact turn
+
+
+@pytest.mark.asyncio
+async def test_a_low_confidence_contact_reading_is_still_answered_by_the_model():
+    """Below the floor means "cannot tell" — it must not cost the turn its answer.
+
+    The gate is a safety net for a confident read, not a replacement for the
+    agent: an uncertain contact turn still runs, where the routing instruction
+    (hotline in, candidate's number out) governs the prose.
+    """
+    from app.graph.runner import _agent_turn
+
+    async def _fake_build_system_prompt(retrieval, *, provider=None):  # noqa: ARG001
+        return "fake system prompt", True
+
+    class _FakeAgent:
+        async def agent(self, user_text, **kwargs):  # noqa: ARG002
+            return "Dạ anh gọi hotline 1800 7228 của bên em được ạ."
+
+    class _FakeLead:
+        async def context(self, *args, **kwargs):  # noqa: ARG002
+            return "", ""
+
+        def instruction(self, question):  # noqa: ARG002
+            return ""
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr("app.graph.context.build_system_prompt", _fake_build_system_prompt)
+    monkeypatch.setattr(lanes, "build_agent_user_text", lambda **kwargs: kwargs["current_user_text"])
+
+    deps = _deps(_FakeZalo(), conversation=object())
+    deps.agent = _FakeAgent()
+    deps.lead = _FakeLead()
+
+    try:
+        reply = await _agent_turn(
+            BotRunState(conversation_id=CONV_ID, version_at_start=1, user_text="liên hệ ai ạ"),
+            deps,
+            "liên hệ ai ạ",
+            provider="zalo_bot",
+            chat_id="z1",
+            recent_messages=[],
+            timings={"lane": "agent"},
+            decisions=TurnDecisions(intent="contact", intent_confidence=0.3),
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert "1800 7228" in reply
+
+
+@pytest.mark.asyncio
 async def test_a_barely_confident_off_domain_reading_is_still_answered_by_the_model():
     """Below the floor means "cannot tell" — that must not cost a lead its bot.
 
