@@ -39,7 +39,14 @@ def _doc(*, status=KnowledgeStatus.PROCESSING, lease=FUTURE, updated=OLD):
 
 
 class FakeSession:
-    """Records statements; scripted rows per scalars() call, rowcounts per execute()."""
+    """Records statements; scripted rows per scalars() call, rowcounts per execute().
+
+    Mirrors ``AsyncSession`` faithfully: ``scalars()`` is a coroutine whose
+    result carries ``.all()``. A synchronous fake returning ``SimpleNamespace``
+    made missing-``await`` call sites valid, which is how the 2026-10-11
+    production outage (``AttributeError: 'coroutine' object has no attribute
+    'all'`` on every recovery tick) passed this suite.
+    """
 
     def __init__(self, pages, rowcounts):
         self.pages = list(pages)
@@ -49,7 +56,7 @@ class FakeSession:
         self.selected = []
         self.commits = 0
 
-    def scalars(self, statement):
+    async def scalars(self, statement):
         self.selected.append(statement)
         rows = self.pages.pop(0)
         return SimpleNamespace(all=lambda: rows)
@@ -158,3 +165,36 @@ def test_bulk_update_targets_orphans():
         "orphan_documents": 7,
         "orphan_revisions": 4,
     }
+
+
+def test_full_sweep_completes_all_three_legs():
+    """Regression (2026-10-11): the sweep must run to completion on an
+    async-faithful session. The first statement died on every production tick
+    (``db.scalars(...)`` coroutine awaited nowhere), so no leg ever ran and
+    orphaned ingest work stayed stuck forever. An abandoned training doc drives
+    leg 1 (its two artifact queries) plus the two bulk-update legs."""
+
+    async def run():
+        abandoned = _doc(status=KnowledgeStatus.PROCESSING, lease=PAST, updated=OLD)
+        orphaned_revision = [_revision()]
+        prepared_child = [_child()]
+        fake = FakeSession(
+            pages=[[abandoned], orphaned_revision, prepared_child],
+            rowcounts=[7, 4],
+        )
+        counts = await recover_abandoned_ingest_work(fake)
+        return counts, fake, abandoned, orphaned_revision, prepared_child
+
+    counts, fake, abandoned, orphaned_revision, prepared_child = asyncio.run(run())
+    # Leg 1 classified and abandoned exactly one training batch.
+    assert counts["training_batches"] == 1
+    assert abandoned.status is KnowledgeStatus.FAILED
+    assert abandoned.metadata_["project_training"]["lease_expires_at"] is None
+    assert orphaned_revision[0].failure_code == TRAINING_RUN_ABANDONED_CODE
+    assert prepared_child[0].category_revision_id is None
+    # Legs 2 and 3 still ran after leg 1's per-batch commit.
+    assert len(fake.selected) == 3  # batches + revisions + children
+    assert len(fake.executed) == 2  # orphan documents + orphan revisions updates
+    assert fake.commits == 3  # one per abandoned batch + one per bulk leg
+    assert counts["orphan_documents"] == 7
+    assert counts["orphan_revisions"] == 4

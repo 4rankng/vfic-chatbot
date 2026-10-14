@@ -143,7 +143,7 @@ async def recover_abandoned_ingest_work(db: AsyncSession) -> dict[str, int]:
 async def _sweep_abandoned_training_batches(db: AsyncSession, now: datetime) -> int:
     """Declare expired training batches abandoned and fail their artifacts."""
     docs = (
-        db.scalars(
+        await db.scalars(
             select(KnowledgeDocument).where(
                 KnowledgeDocument.project_id.is_not(None),
                 KnowledgeDocument.metadata_["project_training"].is_not(None),
@@ -208,7 +208,7 @@ async def _abandon_training_batch(db: AsyncSession, doc: KnowledgeDocument) -> t
             },
         }
     revisions = (
-        db.scalars(
+        await db.scalars(
             select(KnowledgeCategoryRevision).where(
                 KnowledgeCategoryRevision.quality_result["project_training_document_id"].astext
                 == str(doc.id),
@@ -228,7 +228,7 @@ async def _abandon_training_batch(db: AsyncSession, doc: KnowledgeDocument) -> t
             revision.lease_expires_at = None
         revision.quality_result = {}
     children = (
-        db.scalars(
+        await db.scalars(
             select(KnowledgeDocument).where(
                 KnowledgeDocument.metadata_["project_training_document_id"].astext == str(doc.id),
                 KnowledgeDocument.status.in_(
