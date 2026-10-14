@@ -41,11 +41,22 @@ bootstrap:
 	@test -d frontend/node_modules || { echo "Installing frontend deps (npm ci) ..."; cd frontend && npm ci; }
 	@echo "bootstrap complete — run 'make dev'"
 
+# Integration files that gate a release (changed-surface lane). The full
+# integration suite is a manual lane by owner decision (2026-09-26, K-13);
+# these files are the exception: each guards a shipped prod fix whose class
+# unit tests provably cannot catch (ORM eager-load MissingGreenlet, async
+# sweep awaits). Extend this list when a fix lands with that property.
+RELEASE_INTEGRATION_FILES ?= \
+	tests/integration/test_first_message_resilience.py \
+	tests/integration/test_knowledge_recovery_sweep_integration.py
+
 # Release must be committed and validated before any image is pushed or production is touched.
 # Every gate runs on this machine — there is no CI in the loop.
 # `make deploy` does NOT chain this target — run it explicitly before deploying.
 # Heavy gates run as three concurrent lanes (backend | frontend | data); any lane
 # failure fails the release and keeps its full log. Lane contents: docs/ops/deployment-guide.md §3.
+# The changed-surface integration lane (above) rides with the data lane — both
+# need the dev Postgres, so they share one log and one failure status.
 release-check:
 	@dirty="$$(git status --porcelain)"; \
 	if [ -n "$$dirty" ]; then \
@@ -67,7 +78,7 @@ release-check:
 	be_pid=$$!; \
 	( cd frontend && npm audit --omit=dev --audit-level=high && npm run lint && npm run typecheck && npm run registry:check && npm run test:unit:app:coverage:changed-surface -- --run && npm run build && npm run smoke:built ) >"$$tmp/frontend.log" 2>&1 & \
 	fe_pid=$$!; \
-	( cd backend && .venv/bin/python -m pytest "tests/integration/test_migration_roundtrip_walk.py::test_chain_reverses_to_base_and_reapplies" "tests/integration/test_migration_roundtrip_walk.py::test_reverse_chain_renders_offline" -p no:randomly -m integration && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp/golden-raw.json" --gate-output "$$tmp/golden.json" && RELEASE_GATE_LATENCY_SLO_ENABLED=false .venv/bin/python scripts/release_gate_check.py --golden-results "$$tmp/golden.json" ) >"$$tmp/data.log" 2>&1 & \
+	( cd backend && .venv/bin/python -m pytest "tests/integration/test_migration_roundtrip_walk.py::test_chain_reverses_to_base_and_reapplies" "tests/integration/test_migration_roundtrip_walk.py::test_reverse_chain_renders_offline" -p no:randomly -m integration && .venv/bin/python scripts/benchmark_rag.py --gold --min-pass-rate 0 --output "$$tmp/golden-raw.json" --gate-output "$$tmp/golden.json" && RELEASE_GATE_LATENCY_SLO_ENABLED=false .venv/bin/python scripts/release_gate_check.py --golden-results "$$tmp/golden.json" && .venv/bin/python -m pytest -q -p no:randomly -m integration $(RELEASE_INTEGRATION_FILES) ) >"$$tmp/data.log" 2>&1 & \
 	data_pid=$$!; \
 	wait $$be_pid; rc_be=$$?; \
 	wait $$fe_pid; rc_fe=$$?; \

@@ -237,7 +237,7 @@ async def one_call(client, system_prompt: str, user_msg: str) -> dict:
             had_tool_calls=bool(getattr(msg, "tool_calls", None)),
             success=True,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         sample["error"] = type(exc).__name__ + ": " + str(exc)[:120]
     return sample
 
@@ -606,7 +606,7 @@ async def main() -> None:
             total = ok + fail
             print(f" ... {ok}/{total} OK", flush=True)
             results.append(r)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             print(f" ... FAILED ({type(exc).__name__}: {exc})", flush=True)
             results.append(
                 {

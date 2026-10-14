@@ -288,7 +288,7 @@ class DocumentRepository:
                 project_clause=project_clause,
                 project_ids=project_ids,
             )
-        except Exception:
+        except Exception :  # noqa: BLE001
             # Vector arm failed (timeout or error). Return nothing and let the
             # grounding policy / prefetch-miss paths handle the empty evidence
             # instead of answering from stale context.

@@ -642,6 +642,6 @@ async def _dispatch_tool(
             len(result),
         )
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("tool %s failed error_type=%s", name, type(exc).__name__)
         return f"Lỗi khi gọi tool '{name}': vui lòng thử lại hoặc dùng cách khác."

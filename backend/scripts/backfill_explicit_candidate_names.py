@@ -185,7 +185,7 @@ async def _fill_one(session: AsyncSession, conversation, report: _RunReport) -> 
         await session.commit()
         report.written += 1
         _emit("name_written", report.run_id, conversation_id=str(conversation.id), name=name)
-    except Exception:
+    except Exception :  # noqa: BLE001
         await session.rollback()
         report.write_failures += 1
         logger.warning(

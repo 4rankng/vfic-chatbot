@@ -208,14 +208,14 @@ async def _fill_one(
                         conversation_id=str(conversation.conversation_id),
                     )
                     report.pairs_applied += 1
-                except Exception:
+                except Exception :  # noqa: BLE001
                     report.pair_failures += 1
                     logger.warning(
                         "candidate detail fill failed conversation=%s",
                         conversation.conversation_id,
                         exc_info=True,
                     )
-    except Exception:
+    except Exception :  # noqa: BLE001
         report.pair_failures += 1
         logger.warning(
             "candidate detail fill aborted conversation=%s",

@@ -484,7 +484,7 @@ class TrainingCategoryBatch:
                 revision.processing_started_at
             ) = None
             await self.db.commit()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             await self.db.rollback()
             failed = await self.db.scalar(
                 select(KnowledgeCategoryRevision)

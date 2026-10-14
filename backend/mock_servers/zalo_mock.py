@@ -130,7 +130,7 @@ async def _fire_user_reply(chat_id: str) -> None:
             resp.status_code,
             json.dumps(resp_json, ensure_ascii=False)[:200],
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.error("AUTO-REPLY webhook POST failed: %s", exc)
         _record(chat_id, "system", f"auto-reply error: {exc}")
 
@@ -149,7 +149,7 @@ async def bot_method(token: str, method: str, request: Request) -> JSONResponse:
     """
     try:
         body = await request.json() or {}
-    except Exception:
+    except Exception :  # noqa: BLE001
         body = {}
 
     chat_id = body.get("chat_id", "unknown")
@@ -222,7 +222,7 @@ async def mock_send(request: Request) -> JSONResponse:
     """
     try:
         body = await request.json()
-    except Exception:
+    except Exception :  # noqa: BLE001
         return JSONResponse({"error": "invalid JSON"}, status_code=400)
 
     chat_id = body.get("chat_id", "mock-user-123")
@@ -256,7 +256,7 @@ async def mock_send(request: Request) -> JSONResponse:
             json.dumps(result, ensure_ascii=False)[:200],
         )
         return JSONResponse({"backend_status": resp.status_code, "backend_response": result})
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.error("webhook POST failed: %s", exc)
         _record(chat_id, "system", f"webhook error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=502)

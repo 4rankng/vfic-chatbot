@@ -245,7 +245,7 @@ class ZaloWebhookService:
                     try:
                         _recent = await repo.last_messages(conv, limit=5)
                         prev_bot_message = _previous_bot_message(_recent)
-                    except Exception:
+                    except Exception :  # noqa: BLE001
                         prev_bot_message = None
 
                 await CandidateExtractionService.persist_explicit_details(
@@ -255,13 +255,13 @@ class ZaloWebhookService:
                     prev_bot_message=prev_bot_message,
                     conversation=conv,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 # The inbound message is already durable. Do not turn a CRM-profile
                 # write failure into a failed webhook delivery. Error text can carry
                 # DB-bound candidate values, so log only the exception class.
                 try:
                     await db.rollback()
-                except Exception as rollback_exc:
+                except Exception as rollback_exc:  # noqa: BLE001
                     logger.error(
                         "explicit candidate name persistence rollback failed error_type=%s",
                         type(rollback_exc).__name__,

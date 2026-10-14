@@ -374,7 +374,7 @@ class CandidateExtractionService:
         if result.memory_facts:
             try:
                 await MemoryService.save(db, embed_batch, chat_id, result.memory_facts)
-            except Exception:
+            except Exception :  # noqa: BLE001
                 logger.warning(
                     "memory fact save failed for chat %s (%d facts extracted); chat turn continues",
                     chat_id,

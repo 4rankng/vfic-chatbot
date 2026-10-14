@@ -88,7 +88,7 @@ async def compare_income(
     """Return bounded cross-project income evidence from active structured features."""
     try:
         summaries = await retrieval.income_summary_for_active_projects()
-    except Exception:
+    except Exception :  # noqa: BLE001
         logger.warning("compare_income failed", exc_info=True)
         return build_income_verdict(
             [],

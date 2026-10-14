@@ -367,7 +367,7 @@ async def list_active_projects(
     strict_criteria = strict_criteria is True
     try:
         rows = await retrieval.list_active_projects()
-    except Exception:
+    except Exception :  # noqa: BLE001
         logger.warning("list_active_projects failed", exc_info=True)
         return _project_tool_result("unavailable", [], _UNAVAILABLE_REPLY)
 
@@ -490,7 +490,7 @@ async def get_project_distance(
 
     try:
         catalog = await retrieval.list_active_projects()
-    except Exception:
+    except Exception :  # noqa: BLE001
         logger.warning("get_project_distance: catalog read failed", exc_info=True)
         return _project_tool_result("unavailable", [], _UNAVAILABLE_REPLY)
 

@@ -325,7 +325,7 @@ async def extract_category_plan(
     for index in range(len(completed), len(sections)):
         try:
             raw = await llm_json(system, sections[index])
-        except Exception:
+        except Exception :  # noqa: BLE001
             raise CategoryPlanExtractionError(
                 "Category extraction provider failed; retry the retained source"
             ) from None

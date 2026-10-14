@@ -129,7 +129,13 @@ anything that has not had its own tests run — those are the changes
    a dev machine has no production telemetry). The gate is otherwise
    **unit-only** (since 2026-09-26): the rest of the backend integration suite
    and desktop/mobile Playwright remain manual lanes and are not deploy
-   blockers. Every lane runs on the deploying
+   blockers — with one exception, the **changed-surface integration lane**
+   (root `Makefile`'s `RELEASE_INTEGRATION_FILES`): integration files that each
+   guard a shipped prod fix whose failure class unit tests provably cannot
+   catch (ORM lazy-load `MissingGreenlet` on the realtime seam, missing
+   `await` on `AsyncSession.scalars` — both shipped 2026-10-11 with a green
+   unit gate). It runs in the data lane, so it needs the dev Postgres too.
+   Every lane runs on the deploying
    machine — there is **no CI** in the release path (see K-13 in
    `docs/project-roadmap.md`). Stops before any image is pushed if a check
    fails. Skippable only under the urgent-deploy policy above.

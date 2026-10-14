@@ -118,7 +118,7 @@ async def authenticate_socket_token(auth, headers, db):
         raise ConnectionRefusedError("authentication required")
     try:
         return await build_access_token_authenticator(db).authenticate(token)
-    except Exception:
+    except Exception :  # noqa: BLE001
         raise ConnectionRefusedError("invalid token")
 
 

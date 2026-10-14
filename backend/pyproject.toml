@@ -71,6 +71,14 @@ include = ["app*"]
 line-length = 100
 target-version = "py312"
 
+# BLE is enabled deliberately: every ``except Exception`` in this codebase is a
+# designed best-effort swallow, and the ``# noqa: BLE001`` label is how a site
+# declares that intent. Without BLE in the select the labels enforce nothing
+# and a new blind catch ships silently (the 2026-10-14 review found 231
+# decorative labels + 22 unlabeled sites behind a green gate).
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "BLE"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [
