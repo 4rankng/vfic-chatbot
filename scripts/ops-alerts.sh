@@ -116,6 +116,15 @@ if command -v docker >/dev/null 2>&1; then
       v="$(echo "$METRICS" | awk -F'[ =]' -v k="$c" '$1==k {print $2; exit}')"
       [ -n "${v:-}" ] && [ "$v" -gt 0 ] && warn "$c=$v (only ever rises — investigate the sweep)"
     done
+    # Swallowed-error escalation counters (app.core.incidents): each WARNING
+    # catch on a best-effort path increments one of these — a rise means a
+    # silent degradation the logs alone used to hide (lost realtime events,
+    # dead recovery ticks).
+    for c in realtime_payload_failures_total realtime_publish_failures_total \
+      knowledge_recovery_failures_total; do
+      v="$(echo "$METRICS" | awk -F'[ =]' -v k="$c" '$1==k {print $2; exit}')"
+      [ -n "${v:-}" ] && [ "$v" -gt 0 ] && warn "$c=$v (only ever rises — realtime/recovery is silently degrading)"
+    done
   fi
 fi
 

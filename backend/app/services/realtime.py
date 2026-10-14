@@ -10,6 +10,8 @@ on the realtime hot path.
 
 import logging
 
+from app.core.incidents import REALTIME_PUBLISH_FAILURES, count_incident
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,4 +33,5 @@ async def publish_event(event_type: str, payload: dict) -> None:
             return
         await emit_event(event_type, payload, room=room)
     except Exception as exc:  # noqa: BLE001 — realtime must not break writes
-        logger.warning("socket.io publish failed: %s", exc)
+        logger.warning("socket.io publish failed: %s", exc, exc_info=True)
+        count_incident(REALTIME_PUBLISH_FAILURES)

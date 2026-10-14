@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 import uuid
 
+from app.core.incidents import KNOWLEDGE_RECOVERY_FAILURES, count_incident
+
 logger = logging.getLogger(__name__)
 
 # Non-reentrancy guard, mirroring the reconcile tick.
@@ -44,6 +46,9 @@ async def _run_tick_async() -> None:
             counts = await recover_abandoned_ingest_work(db)
         if any(counts.values()):
             logger.warning("knowledge recovery sweep recovered: %s", counts)
+    except Exception:  # noqa: BLE001 — counted, then the RQ failure still fires
+        count_incident(KNOWLEDGE_RECOVERY_FAILURES)
+        raise
     finally:
         # Prove ownership before deleting: a tick that overran into its
         # successor must not delete the successor's lock.

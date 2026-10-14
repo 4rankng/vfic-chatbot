@@ -230,6 +230,13 @@ async def metrics() -> dict:
             "reconcile_unanswered_gauge",
         ):
             queues[key] = int(sync_value(conn.get(key)) or 0)
+        # Swallowed-error escalation counters (app.core.incidents): the WARNING
+        # catches on best-effort paths are a designed terminal state — these
+        # counters are what makes that state visible instead of log-only.
+        from app.core.incidents import ALL_COUNTERS
+
+        for key in ALL_COUNTERS:
+            queues[key] = int(sync_value(conn.get(key)) or 0)
         return queues
 
     return await asyncio.to_thread(_collect)

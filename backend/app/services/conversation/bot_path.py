@@ -31,6 +31,7 @@ from app.channels.types import ZALO_OA_DEFAULT_ACCOUNT_KEY, oa_user_id
 from app.conversation_messaging.application.ports import (
     ConversationEventsPort,
 )
+from app.core.incidents import REALTIME_PAYLOAD_FAILURES, count_incident
 from app.models.channel_account import ChannelAccount
 from app.models.contact import ContactChannelIdentity
 from app.models.conversation import (
@@ -465,6 +466,7 @@ class BotConversationState(
                 conv_id,
                 exc_info=True,
             )
+            count_incident(REALTIME_PAYLOAD_FAILURES)
         return msg
 
     async def escalate_extracted_intent(
