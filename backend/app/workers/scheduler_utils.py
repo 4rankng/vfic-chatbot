@@ -13,10 +13,59 @@ appending another.
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 from datetime import datetime, timezone
 
 log = logging.getLogger(__name__)
+
+
+def _module_exists(module_name: str) -> bool:
+    """Whether *module_name* imports (find_spec; parent packages stay imported)."""
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def purge_dead_ticks(scheduler) -> int:
+    """Cancel scheduled jobs whose worker module no longer exists.
+
+    Removed features leave their rq-scheduler entries behind — Redis outlives
+    the code that registered it, and ``register_unique_tick`` only dedupes a
+    tick's OWN entries, so nothing ever cleaned up after a removal (prod
+    2026-10: four phantom entries — external_source_sync ×2, proactive_followup,
+    decision_trace_retention — each firing ``AttributeError`` into
+    worker-maintenance every interval). Deadness is decided by module
+    importability rather than a hardcoded list, so any future removal is swept
+    on the next boot too.
+
+    Returns the number of entries cancelled. Best-effort: a scan failure is
+    logged and returns 0 — it must never block tick registration.
+    """
+    try:
+        jobs = scheduler.get_jobs()
+    except Exception:  # noqa: BLE001 — cleanup must not block registration
+        log.exception("scheduler dead-tick scan failed (non-fatal)")
+        return 0
+    purged = 0
+    for job in jobs:
+        func_name = getattr(job, "func_name", None) or ""
+        module_name = func_name.rsplit(".", 1)[0]
+        # Only touch our own workers' ticks ("app.workers.*"); anything else
+        # in the scheduled set belongs to another operator/tool.
+        if not module_name.startswith("app.workers."):
+            continue
+        if not _module_exists(module_name):
+            try:
+                scheduler.cancel(job)
+                purged += 1
+                log.warning(
+                    "purged dead rq-scheduler entry func=%s (module removed)", func_name
+                )
+            except Exception:  # noqa: BLE001 — one bad entry must not stop the rest
+                log.exception("failed to cancel dead scheduler entry func=%s", func_name)
+    return purged
 
 
 def register_unique_tick(scheduler, func, interval: int) -> None:

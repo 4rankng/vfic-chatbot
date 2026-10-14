@@ -27,7 +27,11 @@ from app.api import (
     webhooks,
 )
 from app.core.config import get_settings
-from app.workers.scheduler_utils import register_unique_cron_tick, register_unique_tick
+from app.workers.scheduler_utils import (
+    purge_dead_ticks,
+    register_unique_cron_tick,
+    register_unique_tick,
+)
 from app.core.db import engine
 from app.core.errors import register_domain_exception_handlers
 from app.core.logging import request_id_ctx, setup_logging
@@ -95,6 +99,16 @@ async def lifespan(app: FastAPI):
         # The proactive follow-up tick and its `followup` queue were removed
         # (2026-10-04). Reconcile sweep + outbound dispatch stay on `maintenance`.
         maintenance_sched = Scheduler(connection=get_redis_sync(), queue_name="maintenance")
+        # Sweep the scheduled set for entries whose worker module no longer
+        # exists (removed features leave their Redis entries behind, and every
+        # fire of a dead entry raises into worker-maintenance). Importability-
+        # based, so future removals are cleaned on the next boot as well.
+        try:
+            purged = purge_dead_ticks(maintenance_sched)
+            if purged:
+                logger.info("purged %d dead rq-scheduler entr%s", purged, "y" if purged == 1 else "ies")
+        except Exception:  # noqa: BLE001
+            logger.exception("dead-tick purge failed (non-fatal)")
         try:
             register_unique_tick(
                 maintenance_sched, run_reconcile_tick, settings.reconcile_interval_seconds

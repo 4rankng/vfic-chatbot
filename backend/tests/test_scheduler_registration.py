@@ -5,13 +5,70 @@ from unittest.mock import MagicMock
 
 from rq_scheduler import Scheduler
 
-from app.workers.scheduler_utils import register_unique_cron_tick, register_unique_tick
+from app.workers.scheduler_utils import (
+    purge_dead_ticks,
+    register_unique_cron_tick,
+    register_unique_tick,
+)
 
 
 def _make_job(func_name: str) -> MagicMock:
     j = MagicMock()
     j.func_name = func_name
     return j
+
+
+def test_purge_dead_ticks_cancels_entries_for_removed_modules():
+    """Regression (2026-10 prod): removed features left four phantom entries in
+    rq:scheduler:scheduled_jobs; each fire raised AttributeError in
+    worker-maintenance. The purge cancels entries whose worker module is gone
+    and keeps live + foreign entries untouched."""
+    sched = MagicMock()
+    sched.get_jobs.return_value = [
+        _make_job("app.workers.external_source_sync_worker.run_external_source_sync_tick"),
+        _make_job(
+            "app.workers.single_page_external_source_sync_worker."
+            "run_single_page_external_source_sync_tick"
+        ),
+        _make_job("app.workers.proactive_followup_worker.run_proactive_followup_tick"),
+        _make_job("app.workers.decision_trace_retention_worker.run_decision_trace_retention_tick"),
+        # Live entries — modules exist, must survive.
+        _make_job("app.workers.reconcile_worker.run_reconcile_tick"),
+        _make_job("app.workers.knowledge_recovery_worker.run_knowledge_recovery_tick"),
+        # Not ours — must be left alone even if unimportable.
+        _make_job("other_project.worker.gone_module.tick"),
+    ]
+
+    purged = purge_dead_ticks(sched)
+
+    assert purged == 4
+    cancelled = sorted(c.args[0].func_name for c in sched.cancel.call_args_list)
+    assert cancelled == [
+        "app.workers.decision_trace_retention_worker.run_decision_trace_retention_tick",
+        "app.workers.external_source_sync_worker.run_external_source_sync_tick",
+        "app.workers.proactive_followup_worker.run_proactive_followup_tick",
+        "app.workers.single_page_external_source_sync_worker."
+        "run_single_page_external_source_sync_tick",
+    ]
+
+
+def test_purge_dead_ticks_scan_failure_is_non_fatal():
+    sched = MagicMock()
+    sched.get_jobs.side_effect = RuntimeError("Redis down")
+    assert purge_dead_ticks(sched) == 0
+    sched.cancel.assert_not_called()
+
+
+def test_purge_dead_ticks_cancel_failure_continues():
+    """One unruly entry must not shield the remaining dead ones from cleanup."""
+    sched = MagicMock()
+    dead_a = _make_job("app.workers.external_source_sync_worker.run_external_source_sync_tick")
+    dead_b = _make_job("app.workers.proactive_followup_worker.run_proactive_followup_tick")
+    sched.get_jobs.return_value = [dead_a, dead_b]
+    sched.cancel.side_effect = [RuntimeError("boom"), None]
+
+    assert purge_dead_ticks(sched) == 1
+    assert sched.cancel.call_count == 2
 
 
 def test_cancels_matching_jobs_and_keeps_unrelated():
