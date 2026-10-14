@@ -329,6 +329,9 @@ async def test_record_bot_pending_does_not_bump_version():
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
     events = MagicMock()
+    # ensure_realtime_ready is awaited on the record_bot_pending path (the
+    # schedule itself is sync and cannot load relationships itself).
+    events.ensure_realtime_ready = AsyncMock()
     state = ConversationState(db, MagicMock(), events)
 
     msg = await state.record_bot_pending(conv)
@@ -381,7 +384,9 @@ async def test_record_bot_pending_resolves_a_predecessor_placeholder():
         return SimpleNamespace(rowcount=0)
 
     db.execute = AsyncMock(side_effect=_execute)
-    state = ConversationState(db, MagicMock(), MagicMock())
+    events = MagicMock()
+    events.ensure_realtime_ready = AsyncMock()
+    state = ConversationState(db, MagicMock(), events)
 
     msg = await state.record_bot_pending(conv)
 

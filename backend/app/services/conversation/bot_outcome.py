@@ -332,7 +332,11 @@ class BotOutcomeMixin:
         # Realtime fan-out is deferred (fire-and-forget): payloads are serialized
         # eagerly on this coroutine (ORM attrs are expired post-commit and must
         # not be touched from the background task) and only the Redis publishes
-        # run on it. See ConversationEventBus.schedule_realtime.
+        # run on it. See ConversationEventBus.schedule_realtime. The eager load
+        # first: a conversation created this turn reaches here with the contact
+        # relationships unloaded, and schedule_realtime is sync — it cannot
+        # await its own loads (the 2026-10-13/14 MissingGreenlet prod class).
+        await self.events.ensure_realtime_ready(conv)
         self.events.schedule_realtime(msg, conv)
         return msg
 
