@@ -8,8 +8,9 @@
 # (OPS-09, measured 2026-09-24) shaped the original fences; the resize re-based
 # the ones that had grown tight — see the per-service notes below.
 #
-# Memory-limit ledger (OPS-09, re-based 2026-09-28): every service carries a
-# deploy.resources.limits.memory ceiling — postgres 448M, redis 320M, web-blue
+# Memory-limit ledger (OPS-09, re-based 2026-09-28; postgres raised 2026-10-15):
+# every service carries a
+# deploy.resources.limits.memory ceiling — postgres 768M, redis 320M, web-blue
 # 512M, web-green 512M, worker-chatbot 4×512M, worker-persistence 512M,
 # worker-ingest 512M, worker-category 256M,
 # worker-maintenance 384M, scheduler 128M, metrics-watch 128M, frontend 64M,
@@ -56,7 +57,12 @@ services:
     deploy:
       resources:
         limits:
-          memory: 448M  # measured 218 MB resident (2026-09-28); shared_buffers alone is 128 MB
+          # 2026-10-15: raised from 448M. Prod sat at 89-90% of the old cap
+          # (401.8/448 MiB, 2026-10-14 review) with ~46 MiB of headroom before
+          # an OOM kill that would take the database down. 768M keeps worst-case
+          # total container limits within the 3915 MiB host (measured peak
+          # resident ~410 MB; DB is 198 MB — the footprint is runtime, not data).
+          memory: 768M
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vfic}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
