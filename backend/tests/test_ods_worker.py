@@ -41,13 +41,13 @@ def test_tick_sent_logs_info(monkeypatch, caplog):
 
 def test_tick_unconfigured_logs_warning(monkeypatch, caplog):
     async def fake_tick():
-        return _Result("unconfigured", missing=["api_key"])
+        return _Result("unconfigured", missing=["auth_key"])
 
     monkeypatch.setattr(worker_module, "_tick_async", fake_tick)
     with caplog.at_level(logging.WARNING, logger="app.workers.ods_insights_worker"):
         status = worker_module.run_ods_insights_tick()
     assert status == "unconfigured"
-    assert any("api_key" in record.message for record in caplog.records)
+    assert any("auth_key" in record.message for record in caplog.records)
 
 
 async def test_tick_passes_the_shared_summarizer_into_the_run(monkeypatch):

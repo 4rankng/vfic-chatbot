@@ -66,8 +66,11 @@ from app.services.integration_settings.providers.email_digest import (
 )
 from app.services.integration_settings.providers.ods import (
     ODS_API_KEY,
+    ODS_AUTH_KEY,
+    ODS_AUTH_USER,
     ODS_ENABLED,
     ODS_RECIPIENTS,
+    ODS_SERVICE_NAME,
     ODS_SETTING_KEYS,
     OdsRuntimeConfig,
 )
@@ -117,8 +120,11 @@ __all__ = [
     "MINIMAX_ENABLE",
     "MINIMAX_SETTING_KEYS",
     "ODS_API_KEY",
+    "ODS_AUTH_KEY",
+    "ODS_AUTH_USER",
     "ODS_ENABLED",
     "ODS_RECIPIENTS",
+    "ODS_SERVICE_NAME",
     "ODS_SETTING_KEYS",
     "OPENROUTER_AGENT_MODEL",
     "OPENROUTER_API_KEY",

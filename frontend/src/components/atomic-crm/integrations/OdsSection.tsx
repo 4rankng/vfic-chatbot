@@ -14,26 +14,32 @@ import {
 } from "./api";
 import type { SettingsStatusState } from "./SettingsFieldStatus";
 import { SettingsGroupStatus } from "./SettingsFieldStatus";
-import { SecretField } from "./SecretField";
+import { PlainField, SecretField } from "./SecretField";
 import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
 
-/** The CloudFone API key and the recipient list — the two badge-counted fields. */
-const ODS_FIELD_COUNT = 2;
+/**
+ * The badge-counted fields: the three CloudFone spec-1.1 credentials
+ * (ServiceName, AuthUser, AuthKey) plus the recipient list.
+ */
+const ODS_FIELD_COUNT = 4;
 
 /** One query key for the endpoint, so a save can write back its own response. */
 const odsSettingsKey = ["ods-settings"] as const;
 
 /**
- * The ODS (CloudFone tổng đài) voice-transcript insights view: the CloudFone
- * API key, the recipient list, and the daily-send toggle. A blank key means
- * "keep the stored one"; the whole feature stays off until the key AND a
- * non-empty recipient list are saved with cron enabled.
+ * The ODS (CloudFone tổng đài) voice-transcript insights view: the three
+ * CloudFone spec-1.1 credentials, the recipient list, and the daily-send
+ * toggle. Blank credentials mean "keep the stored ones"; the whole feature
+ * stays off until ServiceName AND AuthUser AND AuthKey AND a non-empty
+ * recipient list are saved with cron enabled.
  */
 export const OdsSection = () => {
   const notify = useNotify();
   const queryClient = useQueryClient();
   // Untouched-draft sentinels: null shows (and keeps tracking) the server value.
-  const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [serviceNameDraft, setServiceNameDraft] = useState<string | null>(null);
+  const [authUserDraft, setAuthUserDraft] = useState<string | null>(null);
+  const [authKeyDraft, setAuthKeyDraft] = useState("");
   const [recipientsDraft, setRecipientsDraft] = useState<string | null>(null);
   const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
 
@@ -53,7 +59,9 @@ export const OdsSection = () => {
   const saveSettings = useMutation<OdsSettings, Error, OdsSettingsUpdate>({
     mutationFn: (body) => zaloIntegrationGateway.saveOdsSettings(body),
     onSuccess: (data) => {
-      setApiKeyDraft("");
+      setServiceNameDraft(null);
+      setAuthUserDraft(null);
+      setAuthKeyDraft("");
       setRecipientsDraft(null);
       setEnabledDraft(null);
       queryClient.setQueryData(odsSettingsKey, data);
@@ -69,10 +77,14 @@ export const OdsSection = () => {
     },
   });
 
-  const testConnection = useMutation<OdsTestResult, Error, string | undefined>({
-    // The probe validates the typed key BEFORE it is saved; without a draft
-    // the stored key is probed instead.
-    mutationFn: (apiKey) => zaloIntegrationGateway.testOdsConnection(apiKey),
+  const testConnection = useMutation<
+    OdsTestResult,
+    Error,
+    OdsSettingsUpdate | undefined
+  >({
+    // The probe validates the typed credentials BEFORE they are saved; without
+    // a draft the stored credentials are probed instead.
+    mutationFn: (body) => zaloIntegrationGateway.testOdsConnection(body),
     onSuccess: (result) => {
       if (result.ok) {
         notify(
@@ -94,30 +106,59 @@ export const OdsSection = () => {
     },
   });
 
+  const storedServiceName = settings?.service_name ?? "";
+  const storedAuthUser = settings?.auth_user ?? "";
   const storedRecipients = settings?.recipients ?? [];
+  const serviceNameValue = serviceNameDraft ?? storedServiceName;
+  const authUserValue = authUserDraft ?? storedAuthUser;
   const recipientsValue = recipientsDraft ?? storedRecipients.join(",\n");
   const enabled = enabledDraft ?? settings?.enabled ?? false;
-  const trimmedApiKey = apiKeyDraft.trim();
+  const trimmedAuthKey = authKeyDraft.trim();
 
   const parsedRecipients = recipientsValue
     .split(/[,\n]/)
     .map((email) => email.trim())
     .filter(Boolean);
+  const serviceNameChanged =
+    serviceNameDraft !== null && serviceNameValue.trim() !== storedServiceName;
+  const authUserChanged =
+    authUserDraft !== null && authUserValue.trim() !== storedAuthUser;
   const recipientsChanged =
     recipientsDraft !== null &&
     recipientsValue.trim() !== storedRecipients.join(", ");
   const dirty =
-    Boolean(trimmedApiKey) || recipientsChanged || enabledDraft !== null;
+    serviceNameChanged ||
+    authUserChanged ||
+    Boolean(trimmedAuthKey) ||
+    recipientsChanged ||
+    enabledDraft !== null;
 
   const configuredFields = [
-    settings?.api_key?.configured,
+    storedServiceName.length > 0,
+    storedAuthUser.length > 0,
+    settings?.auth_key?.configured,
     storedRecipients.length > 0,
   ].filter(Boolean).length;
+
+  /** Typed credentials only — omitted fields probe the stored values. */
+  const probeDraft = (): OdsSettingsUpdate | undefined => {
+    const body: OdsSettingsUpdate = {};
+    if (serviceNameDraft !== null && serviceNameDraft.trim()) {
+      body.service_name = serviceNameDraft.trim();
+    }
+    if (authUserDraft !== null && authUserDraft.trim()) {
+      body.auth_user = authUserDraft.trim();
+    }
+    if (trimmedAuthKey) body.auth_key = trimmedAuthKey;
+    return Object.keys(body).length > 0 ? body : undefined;
+  };
 
   const submit = () => {
     if (!settings || isError || saveSettings.isPending || !dirty) return;
     saveSettings.mutate({
-      ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
+      ...(serviceNameChanged ? { service_name: serviceNameValue.trim() } : {}),
+      ...(authUserChanged ? { auth_user: authUserValue.trim() } : {}),
+      ...(trimmedAuthKey ? { auth_key: trimmedAuthKey } : {}),
       recipients: parsedRecipients,
       ...(enabledDraft !== null ? { enabled: enabledDraft } : {}),
     });
@@ -159,17 +200,37 @@ export const OdsSection = () => {
           }
           defaultOpen
         >
-          <SecretField
-            id="ods_api_key"
-            label="CloudFone API key"
-            placeholder="Nhập CloudFone API key"
-            configured={settings?.api_key?.configured ?? false}
+          <PlainField
+            id="ods_service_name"
+            label="CloudFone ServiceName"
+            configured={storedServiceName.length > 0}
             statusState={statusState}
-            preview={settings?.api_key?.preview ?? null}
-            value={apiKeyDraft}
-            onChange={setApiKeyDraft}
+            showMissingStatus={false}
+            value={serviceNameValue}
+            onChange={setServiceNameDraft}
+            hint="Tên dịch vụ trong body request CloudFone API 1.1. Để trống để giữ giá trị đã lưu."
+          />
+          <PlainField
+            id="ods_auth_user"
+            label="CloudFone AuthUser"
+            configured={storedAuthUser.length > 0}
+            statusState={statusState}
+            showMissingStatus={false}
+            value={authUserValue}
+            onChange={setAuthUserDraft}
+            hint="Tài khoản xác thực CloudFone API 1.1. Để trống để giữ giá trị đã lưu."
+          />
+          <SecretField
+            id="ods_auth_key"
+            label="CloudFone AuthKey"
+            placeholder="Nhập CloudFone AuthKey"
+            configured={settings?.auth_key?.configured ?? false}
+            statusState={statusState}
+            preview={settings?.auth_key?.preview ?? null}
+            value={authKeyDraft}
+            onChange={setAuthKeyDraft}
             notify={notify}
-            hint="Để trống để giữ key đã lưu. Key dùng để lấy bản ghi (transcript) cuộc gọi tổng đài mỗi ngày."
+            hint="Để trống để giữ key đã lưu. Bộ ba ServiceName + AuthUser + AuthKey dùng để lấy bản ghi cuộc gọi tổng đài mỗi ngày."
           />
 
           <div className="settings-tingting-subhead">
@@ -233,15 +294,17 @@ export const OdsSection = () => {
                 : enabledDraft === false
                   ? "ODS sẽ tắt sau khi bấm Lưu cấu hình."
                   : storedRecipients.length === 0 ||
-                      !settings?.api_key?.configured
-                    ? "ODS đang tắt — cần CloudFone API key và ít nhất một người nhận."
+                      !storedServiceName ||
+                      !storedAuthUser ||
+                      !settings?.auth_key?.configured
+                    ? "ODS đang tắt — cần đủ ServiceName, AuthUser, AuthKey và ít nhất một người nhận."
                     : "ODS đang tắt — bấm Bật cron rồi Lưu cấu hình để bật."}
             </span>
             <Button
               type="button"
               color="secondary"
               className="uu-scope settings-test-button tt-btn-touch"
-              onClick={() => testConnection.mutate(trimmedApiKey || undefined)}
+              onClick={() => testConnection.mutate(probeDraft())}
               isDisabled={testConnection.isPending}
               aria-busy={testConnection.isPending}
             >

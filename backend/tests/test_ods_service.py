@@ -1,4 +1,5 @@
-"""ODS service: CloudFone client, daily fetch, insights build, and the pass.
+"""ODS service: CloudFone client (GetCallLogs spec 1.1), daily fetch,
+insights build, and the pass.
 
 The client's transport is injected (``httpx.MockTransport``), the summarizer
 and the sender are callables — no network and no graph import anywhere here.
@@ -31,8 +32,26 @@ from app.services.ods import (
 )
 
 
-def _envelope(items: list[dict]) -> dict:
-    return {"result": "success", "data": {"data": items}}
+def _envelope(items: list[dict], *, total: int | None = None) -> dict:
+    """The spec-1.1 success envelope: result/message/total/data(list)."""
+    return {
+        "result": "success",
+        "message": "",
+        "total": len(items) if total is None else total,
+        "data": items,
+    }
+
+
+def _row(index: int) -> dict:
+    return {
+        "CallID": f"c{index}",
+        "Phone": "0901234567",
+        "Direction": "inbound",
+        "Agent": "ext-11",
+        "Duration": "125",
+        "StartTime": "2026-10-18 09:15:00",
+        "Transcript": f"Giao tiếp số {index}.",
+    }
 
 
 def _transport_client(handler) -> OdsCloudfoneClient:
@@ -48,10 +67,19 @@ def _transport_client(handler) -> OdsCloudfoneClient:
             raise CloudfoneError(f"CloudFone trả lỗi HTTP {response.status_code}")
         return response.json()
 
-    return OdsCloudfoneClient("cf-key", transport=transport)
+    return OdsCloudfoneClient("CloudFone", "ods-user", "cf-key", transport=transport)
 
 
-async def test_client_posts_service_and_key_in_the_body():
+class _FrozenDateTime(datetime):
+    """Module-level datetime stand-in: 01:00 UTC = 08:00 ICT on the 19th."""
+
+    @classmethod
+    def now(cls, tz=None):  # noqa: ARG003 — the frozen instant ignores the tz
+        return datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc)
+
+
+async def test_get_call_logs_sends_the_spec_1_1_body(monkeypatch):
+    """Auth trio + all required spec fields, correct names, nothing legacy."""
     seen: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -59,19 +87,66 @@ async def test_client_posts_service_and_key_in_the_body():
         seen["body"] = json.loads(request.content)
         return httpx.Response(200, json=_envelope([]))
 
-    client = _transport_client(handler)
-    rows = await client.get_call_logs(limit=1)
+    monkeypatch.setattr(ods_module, "datetime", _FrozenDateTime)
+    rows = await _transport_client(handler).get_call_logs(page_index=0, page_size=5)
 
     assert rows == []
     assert seen["url"].endswith("/GetCallLogs")
-    assert seen["body"]["Service"] == "CloudFone"
-    assert seen["body"]["APIKey"] == "cf-key"
-    assert seen["body"]["Limit"] == 1
+    # Spec auth: three separate credential fields in the JSON body.
+    assert seen["body"]["ServiceName"] == "CloudFone"
+    assert seen["body"]["AuthUser"] == "ods-user"
+    assert seen["body"]["AuthKey"] == "cf-key"
+    # Required request fields per the spec's REQUEST table.
+    assert seen["body"]["Direction"] == "all"  # default covers both ways
+    assert seen["body"]["DateStart"] == "2026-10-18 00:00:01"  # yesterday
+    assert seen["body"]["DateEnd"] == "2026-10-19 23:59:59"  # → today
+    assert seen["body"]["PageIndex"] == 0
+    assert seen["body"]["PageSize"] == 5
+    # The pre-spec field names are gone for good.
+    for legacy in ("Service", "APIKey", "Limit"):
+        assert legacy not in seen["body"]
     # The key must never ride the query string (proxy logs stay clean).
     assert "cf-key" not in seen["url"]
 
 
-async def test_fetch_daily_transcripts_uses_yesterdays_full_day_range():
+async def test_get_call_logs_honors_an_explicit_window_and_direction():
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_envelope([]))
+
+    await _transport_client(handler).get_call_logs(
+        date_start="2026-10-01 00:00:01",
+        date_end="2026-10-02 23:59:59",
+        direction="inbound",
+    )
+    assert seen["body"]["DateStart"] == "2026-10-01 00:00:01"
+    assert seen["body"]["DateEnd"] == "2026-10-02 23:59:59"
+    assert seen["body"]["Direction"] == "inbound"
+
+
+async def test_client_rejects_a_non_success_result():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"result": "error", "message": "Invalid APIKey"})
+
+    with pytest.raises(CloudfoneError, match="Invalid APIKey"):
+        await _transport_client(handler).get_call_logs(page_index=0, page_size=5)
+
+
+async def test_client_rejects_the_live_failure_envelope():
+    """The verified live shape: HTTP 200, result=failure, empty message."""
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"result": "failure", "message": "", "total": 0, "data": None}
+        )
+
+    with pytest.raises(CloudfoneError, match="không rõ lý do"):
+        await _transport_client(handler).get_call_logs(page_index=0, page_size=5)
+
+
+async def test_fetch_daily_transcripts_uses_the_spec_day_window():
     seen: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -81,15 +156,7 @@ async def test_fetch_daily_transcripts_uses_yesterdays_full_day_range():
             200,
             json=_envelope(
                 [
-                    {
-                        "CallID": "c1",
-                        "Phone": "0901234567",
-                        "Direction": "inbound",
-                        "Agent": "ext-11",
-                        "Duration": "125",
-                        "StartTime": "2026-10-18 09:15:00",
-                        "Transcript": "Chào anh, em gọi hỏi về ca làm việc.",
-                    },
+                    _row(1),
                     {"id": "c2", "transcript": "Không rõ lỗi gì ạ."},
                 ]
             ),
@@ -99,22 +166,59 @@ async def test_fetch_daily_transcripts_uses_yesterdays_full_day_range():
     day = insights_window(datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc))
     transcripts = await client.fetch_daily_transcripts(day=day)
 
-    assert seen["url"].endswith("/GetHistoryCallAnalytics")
-    assert seen["body"]["FromDate"] == day.isoformat()
-    assert seen["body"]["ToDate"] == day.isoformat()
+    assert seen["url"].endswith("/GetCallLogs")
+    assert seen["body"]["DateStart"] == f"{day.isoformat()} 00:00:01"
+    assert seen["body"]["DateEnd"] == f"{day.isoformat()} 23:59:59"
+    assert seen["body"]["Direction"] == "all"
+    assert seen["body"]["PageIndex"] == 0
+    assert seen["body"]["PageSize"] == ods_module.DEFAULT_PAGE_SIZE
+    assert seen["body"]["IsSort"] == 1
     assert [t.call_id for t in transcripts] == ["c1", "c2"]
     assert transcripts[0].phone == "0901234567"
     assert transcripts[0].duration_seconds == 125
-    assert transcripts[0].transcript.startswith("Chào anh")
+    assert transcripts[0].transcript.startswith("Giao tiếp số 1")
     assert transcripts[1].transcript == "Không rõ lỗi gì ạ."
 
 
-async def test_client_rejects_a_non_success_result():
-    def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"result": "error", "message": "Invalid APIKey"})
+async def test_fetch_daily_transcripts_walks_pages_until_total_is_drained():
+    """205 rows = one full page + one remainder page, then the loop stops."""
+    seen_pages: list[int] = []
+    page_size = ods_module.DEFAULT_PAGE_SIZE
 
-    with pytest.raises(CloudfoneError, match="Invalid APIKey"):
-        await _transport_client(handler).get_call_logs(limit=1)
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen_pages.append(body["PageIndex"])
+        start = body["PageIndex"] * page_size
+        items = [_row(i) for i in range(start, min(start + page_size, 205))]
+        return httpx.Response(200, json=_envelope(items, total=205))
+
+    transcripts = await _transport_client(handler).fetch_daily_transcripts(
+        day=ods_module.insights_window(datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc))
+    )
+
+    assert seen_pages == [0, 1]
+    assert len(transcripts) == 205
+
+
+async def test_fetch_daily_transcripts_caps_the_page_walk(caplog):
+    """A broken/giant total stops at MAX_DAILY_PAGES with a truncation warning."""
+    requests: list[dict] = []
+    page_size = ods_module.DEFAULT_PAGE_SIZE
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        items = [_row(i) for i in range(page_size)]  # always a full page
+        return httpx.Response(200, json=_envelope(items, total=10_000))
+
+    with caplog.at_level("WARNING", logger="app.services.ods"):
+        transcripts = await _transport_client(handler).fetch_daily_transcripts(
+            day=ods_module.insights_window(datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc))
+        )
+
+    assert [r["PageIndex"] for r in requests] == list(range(ods_module.MAX_DAILY_PAGES))
+    assert len(transcripts) == ods_module.MAX_DAILY_PAGES * page_size
+    assert any("truncated" in record.message for record in caplog.records)
 
 
 async def test_insights_window_is_the_previous_ict_day():
@@ -179,7 +283,9 @@ class _FakeSettingsService:
 
 def _ods_cfg(**overrides):
     values: dict = {
-        "api_key": "cf-key",
+        "service_name": "CloudFone",
+        "auth_user": "ods-user",
+        "auth_key": "cf-key",
         "recipients": ("ops@vp.vn",),
         "enabled": True,
     }
@@ -207,16 +313,28 @@ async def test_run_disabled_without_recipients_or_toggle():
     assert result.status == STATUS_DISABLED
 
 
-async def test_run_unconfigured_without_api_key():
+async def test_run_unconfigured_without_full_credentials():
+    """Spec 1.1 needs all three credential fields — each gap is reported."""
     result = await run_ods_insights(
         None,
         settings_service=_FakeSettingsService(
-            _ods_cfg(api_key=""), EmailDigestRuntimeConfig(resend_api_key="r")
+            _ods_cfg(auth_user=""), EmailDigestRuntimeConfig(resend_api_key="r")
         ),
         fetcher=_fail_fetcher,
     )
     assert result.status == STATUS_UNCONFIGURED
-    assert result.missing == ["api_key"]
+    assert result.missing == ["auth_user"]
+
+    result = await run_ods_insights(
+        None,
+        settings_service=_FakeSettingsService(
+            _ods_cfg(service_name="", auth_user="", auth_key=""),
+            EmailDigestRuntimeConfig(resend_api_key="r"),
+        ),
+        fetcher=_fail_fetcher,
+    )
+    assert result.status == STATUS_UNCONFIGURED
+    assert result.missing == ["service_name", "auth_user", "auth_key"]
 
 
 async def test_run_disabled_without_resend_key():

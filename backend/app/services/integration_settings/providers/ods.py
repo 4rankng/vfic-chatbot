@@ -2,10 +2,12 @@
 
 ODS is the vendor label for the CloudFone-hosted call-center integration (the
 underlying API stays api.cloudfone.vn). Admin-editable from the settings
-console: the CloudFone API key (encrypted at rest, no env fallback — the key is
-deployment-specific and only admins hold it), the recipient list for the daily
-insights email, and the on/off switch. There is no worker-owned state row: the
-tick always reports on the previous full day, so re-running it is idempotent.
+console: the three CloudFone spec-1.1 credentials (``ServiceName``,
+``AuthUser``, ``AuthKey`` — the key encrypted at rest, no env fallback — the
+credentials are deployment-specific and only admins hold them), the recipient
+list for the daily insights email, and the on/off switch. There is no
+worker-owned state row: the tick always reports on the previous full day, so
+re-running it is idempotent.
 """
 
 from __future__ import annotations
@@ -23,18 +25,34 @@ from app.shared.domain.errors import ValidationError
 
 logger = logging.getLogger(__name__)
 
+# Spec 1.1 credentials: three separate rows, exactly the fields GetCallLogs
+# requires for auth (ServiceName + AuthUser + AuthKey in the request body).
+ODS_SERVICE_NAME = "ods_service_name"
+ODS_AUTH_USER = "ods_auth_user"
+ODS_AUTH_KEY = "ods_auth_key"
+# Pre-spec-1.1 single-key row: read-only legacy fallback for deployments that
+# stored a key before the split — it rides as AuthKey until re-saved.
 ODS_API_KEY = "ods_api_key"
 ODS_RECIPIENTS = "ods_recipients"
 # Admin on/off switch for the daily insights send ("1"/"0"; unset = off).
 ODS_ENABLED = "ods_enabled"
 
-ODS_SETTING_KEYS = (ODS_API_KEY, ODS_RECIPIENTS, ODS_ENABLED)
+ODS_SETTING_KEYS = (
+    ODS_SERVICE_NAME,
+    ODS_AUTH_USER,
+    ODS_AUTH_KEY,
+    ODS_API_KEY,
+    ODS_RECIPIENTS,
+    ODS_ENABLED,
+)
 
 # The admin API speaks OdsIntegrationSettingsUpdate schema names; the KV table
 # keeps the namespaced keys. One explicit map joins the two — and doubles as
 # the request whitelist (a PUT can never write an arbitrary integration row).
 API_FIELD_TO_SETTING_KEY = {
-    "api_key": ODS_API_KEY,
+    "service_name": ODS_SERVICE_NAME,
+    "auth_user": ODS_AUTH_USER,
+    "auth_key": ODS_AUTH_KEY,
     "recipients": ODS_RECIPIENTS,
     "enabled": ODS_ENABLED,
 }
@@ -42,7 +60,9 @@ API_FIELD_TO_SETTING_KEY = {
 
 @dataclass(frozen=True)
 class OdsRuntimeConfig:
-    api_key: str = ""
+    service_name: str = ""
+    auth_user: str = ""
+    auth_key: str = ""
     recipients: tuple[str, ...] = ()
     enabled: bool = False
 
@@ -77,11 +97,15 @@ class OdsSettingsMixin:
         ) -> bool: ...
 
     async def resolve_ods(self) -> OdsRuntimeConfig:
-        """Stored-only resolution: no env fallback exists for this vendor key."""
+        """Stored-only resolution: no env fallback exists for these credentials."""
         stored = await self._stored_values(ODS_SETTING_KEYS)
         raw_enabled = (stored.get(ODS_ENABLED) or "").strip()
         return OdsRuntimeConfig(
-            api_key=stored.get(ODS_API_KEY) or "",
+            service_name=stored.get(ODS_SERVICE_NAME) or "",
+            auth_user=stored.get(ODS_AUTH_USER) or "",
+            # Legacy single-key deployments keep working: the old row rides
+            # as AuthKey until the admin saves the split credentials.
+            auth_key=stored.get(ODS_AUTH_KEY) or stored.get(ODS_API_KEY) or "",
             recipients=tuple(parse_recipients(stored.get(ODS_RECIPIENTS))),
             # Unset row = off: this integration is opt-in, unlike the digest
             # whose owner wanted the daily send running out of the box.
@@ -91,21 +115,29 @@ class OdsSettingsMixin:
     async def admin_ods_view(self) -> dict:
         cfg = await self.resolve_ods()
         return {
-            "api_key": _secret_status(cfg.api_key),
+            "service_name": cfg.service_name,
+            "auth_user": cfg.auth_user,
+            "auth_key": _secret_status(cfg.auth_key),
             "recipients": list(cfg.recipients),
-            # Effective state: the admin toggle AND somewhere to send to AND a
-            # key to fetch with — a toggle-on without either can't deliver, so
-            # the view reports off and the status line explains why.
-            "enabled": cfg.enabled and bool(cfg.api_key) and bool(cfg.recipients),
+            # Effective state: the admin toggle AND all three credentials AND
+            # somewhere to send to — a toggle-on without any of those can't
+            # deliver, so the view reports off and the status line explains why.
+            "enabled": (
+                cfg.enabled
+                and bool(cfg.service_name)
+                and bool(cfg.auth_user)
+                and bool(cfg.auth_key)
+                and bool(cfg.recipients)
+            ),
         }
 
     async def update_ods(self, values: dict[str, object], *, actor_id) -> dict:
         """Validate + persist the admin-editable ODS fields; returns the view.
 
-        ``values`` uses the API field names (``api_key``, ``recipients``,
-        ``enabled``) — the names the settings page sends. Anything outside
-        ``API_FIELD_TO_SETTING_KEY`` is rejected, so a typo cannot write an
-        arbitrary integration row.
+        ``values`` uses the API field names (``service_name``, ``auth_user``,
+        ``auth_key``, ``recipients``, ``enabled``) — the names the settings
+        page sends. Anything outside ``API_FIELD_TO_SETTING_KEY`` is rejected,
+        so a typo cannot write an arbitrary integration row.
         """
         unknown = set(values) - set(API_FIELD_TO_SETTING_KEY)
         if unknown:
@@ -113,20 +145,23 @@ class OdsSettingsMixin:
 
         changed: list[str] = []
 
-        raw_api_key = values.get("api_key")
-        if raw_api_key is not None and str(raw_api_key).strip():
-            await self._write_setting(
-                ODS_API_KEY,
-                str(raw_api_key),
-                actor_id=actor_id,
-                is_secret=True,
-            )
-            changed.append(ODS_API_KEY)
+        for field_name, setting_key, is_secret in (
+            ("service_name", ODS_SERVICE_NAME, False),
+            ("auth_user", ODS_AUTH_USER, False),
+            ("auth_key", ODS_AUTH_KEY, True),
+        ):
+            raw = values.get(field_name)
+            if raw is not None and str(raw).strip():
+                await self._write_setting(
+                    setting_key,
+                    str(raw),
+                    actor_id=actor_id,
+                    is_secret=is_secret,
+                )
+                changed.append(setting_key)
 
         if "recipients" in values:
-            recipients = parse_recipients(
-                cast("str | list[str] | None", values.get("recipients"))
-            )
+            recipients = parse_recipients(cast("str | list[str] | None", values.get("recipients")))
             await self._write_setting(
                 ODS_RECIPIENTS,
                 ",".join(recipients),

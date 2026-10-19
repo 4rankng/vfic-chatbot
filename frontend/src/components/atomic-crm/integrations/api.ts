@@ -183,20 +183,25 @@ export type EmailDigestTestResult = {
 
 /** ODS (CloudFone tổng đài) daily voice-transcript insights. */
 export type OdsSettings = {
-  api_key: SecretStatus;
+  /** Spec 1.1 credentials — ServiceName + AuthUser in clear, AuthKey masked. */
+  service_name: string;
+  auth_user: string;
+  auth_key: SecretStatus;
   recipients: string[];
-  /** False unless the key AND the recipient list are both set. */
+  /** False unless all three credentials AND the recipient list are both set. */
   enabled: boolean;
 };
 
-/** PUT body. Omit `api_key` to keep the stored value. */
+/** PUT body. Omit a credential to keep the stored value. */
 export type OdsSettingsUpdate = {
-  api_key?: string;
+  service_name?: string;
+  auth_user?: string;
+  auth_key?: string;
   recipients?: string[];
   enabled?: boolean;
 };
 
-/** Result of POST /ods/test (a real GetCallLogs probe, limit 1). */
+/** Result of POST /ods/test (a real GetCallLogs probe, one page of 5). */
 export type OdsTestResult = {
   ok: boolean;
   configured: boolean;
@@ -474,11 +479,11 @@ export const zaloIntegrationGateway = {
       body,
     }),
 
-  /** Probe the CloudFone API key (typed key first, stored key otherwise). */
-  testOdsConnection: async (apiKey?: string): Promise<OdsTestResult> =>
+  /** Probe the CloudFone credentials (typed values first, stored otherwise). */
+  testOdsConnection: async (body?: OdsSettingsUpdate): Promise<OdsTestResult> =>
     apiJson<OdsTestResult>(`${ADMIN_INTEGRATIONS_BASE_PATH}/ods/test`, {
       method: "POST",
-      body: apiKey ? { api_key: apiKey } : {},
+      body: body ?? {},
     }),
 } as const;
 
