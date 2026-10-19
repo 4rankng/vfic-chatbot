@@ -272,6 +272,13 @@ class Settings(BaseSettings):
     rag_ann_enabled: bool = True
     rag_ann_candidates: int = 200
     rag_rrf_rank_constant: int = 60
+    # Contextual Retrieval (Anthropic): prepend a short document-context prefix
+    # to each chunk at index time before embedding (−49% failed retrievals in
+    # Anthropic's evals, −67% with rerank). Built metadata-first — no extra LLM
+    # call; the digest summary already carries what a generated context would
+    # say. Off = legacy behavior for new ingests (existing vectors unchanged);
+    # see scripts/backfill_contextual_prefix.py to prefix existing chunks.
+    rag_contextual_enabled: bool = True
     rag_cache_enabled: bool = True
     rag_result_cache_ttl_seconds: int = 300
     embedding_cache_ttl_seconds: int = 86400
