@@ -1274,7 +1274,9 @@ be shared by another Project.
   `scripts/backfill_project_coordinates.py` resolves existing projects
   (`--force` re-geocodes, `--re-extract` re-runs the extraction).
 - **Benchmarks:** `scripts/benchmark_rag.py` (golden-case scoring) and
-  `scripts/capture_bus_timetable_golden.py`.
+  `scripts/capture_bus_timetable_golden.py`. Answer quality (faithfulness /
+  relevancy / contextual precision+recall, DeepEval over the golden answer set):
+  `scripts/eval_answers.py`.
 
 ---
 

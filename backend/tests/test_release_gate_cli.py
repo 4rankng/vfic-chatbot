@@ -12,6 +12,12 @@ def _settings(**overrides) -> SimpleNamespace:
         "release_gate_latency_slo_enabled": True,
         "release_gate_full_answer_p95_ms": 4000,
         "release_gate_error_rate_pct": 1.0,
+        "release_gate_answer_quality_enabled": False,
+        "release_gate_fact_hit_rate_min": 0.80,
+        "release_gate_faithfulness_min": 0.75,
+        "release_gate_answer_relevancy_min": 0.70,
+        "release_gate_contextual_precision_min": 0.60,
+        "release_gate_contextual_recall_min": 0.70,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -38,7 +44,7 @@ async def test_cli_skips_dependencies_when_both_gates_disabled(monkeypatch, tmp_
     )
     monkeypatch.setattr(cli, "async_session", _ForbiddenSessionFactory())
 
-    rc = await cli._run(Namespace(golden_results=tmp_path / "missing.json", window_hours=24))
+    rc = await cli._run(Namespace(golden_results=tmp_path / "missing.json", answer_quality=None, window_hours=24))
 
     captured = capsys.readouterr()
     assert rc == 0
@@ -57,7 +63,7 @@ async def test_cli_blocks_on_missing_golden_file_when_correctness_enabled(
     )
     monkeypatch.setattr(cli, "async_session", _ForbiddenSessionFactory())
 
-    rc = await cli._run(Namespace(golden_results=tmp_path / "missing.json", window_hours=24))
+    rc = await cli._run(Namespace(golden_results=tmp_path / "missing.json", answer_quality=None, window_hours=24))
 
     captured = capsys.readouterr()
     assert rc == 1
@@ -74,7 +80,7 @@ async def test_cli_blocks_on_malformed_json(monkeypatch, tmp_path, capsys):
     malformed = tmp_path / "gold.json"
     malformed.write_text("{", encoding="utf-8")
 
-    rc = await cli._run(Namespace(golden_results=malformed, window_hours=24))
+    rc = await cli._run(Namespace(golden_results=malformed, answer_quality=None, window_hours=24))
 
     captured = capsys.readouterr()
     assert rc == 1

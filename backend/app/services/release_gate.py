@@ -19,6 +19,16 @@ from app.services.slo_service import SloResult, compute_slos, count_measured_run
 
 GateVerdict = Literal["pass", "block"]
 GOLDEN_PASS_RATE_THRESHOLD_PCT = 95.0
+# Answer-quality metrics (RAG pack B). Each resolves its deploy-blocking
+# threshold from settings as ``release_gate_<metric>_min``; the field naming in
+# app/core/config.py mirrors this tuple.
+ANSWER_QUALITY_METRICS: tuple[str, ...] = (
+    "fact_hit_rate",
+    "faithfulness",
+    "answer_relevancy",
+    "contextual_precision",
+    "contextual_recall",
+)
 # Below this many stage-timing measurements in the SLO window, latency/error
 # rates are sample-size noise (e.g. 2 overnight runs → p95 of the two), not
 # release evidence. The gate treats the SLO segment as not-evaluated instead
@@ -28,6 +38,29 @@ MIN_WINDOW_RUNS = 30
 
 class GoldenResultsError(ValueError):
     """Raised when a golden-results payload is missing or malformed."""
+
+
+class AnswerQualityError(ValueError):
+    """Raised when an answer-quality payload is missing or malformed."""
+
+
+@dataclass(frozen=True)
+class AnswerQualityScores:
+    """Aggregate answer-quality scores from ``scripts/eval_answers.py``.
+
+    All five are ratios in [0, 1]. ``fact_hit_rate`` is the deterministic
+    floor (expected answer points present in the reply); the other four are
+    DeepEval LLM-judge means over the golden answer set.
+    """
+
+    fact_hit_rate: float
+    faithfulness: float
+    answer_relevancy: float
+    contextual_precision: float
+    contextual_recall: float
+
+    def as_dict(self) -> dict[str, float]:
+        return {name: getattr(self, name) for name in ANSWER_QUALITY_METRICS}
 
 
 @dataclass(frozen=True)
@@ -49,6 +82,7 @@ class ReleaseGateResult:
     slos: list[SloResult]
     golden_pass_rate: float | None
     not_evaluated: list[str]
+    answer_quality: AnswerQualityScores | None = None
 
     @property
     def passed(self) -> bool:
@@ -98,6 +132,27 @@ def extract_golden_pass_rate(payload: Mapping[str, object]) -> float:
     )
 
 
+def extract_answer_quality(payload: Mapping[str, object]) -> AnswerQualityScores:
+    """Read aggregate answer-quality scores from an eval gate payload.
+
+    The payload is the flat ``--gate-output`` document written by
+    ``scripts/eval_answers.py``. All five metrics are required: a partial
+    payload would silently pass a report-only gate that later turns blocking.
+    """
+    missing = [name for name in ANSWER_QUALITY_METRICS if name not in payload]
+    if missing:
+        raise AnswerQualityError(
+            f"answer-quality payload is missing metrics: {', '.join(missing)}"
+        )
+    values: dict[str, float] = {}
+    for name in ANSWER_QUALITY_METRICS:
+        try:
+            values[name] = _coerce_ratio(payload[name], field_name=name)
+        except GoldenResultsError as exc:
+            raise AnswerQualityError(str(exc)) from exc
+    return AnswerQualityScores(**values)
+
+
 def _coerce_percent(value: object, *, field_name: str) -> float:
     numeric = _coerce_number(value, field_name=field_name)
     if numeric < 0.0 or numeric > 100.0:
@@ -138,12 +193,15 @@ async def evaluate_release_gate(
     *,
     settings,
     golden_pass_rate: float | None = None,
+    answer_quality: AnswerQualityScores | None = None,
     window_hours: int = 24,
 ) -> ReleaseGateResult:
     """Evaluate retrieval-correctness + latency gates against the configured thresholds.
 
     ``golden_pass_rate`` is the % of golden-dataset turns (P3-1) that passed;
     None when the golden runner hasn't executed (e.g. CI skipped it).
+    ``answer_quality`` carries the aggregate answer-eval scores
+    (scripts/eval_answers.py); None when the eval hasn't executed.
     """
     if window_hours <= 0:
         raise ValueError("window_hours must be greater than zero")
@@ -202,6 +260,37 @@ async def evaluate_release_gate(
     else:
         not_evaluated.append("retrieval_correctness")
 
+    # Answer-quality gate (RAG pack B: DeepEval metrics + fact-hit floor from
+    # scripts/eval_answers.py). Report-only until a baseline is recorded —
+    # release_gate_answer_quality_enabled defaults to False, so the scores
+    # surface in the CLI output and never block a deploy.
+    if settings.release_gate_answer_quality_enabled:
+        if answer_quality is None:
+            failures.append(
+                GateFailure(
+                    "answer_quality",
+                    None,
+                    0.0,
+                    "answer-quality payload missing; run scripts/eval_answers.py "
+                    "and pass --answer-quality",
+                )
+            )
+        else:
+            for name in ANSWER_QUALITY_METRICS:
+                threshold = getattr(settings, f"release_gate_{name}_min")
+                actual = getattr(answer_quality, name)
+                if actual < threshold:
+                    failures.append(
+                        GateFailure(
+                            f"answer_quality.{name}",
+                            actual,
+                            threshold,
+                            f"answer quality {name} {actual:.3f} < {threshold:.3f}",
+                        )
+                    )
+    else:
+        not_evaluated.append("answer_quality")
+
     # Latency SLO gates.
     if settings.release_gate_latency_slo_enabled:
         if window_run_count is None or window_run_count < MIN_WINDOW_RUNS:
@@ -256,4 +345,5 @@ async def evaluate_release_gate(
         slos=slos,
         golden_pass_rate=golden_pass_rate,
         not_evaluated=not_evaluated,
+        answer_quality=answer_quality,
     )

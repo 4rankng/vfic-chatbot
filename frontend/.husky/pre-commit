@@ -1,9 +1,16 @@
 # Git runs hooks from the repository root, so resolve frontend/ explicitly.
 # Do not depend on frontend/makefile: frontend/package.json is the single
 # source for these steps.
-cd "$(git rev-parse --show-toplevel)/frontend" || exit 1
+# Resolve the root ONCE, before any cd: under git's hook environment (GIT_DIR
+# exported, GIT_WORK_TREE unset) `git rev-parse --show-toplevel` is cwd-
+# sensitive and reports the current directory once we are inside frontend/ —
+# which stranded the final `git update-index --again` there and aborted every
+# commit touching backend paths (exit 128: "does not exist and --remove not
+# passed"). Verified 2026-10-19 from a linked worktree.
+root="$(git rev-parse --show-toplevel)" || exit 1
+cd "$root/frontend" || exit 1
 npm run registry:gen
 npx prettier --config ./.prettierrc.json --write "registry.json"
 npx lint-staged
-cd "$(git rev-parse --show-toplevel)" || exit 1
+cd "$root" || exit 1
 git update-index --again

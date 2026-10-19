@@ -15,7 +15,14 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.core.config import get_settings  # noqa: E402
 from app.core.db import async_session  # noqa: E402
-from app.services.release_gate import GoldenResultsError, extract_golden_pass_rate, evaluate_release_gate  # noqa: E402
+from app.services.release_gate import (  # noqa: E402
+    AnswerQualityError,
+    AnswerQualityScores,
+    GoldenResultsError,
+    extract_answer_quality,
+    extract_golden_pass_rate,
+    evaluate_release_gate,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -24,6 +31,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--golden-results",
         type=Path,
         help="Path to the golden-results JSON payload with a pass rate.",
+    )
+    parser.add_argument(
+        "--answer-quality",
+        type=Path,
+        help=(
+            "Path to the answer-quality payload written by "
+            "scripts/eval_answers.py --gate-output (report-only unless "
+            "RELEASE_GATE_ANSWER_QUALITY_ENABLED is set)."
+        ),
     )
     parser.add_argument(
         "--window-hours",
@@ -44,6 +60,18 @@ def _load_golden_pass_rate(path: Path) -> float:
     if not isinstance(payload, dict):
         raise GoldenResultsError("golden results JSON must be an object")
     return extract_golden_pass_rate(payload)
+
+
+def _load_answer_quality(path: Path) -> AnswerQualityScores:
+    if not path.is_file():
+        raise AnswerQualityError(f"answer-quality file not found: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise AnswerQualityError(f"answer-quality JSON is invalid: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise AnswerQualityError("answer-quality JSON must be an object")
+    return extract_answer_quality(payload)
 
 
 class _NullAsyncSession:
@@ -74,6 +102,21 @@ async def _run(args: argparse.Namespace) -> int:
             print(f"release gate blocked: {exc}", file=sys.stderr)
             return 1
 
+    answer_quality: AnswerQualityScores | None = None
+    if args.answer_quality is not None:
+        try:
+            answer_quality = _load_answer_quality(args.answer_quality)
+        except (AnswerQualityError, OSError) as exc:
+            print(f"release gate blocked: {exc}", file=sys.stderr)
+            return 1
+    if settings.release_gate_answer_quality_enabled and answer_quality is None:
+        print(
+            "release gate blocked: --answer-quality is required when the "
+            "answer-quality gate is enabled",
+            file=sys.stderr,
+        )
+        return 1
+
     session_factory = async_session if settings.release_gate_latency_slo_enabled else _NullAsyncSession
     try:
         async with session_factory() as db:
@@ -81,11 +124,17 @@ async def _run(args: argparse.Namespace) -> int:
                 db,
                 settings=settings,
                 golden_pass_rate=golden_pass_rate,
+                answer_quality=answer_quality,
                 window_hours=args.window_hours,
             )
     except Exception as exc:  # noqa: BLE001 - the gate must fail closed.
         print(f"release gate blocked: unable to evaluate release metrics: {exc}", file=sys.stderr)
         return 1
+
+    if result.answer_quality is not None:
+        mode = "blocking" if settings.release_gate_answer_quality_enabled else "report-only"
+        scores = " ".join(f"{k}={v:.3f}" for k, v in result.answer_quality.as_dict().items())
+        print(f"answer quality ({mode}): {scores}")
 
     if result.passed:
         parts = ["release gate passed:"]

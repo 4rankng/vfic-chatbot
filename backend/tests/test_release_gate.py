@@ -19,6 +19,12 @@ def _settings(**overrides) -> SimpleNamespace:
         "release_gate_latency_slo_enabled": True,
         "release_gate_full_answer_p95_ms": 4000,
         "release_gate_error_rate_pct": 1.0,
+        "release_gate_answer_quality_enabled": False,
+        "release_gate_fact_hit_rate_min": 0.80,
+        "release_gate_faithfulness_min": 0.75,
+        "release_gate_answer_relevancy_min": 0.70,
+        "release_gate_contextual_precision_min": 0.60,
+        "release_gate_contextual_recall_min": 0.70,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -185,7 +191,11 @@ async def test_release_gate_skip_when_gates_disabled(monkeypatch):
     result = await evaluate_release_gate(db=None, settings=s, golden_pass_rate=10.0)
     assert result.verdict == "pass"
     assert result.slos == []
-    assert set(result.not_evaluated) == {"retrieval_correctness", "latency_slo"}
+    assert set(result.not_evaluated) == {
+        "retrieval_correctness",
+        "latency_slo",
+        "answer_quality",
+    }
 
 
 async def test_release_gate_blocks_when_golden_pass_rate_is_missing(monkeypatch):

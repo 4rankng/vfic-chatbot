@@ -375,8 +375,8 @@ class Settings(BaseSettings):
     singleflight_enabled: bool = False
     # ── P3-2 retrieval tuning (Tech-Lead Directive §12 + §16 P3) ──
     # RRF fusion weights + rerank conditionality. Defaults are starting points;
-    # P3-2's benchmark harness (scripts/eval_retrieval.py) measures quality at
-    # each config and picks the winner against the golden dataset (P3-1).
+    # P3-2's answer-quality harness (scripts/eval_answers.py) measures quality
+    # at each config against the golden answer set (tests/golden/answers.yaml).
     # RRF rank constant: higher favors top ranks from each arm.
     rag_lexical_weight: float = 1.0  # multiplier on lexical arm rank in fusion
     rag_vector_weight: float = 1.0  # multiplier on vector arm rank in fusion
@@ -394,6 +394,20 @@ class Settings(BaseSettings):
     # Per-SLO deploy-blocking thresholds (matched against /admin/performance/slos).
     release_gate_full_answer_p95_ms: int = 4000
     release_gate_error_rate_pct: float = 1.0
+    # ── answer-quality gate (RAG pack B; scripts/eval_answers.py) ──
+    # Thresholds on the DeepEval answer eval (faithfulness / answer relevancy /
+    # contextual precision + recall) and the deterministic fact-hit floor.
+    # REPORT-ONLY by default: release_gate_answer_quality_enabled stays False
+    # until eval baselines are recorded (docs/decisions/0014-*), so the metrics
+    # surface in scripts/release_gate_check.py output without ever blocking a
+    # deploy. Field naming is load-bearing: the gate resolves each metric's
+    # threshold as ``release_gate_<metric>_min`` (see app/services/release_gate.py).
+    release_gate_answer_quality_enabled: bool = False
+    release_gate_fact_hit_rate_min: float = 0.80
+    release_gate_faithfulness_min: float = 0.75
+    release_gate_answer_relevancy_min: float = 0.70
+    release_gate_contextual_precision_min: float = 0.60
+    release_gate_contextual_recall_min: float = 0.70
     # Native Zalo Bot status. Older interval overrides remain accepted, but
     # runtime caps the cadence at three seconds; OA has no typing capability.
     typing_heartbeat_seconds: float = 3.0
@@ -444,9 +458,12 @@ class Settings(BaseSettings):
     grounding_check_enabled: bool = True
 
     # Retrieval reranker (Phase 4). The knowledge path already fuses via RRF; this
-    # adds an optional score-blend rerank tail on the fused top-K. Off by default —
-    # enable after measuring a precision lift on the gold set. The interface
-    # (Reranker) is ready for a hosted cross-encoder backend later.
+    # adds an optional score-blend rerank tail on the fused top-K. P3-2 measured
+    # zero precision lift on the golden answer set (2026-10-19, ADR-0014) because
+    # production retrieval is vector-only and the tail is a stable sort by the
+    # same similarity the vector arm already sorted by — the flag stays OFF.
+    # Re-evaluate when a lexical arm returns or a real cross-encoder lands.
+    # The interface (Reranker) is ready for a hosted backend later.
     rag_rerank_enabled: bool = False
 
     # Reconcile sweep — recovers lost bot turns after worker crash / restart.
