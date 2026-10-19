@@ -181,6 +181,30 @@ export type EmailDigestTestResult = {
   candidate_count: number;
 };
 
+/** ODS (CloudFone tổng đài) daily voice-transcript insights. */
+export type OdsSettings = {
+  api_key: SecretStatus;
+  recipients: string[];
+  /** False unless the key AND the recipient list are both set. */
+  enabled: boolean;
+};
+
+/** PUT body. Omit `api_key` to keep the stored value. */
+export type OdsSettingsUpdate = {
+  api_key?: string;
+  recipients?: string[];
+  enabled?: boolean;
+};
+
+/** Result of POST /ods/test (a real GetCallLogs probe, limit 1). */
+export type OdsTestResult = {
+  ok: boolean;
+  configured: boolean;
+  missing: string[];
+  latency_ms: number | null;
+  error: string | null;
+};
+
 /** PUT body. Omit a key to keep the stored value. */
 export type GeocoderSettingsUpdate = {
   vietmap_api_key?: string;
@@ -440,6 +464,22 @@ export const zaloIntegrationGateway = {
       `${ADMIN_INTEGRATIONS_BASE_PATH}/email-digest/test`,
       { method: "POST", body: { to_email: toEmail } },
     ),
+
+  loadOdsSettings: async (): Promise<OdsSettings> =>
+    apiJson<OdsSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/ods`),
+
+  saveOdsSettings: async (body: OdsSettingsUpdate): Promise<OdsSettings> =>
+    apiJson<OdsSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/ods`, {
+      method: "PUT",
+      body,
+    }),
+
+  /** Probe the CloudFone API key (typed key first, stored key otherwise). */
+  testOdsConnection: async (apiKey?: string): Promise<OdsTestResult> =>
+    apiJson<OdsTestResult>(`${ADMIN_INTEGRATIONS_BASE_PATH}/ods/test`, {
+      method: "POST",
+      body: apiKey ? { api_key: apiKey } : {},
+    }),
 } as const;
 
 export const facebookIntegrationGateway = {

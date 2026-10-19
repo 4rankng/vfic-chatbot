@@ -578,3 +578,33 @@ class EmailDigestTestOut(BaseModel):
     error: str | None = None
     provider_id: str | None = None
     candidate_count: int = 0
+
+
+# ─── ODS voice-transcript insights (CloudFone tổng đài) ──────────────────────
+# Admin-configured daily call-analytics email: one CloudFone API key (secret,
+# stored-only — no env fallback), a recipient list, and the on/off switch.
+
+
+class OdsIntegrationSettingsOut(BaseModel):
+    api_key: SecretStatus
+    recipients: list[str]
+    # The whole feature is off unless the key AND the recipient list are set.
+    enabled: bool
+
+
+class OdsIntegrationSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    recipients: list[str] | None = None
+    enabled: bool | None = None
+
+
+class OdsIntegrationTestOut(BaseModel):
+    """Outcome of POST /ods/test (a real GetCallLogs probe against CloudFone)."""
+
+    ok: bool
+    configured: bool
+    missing: list[str]
+    latency_ms: int | None = None
+    error: str | None = None

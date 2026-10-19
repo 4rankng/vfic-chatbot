@@ -64,6 +64,13 @@ from app.services.integration_settings.providers.email_digest import (
     EmailDigestRuntimeConfig,
     parse_recipients,
 )
+from app.services.integration_settings.providers.ods import (
+    ODS_API_KEY,
+    ODS_ENABLED,
+    ODS_RECIPIENTS,
+    ODS_SETTING_KEYS,
+    OdsRuntimeConfig,
+)
 from app.services.integration_settings.providers.zalo import (
     ZALO_BOT_TOKEN,
     ZALO_BOT_WEBHOOK_SECRET,
@@ -109,6 +116,10 @@ __all__ = [
     "MINIMAX_API_KEY",
     "MINIMAX_ENABLE",
     "MINIMAX_SETTING_KEYS",
+    "ODS_API_KEY",
+    "ODS_ENABLED",
+    "ODS_RECIPIENTS",
+    "ODS_SETTING_KEYS",
     "OPENROUTER_AGENT_MODEL",
     "OPENROUTER_API_KEY",
     "OPENROUTER_DIGEST_MODEL",
@@ -135,6 +146,7 @@ __all__ = [
     "EMAIL_DIGEST_SEND_TIME",
     "EMAIL_DIGEST_SETTING_KEYS",
     "EmailDigestRuntimeConfig",
+    "OdsRuntimeConfig",
     "parse_recipients",
     "CustomLlmRuntimeConfig",
     "JevRuntimeConfig",

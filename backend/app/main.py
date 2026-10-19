@@ -93,6 +93,7 @@ async def lifespan(app: FastAPI):
 
         from app.core.redis import get_redis_sync
         from app.workers.email_digest_worker import run_email_digest_tick
+        from app.workers.ods_insights_worker import run_ods_insights_tick
         from app.workers.outbound_dispatch_worker import run_outbound_dispatch_tick
         from app.workers.reconcile_worker import run_reconcile_tick
 
@@ -156,6 +157,19 @@ async def lifespan(app: FastAPI):
             )
         except Exception:  # noqa: BLE001
             logger.exception("email digest scheduler registration failed (non-fatal)")
+        try:
+            register_unique_cron_tick(
+                maintenance_sched,
+                run_ods_insights_tick,
+                settings.ods_insights_cron,
+                job_timeout_seconds=settings.ods_insights_job_timeout_seconds,
+            )
+            logger.info(
+                "ods insights tick registered: cron=%s queue=maintenance",
+                settings.ods_insights_cron,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("ods insights scheduler registration failed (non-fatal)")
     except Exception:  # noqa: BLE001
         logger.exception("rq-scheduler setup failed (non-fatal)")
 

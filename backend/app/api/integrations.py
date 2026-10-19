@@ -8,6 +8,7 @@ error, and returns the response model.
 
 import json
 import logging
+import time
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Body, Depends, Response
@@ -47,6 +48,9 @@ from app.schemas.integrations import (
     MinimaxIntegrationSettingsOut,
     MinimaxIntegrationSettingsUpdate,
     MinimaxIntegrationTestOut,
+    OdsIntegrationSettingsOut,
+    OdsIntegrationSettingsUpdate,
+    OdsIntegrationTestOut,
     OpenRouterIntegrationSettingsOut,
     OpenRouterIntegrationSettingsUpdate,
     OpenRouterIntegrationTestOut,
@@ -408,6 +412,69 @@ async def test_email_digest(
         summarizer = None
     return await send_test_digest(
         db, to_email=str(body.to_email), summarizer=summarizer
+    )
+
+
+@router.get("/ods", response_model=OdsIntegrationSettingsOut)
+async def get_ods_integration_settings(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> OdsIntegrationSettingsOut:
+    """ODS (CloudFone tổng đài) voice-transcript insights settings — the API
+    key is status-only, never its value."""
+    return OdsIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_ods_view()
+    )
+
+
+@router.put("/ods", response_model=OdsIntegrationSettingsOut)
+async def update_ods_integration_settings(
+    body: OdsIntegrationSettingsUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> OdsIntegrationSettingsOut:
+    view = await IntegrationSettingsService(db).update_ods(
+        body.model_dump(exclude_unset=True),
+        actor_id=admin.id,
+    )
+    return OdsIntegrationSettingsOut.model_validate(view)
+
+
+@router.post("/ods/test", response_model=OdsIntegrationTestOut)
+async def test_ods_integration_settings(
+    body: OdsIntegrationSettingsUpdate | None = None,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> OdsIntegrationTestOut:
+    """Make a real GetCallLogs call (limit 1) so a bad key fails here, not in
+    the daily tick. A key typed in the console may be probed BEFORE being
+    saved; anything omitted falls back to the stored configuration."""
+    from app.services.ods import CloudfoneError, OdsCloudfoneClient
+
+    settings_service = IntegrationSettingsService(db)
+    cfg = await settings_service.resolve_ods()
+    api_key = str(body.api_key).strip() if body and body.api_key else cfg.api_key
+    if not api_key:
+        return OdsIntegrationTestOut(
+            ok=False, configured=False, missing=["api_key"]
+        )
+    started = time.perf_counter()
+    try:
+        client = OdsCloudfoneClient(api_key, timeout=15.0)
+        await client.get_call_logs(limit=1)
+    except CloudfoneError as exc:
+        return OdsIntegrationTestOut(
+            ok=False,
+            configured=True,
+            missing=[],
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            error=str(exc),
+        )
+    return OdsIntegrationTestOut(
+        ok=True,
+        configured=True,
+        missing=[],
+        latency_ms=int((time.perf_counter() - started) * 1000),
     )
 
 

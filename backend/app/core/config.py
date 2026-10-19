@@ -15,6 +15,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ---------------------------------------------------------------------------
 ZALO_BOT_API_BASE: str = "https://bot-api.zaloplatforms.com"
 ZALO_OA_API_BASE: str = "https://openapi.zalo.me"
+# CloudFone API base — the call-center platform behind the ODS voice-transcript
+# insights integration (code constant, not admin-editable runtime settings).
+CLOUDFONE_API_BASE: str = "https://api.cloudfone.vn/api/CloudFone"
 # Public Bot Platform inbound endpoint registered with Zalo (POST /webhooks/zalo/chatbot).
 # A code constant, NOT env — an empty/missing URL is exactly how the app and Zalo
 # desync the webhook secret and silently 401-drop all inbound. Update only if the
@@ -468,6 +471,17 @@ class Settings(BaseSettings):
     # happens, because a late summary is worth less than no letter at all.
     email_digest_job_timeout_seconds: int = 900
     email_digest_enrich_budget_seconds: int = 600
+    # ODS (CloudFone tổng đài) daily voice-transcript insights: the scheduler
+    # fires the tick on this cron and the tick itself always reports on the
+    # previous full ICT day, so "0 1 * * *" (01:00 UTC = 08:00 Vietnam) sends
+    # yesterday's letter once. The container TZ must stay UTC for the
+    # expression to mean what it says. Like email_digest_tick_cron, this is a
+    # plain env with a default — no docker-compose entry needed to change it.
+    ods_insights_cron: str = "0 1 * * *"
+    # The tick summarizes every transcript through the LLM before it sends, so
+    # a chatty day can exceed RQ's default 180s ceiling — same reason the
+    # digest carries its own job timeout.
+    ods_insights_job_timeout_seconds: int = 600
 
     @field_validator("email_digest_tick_cron")
     @classmethod
@@ -481,6 +495,19 @@ class Settings(BaseSettings):
         except (ValueError, KeyError) as exc:
             raise ValueError(
                 f"email_digest_tick_cron must be a valid cron expression (got {value!r})"
+            ) from exc
+        return value
+
+    @field_validator("ods_insights_cron")
+    @classmethod
+    def _validate_ods_insights_cron(cls, value: str) -> str:
+        from crontab import CronTab
+
+        try:
+            CronTab(value)
+        except (ValueError, KeyError) as exc:
+            raise ValueError(
+                f"ods_insights_cron must be a valid cron expression (got {value!r})"
             ) from exc
         return value
 
