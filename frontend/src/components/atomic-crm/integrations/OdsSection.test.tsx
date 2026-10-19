@@ -24,7 +24,9 @@ vi.mock("./api", () => ({
 import { OdsSection } from "./OdsSection";
 
 const STORED_SETTINGS = {
-  api_key: { configured: true, preview: "9 ký tự" },
+  service_name: "CloudFone",
+  auth_user: "ods-user",
+  auth_key: { configured: true, preview: "9 ký tự" },
   recipients: ["quanly@vp.vn"],
   enabled: true,
 };
@@ -55,26 +57,41 @@ describe("OdsSection", () => {
     mocks.loadOdsSettings.mockResolvedValue(STORED_SETTINGS);
     const screen = await renderSection();
 
-    await expect.element(screen.getByText("CloudFone API key")).toBeVisible();
+    await expect.element(screen.getByText("CloudFone AuthKey")).toBeVisible();
     await expect
       .element(
         screen.getByRole("textbox", { name: "Danh sách email người nhận" }),
       )
       .toHaveValue("quanly@vp.vn");
+    await expect
+      .element(screen.getByRole("textbox", { name: "CloudFone ServiceName" }))
+      .toHaveValue("CloudFone");
+    await expect
+      .element(screen.getByRole("textbox", { name: "CloudFone AuthUser" }))
+      .toHaveValue("ods-user");
     await expect.element(screen.getByText(/ODS đang bật/)).toBeVisible();
   });
 
   it("reports the integration as off while config is incomplete", async () => {
     mocks.loadOdsSettings.mockResolvedValue({
-      api_key: { configured: false, preview: null },
+      service_name: "CloudFone",
+      auth_user: "",
+      auth_key: { configured: false, preview: null },
       recipients: [],
       enabled: false,
     });
     const screen = await renderSection();
     await expect.element(screen.getByText(/ODS đang tắt/)).toBeVisible();
+    await expect
+      .element(
+        screen.getByText(
+          /cần đủ ServiceName, AuthUser, AuthKey và ít nhất một người nhận/,
+        ),
+      )
+      .toBeVisible();
   });
 
-  it("saves a parsed recipient list plus the typed key", async () => {
+  it("saves a parsed recipient list plus the typed credentials", async () => {
     mocks.loadOdsSettings.mockResolvedValue(STORED_SETTINGS);
     mocks.saveOdsSettings.mockResolvedValue(STORED_SETTINGS);
     const screen = await renderSection();
@@ -83,7 +100,10 @@ describe("OdsSection", () => {
       .getByRole("textbox", { name: "Danh sách email người nhận" })
       .fill("quanly@vp.vn, kd@vp.vn");
     await screen
-      .getByRole("textbox", { name: /CloudFone API key/ })
+      .getByRole("textbox", { name: "CloudFone AuthUser" })
+      .fill("ods-user-2");
+    await screen
+      .getByRole("textbox", { name: /CloudFone AuthKey/ })
       .fill("cf-new-key");
     await screen.getByRole("button", { name: "Lưu cấu hình" }).click();
 
@@ -92,7 +112,8 @@ describe("OdsSection", () => {
       .toEqual([
         [
           {
-            api_key: "cf-new-key",
+            auth_user: "ods-user-2",
+            auth_key: "cf-new-key",
             recipients: ["quanly@vp.vn", "kd@vp.vn"],
           },
         ],
@@ -125,7 +146,7 @@ describe("OdsSection", () => {
       .toEqual([["Đã lưu. Tích hợp ODS đang tắt.", { type: "info" }]]);
   });
 
-  it("probes the typed key first when testing the connection", async () => {
+  it("probes the typed credentials first when testing the connection", async () => {
     mocks.loadOdsSettings.mockResolvedValue(STORED_SETTINGS);
     mocks.testOdsConnection.mockResolvedValue({
       ok: true,
@@ -137,13 +158,13 @@ describe("OdsSection", () => {
     const screen = await renderSection();
 
     await screen
-      .getByRole("textbox", { name: /CloudFone API key/ })
+      .getByRole("textbox", { name: /CloudFone AuthKey/ })
       .fill("typed-key");
     await screen.getByRole("button", { name: "Kiểm tra kết nối" }).click();
 
     await expect
       .poll(() => mocks.testOdsConnection.mock.calls)
-      .toEqual([["typed-key"]]);
+      .toEqual([[{ auth_key: "typed-key" }]]);
     await expect
       .poll(() => mocks.notify.mock.calls)
       .toEqual([
@@ -151,14 +172,14 @@ describe("OdsSection", () => {
       ]);
   });
 
-  it("surfaces a failed probe without losing the stored key", async () => {
+  it("surfaces a failed probe without losing the stored credentials", async () => {
     mocks.loadOdsSettings.mockResolvedValue(STORED_SETTINGS);
     mocks.testOdsConnection.mockResolvedValue({
       ok: false,
       configured: true,
       missing: [],
       latency_ms: 90,
-      error: "CloudFone từ chối yêu cầu: Invalid APIKey",
+      error: "CloudFone từ chối yêu cầu: Invalid AuthKey",
     });
     const screen = await renderSection();
 
@@ -170,7 +191,7 @@ describe("OdsSection", () => {
       .poll(() => mocks.notify.mock.calls)
       .toEqual([
         [
-          "Kết nối thất bại: CloudFone từ chối yêu cầu: Invalid APIKey",
+          "Kết nối thất bại: CloudFone từ chối yêu cầu: Invalid AuthKey",
           { type: "error" },
         ],
       ]);

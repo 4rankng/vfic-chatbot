@@ -410,9 +410,7 @@ async def test_email_digest(
             exc_info=True,
         )
         summarizer = None
-    return await send_test_digest(
-        db, to_email=str(body.to_email), summarizer=summarizer
-    )
+    return await send_test_digest(db, to_email=str(body.to_email), summarizer=summarizer)
 
 
 @router.get("/ods", response_model=OdsIntegrationSettingsOut)
@@ -446,22 +444,31 @@ async def test_ods_integration_settings(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> OdsIntegrationTestOut:
-    """Make a real GetCallLogs call (limit 1) so a bad key fails here, not in
-    the daily tick. A key typed in the console may be probed BEFORE being
-    saved; anything omitted falls back to the stored configuration."""
+    """Make a real GetCallLogs call (one page: PageIndex 0, PageSize 5) so bad
+    CloudFone credentials fail here, not in the daily tick. Credentials typed
+    in the console may be probed BEFORE being saved; anything omitted falls
+    back to the stored configuration."""
     from app.services.ods import CloudfoneError, OdsCloudfoneClient
 
     settings_service = IntegrationSettingsService(db)
     cfg = await settings_service.resolve_ods()
-    api_key = str(body.api_key).strip() if body and body.api_key else cfg.api_key
-    if not api_key:
-        return OdsIntegrationTestOut(
-            ok=False, configured=False, missing=["api_key"]
-        )
+    typed = body.model_dump(exclude_unset=True) if body else {}
+    creds = {
+        name: (str(typed.get(name) or "").strip() or getattr(cfg, name))
+        for name in ("service_name", "auth_user", "auth_key")
+    }
+    missing = sorted(name for name, value in creds.items() if not value)
+    if missing:
+        return OdsIntegrationTestOut(ok=False, configured=False, missing=missing)
     started = time.perf_counter()
     try:
-        client = OdsCloudfoneClient(api_key, timeout=15.0)
-        await client.get_call_logs(limit=1)
+        client = OdsCloudfoneClient(
+            creds["service_name"],
+            creds["auth_user"],
+            creds["auth_key"],
+            timeout=15.0,
+        )
+        await client.get_call_logs(page_index=0, page_size=5)
     except CloudfoneError as exc:
         return OdsIntegrationTestOut(
             ok=False,
@@ -503,9 +510,7 @@ async def update_tingting_integration_settings(
     """
     service = IntegrationSettingsService(db)
     await service.update_tingting(body.model_dump(exclude_unset=True), actor_id=admin.id)
-    return TingtingIntegrationSettingsOut.model_validate(
-        await service.admin_tingting_view()
-    )
+    return TingtingIntegrationSettingsOut.model_validate(await service.admin_tingting_view())
 
 
 @router.post("/custom-llm/test", response_model=CustomLlmIntegrationTestOut)
@@ -812,9 +817,7 @@ async def get_facebook_page_projects(
         account = await service.load_page(page_id)
     except FacebookPageNotFoundError:
         raise NotFoundError("Không tìm thấy Trang Facebook.") from None
-    return _assignments_out(
-        account.account_key, await service.assignments(account.id)
-    )
+    return _assignments_out(account.account_key, await service.assignments(account.id))
 
 
 @router.put("/facebook/pages/{page_id}/projects", response_model=FacebookPageProjectsOut)
@@ -887,9 +890,7 @@ async def remove_facebook_page_project(
 
     service = FacebookPageAssignments(db)
     try:
-        views = await service.remove(
-            page_id=page_id, project_id=project_id, actor_id=admin.id
-        )
+        views = await service.remove(page_id=page_id, project_id=project_id, actor_id=admin.id)
     except FacebookPageNotFoundError:
         raise NotFoundError("Không tìm thấy Trang Facebook.") from None
     if views is None:

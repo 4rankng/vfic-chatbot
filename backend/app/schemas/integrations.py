@@ -527,12 +527,8 @@ class FacebookCredentialsUpdate(BaseModel):
 
     facebook_app_id: str | None = Field(default=None, min_length=1, max_length=128)
     facebook_app_secret: str | None = Field(default=None, min_length=8, max_length=256)
-    facebook_login_config_id: str | None = Field(
-        default=None, min_length=1, max_length=256
-    )
-    facebook_webhook_verify_token: str | None = Field(
-        default=None, min_length=4, max_length=256
-    )
+    facebook_login_config_id: str | None = Field(default=None, min_length=1, max_length=256)
+    facebook_webhook_verify_token: str | None = Field(default=None, min_length=4, max_length=256)
 
 
 # ─── Candidate email digest (Resend) ─────────────────────────────────────────
@@ -586,16 +582,23 @@ class EmailDigestTestOut(BaseModel):
 
 
 class OdsIntegrationSettingsOut(BaseModel):
-    api_key: SecretStatus
+    service_name: str
+    auth_user: str
+    auth_key: SecretStatus
     recipients: list[str]
-    # The whole feature is off unless the key AND the recipient list are set.
+    # The whole feature is off unless all three credentials AND the recipient
+    # list are set.
     enabled: bool
 
 
 class OdsIntegrationSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    api_key: str | None = Field(default=None, min_length=1, max_length=4096)
+    # Spec 1.1 credentials: ServiceName + AuthUser + AuthKey, exactly what the
+    # GetCallLogs request body requires for auth.
+    service_name: str | None = Field(default=None, min_length=1, max_length=256)
+    auth_user: str | None = Field(default=None, min_length=1, max_length=256)
+    auth_key: str | None = Field(default=None, min_length=1, max_length=4096)
     recipients: list[str] | None = None
     enabled: bool | None = None
 

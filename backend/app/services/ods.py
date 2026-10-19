@@ -38,6 +38,14 @@ STATUS_SENT = "sent"
 
 CloudfoneTransport = Callable[[str, dict], Awaitable[dict]]
 
+# GetCallLogs spec 1.1 defaults: page geometry for the daily fetch and the
+# admin probe, plus the all-directions filter (both inbound and outbound).
+DEFAULT_DIRECTION = "all"
+DEFAULT_PAGE_SIZE = 200
+# Bounds one day's fetch at 5 × 200 rows — any real day fits; see
+# fetch_daily_transcripts for the truncation behavior past the bound.
+MAX_DAILY_PAGES = 5
+
 INSIGHTS_SYSTEM_PROMPT = (
     "Bạn là trợ lý phân tích cuộc gọi tổng đài. Viết 2-4 câu tiếng Việt tóm tắt "
     "nội dung cuộc giao tiếp trong bản ghi (transcript) cuộc gọi: người gọi hỏi/về "
@@ -56,7 +64,7 @@ class CloudfoneError(RuntimeError):
 
 @dataclass(frozen=True)
 class CallTranscript:
-    """One analyzed call from GetHistoryCallAnalytics (voice transcript)."""
+    """One call row from GetCallLogs (spec 1.1) — transcript when provided."""
 
     call_id: str
     phone: str = ""
@@ -144,31 +152,57 @@ def _data_items(payload: dict) -> list[dict]:
     return []
 
 
+def _day_window(day: date) -> tuple[str, str]:
+    """The spec date window covering one full calendar day (ICT wall clock)."""
+    day_str = day.isoformat()
+    return f"{day_str} 00:00:01", f"{day_str} 23:59:59"
+
+
+def _envelope_total(payload: dict, *, fallback: int) -> int:
+    """The envelope's row count; a missing/garbage ``total`` trusts the page."""
+    raw = payload.get("total")
+    try:
+        return int(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+
+
 class OdsCloudfoneClient:
-    """CloudFone API client (POST + JSON body auth per the CloudFone doc pattern).
+    """CloudFone client per the GetCallLogs spec 1.1 (API.docx, POST + JSON).
 
     Every request is a POST to ``{base}/{Method}`` whose JSON body carries the
-    ``Service`` discriminator and the ``APIKey`` alongside the call's
-    parameters — no header auth, no query-string secrets (URLs stay clean in
-    proxy logs). ``transport`` replaces the HTTP call in tests; production
-    resolves it through the process-scoped httpx client.
+    three credential fields — ``ServiceName``, ``AuthUser``, ``AuthKey`` —
+    plus the call's parameters; there is no header auth and no query-string
+    secret (URLs stay clean in proxy logs). GetCallLogs additionally requires
+    ``Direction``, ``DateStart``, ``DateEnd``, ``PageIndex`` and ``PageSize``.
+    ``transport`` replaces the HTTP call in tests; production resolves it
+    through the process-scoped httpx client.
     """
 
     def __init__(
         self,
-        api_key: str,
+        service_name: str,
+        auth_user: str,
+        auth_key: str,
         *,
         base_url: str = CLOUDFONE_API_BASE,
         timeout: float = 30.0,
         transport: CloudfoneTransport | None = None,
     ) -> None:
-        self.api_key = api_key
+        self.service_name = service_name
+        self.auth_user = auth_user
+        self.auth_key = auth_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._transport = transport
 
     async def _post(self, method: str, payload: dict) -> dict:
-        body = {"Service": "CloudFone", "APIKey": self.api_key, **payload}
+        body = {
+            "ServiceName": self.service_name,
+            "AuthUser": self.auth_user,
+            "AuthKey": self.auth_key,
+            **payload,
+        }
         if self._transport is not None:
             return await self._transport(method, body)
 
@@ -202,19 +236,77 @@ class OdsCloudfoneClient:
             raise CloudfoneError(f"CloudFone từ chối yêu cầu: {message or 'không rõ lý do'}")
         return data
 
-    async def get_call_logs(self, *, limit: int = 1) -> list[dict]:
-        """The most recent call-log rows — the key probe (metadata only)."""
-        data = await self._request("GetCallLogs", {"Limit": max(int(limit), 1)})
+    async def get_call_logs(
+        self,
+        *,
+        date_start: str | None = None,
+        date_end: str | None = None,
+        direction: str = DEFAULT_DIRECTION,
+        page_index: int = 0,
+        page_size: int = DEFAULT_PAGE_SIZE,
+    ) -> list[dict]:
+        """One GetCallLogs page — the spec-1.1 credential probe.
+
+        The date window defaults to yesterday → today (ICT full days); the
+        caller may pass an explicit ``YYYY-MM-DD HH:MM:SS`` window instead.
+        Only required spec fields ride along: ``Direction``, ``DateStart``,
+        ``DateEnd``, ``PageIndex``, ``PageSize``.
+        """
+        if not (date_start and date_end):
+            today = datetime.now(ICT).date()
+            default_start, default_end = _day_window(today - timedelta(days=1)), _day_window(today)
+            date_start = date_start or default_start[0]
+            date_end = date_end or default_end[1]
+        data = await self._request(
+            "GetCallLogs",
+            {
+                "Direction": direction,
+                "DateStart": date_start,
+                "DateEnd": date_end,
+                "PageIndex": max(int(page_index), 0),
+                "PageSize": max(int(page_size), 1),
+            },
+        )
         return _data_items(data)
 
     async def fetch_daily_transcripts(self, *, day: date) -> list[CallTranscript]:
-        """The analyzed voice transcripts of one full calendar day."""
-        day_str = day.isoformat()
-        data = await self._request(
-            "GetHistoryCallAnalytics",
-            {"FromDate": day_str, "ToDate": day_str},
-        )
-        return [_parse_transcript(item) for item in _data_items(data)]
+        """The analyzed voice rows of one full ICT calendar day.
+
+        Spec paging: the day's window ``00:00:01 → 23:59:59``, oldest-first
+        (``IsSort=1``), 200 rows per page, walking pages until the envelope's
+        ``total`` is drained — bounded at :data:`MAX_DAILY_PAGES` so a broken
+        counter can never loop forever (a bound of 5 × 200 rows covers any
+        real day; past it the tick logs a truncation warning and ships what
+        it has).
+        """
+        date_start, date_end = _day_window(day)
+        rows: list[dict] = []
+        total: int | None = None
+        for page_index in range(MAX_DAILY_PAGES):
+            data = await self._request(
+                "GetCallLogs",
+                {
+                    "Direction": DEFAULT_DIRECTION,
+                    "DateStart": date_start,
+                    "DateEnd": date_end,
+                    "PageIndex": page_index,
+                    "PageSize": DEFAULT_PAGE_SIZE,
+                    "IsSort": 1,
+                },
+            )
+            items = _data_items(data)
+            rows.extend(items)
+            total = _envelope_total(data, fallback=len(rows))
+            if not items or len(rows) >= total:
+                break
+        if total is not None and len(rows) < total:
+            logger.warning(
+                "ods daily fetch truncated: %d/%d rows after %d pages",
+                len(rows),
+                total,
+                MAX_DAILY_PAGES,
+            )
+        return [_parse_transcript(item) for item in rows]
 
 
 def insights_window(now: datetime) -> date:
@@ -283,11 +375,11 @@ def render_insights_html(insights: list[CallInsight], day: date) -> str:
             if part
         )
         rows.append(
-            "<div style=\"margin:0 0 16px 0;padding:12px;border:1px solid #e2e8f0;"
+            '<div style="margin:0 0 16px 0;padding:12px;border:1px solid #e2e8f0;'
             'border-radius:8px">'
-            f"<p style=\"margin:0 0 4px 0;font-size:12px;color:#64748b\">{meta}</p>"
-            f"<p style=\"margin:0 0 8px 0;font-weight:600\">{_escape(summary)}</p>"
-            f"<details><summary style=\"color:#64748b;font-size:12px\">Transcript</summary>"
+            f'<p style="margin:0 0 4px 0;font-size:12px;color:#64748b">{meta}</p>'
+            f'<p style="margin:0 0 8px 0;font-weight:600">{_escape(summary)}</p>'
+            f'<details><summary style="color:#64748b;font-size:12px">Transcript</summary>'
             f'<p style="white-space:pre-wrap;font-size:12px">{_escape(call.transcript)}</p>'
             "</details></div>"
         )
@@ -300,9 +392,7 @@ def render_insights_html(insights: list[CallInsight], day: date) -> str:
     )
 
 
-async def _default_fetcher(
-    client: OdsCloudfoneClient, day: date
-) -> list[CallTranscript]:
+async def _default_fetcher(client: OdsCloudfoneClient, day: date) -> list[CallTranscript]:
     return await client.fetch_daily_transcripts(day=day)
 
 
@@ -330,10 +420,18 @@ async def run_ods_insights(
         # The admin's off switch, or nowhere to send to: no-op without error.
         missing = [] if cfg.recipients else ["recipients"]
         return OdsInsightsResult(status=STATUS_DISABLED, missing=missing)
-    if not cfg.api_key:
-        return OdsInsightsResult(
-            status=STATUS_UNCONFIGURED, missing=["api_key"]
+    # Spec 1.1 auth: all three credential fields are required by GetCallLogs.
+    missing_creds = [
+        name
+        for name, value in (
+            ("service_name", cfg.service_name),
+            ("auth_user", cfg.auth_user),
+            ("auth_key", cfg.auth_key),
         )
+        if not value
+    ]
+    if missing_creds:
+        return OdsInsightsResult(status=STATUS_UNCONFIGURED, missing=missing_creds)
 
     # The email rides the same Resend account as the candidate digest (one
     # sender account per deployment); without it there is nowhere to deliver.
@@ -342,7 +440,9 @@ async def run_ods_insights(
         return OdsInsightsResult(status=STATUS_DISABLED, missing=["resend_api_key"])
 
     day = insights_window(moment)
-    ods_client = client or OdsCloudfoneClient(cfg.api_key, timeout=30.0)
+    ods_client = client or OdsCloudfoneClient(
+        cfg.service_name, cfg.auth_user, cfg.auth_key, timeout=30.0
+    )
     fetch = fetcher or (lambda d: _default_fetcher(ods_client, d))
     try:
         transcripts = await fetch(day)
