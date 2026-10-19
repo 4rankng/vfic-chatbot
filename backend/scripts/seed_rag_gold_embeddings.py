@@ -90,11 +90,14 @@ async def _seed() -> int:
     summary = aggregate(scores)
     baseline = {
         "case_count": summary.case_count,
-        "precision_at_3": round(summary.mean_precision_at_3, 4),
-        "precision_at_5": round(summary.mean_precision_at_5, 4),
-        "recall_at_10": round(summary.mean_recall_at_10, 4),
-        "mrr": round(summary.mean_mrr, 4),
-        "pass_rate": round(summary.pass_rate, 4),
+        # Full precision — the gate compares ``actual >= baseline`` with a 1e-9
+        # tolerance, so a 4-dp round-UP here (e.g. mrr 0.75246 -> 0.7525) would
+        # fail the gate against its own recorded baseline.
+        "precision_at_3": summary.mean_precision_at_3,
+        "precision_at_5": summary.mean_precision_at_5,
+        "recall_at_10": summary.mean_recall_at_10,
+        "mrr": summary.mean_mrr,
+        "pass_rate": summary.pass_rate,
         "bait_count": summary.bait_count,
         "bait_passed": summary.bait_passed,
     }

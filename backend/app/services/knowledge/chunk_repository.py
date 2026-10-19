@@ -38,6 +38,11 @@ class KnowledgeChunkRepo:
             metadata = dict(u.get("metadata") or {})
             metadata.setdefault("source_anchor", u["source_anchor"])
             metadata.setdefault("is_inference", u["is_inference"])
+            # The Contextual Retrieval prefix rode in the embedding input; keep
+            # a copy under metadata (content itself stays verbatim) so re-index
+            # and backfill tooling can tell prefixed chunks from legacy ones.
+            if u.get("contextual_prefix"):
+                metadata.setdefault("contextual_prefix", u["contextual_prefix"])
             await self.db.execute(
                 text(
                     "INSERT INTO knowledge_chunks "

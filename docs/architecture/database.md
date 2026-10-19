@@ -78,6 +78,12 @@ Path: `backend/app/models/`
 ### Embeddings
 - `KnowledgeChunk` stores embeddings as `vector(3072)` (pgvector) — dim 3072 via OpenRouter/Gemini.
 - HNSW index for ANN search (enabled when `rag_ann_enabled = true`).
+- Contextual Retrieval (when `rag_contextual_enabled = true`, default): digest chunks
+  embed under a metadata-first document-context prefix (stored verbatim in
+  `metadata.contextual_prefix`; `content` unchanged). Canonical chunks embed their
+  spec-owned `contextual_text` header instead; existing unprefixed vectors are
+  re-indexed by `backend/scripts/backfill_contextual_prefix.py`. Benchmark evidence:
+  `qa/contextual-retrieval-benchmark.md`.
 
 ### Category revisions
 

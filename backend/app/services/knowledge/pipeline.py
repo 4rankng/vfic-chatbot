@@ -47,6 +47,7 @@ from app.services.knowledge.canonical import (
     checksum_text,
     parse_canonical_markdown,
 )
+from app.services.knowledge.contextual import contextual_embed_input
 from app.services.knowledge.extraction import DigestSections, category_plan_sections, split_for_digest
 from app.services.geo.project_address import refresh_from_kb
 from app.services.knowledge.prompts import DIGEST_SYSTEM_PROMPT, INDEX_SYSTEM_PROMPT
@@ -130,9 +131,12 @@ class KnowledgePipeline:
                 all_units.extend(tail_units)
 
         await self._set_stage(doc, "EMBEDDING")
-        await self._store_units(doc, all_units)
+        # The digest summary rides in the contextual prefix (see _store_units),
+        # so it must exist before units are embedded — not only on the doc row.
+        doc_summary = " ".join(summary_parts).strip() or None
+        await self._store_units(doc, all_units, doc_summary=doc_summary)
 
-        doc.digest_summary = " ".join(summary_parts).strip() or None
+        doc.digest_summary = doc_summary
         flagged = [
             i for i, u in enumerate(all_units) if u["confidence"] == "low" or u["is_inference"]
         ]
@@ -282,15 +286,26 @@ class KnowledgePipeline:
         summary = blocks[0][:220] if blocks else ""
         return summary, units
 
-    async def _store_units(self, doc, units: list[dict]) -> None:
+    async def _store_units(
+        self, doc, units: list[dict], *, doc_summary: str | None = None
+    ) -> None:
         if not units:
             await self._guard_training(doc)
             await self.chunks.replace_for_doc(doc, [])  # clear the document's chunks
             return
         # Batch-embed one combined string per unit (content + summary + questions).
+        # Digest units (non-canonical) carry a Contextual Retrieval prefix in
+        # front — document title + digest summary + the unit's own anchor —
+        # built metadata-first in ``contextual``; canonical units already embed
+        # their spec-owned ``contextual_text`` header instead.
         embed_inputs = []
         for u in units:
-            pieces = [u.get("contextual_text") or u["content"]]
+            base = u.get("contextual_text") or u["content"]
+            if u.get("contextual_text") is None:
+                base = contextual_embed_input(
+                    u, base, doc_title=doc.file_name, doc_summary=doc_summary
+                )
+            pieces = [base]
             if u["summary"]:
                 pieces.append(u["summary"])
             pieces.extend(u["questions"])

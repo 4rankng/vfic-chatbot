@@ -132,6 +132,12 @@ async def _main() -> int:
     parser.add_argument("--top-k", type=int, default=25)
     parser.add_argument("--min-pass-rate", type=float, default=1.0)
     parser.add_argument("--output", type=Path, help="Optional JSON result path")
+    parser.add_argument("--embeddings", type=Path, help=(
+        "--gold only: score against an alternative canned-embeddings file "
+        "(e.g. the contextual-prefix embeddings produced by "
+        "scripts/seed_rag_gold_contextual_embeddings.py) instead of the "
+        "checked-in embeddings.json"
+    ))
     parser.add_argument("--gate-output", type=Path, help=(
         "Optional reduced payload with golden_pass_rate_pct as its single "
         "pass-rate source, consumable by scripts/release_gate_check.py"
@@ -191,7 +197,7 @@ def _run_gold(args: argparse.Namespace) -> int:
 
     cases = load_cases()
     chunks = load_chunks()
-    embeddings = load_embeddings()
+    embeddings = load_embeddings(args.embeddings) if args.embeddings else load_embeddings()
     if not embeddings:
         print(
             "ERROR: embeddings.json missing. Run "
