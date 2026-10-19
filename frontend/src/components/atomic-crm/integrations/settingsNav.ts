@@ -6,12 +6,13 @@ import {
   MapPin,
   MessageCircle,
   MessagesSquare,
+  PhoneCall,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
 
 /**
- * Settings navigation: the eight entries of the console rail and the header
+ * Settings navigation: the nine entries of the console rail and the header
  * copy each one shows. Kept free of JSX so the rail, the mobile drawer and the
  * header all read one source.
  */
@@ -23,6 +24,7 @@ export type SettingsItemId =
   | "settings-jev"
   | "settings-tingting"
   | "settings-email-digest"
+  | "settings-ods"
   | "settings-geocoder"
   | "settings-users";
 
@@ -69,6 +71,12 @@ export const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     label: "Email ứng viên",
     description: "Gửi ứng viên mới qua email",
     Icon: Mail,
+  },
+  {
+    itemId: "settings-ods",
+    label: "ODS",
+    description: "Phân tích cuộc gọi",
+    Icon: PhoneCall,
   },
   {
     itemId: "settings-geocoder",
@@ -120,6 +128,12 @@ export const SETTINGS_VIEW_COPY: Record<
     title: "Danh sách ứng viên mới",
     description:
       "Gửi định kỳ email danh sách ứng viên mới (Zalo chatbot, Messenger, OA khác — không gồm TingTing OA) với số điện thoại, dự án quan tâm và tóm tắt hội thoại.",
+  },
+  "settings-ods": {
+    kicker: "Tích hợp",
+    title: "ODS · Phân tích cuộc gọi",
+    description:
+      "Lấy bản ghi (voice transcript) cuộc gọi tổng đài CloudFone mỗi ngày, tóm tắt bằng AI và gửi email cho danh sách người nhận.",
   },
   "settings-geocoder": {
     kicker: "Tích hợp",
