@@ -51,6 +51,8 @@ Performance (RAG benchmark)   ← test_rag_benchmark.py
 | Decisions / FAQ | `test_graph_decisions.py`, `test_model_tiering.py`, `test_faq_bypass.py` |
 | Knowledge pipeline | `test_knowledge.py`, `test_knowledge_pipeline.py`, `test_knowledge_coercion.py`, `test_knowledge_text_ingestion.py` |
 | Retrieval / RAG | `test_rag_benchmark.py`, `test_retrieval_fusion.py`, `test_retrieval_ann_gate.py`, `test_reranker.py`, `test_semantic_cache.py` |
+| Answer quality eval | `test_answer_gold.py`, `test_eval_answers.py` |
+| Release gate | `test_release_gate.py`, `test_release_gate_cli.py`, `test_release_gate_answer_quality.py` |
 | Lead | `test_lead_extraction.py`, `test_lead_chatops.py` |
 | Recommendation | `test_recommendation_scoring.py` |
 | Workers | `test_persistence_worker.py`, `test_reconcile_worker.py`, `test_reconcile_repository.py`, `test_worker_async_runner.py`, `test_worker_preload.py`, `test_scheduler_registration.py` |
@@ -74,6 +76,31 @@ Start the local database before the selected integration lane:
 ```bash
 docker compose -f docker-compose.dev.yml up -d postgres
 ```
+
+### Answer-quality eval (DeepEval)
+
+`backend/scripts/eval_answers.py` grades the bot's ANSWER (not just retrieval)
+on the golden answer set (`backend/tests/golden/answers.yaml`, 39 Vietnamese
+questions backed by the `tests/fixtures/rag_gold/` corpus): DeepEval
+Faithfulness / AnswerRelevancy / ContextualPrecision / ContextualRecall judged
+through the app's own provider credentials (no new API keys), plus a
+deterministic fact-hit floor and gold-set precision/recall.
+
+```bash
+# Full P3-2 comparison: same set with rag_rerank_enabled off and on
+MINIMAX_ENABLE=false OPENROUTER_ENABLE=true \
+  .venv/bin/python -m scripts.eval_answers --rerank both --output /tmp/eval.json
+
+.venv/bin/python -m scripts.eval_answers --rerank off --no-answers   # retrieval-only, offline
+.venv/bin/python -m scripts.eval_answers --rerank off --replay /tmp/eval.json --judge off
+```
+
+DeepEval installs via the `evals` extra (`uv sync --all-extras`); it is not a
+runtime dependency and never ships in the production image. The
+answer-quality release gate (`scripts/release_gate_check.py --answer-quality`
+with the `--gate-output` payload) is **report-only** until baselines are
+recorded — `RELEASE_GATE_ANSWER_QUALITY_ENABLED` defaults to false, so the
+scores print without ever blocking a deploy.
 
 ### PostgreSQL Integration Safety Contract
 

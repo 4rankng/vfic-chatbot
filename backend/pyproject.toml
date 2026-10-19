@@ -58,6 +58,14 @@ dev = [
     "pytest-timeout>=2.3,<3.0",
     "ruff>=0.8,<1.0",
 ]
+# Answer-quality eval harness (scripts/eval_answers.py). Not a runtime dep:
+# the production image installs via `uv export --frozen --no-dev` without
+# extras, so DeepEval never ships to prod. Dev venvs get it via Makefile
+# bootstrap (`uv sync --all-extras`). LLM-judge calls reuse the app's existing
+# provider credentials (app/graph/providers.py) — no new API keys.
+evals = [
+    "deepeval>=4.3,<5.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

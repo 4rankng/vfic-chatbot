@@ -1,0 +1,256 @@
+# Golden answer set — answer-quality eval (RAG pack B, P3-2).
+#
+# Parallel companion to ``dataset.yaml`` (that file gates intent/route/latency;
+# this one gates the ANSWER: what the reply must contain). Each entry pins the
+# expected answer points (điểm cần có) for one representative Vietnamese
+# question, so ``scripts/eval_answers.py`` can grade generated answers by
+# DeepEval (Faithfulness / AnswerRelevancy / ContextualPrecision /
+# ContextualRecall) plus the deterministic fact-hit check below.
+#
+# Provenance: questions + facts are drawn from the retrieval gold set
+# ``tests/fixtures/rag_gold/cases.json`` (real job-posting figures: LG Display
+# Hải Phòng, Samsung Bắc Ninh, Bộ luật Lao động policy), so every entry is
+# backed by a real KB chunk and a canned query embedding (`ref` links the two).
+#
+# Schema per entry:
+#   id                       unique answer-gold id
+#   category                 question family (salary, overtime, policy, ...)
+#   ref                      rag_gold case id — supplies question text match,
+#                            retrieval context, and expected chunk ids
+#   question                 the Vietnamese question (MUST equal the ref'd
+#                            case's query; enforced by test_answer_gold.py)
+#   expected_answer_points   substrings a correct reply must contain
+#                            (deterministic fact-hit check; NONE needed for
+#                            `abstain` entries)
+#   abstain                  true when the KB has NO answer — the reply must
+#                            refuse rather than invent one (graded by the
+#                            judge's faithfulness + the fact-hit exclusion)
+#
+# Fact-hit matching is deliberately coarse: diacritic-folded, case-folded,
+# whitespace-collapsed substring search. It is a floor metric for the release
+# gate; the LLM-judge metrics are the real graders. Pick points that survive a
+# reasonable Vietnamese paraphrase ("7.500.000", "200%", "0388.123.456").
+version: 1
+entries:
+  # ── salary / allowance ──
+  - id: ans-lgd-salary-basic
+    category: salary
+    ref: lgd_salary_basic
+    question: "Lương cơ bản công nhân LG Display Hải Phòng bao nhiêu?"
+    expected_answer_points: ["7.500.000"]
+  - id: ans-lgd-salary-official
+    category: salary
+    ref: lgd_salary_official
+    question: "Sau thử việc lương chính thức tại LG Display là gì?"
+    expected_answer_points: ["8.200.000"]
+  - id: ans-lgd-salary-total
+    category: salary
+    ref: lgd_salary_total
+    question: "Tổng thu nhập trung bình công nhân LG Display một tháng?"
+    expected_answer_points: ["9.650.000"]
+  - id: ans-lgd-salary-trial
+    category: salary
+    ref: lgd_salary_trial
+    question: "Lương thử việc ở LG Display?"
+    expected_answer_points: ["7.380.000"]
+  - id: ans-ssg-salary-basic
+    category: salary
+    ref: ssg_salary_basic
+    question: "Lương cơ bản Samsung Bắc Ninh bao nhiêu?"
+    expected_answer_points: ["6.800.000"]
+  - id: ans-ssg-salary-official
+    category: salary
+    ref: ssg_salary_official
+    question: "Sau thử việc công nhân Samsung được bao nhiêu tiền?"
+    expected_answer_points: ["7.500.000"]
+  - id: ans-lgd-allowance-transport
+    category: allowance
+    ref: lgd_allowance_transport
+    question: "Phụ cấp đi lại LG Display mỗi tháng?"
+    expected_answer_points: ["800.000"]
+  - id: ans-lgd-allowance-lunch
+    category: allowance
+    ref: lgd_allowance_lunch
+    question: "LG Display có phụ cấp ăn trưa không?"
+    expected_answer_points: ["650.000"]
+
+  # ── overtime ──
+  - id: ans-ssg-ot-income
+    category: overtime
+    ref: ssg_ot_income
+    question: "Tăng ca Samsung thêm được bao nhiêu tiền một tháng?"
+    expected_answer_points: ["2 triệu"]
+  - id: ans-ssg-ot-coefficient
+    category: overtime
+    ref: ssg_ot_coefficient
+    question: "Hệ số tăng ca ngày chủ nhật ở Samsung?"
+    expected_answer_points: ["200%"]
+  - id: ans-lgd-ot-coefficient
+    category: overtime
+    ref: lgd_ot_coefficient
+    question: "Tăng ca cuối tuần LG Display hệ số bao nhiêu?"
+    expected_answer_points: ["2.0"]
+
+  # ── shifts ──
+  - id: ans-lgd-shift-morning
+    category: working_hours
+    ref: lgd_shift_morning
+    question: "Ca sáng LG Display mấy giờ?"
+    expected_answer_points: ["7h30"]
+  - id: ans-ssg-shift-count
+    category: working_hours
+    ref: ssg_shift_count
+    question: "Samsung Bắc Ninh làm mấy ca một ngày?"
+    expected_answer_points: ["3 ca"]
+
+  # ── application requirements / documents ──
+  - id: ans-lgd-apply-age
+    category: requirements
+    ref: lgd_apply_age
+    question: "Yêu cầu tuổi để vào LG Display?"
+    expected_answer_points: ["18", "35"]
+  - id: ans-lgd-apply-height-male
+    category: requirements
+    ref: lgd_apply_height_male
+    question: "Chiều cao yêu cầu nam công nhân LG Display?"
+    expected_answer_points: ["1m60"]
+  - id: ans-lgd-apply-documents
+    category: documents
+    ref: lgd_apply_documents
+    question: "Cần những giấy tờ gì để ứng tuyển LG Display?"
+    expected_answer_points: ["CCCD", "sơ yếu lý lịch"]
+  - id: ans-ssg-apply-age
+    category: requirements
+    ref: ssg_apply_age
+    question: "Samsung yêu cầu công nhân bao nhiêu tuổi?"
+    expected_answer_points: ["18", "32"]
+
+  # ── contact / location ──
+  - id: ans-lgd-apply-phone
+    category: contact
+    ref: lgd_apply_phone
+    question: "Số Zalo nộp hồ sơ LG Display là gì?"
+    expected_answer_points: ["0388.123.456"]
+  - id: ans-ssg-apply-phone
+    category: contact
+    ref: ssg_apply_phone
+    question: "Ứng tuyển Samsung qua số điện thoại nào?"
+    expected_answer_points: ["0388.987.654"]
+  - id: ans-lgd-factory-location
+    category: location
+    ref: lgd_factory_location
+    question: "Nhà máy LG Display Hải Phòng ở đâu?"
+    expected_answer_points: ["Tràng Duệ"]
+
+  # ── vacancy / dormitory ──
+  - id: ans-lgd-vacancy-count
+    category: vacancy
+    ref: lgd_vacancy_count
+    question: "LG Display đang tuyển bao nhiêu công nhân?"
+    expected_answer_points: ["50"]
+  - id: ans-lgd-dorm-fee
+    category: dormitory
+    ref: lgd_dorm_fee
+    question: "Phí ký túc xá LG Display bao nhiêu một tháng?"
+    expected_answer_points: ["300.000"]
+  - id: ans-ssg-dorm-fee
+    category: dormitory
+    ref: ssg_dorm_fee
+    question: "Samsung Bắc Ninh phí KX bao nhiêu?"
+    expected_answer_points: ["250.000"]
+
+  # ── leave / insurance ──
+  - id: ans-lgd-leave-days
+    category: leave
+    ref: lgd_leave_days
+    question: "Công nhân LG Display được bao nhiêu ngày phép?"
+    expected_answer_points: ["12 ngày"]
+  - id: ans-lgd-unemployment-rate
+    category: insurance
+    ref: lgd_unemployment_rate
+    question: "Mất việc ở LG Display trợ cấp thất nghiệp bao nhiêu phần trăm?"
+    expected_answer_points: ["60%"]
+
+  # ── transport ──
+  - id: ans-bus-lgd-route
+    category: transport
+    ref: bus_lgd_route
+    question: "Tuyến xe đưa đón LG Display Hải Phòng đi mấy giờ?"
+    expected_answer_points: ["6h00"]
+  - id: ans-bus-ssg-route
+    category: transport
+    ref: bus_ssg_route
+    question: "Xe đưa đón Samsung Bắc Ninh xuất phát mấy giờ?"
+    expected_answer_points: ["5h30"]
+
+  # ── labour policy ──
+  - id: ans-policy-trial-pay-percent
+    category: policy
+    ref: policy_trial_pay_percent
+    question: "Lương thử việc tối thiểu bao nhiêu phần trăm?"
+    expected_answer_points: ["85%"]
+  - id: ans-policy-ot-coefficient-holiday
+    category: policy
+    ref: policy_ot_coefficient_holiday
+    question: "Tăng ca ngày lễ hệ số bao nhiêu?"
+    expected_answer_points: ["300%"]
+  - id: ans-policy-resign-notice
+    category: policy
+    ref: policy_resign_notice
+    question: "Muốn nghỉ việc phải báo trước bao nhiêu ngày?"
+    expected_answer_points: ["45 ngày", "30 ngày"]
+  - id: ans-policy-trial-max
+    category: policy
+    ref: policy_trial_max
+    question: "Thời gian thử việc tối đa theo luật là bao lâu?"
+    expected_answer_points: ["180 ngày"]
+
+  # ── paraphrase (Vietnamese wording variants of the same fact) ──
+  - id: ans-lgd-income-synonym
+    category: paraphrase
+    ref: lgd_income_synonym
+    question: "Thu nhập công nhân LG Display Hải Phòng được bao nhiêu?"
+    expected_answer_points: ["9.650.000"]
+  - id: ans-ssg-pay-question
+    category: paraphrase
+    ref: ssg_pay_question
+    question: "Vào Samsung thì được trả lương ra sao?"
+    expected_answer_points: ["6.800.000"]
+
+  # ── abstention: the KB must NOT be stretched into an answer ──
+  - id: ans-bait-lgd-salary-50m
+    category: abstention
+    ref: bait_lgd_salary_50m
+    question: "Em nghe nói lương công nhân LG Display 50 triệu một tháng đúng không?"
+    expected_answer_points: []
+    abstain: true
+  - id: ans-bait-ssg-salary-free
+    category: abstention
+    ref: bait_ssg_salary_free
+    question: "Samsung có trả lương 100 triệu cho công nhân mới không?"
+    expected_answer_points: []
+    abstain: true
+  - id: ans-bait-lgd-phone-fake
+    category: abstention
+    ref: bait_lgd_phone_fake
+    question: "Số điện thoại HR LG Display là 0123.999.888 đúng không?"
+    expected_answer_points: []
+    abstain: true
+  - id: ans-bait-lgd-vacancy-5000
+    category: abstention
+    ref: bait_lgd_vacancy_5000
+    question: "LG Display thông báo tuyển 5000 công nhân gấp?"
+    expected_answer_points: []
+    abstain: true
+  - id: ans-bait-nonexistent-project
+    category: abstention
+    ref: bait_nonexistent_project
+    question: "Công ty Apple Hà Nội đang tuyển 200 công nhân đúng không?"
+    expected_answer_points: []
+    abstain: true
+  - id: ans-bait-lgd-4day-week
+    category: abstention
+    ref: bait_lgd_4day_week
+    question: "LG Display làm tuần 4 ngày à?"
+    expected_answer_points: []
+    abstain: true
