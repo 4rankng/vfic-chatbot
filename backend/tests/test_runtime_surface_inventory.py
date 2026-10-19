@@ -59,7 +59,7 @@ EXPECTED_ROUTE_COUNTS = {
     # +3 candidate email digest: GET/PUT /email-digest config + POST test send
     # +1 POST /facebook/pages/{page_id}/bot-pause — the per-Page bot pause
     # switch (2026-10-08): Page stays connected, bot sends nothing.
-    "integrations": 39,  # +3 custom OpenAI-compatible provider endpoints (settings page); +3 Jev decision-model endpoints; +2 geocoder credential endpoints (settings page)
+    "integrations": 42,  # +3 the Cloudfone insights settings trio (GET/PUT /cloudfone + POST /cloudfone/test; feature commit a3b5d38a, spec-1.1 rework 039f1d56)
     # +2 the TingTing support OA: save-and-check the four credentials (PUT /tingting)
     # and a re-probe endpoint (POST /tingting/oa/check)
     # +2 deployment-wide TingTing app API key (GET / PUT, secrets status-only)
@@ -114,7 +114,11 @@ EXPECTED_ROUTE_COUNTS = {
 # recruiter's review turn that reads the conversation and answers only if
 # warranted); digest recomputed from the post-change scan.
 # 2026-10-08: +1 POST /facebook/pages/{page_id}/bot-pause (per-Page pause switch).
-EXPECTED_ROUTE_INVENTORY_SHA256 = "7cf1af29bf1790929f418e2305cbd2a473080aab6176c53d65c24075b3e912f7"
+# 2026-10-19: integrations 39 → 42 — +3 the CloudFone insights settings trio
+# (GET/PUT /cloudfone + POST /cloudfone/test, feature commit a3b5d38a added
+# them as /ods without touching this oracle; the ods→cloudfone rename kept the
+# count and renamed the three route functions, digest recomputed).
+EXPECTED_ROUTE_INVENTORY_SHA256 = "d8d3b5517acdd53c0f6ca5e1345889f1a7122a4e5737d878b7e1970495e81dca"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.
@@ -259,7 +263,14 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # provider-transport module). Delta verified against a HEAD-worktree scan.
     # +1: the self check-in status query (POST /integration/self-checkin/status
     # egress in tingting_selfcheckin.update_self_checkin pre-check).
-    "provider_boundary": 105,  # +1 the TingTing self check-in toggle's payroll egress site (3ab65a44)
+    "provider_boundary": 111,  # +1 the TingTing self check-in toggle's payroll egress site (3ab65a44)
+    # 2026-10-19: 105 → 111 — +7 the Cloudfone insights feature's six
+    # provider-transport sites in app/services/cloudfone.py (envelope `.get`
+    # reads + the `_post` transport POST; feature commit a3b5d38a shipped the
+    # module without updating this oracle, spec-1.1 rework 039f1d56 reshaped
+    # the client) minus the reviewed baseline's own drift observed on a HEAD
+    # worktree scan; the ods→cloudfone rename keys no row of its own. Digest
+    # recomputed from the post-change scan.
     # -32: the integrations router became transport-only. Its 30+ rows were
     # mostly route-decorator artifacts of the forced by-path scan (every
     # `@router.get` counted as a provider `get`); the real transport sites
@@ -421,7 +432,10 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # 2026-10-08 (later): +1 provider_boundary — update_self_checkin consults payroll's
 # read-only status endpoint before mutating (state-matching toggles are answered
 # without an update call); digest recomputed from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "8c53cbda7a63965afd9bfcce08d6e3c42ce4d88a092dfa32cc4c6052826f74f7"
+# 2026-10-19: the CloudFone insights feature's boundary rows (see the
+# provider_boundary count note) and the ods→cloudfone rename; digest recomputed
+# from the post-change scan.
+EXPECTED_BROAD_BOUNDARY_SHA256 = "e7e981d388d6c205b31d3c561ea431000be85e42135968b0ca70c3e3965534b8"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

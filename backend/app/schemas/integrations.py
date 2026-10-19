@@ -576,12 +576,12 @@ class EmailDigestTestOut(BaseModel):
     candidate_count: int = 0
 
 
-# ─── ODS voice-transcript insights (CloudFone tổng đài) ──────────────────────
+# ─── Cloudfone voice-transcript insights (CloudFone tổng đài) ──────────────────────
 # Admin-configured daily call-analytics email: one CloudFone API key (secret,
 # stored-only — no env fallback), a recipient list, and the on/off switch.
 
 
-class OdsIntegrationSettingsOut(BaseModel):
+class CloudfoneIntegrationSettingsOut(BaseModel):
     service_name: str
     auth_user: str
     auth_key: SecretStatus
@@ -591,7 +591,7 @@ class OdsIntegrationSettingsOut(BaseModel):
     enabled: bool
 
 
-class OdsIntegrationSettingsUpdate(BaseModel):
+class CloudfoneIntegrationSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # Spec 1.1 credentials: ServiceName + AuthUser + AuthKey, exactly what the
@@ -603,8 +603,8 @@ class OdsIntegrationSettingsUpdate(BaseModel):
     enabled: bool | None = None
 
 
-class OdsIntegrationTestOut(BaseModel):
-    """Outcome of POST /ods/test (a real GetCallLogs probe against CloudFone)."""
+class CloudfoneIntegrationTestOut(BaseModel):
+    """Outcome of POST /cloudfone/test (a real GetCallLogs probe against CloudFone)."""
 
     ok: bool
     configured: bool

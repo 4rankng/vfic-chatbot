@@ -16,7 +16,7 @@ from app.services.integration_settings.providers.email_digest import EmailDigest
 from app.services.integration_settings.providers.facebook import FacebookSettingsMixin
 from app.services.integration_settings.providers.geo import GeoSettingsMixin
 from app.services.integration_settings.providers.llm import LlmSettingsMixin
-from app.services.integration_settings.providers.ods import OdsSettingsMixin
+from app.services.integration_settings.providers.cloudfone import CloudfoneSettingsMixin
 from app.services.integration_settings.providers.tingting import TingtingSettingsMixin
 from app.services.integration_settings.providers.zalo import ZaloSettingsMixin
 from app.services.integration_settings.storage import StorageMixin
@@ -30,7 +30,7 @@ class IntegrationSettingsService(
     TingtingSettingsMixin,
     GeoSettingsMixin,
     EmailDigestSettingsMixin,
-    OdsSettingsMixin,
+    CloudfoneSettingsMixin,
 ):
     """Resolve / admin-view / persist integration credentials per provider group."""
 

@@ -8,9 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 
 import {
   zaloIntegrationGateway,
-  type OdsSettings,
-  type OdsSettingsUpdate,
-  type OdsTestResult,
+  type CloudfoneSettings,
+  type CloudfoneSettingsUpdate,
+  type CloudfoneTestResult,
 } from "./api";
 import type { SettingsStatusState } from "./SettingsFieldStatus";
 import { SettingsGroupStatus } from "./SettingsFieldStatus";
@@ -21,19 +21,19 @@ import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
  * The badge-counted fields: the three CloudFone spec-1.1 credentials
  * (ServiceName, AuthUser, AuthKey) plus the recipient list.
  */
-const ODS_FIELD_COUNT = 4;
+const CLOUDFONE_FIELD_COUNT = 4;
 
 /** One query key for the endpoint, so a save can write back its own response. */
-const odsSettingsKey = ["ods-settings"] as const;
+const cloudfoneSettingsKey = ["cloudfone-settings"] as const;
 
 /**
- * The ODS (CloudFone tổng đài) voice-transcript insights view: the three
+ * The Cloudfone (CloudFone tổng đài) voice-transcript insights view: the three
  * CloudFone spec-1.1 credentials, the recipient list, and the daily-send
  * toggle. Blank credentials mean "keep the stored ones"; the whole feature
  * stays off until ServiceName AND AuthUser AND AuthKey AND a non-empty
  * recipient list are saved with cron enabled.
  */
-export const OdsSection = () => {
+export const CloudfoneSection = () => {
   const notify = useNotify();
   const queryClient = useQueryClient();
   // Untouched-draft sentinels: null shows (and keeps tracking) the server value.
@@ -43,9 +43,9 @@ export const OdsSection = () => {
   const [recipientsDraft, setRecipientsDraft] = useState<string | null>(null);
   const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
 
-  const settingsQuery = useQuery<OdsSettings>({
-    queryKey: odsSettingsKey,
-    queryFn: () => zaloIntegrationGateway.loadOdsSettings(),
+  const settingsQuery = useQuery<CloudfoneSettings>({
+    queryKey: cloudfoneSettingsKey,
+    queryFn: () => zaloIntegrationGateway.loadCloudfoneSettings(),
     staleTime: 30_000,
   });
   const { data: settings, isPending, isError } = settingsQuery;
@@ -56,35 +56,39 @@ export const OdsSection = () => {
       ? "error"
       : "ready";
 
-  const saveSettings = useMutation<OdsSettings, Error, OdsSettingsUpdate>({
-    mutationFn: (body) => zaloIntegrationGateway.saveOdsSettings(body),
+  const saveSettings = useMutation<
+    CloudfoneSettings,
+    Error,
+    CloudfoneSettingsUpdate
+  >({
+    mutationFn: (body) => zaloIntegrationGateway.saveCloudfoneSettings(body),
     onSuccess: (data) => {
       setServiceNameDraft(null);
       setAuthUserDraft(null);
       setAuthKeyDraft("");
       setRecipientsDraft(null);
       setEnabledDraft(null);
-      queryClient.setQueryData(odsSettingsKey, data);
+      queryClient.setQueryData(cloudfoneSettingsKey, data);
       notify(
         data.enabled
-          ? "Đã lưu cấu hình ODS."
-          : "Đã lưu. Tích hợp ODS đang tắt.",
+          ? "Đã lưu cấu hình Cloudfone."
+          : "Đã lưu. Tích hợp Cloudfone đang tắt.",
         { type: data.enabled ? "success" : "info" },
       );
     },
     onError: () => {
-      notify("Không thể lưu cấu hình ODS.", { type: "error" });
+      notify("Không thể lưu cấu hình Cloudfone.", { type: "error" });
     },
   });
 
   const testConnection = useMutation<
-    OdsTestResult,
+    CloudfoneTestResult,
     Error,
-    OdsSettingsUpdate | undefined
+    CloudfoneSettingsUpdate | undefined
   >({
     // The probe validates the typed credentials BEFORE they are saved; without
     // a draft the stored credentials are probed instead.
-    mutationFn: (body) => zaloIntegrationGateway.testOdsConnection(body),
+    mutationFn: (body) => zaloIntegrationGateway.testCloudfoneConnection(body),
     onSuccess: (result) => {
       if (result.ok) {
         notify(
@@ -141,8 +145,8 @@ export const OdsSection = () => {
   ].filter(Boolean).length;
 
   /** Typed credentials only — omitted fields probe the stored values. */
-  const probeDraft = (): OdsSettingsUpdate | undefined => {
-    const body: OdsSettingsUpdate = {};
+  const probeDraft = (): CloudfoneSettingsUpdate | undefined => {
+    const body: CloudfoneSettingsUpdate = {};
     if (serviceNameDraft !== null && serviceNameDraft.trim()) {
       body.service_name = serviceNameDraft.trim();
     }
@@ -165,10 +169,10 @@ export const OdsSection = () => {
   };
 
   return (
-    <SettingsSectionPanel id="settings-ods">
+    <SettingsSectionPanel id="settings-cloudfone">
       {isError ? (
         <div role="alert" className="mb-3 text-body-sm">
-          <p>Chưa tải được cấu hình ODS.</p>
+          <p>Chưa tải được cấu hình Cloudfone.</p>
           <Button
             type="button"
             color="secondary"
@@ -186,7 +190,7 @@ export const OdsSection = () => {
         disabled={!settings || isError || saveSettings.isPending}
         aria-busy={saveSettings.isPending}
       >
-        <legend className="sr-only">Cấu hình ODS</legend>
+        <legend className="sr-only">Cấu hình Cloudfone</legend>
         <SettingsGroup
           className="settings-tingting-card"
           title="CloudFone API & người nhận"
@@ -194,14 +198,14 @@ export const OdsSection = () => {
           meta={
             <SettingsGroupStatus
               configured={configuredFields}
-              total={ODS_FIELD_COUNT}
+              total={CLOUDFONE_FIELD_COUNT}
               state={statusState}
             />
           }
           defaultOpen
         >
           <PlainField
-            id="ods_service_name"
+            id="cloudfone_service_name"
             label="CloudFone ServiceName"
             configured={storedServiceName.length > 0}
             statusState={statusState}
@@ -211,7 +215,7 @@ export const OdsSection = () => {
             hint="Tên dịch vụ trong body request CloudFone API 1.1. Để trống để giữ giá trị đã lưu."
           />
           <PlainField
-            id="ods_auth_user"
+            id="cloudfone_auth_user"
             label="CloudFone AuthUser"
             configured={storedAuthUser.length > 0}
             statusState={statusState}
@@ -221,7 +225,7 @@ export const OdsSection = () => {
             hint="Tài khoản xác thực CloudFone API 1.1. Để trống để giữ giá trị đã lưu."
           />
           <SecretField
-            id="ods_auth_key"
+            id="cloudfone_auth_key"
             label="CloudFone AuthKey"
             placeholder="Nhập CloudFone AuthKey"
             configured={settings?.auth_key?.configured ?? false}
@@ -238,13 +242,13 @@ export const OdsSection = () => {
             <p>Danh sách trống = tắt email phân tích cuộc gọi.</p>
           </div>
           <label
-            htmlFor="ods_recipients"
+            htmlFor="cloudfone_recipients"
             className="text-body-sm text-foreground"
           >
             Danh sách email người nhận
           </label>
           <Textarea
-            id="ods_recipients"
+            id="cloudfone_recipients"
             value={recipientsValue}
             onChange={(event) => setRecipientsDraft(event.target.value)}
             placeholder={"quanly@congty.vn\nkd@congty.vn"}
@@ -263,7 +267,7 @@ export const OdsSection = () => {
           <div
             className="flex flex-wrap items-center gap-2"
             role="group"
-            aria-label="Bật tắt cron ODS"
+            aria-label="Bật tắt cron Cloudfone"
           >
             <Button
               type="button"
@@ -290,15 +294,15 @@ export const OdsSection = () => {
           <div className="settings-tingting-link">
             <span className="settings-tingting-link-copy" role="status">
               {enabled
-                ? "ODS đang bật. Email phân tích sẽ gửi hàng ngày lúc 08:00 (giờ VN)."
+                ? "Cloudfone đang bật. Email phân tích sẽ gửi hàng ngày lúc 08:00 (giờ VN)."
                 : enabledDraft === false
-                  ? "ODS sẽ tắt sau khi bấm Lưu cấu hình."
+                  ? "Cloudfone sẽ tắt sau khi bấm Lưu cấu hình."
                   : storedRecipients.length === 0 ||
                       !storedServiceName ||
                       !storedAuthUser ||
                       !settings?.auth_key?.configured
-                    ? "ODS đang tắt — cần đủ ServiceName, AuthUser, AuthKey và ít nhất một người nhận."
-                    : "ODS đang tắt — bấm Bật cron rồi Lưu cấu hình để bật."}
+                    ? "Cloudfone đang tắt — cần đủ ServiceName, AuthUser, AuthKey và ít nhất một người nhận."
+                    : "Cloudfone đang tắt — bấm Bật cron rồi Lưu cấu hình để bật."}
             </span>
             <Button
               type="button"

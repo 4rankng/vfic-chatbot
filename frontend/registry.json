@@ -524,10 +524,6 @@
           "type": "registry:component"
         },
         {
-          "path": "src/components/atomic-crm/integrations/OdsSection.tsx",
-          "type": "registry:component"
-        },
-        {
           "path": "src/components/atomic-crm/integrations/LlmProvidersSection.tsx",
           "type": "registry:component"
         },
@@ -553,6 +549,10 @@
         },
         {
           "path": "src/components/atomic-crm/integrations/EmailDigestSection.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/CloudfoneSection.tsx",
           "type": "registry:component"
         },
         {

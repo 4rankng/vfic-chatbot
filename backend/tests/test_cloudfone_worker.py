@@ -1,4 +1,4 @@
-"""ODS insights worker tick: quiet statuses stay quiet, sends log info.
+"""Cloudfone insights worker tick: quiet statuses stay quiet, sends log info.
 
 Mirrors ``test_email_digest_worker.py`` — the tick's async body is replaced,
 so no DB, Redis, or network is touched.
@@ -9,7 +9,7 @@ so no DB, Redis, or network is touched.
 import logging
 
 
-from app.workers import ods_insights_worker as worker_module
+from app.workers import cloudfone_insights_worker as worker_module
 
 
 class _Result:
@@ -25,7 +25,7 @@ def test_tick_quiet_statuses(monkeypatch):
         return _Result("disabled")
 
     monkeypatch.setattr(worker_module, "_tick_async", fake_tick)
-    assert worker_module.run_ods_insights_tick() == "disabled"
+    assert worker_module.run_cloudfone_insights_tick() == "disabled"
 
 
 def test_tick_sent_logs_info(monkeypatch, caplog):
@@ -33,8 +33,8 @@ def test_tick_sent_logs_info(monkeypatch, caplog):
         return _Result("sent", insights_count=7)
 
     monkeypatch.setattr(worker_module, "_tick_async", fake_tick)
-    with caplog.at_level(logging.INFO, logger="app.workers.ods_insights_worker"):
-        status = worker_module.run_ods_insights_tick()
+    with caplog.at_level(logging.INFO, logger="app.workers.cloudfone_insights_worker"):
+        status = worker_module.run_cloudfone_insights_tick()
     assert status == "sent"
     assert any("calls=7" in record.message for record in caplog.records)
 
@@ -44,8 +44,8 @@ def test_tick_unconfigured_logs_warning(monkeypatch, caplog):
         return _Result("unconfigured", missing=["auth_key"])
 
     monkeypatch.setattr(worker_module, "_tick_async", fake_tick)
-    with caplog.at_level(logging.WARNING, logger="app.workers.ods_insights_worker"):
-        status = worker_module.run_ods_insights_tick()
+    with caplog.at_level(logging.WARNING, logger="app.workers.cloudfone_insights_worker"):
+        status = worker_module.run_cloudfone_insights_tick()
     assert status == "unconfigured"
     assert any("auth_key" in record.message for record in caplog.records)
 
@@ -77,11 +77,11 @@ async def test_tick_passes_the_shared_summarizer_into_the_run(monkeypatch):
             return False
 
     import app.composition.email_digest as composition
-    import app.services.ods as ods_service
+    import app.services.cloudfone as cloudfone_service
     import app.workers._db as workers_db
 
     monkeypatch.setattr(composition, "build_digest_summarizer_for", fake_summarizer_builder)
-    monkeypatch.setattr(ods_service, "run_ods_insights", fake_run)
+    monkeypatch.setattr(cloudfone_service, "run_cloudfone_insights", fake_run)
     monkeypatch.setattr(workers_db, "worker_session", lambda: _FakeSession())
 
     status_result = await worker_module._tick_async()
@@ -116,11 +116,11 @@ async def test_tick_survives_a_dead_summarizer_chain(monkeypatch):
             return False
 
     import app.composition.email_digest as composition
-    import app.services.ods as ods_service
+    import app.services.cloudfone as cloudfone_service
     import app.workers._db as workers_db
 
     monkeypatch.setattr(composition, "build_digest_summarizer_for", dead_summarizer_builder)
-    monkeypatch.setattr(ods_service, "run_ods_insights", fake_run)
+    monkeypatch.setattr(cloudfone_service, "run_cloudfone_insights", fake_run)
     monkeypatch.setattr(workers_db, "worker_session", lambda: _FakeSession())
 
     status_result = await worker_module._tick_async()
@@ -129,11 +129,11 @@ async def test_tick_survives_a_dead_summarizer_chain(monkeypatch):
 
 
 def test_cron_env_is_valid_and_daily_by_default():
-    """ODS_INSIGHTS_CRON must parse as cron and default to 01:00 UTC daily."""
+    """CLOUDFONE_INSIGHTS_CRON must parse as cron and default to 01:00 UTC daily."""
     from crontab import CronTab
 
     from app.core.config import get_settings
 
     settings = get_settings()
-    assert settings.ods_insights_cron == "0 1 * * *"
-    assert CronTab(settings.ods_insights_cron) is not None
+    assert settings.cloudfone_insights_cron == "0 1 * * *"
+    assert CronTab(settings.cloudfone_insights_cron) is not None

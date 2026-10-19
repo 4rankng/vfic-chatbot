@@ -1,7 +1,7 @@
-"""ODS daily voice-transcript insights: fetch → summarize → email.
+"""Cloudfone daily voice-transcript insights: fetch → summarize → email.
 
-ODS is the vendor label for the CloudFone-hosted call center (the underlying
-HTTP API stays ``api.cloudfone.vn``). One ``run_ods_insights`` pass: resolve
+Cloudfone is the vendor label for the CloudFone-hosted call center (the underlying
+HTTP API stays ``api.cloudfone.vn``). One ``run_cloudfone_insights`` pass: resolve
 the admin config, fetch the previous full day's call analytics (voice
 transcripts) from CloudFone, summarize each transcript through the shared
 digest summarizer (injected — services must not import the graph layer), and
@@ -32,7 +32,7 @@ ICT = ZoneInfo("Asia/Ho_Chi_Minh")  # Vietnam — GMT+7, no DST
 
 # Bounded human-readable statuses for the tick log line.
 STATUS_DISABLED = "disabled"  # toggle off, no recipients, or no Resend key
-STATUS_UNCONFIGURED = "unconfigured"  # enabled with recipients but no ODS key
+STATUS_UNCONFIGURED = "unconfigured"  # enabled with recipients but no Cloudfone key
 STATUS_EMPTY = "empty"  # fetched fine, but the previous day had no transcripts
 STATUS_SENT = "sent"
 
@@ -82,7 +82,7 @@ class CallInsight:
 
 
 @dataclass(frozen=True)
-class OdsInsightsResult:
+class CloudfoneInsightsResult:
     status: str
     transcript_count: int = 0
     insights_count: int = 0
@@ -167,7 +167,7 @@ def _envelope_total(payload: dict, *, fallback: int) -> int:
         return fallback
 
 
-class OdsCloudfoneClient:
+class CloudfoneClient:
     """CloudFone client per the GetCallLogs spec 1.1 (API.docx, POST + JSON).
 
     Every request is a POST to ``{base}/{Method}`` whose JSON body carries the
@@ -211,7 +211,7 @@ class OdsCloudfoneClient:
         from app.core.http import get_http_client
 
         client = await get_http_client(
-            "ods_cloudfone",
+            "cloudfone",
             base_url=self.base_url,
             timeout=self.timeout,
         )
@@ -301,7 +301,7 @@ class OdsCloudfoneClient:
                 break
         if total is not None and len(rows) < total:
             logger.warning(
-                "ods daily fetch truncated: %d/%d rows after %d pages",
+                "cloudfone daily fetch truncated: %d/%d rows after %d pages",
                 len(rows),
                 total,
                 MAX_DAILY_PAGES,
@@ -315,7 +315,7 @@ def insights_window(now: datetime) -> date:
 
 
 def insights_subject(day: date) -> str:
-    return f"ODS — Phân tích cuộc gọi ngày {day.strftime('%d/%m/%Y')}"
+    return f"Cloudfone — Phân tích cuộc gọi ngày {day.strftime('%d/%m/%Y')}"
 
 
 async def build_insights(
@@ -340,7 +340,7 @@ async def build_insights(
                 summary = (reply or "").strip() or None
             except Exception:  # noqa: BLE001 — a summary failure must not block the email
                 logger.warning(
-                    "ods insights summary failed call_id=%s", item.call_id, exc_info=True
+                    "cloudfone insights summary failed call_id=%s", item.call_id, exc_info=True
                 )
         insights.append(CallInsight(transcript=item, summary=summary))
     return insights
@@ -385,28 +385,28 @@ def render_insights_html(insights: list[CallInsight], day: date) -> str:
         )
     return (
         '<div style="font-family:sans-serif;max-width:640px">'
-        f"<h2>ODS — Phân tích cuộc gọi ngày {day.strftime('%d/%m/%Y')}</h2>"
+        f"<h2>Cloudfone — Phân tích cuộc gọi ngày {day.strftime('%d/%m/%Y')}</h2>"
         f"<p>Tổng số cuộc gọi: <b>{total}</b> · Có transcript: <b>{with_transcript}</b></p>"
         + ("".join(rows) if rows else "<p>Không có cuộc gọi nào trong ngày.</p>")
         + "</div>"
     )
 
 
-async def _default_fetcher(client: OdsCloudfoneClient, day: date) -> list[CallTranscript]:
+async def _default_fetcher(client: CloudfoneClient, day: date) -> list[CallTranscript]:
     return await client.fetch_daily_transcripts(day=day)
 
 
-async def run_ods_insights(
+async def run_cloudfone_insights(
     db: AsyncSession,
     *,
     now: datetime | None = None,
     settings_service: IntegrationSettingsService | None = None,
     summarizer: Callable[[str, str], Awaitable[str]] | None = None,
-    client: OdsCloudfoneClient | None = None,
+    client: CloudfoneClient | None = None,
     fetcher: Callable[[date], Awaitable[list[CallTranscript]]] | None = None,
     sender: Callable[..., Awaitable[str | None]] | None = None,
-) -> OdsInsightsResult:
-    """One ODS insights pass: fetch yesterday → summarize → email recipients.
+) -> CloudfoneInsightsResult:
+    """One Cloudfone insights pass: fetch yesterday → summarize → email recipients.
 
     ``fetcher`` and ``sender`` are injectable seams (the worker and tests pass
     fakes); production resolves the real CloudFone client from the stored key
@@ -414,12 +414,12 @@ async def run_ods_insights(
     """
     moment = now or datetime.now(timezone.utc)
     service = settings_service or IntegrationSettingsService(db)
-    cfg = await service.resolve_ods()
+    cfg = await service.resolve_cloudfone()
 
     if not cfg.enabled or not cfg.recipients:
         # The admin's off switch, or nowhere to send to: no-op without error.
         missing = [] if cfg.recipients else ["recipients"]
-        return OdsInsightsResult(status=STATUS_DISABLED, missing=missing)
+        return CloudfoneInsightsResult(status=STATUS_DISABLED, missing=missing)
     # Spec 1.1 auth: all three credential fields are required by GetCallLogs.
     missing_creds = [
         name
@@ -431,27 +431,27 @@ async def run_ods_insights(
         if not value
     ]
     if missing_creds:
-        return OdsInsightsResult(status=STATUS_UNCONFIGURED, missing=missing_creds)
+        return CloudfoneInsightsResult(status=STATUS_UNCONFIGURED, missing=missing_creds)
 
     # The email rides the same Resend account as the candidate digest (one
     # sender account per deployment); without it there is nowhere to deliver.
     digest_cfg = await service.resolve_email_digest()
     if not digest_cfg.resend_api_key:
-        return OdsInsightsResult(status=STATUS_DISABLED, missing=["resend_api_key"])
+        return CloudfoneInsightsResult(status=STATUS_DISABLED, missing=["resend_api_key"])
 
     day = insights_window(moment)
-    ods_client = client or OdsCloudfoneClient(
+    cloudfone_client = client or CloudfoneClient(
         cfg.service_name, cfg.auth_user, cfg.auth_key, timeout=30.0
     )
-    fetch = fetcher or (lambda d: _default_fetcher(ods_client, d))
+    fetch = fetcher or (lambda d: _default_fetcher(cloudfone_client, d))
     try:
         transcripts = await fetch(day)
     except CloudfoneError as exc:
-        logger.warning("ods insights fetch failed: %s", exc)
-        return OdsInsightsResult(status=STATUS_UNCONFIGURED, error=str(exc))
+        logger.warning("cloudfone insights fetch failed: %s", exc)
+        return CloudfoneInsightsResult(status=STATUS_UNCONFIGURED, error=str(exc))
 
     if not transcripts:
-        return OdsInsightsResult(status=STATUS_EMPTY)
+        return CloudfoneInsightsResult(status=STATUS_EMPTY)
 
     insights = await build_insights(transcripts, summarizer)
     send = sender or send_email_via_resend
@@ -464,8 +464,8 @@ async def run_ods_insights(
             html=render_insights_html(insights, day),
         )
     except EmailDeliveryError as exc:
-        logger.warning("ods insights email rejected: %s", exc)
-        return OdsInsightsResult(
+        logger.warning("cloudfone insights email rejected: %s", exc)
+        return CloudfoneInsightsResult(
             status=STATUS_UNCONFIGURED,
             transcript_count=len(transcripts),
             insights_count=len(insights),
@@ -473,13 +473,13 @@ async def run_ods_insights(
         )
 
     logger.info(
-        "ods insights sent: day=%s calls=%d recipients=%d provider_id=%s",
+        "cloudfone insights sent: day=%s calls=%d recipients=%d provider_id=%s",
         day.isoformat(),
         len(insights),
         len(cfg.recipients),
         provider_id or "-",
     )
-    return OdsInsightsResult(
+    return CloudfoneInsightsResult(
         status=STATUS_SENT,
         transcript_count=len(transcripts),
         insights_count=len(insights),

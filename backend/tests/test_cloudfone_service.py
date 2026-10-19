@@ -1,4 +1,4 @@
-"""ODS service: CloudFone client (GetCallLogs spec 1.1), daily fetch,
+"""Cloudfone service: CloudFone client (GetCallLogs spec 1.1), daily fetch,
 insights build, and the pass.
 
 The client's transport is injected (``httpx.MockTransport``), the summarizer
@@ -13,22 +13,22 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 
-import app.services.ods as ods_module
+import app.services.cloudfone as cloudfone_module
 from app.services.email_service import EmailDeliveryError
-from app.services.integration_settings import EmailDigestRuntimeConfig, OdsRuntimeConfig
-from app.services.ods import (
+from app.services.integration_settings import EmailDigestRuntimeConfig, CloudfoneRuntimeConfig
+from app.services.cloudfone import (
     STATUS_DISABLED,
     STATUS_EMPTY,
     STATUS_SENT,
     STATUS_UNCONFIGURED,
     CallTranscript,
     CloudfoneError,
-    OdsCloudfoneClient,
+    CloudfoneClient,
     build_insights,
     insights_subject,
     insights_window,
     render_insights_html,
-    run_ods_insights,
+    run_cloudfone_insights,
 )
 
 
@@ -54,7 +54,7 @@ def _row(index: int) -> dict:
     }
 
 
-def _transport_client(handler) -> OdsCloudfoneClient:
+def _transport_client(handler) -> CloudfoneClient:
     """A client whose HTTP call rides an httpx.MockTransport (no sockets)."""
     http = httpx.AsyncClient(
         transport=httpx.MockTransport(handler),
@@ -67,7 +67,7 @@ def _transport_client(handler) -> OdsCloudfoneClient:
             raise CloudfoneError(f"CloudFone trả lỗi HTTP {response.status_code}")
         return response.json()
 
-    return OdsCloudfoneClient("CloudFone", "ods-user", "cf-key", transport=transport)
+    return CloudfoneClient("CloudFone", "cloudfone-user", "cf-key", transport=transport)
 
 
 class _FrozenDateTime(datetime):
@@ -87,14 +87,14 @@ async def test_get_call_logs_sends_the_spec_1_1_body(monkeypatch):
         seen["body"] = json.loads(request.content)
         return httpx.Response(200, json=_envelope([]))
 
-    monkeypatch.setattr(ods_module, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(cloudfone_module, "datetime", _FrozenDateTime)
     rows = await _transport_client(handler).get_call_logs(page_index=0, page_size=5)
 
     assert rows == []
     assert seen["url"].endswith("/GetCallLogs")
     # Spec auth: three separate credential fields in the JSON body.
     assert seen["body"]["ServiceName"] == "CloudFone"
-    assert seen["body"]["AuthUser"] == "ods-user"
+    assert seen["body"]["AuthUser"] == "cloudfone-user"
     assert seen["body"]["AuthKey"] == "cf-key"
     # Required request fields per the spec's REQUEST table.
     assert seen["body"]["Direction"] == "all"  # default covers both ways
@@ -171,7 +171,7 @@ async def test_fetch_daily_transcripts_uses_the_spec_day_window():
     assert seen["body"]["DateEnd"] == f"{day.isoformat()} 23:59:59"
     assert seen["body"]["Direction"] == "all"
     assert seen["body"]["PageIndex"] == 0
-    assert seen["body"]["PageSize"] == ods_module.DEFAULT_PAGE_SIZE
+    assert seen["body"]["PageSize"] == cloudfone_module.DEFAULT_PAGE_SIZE
     assert seen["body"]["IsSort"] == 1
     assert [t.call_id for t in transcripts] == ["c1", "c2"]
     assert transcripts[0].phone == "0901234567"
@@ -183,7 +183,7 @@ async def test_fetch_daily_transcripts_uses_the_spec_day_window():
 async def test_fetch_daily_transcripts_walks_pages_until_total_is_drained():
     """205 rows = one full page + one remainder page, then the loop stops."""
     seen_pages: list[int] = []
-    page_size = ods_module.DEFAULT_PAGE_SIZE
+    page_size = cloudfone_module.DEFAULT_PAGE_SIZE
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -193,7 +193,7 @@ async def test_fetch_daily_transcripts_walks_pages_until_total_is_drained():
         return httpx.Response(200, json=_envelope(items, total=205))
 
     transcripts = await _transport_client(handler).fetch_daily_transcripts(
-        day=ods_module.insights_window(datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc))
+        day=cloudfone_module.insights_window(datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc))
     )
 
     assert seen_pages == [0, 1]
@@ -203,7 +203,7 @@ async def test_fetch_daily_transcripts_walks_pages_until_total_is_drained():
 async def test_fetch_daily_transcripts_caps_the_page_walk(caplog):
     """A broken/giant total stops at MAX_DAILY_PAGES with a truncation warning."""
     requests: list[dict] = []
-    page_size = ods_module.DEFAULT_PAGE_SIZE
+    page_size = cloudfone_module.DEFAULT_PAGE_SIZE
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -211,13 +211,13 @@ async def test_fetch_daily_transcripts_caps_the_page_walk(caplog):
         items = [_row(i) for i in range(page_size)]  # always a full page
         return httpx.Response(200, json=_envelope(items, total=10_000))
 
-    with caplog.at_level("WARNING", logger="app.services.ods"):
+    with caplog.at_level("WARNING", logger="app.services.cloudfone"):
         transcripts = await _transport_client(handler).fetch_daily_transcripts(
-            day=ods_module.insights_window(datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc))
+            day=cloudfone_module.insights_window(datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc))
         )
 
-    assert [r["PageIndex"] for r in requests] == list(range(ods_module.MAX_DAILY_PAGES))
-    assert len(transcripts) == ods_module.MAX_DAILY_PAGES * page_size
+    assert [r["PageIndex"] for r in requests] == list(range(cloudfone_module.MAX_DAILY_PAGES))
+    assert len(transcripts) == cloudfone_module.MAX_DAILY_PAGES * page_size
     assert any("truncated" in record.message for record in caplog.records)
 
 
@@ -227,7 +227,7 @@ async def test_insights_window_is_the_previous_ict_day():
         "2026-10-18"
     )
     assert insights_subject(insights_window(datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc))) == (
-        "ODS — Phân tích cuộc gọi ngày 18/10/2026"
+        "Cloudfone — Phân tích cuộc gọi ngày 18/10/2026"
     )
 
 
@@ -259,7 +259,7 @@ def test_render_insights_html_escapes_content():
         transcript="Nội dung & chi tiết",
     )
     html = render_insights_html(
-        [ods_module.CallInsight(transcript=row, summary="Tóm tắt <b>này</b>")],
+        [cloudfone_module.CallInsight(transcript=row, summary="Tóm tắt <b>này</b>")],
         insights_window(datetime(2026, 10, 19, 1, 0, tzinfo=timezone.utc)),
     )
     assert "<script>" not in html
@@ -270,43 +270,43 @@ def test_render_insights_html_escapes_content():
 
 
 class _FakeSettingsService:
-    def __init__(self, ods_cfg, digest_cfg) -> None:
-        self._ods = ods_cfg
+    def __init__(self, cloudfone_cfg, digest_cfg) -> None:
+        self._cloudfone = cloudfone_cfg
         self._digest = digest_cfg
 
-    async def resolve_ods(self):
-        return self._ods
+    async def resolve_cloudfone(self):
+        return self._cloudfone
 
     async def resolve_email_digest(self):
         return self._digest
 
 
-def _ods_cfg(**overrides):
+def _cloudfone_cfg(**overrides):
     values: dict = {
         "service_name": "CloudFone",
-        "auth_user": "ods-user",
+        "auth_user": "cloudfone-user",
         "auth_key": "cf-key",
         "recipients": ("ops@vp.vn",),
         "enabled": True,
     }
     values.update(overrides)
-    return OdsRuntimeConfig(**values)
+    return CloudfoneRuntimeConfig(**values)
 
 
 async def test_run_disabled_without_recipients_or_toggle():
-    result = await run_ods_insights(
+    result = await run_cloudfone_insights(
         None,
         settings_service=_FakeSettingsService(
-            _ods_cfg(enabled=False), EmailDigestRuntimeConfig(resend_api_key="r")
+            _cloudfone_cfg(enabled=False), EmailDigestRuntimeConfig(resend_api_key="r")
         ),
         fetcher=_fail_fetcher,
     )
     assert result.status == STATUS_DISABLED
 
-    result = await run_ods_insights(
+    result = await run_cloudfone_insights(
         None,
         settings_service=_FakeSettingsService(
-            _ods_cfg(recipients=()), EmailDigestRuntimeConfig(resend_api_key="r")
+            _cloudfone_cfg(recipients=()), EmailDigestRuntimeConfig(resend_api_key="r")
         ),
         fetcher=_fail_fetcher,
     )
@@ -315,20 +315,20 @@ async def test_run_disabled_without_recipients_or_toggle():
 
 async def test_run_unconfigured_without_full_credentials():
     """Spec 1.1 needs all three credential fields — each gap is reported."""
-    result = await run_ods_insights(
+    result = await run_cloudfone_insights(
         None,
         settings_service=_FakeSettingsService(
-            _ods_cfg(auth_user=""), EmailDigestRuntimeConfig(resend_api_key="r")
+            _cloudfone_cfg(auth_user=""), EmailDigestRuntimeConfig(resend_api_key="r")
         ),
         fetcher=_fail_fetcher,
     )
     assert result.status == STATUS_UNCONFIGURED
     assert result.missing == ["auth_user"]
 
-    result = await run_ods_insights(
+    result = await run_cloudfone_insights(
         None,
         settings_service=_FakeSettingsService(
-            _ods_cfg(service_name="", auth_user="", auth_key=""),
+            _cloudfone_cfg(service_name="", auth_user="", auth_key=""),
             EmailDigestRuntimeConfig(resend_api_key="r"),
         ),
         fetcher=_fail_fetcher,
@@ -338,10 +338,10 @@ async def test_run_unconfigured_without_full_credentials():
 
 
 async def test_run_disabled_without_resend_key():
-    result = await run_ods_insights(
+    result = await run_cloudfone_insights(
         None,
         settings_service=_FakeSettingsService(
-            _ods_cfg(), EmailDigestRuntimeConfig(resend_api_key="")
+            _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="")
         ),
         fetcher=_fail_fetcher,
     )
@@ -357,10 +357,10 @@ async def test_run_empty_when_the_day_has_no_calls():
     async def fetcher(_day):
         return []
 
-    result = await run_ods_insights(
+    result = await run_cloudfone_insights(
         None,
         settings_service=_FakeSettingsService(
-            _ods_cfg(), EmailDigestRuntimeConfig(resend_api_key="r")
+            _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="r")
         ),
         fetcher=fetcher,
     )
@@ -382,11 +382,11 @@ async def test_run_sends_the_insights_email_to_recipients():
         sent.update(kwargs)
         return "resend-id-1"
 
-    result = await run_ods_insights(
+    result = await run_cloudfone_insights(
         None,
         now=moment,
         settings_service=_FakeSettingsService(
-            _ods_cfg(), EmailDigestRuntimeConfig(resend_api_key="resend-key")
+            _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="resend-key")
         ),
         summarizer=summarizer,
         fetcher=fetcher,
@@ -396,7 +396,7 @@ async def test_run_sends_the_insights_email_to_recipients():
     assert result.provider_id == "resend-id-1"
     assert sent["api_key"] == "resend-key"
     assert sent["to"] == ["ops@vp.vn"]
-    assert sent["subject"] == "ODS — Phân tích cuộc gọi ngày 18/10/2026"
+    assert sent["subject"] == "Cloudfone — Phân tích cuộc gọi ngày 18/10/2026"
     assert "Khách hỏi về giá dịch vụ." in sent["html"]
 
 
@@ -407,10 +407,10 @@ async def test_run_reports_a_rejected_email_without_raising():
     async def sender(**_kwargs):
         raise EmailDeliveryError("Resend rejected the email (status 422)")
 
-    result = await run_ods_insights(
+    result = await run_cloudfone_insights(
         None,
         settings_service=_FakeSettingsService(
-            _ods_cfg(), EmailDigestRuntimeConfig(resend_api_key="resend-key")
+            _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="resend-key")
         ),
         fetcher=fetcher,
         sender=sender,
@@ -423,10 +423,10 @@ async def test_run_surfaces_a_cloudfone_fetch_failure():
     async def fetcher(_day):
         raise CloudfoneError("CloudFone không phản hồi: boom")
 
-    result = await run_ods_insights(
+    result = await run_cloudfone_insights(
         None,
         settings_service=_FakeSettingsService(
-            _ods_cfg(), EmailDigestRuntimeConfig(resend_api_key="r")
+            _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="r")
         ),
         fetcher=fetcher,
     )

@@ -48,9 +48,9 @@ from app.schemas.integrations import (
     MinimaxIntegrationSettingsOut,
     MinimaxIntegrationSettingsUpdate,
     MinimaxIntegrationTestOut,
-    OdsIntegrationSettingsOut,
-    OdsIntegrationSettingsUpdate,
-    OdsIntegrationTestOut,
+    CloudfoneIntegrationSettingsOut,
+    CloudfoneIntegrationSettingsUpdate,
+    CloudfoneIntegrationTestOut,
     OpenRouterIntegrationSettingsOut,
     OpenRouterIntegrationSettingsUpdate,
     OpenRouterIntegrationTestOut,
@@ -413,45 +413,45 @@ async def test_email_digest(
     return await send_test_digest(db, to_email=str(body.to_email), summarizer=summarizer)
 
 
-@router.get("/ods", response_model=OdsIntegrationSettingsOut)
-async def get_ods_integration_settings(
+@router.get("/cloudfone", response_model=CloudfoneIntegrationSettingsOut)
+async def get_cloudfone_integration_settings(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
-) -> OdsIntegrationSettingsOut:
-    """ODS (CloudFone tổng đài) voice-transcript insights settings — the API
+) -> CloudfoneIntegrationSettingsOut:
+    """Cloudfone (CloudFone tổng đài) voice-transcript insights settings — the API
     key is status-only, never its value."""
-    return OdsIntegrationSettingsOut.model_validate(
-        await IntegrationSettingsService(db).admin_ods_view()
+    return CloudfoneIntegrationSettingsOut.model_validate(
+        await IntegrationSettingsService(db).admin_cloudfone_view()
     )
 
 
-@router.put("/ods", response_model=OdsIntegrationSettingsOut)
-async def update_ods_integration_settings(
-    body: OdsIntegrationSettingsUpdate,
+@router.put("/cloudfone", response_model=CloudfoneIntegrationSettingsOut)
+async def update_cloudfone_integration_settings(
+    body: CloudfoneIntegrationSettingsUpdate,
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
-) -> OdsIntegrationSettingsOut:
-    view = await IntegrationSettingsService(db).update_ods(
+) -> CloudfoneIntegrationSettingsOut:
+    view = await IntegrationSettingsService(db).update_cloudfone(
         body.model_dump(exclude_unset=True),
         actor_id=admin.id,
     )
-    return OdsIntegrationSettingsOut.model_validate(view)
+    return CloudfoneIntegrationSettingsOut.model_validate(view)
 
 
-@router.post("/ods/test", response_model=OdsIntegrationTestOut)
-async def test_ods_integration_settings(
-    body: OdsIntegrationSettingsUpdate | None = None,
+@router.post("/cloudfone/test", response_model=CloudfoneIntegrationTestOut)
+async def test_cloudfone_integration_settings(
+    body: CloudfoneIntegrationSettingsUpdate | None = None,
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
-) -> OdsIntegrationTestOut:
+) -> CloudfoneIntegrationTestOut:
     """Make a real GetCallLogs call (one page: PageIndex 0, PageSize 5) so bad
     CloudFone credentials fail here, not in the daily tick. Credentials typed
     in the console may be probed BEFORE being saved; anything omitted falls
     back to the stored configuration."""
-    from app.services.ods import CloudfoneError, OdsCloudfoneClient
+    from app.services.cloudfone import CloudfoneError, CloudfoneClient
 
     settings_service = IntegrationSettingsService(db)
-    cfg = await settings_service.resolve_ods()
+    cfg = await settings_service.resolve_cloudfone()
     typed = body.model_dump(exclude_unset=True) if body else {}
     creds = {
         name: (str(typed.get(name) or "").strip() or getattr(cfg, name))
@@ -459,10 +459,10 @@ async def test_ods_integration_settings(
     }
     missing = sorted(name for name, value in creds.items() if not value)
     if missing:
-        return OdsIntegrationTestOut(ok=False, configured=False, missing=missing)
+        return CloudfoneIntegrationTestOut(ok=False, configured=False, missing=missing)
     started = time.perf_counter()
     try:
-        client = OdsCloudfoneClient(
+        client = CloudfoneClient(
             creds["service_name"],
             creds["auth_user"],
             creds["auth_key"],
@@ -470,14 +470,14 @@ async def test_ods_integration_settings(
         )
         await client.get_call_logs(page_index=0, page_size=5)
     except CloudfoneError as exc:
-        return OdsIntegrationTestOut(
+        return CloudfoneIntegrationTestOut(
             ok=False,
             configured=True,
             missing=[],
             latency_ms=int((time.perf_counter() - started) * 1000),
             error=str(exc),
         )
-    return OdsIntegrationTestOut(
+    return CloudfoneIntegrationTestOut(
         ok=True,
         configured=True,
         missing=[],

@@ -24,7 +24,7 @@ export type SettingsItemId =
   | "settings-jev"
   | "settings-tingting"
   | "settings-email-digest"
-  | "settings-ods"
+  | "settings-cloudfone"
   | "settings-geocoder"
   | "settings-users";
 
@@ -73,8 +73,8 @@ export const SETTINGS_NAV_ITEMS: SettingsSectionNavItem[] = [
     Icon: Mail,
   },
   {
-    itemId: "settings-ods",
-    label: "ODS",
+    itemId: "settings-cloudfone",
+    label: "Cloudfone",
     description: "Phân tích cuộc gọi",
     Icon: PhoneCall,
   },
@@ -129,9 +129,9 @@ export const SETTINGS_VIEW_COPY: Record<
     description:
       "Gửi định kỳ email danh sách ứng viên mới (Zalo chatbot, Messenger, OA khác — không gồm TingTing OA) với số điện thoại, dự án quan tâm và tóm tắt hội thoại.",
   },
-  "settings-ods": {
+  "settings-cloudfone": {
     kicker: "Tích hợp",
-    title: "ODS · Phân tích cuộc gọi",
+    title: "Cloudfone · Phân tích cuộc gọi",
     description:
       "Lấy bản ghi (voice transcript) cuộc gọi tổng đài CloudFone mỗi ngày, tóm tắt bằng AI và gửi email cho danh sách người nhận.",
   },

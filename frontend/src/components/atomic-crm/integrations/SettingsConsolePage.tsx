@@ -17,7 +17,7 @@ import { EmailDigestSection } from "./EmailDigestSection";
 import { GeocoderSection } from "./GeocoderSection";
 import { JevSection } from "./JevSection";
 import { LlmProvidersSection } from "./LlmProvidersSection";
-import { OdsSection } from "./OdsSection";
+import { CloudfoneSection } from "./CloudfoneSection";
 import { TingtingSection } from "./TingtingSection";
 import { SettingsChrome, SettingsWorkspace } from "./SettingsChrome";
 import { ZaloChannelSection } from "./ZaloChannelSection";
@@ -100,8 +100,8 @@ export const SettingsConsolePage = () => {
         return <TingtingSection />;
       case "settings-email-digest":
         return <EmailDigestSection />;
-      case "settings-ods":
-        return <OdsSection />;
+      case "settings-cloudfone":
+        return <CloudfoneSection />;
       case "settings-geocoder":
         return <GeocoderSection />;
       case "settings-users":

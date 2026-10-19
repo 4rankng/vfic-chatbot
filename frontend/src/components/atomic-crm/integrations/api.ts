@@ -181,8 +181,8 @@ export type EmailDigestTestResult = {
   candidate_count: number;
 };
 
-/** ODS (CloudFone tổng đài) daily voice-transcript insights. */
-export type OdsSettings = {
+/** Cloudfone (CloudFone tổng đài) daily voice-transcript insights. */
+export type CloudfoneSettings = {
   /** Spec 1.1 credentials — ServiceName + AuthUser in clear, AuthKey masked. */
   service_name: string;
   auth_user: string;
@@ -193,7 +193,7 @@ export type OdsSettings = {
 };
 
 /** PUT body. Omit a credential to keep the stored value. */
-export type OdsSettingsUpdate = {
+export type CloudfoneSettingsUpdate = {
   service_name?: string;
   auth_user?: string;
   auth_key?: string;
@@ -201,8 +201,8 @@ export type OdsSettingsUpdate = {
   enabled?: boolean;
 };
 
-/** Result of POST /ods/test (a real GetCallLogs probe, one page of 5). */
-export type OdsTestResult = {
+/** Result of POST /cloudfone/test (a real GetCallLogs probe, one page of 5). */
+export type CloudfoneTestResult = {
   ok: boolean;
   configured: boolean;
   missing: string[];
@@ -470,21 +470,28 @@ export const zaloIntegrationGateway = {
       { method: "POST", body: { to_email: toEmail } },
     ),
 
-  loadOdsSettings: async (): Promise<OdsSettings> =>
-    apiJson<OdsSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/ods`),
+  loadCloudfoneSettings: async (): Promise<CloudfoneSettings> =>
+    apiJson<CloudfoneSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/cloudfone`),
 
-  saveOdsSettings: async (body: OdsSettingsUpdate): Promise<OdsSettings> =>
-    apiJson<OdsSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/ods`, {
+  saveCloudfoneSettings: async (
+    body: CloudfoneSettingsUpdate,
+  ): Promise<CloudfoneSettings> =>
+    apiJson<CloudfoneSettings>(`${ADMIN_INTEGRATIONS_BASE_PATH}/cloudfone`, {
       method: "PUT",
       body,
     }),
 
   /** Probe the CloudFone credentials (typed values first, stored otherwise). */
-  testOdsConnection: async (body?: OdsSettingsUpdate): Promise<OdsTestResult> =>
-    apiJson<OdsTestResult>(`${ADMIN_INTEGRATIONS_BASE_PATH}/ods/test`, {
-      method: "POST",
-      body: body ?? {},
-    }),
+  testCloudfoneConnection: async (
+    body?: CloudfoneSettingsUpdate,
+  ): Promise<CloudfoneTestResult> =>
+    apiJson<CloudfoneTestResult>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/cloudfone/test`,
+      {
+        method: "POST",
+        body: body ?? {},
+      },
+    ),
 } as const;
 
 export const facebookIntegrationGateway = {

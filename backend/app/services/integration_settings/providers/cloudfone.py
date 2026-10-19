@@ -1,6 +1,6 @@
-"""ODS provider group: the daily voice-transcript insights configuration.
+"""Cloudfone provider group: the daily voice-transcript insights configuration.
 
-ODS is the vendor label for the CloudFone-hosted call-center integration (the
+Cloudfone is the vendor label for the CloudFone-hosted call-center integration (the
 underlying API stays api.cloudfone.vn). Admin-editable from the settings
 console: the three CloudFone spec-1.1 credentials (``ServiceName``,
 ``AuthUser``, ``AuthKey`` — the key encrypted at rest, no env fallback — the
@@ -27,39 +27,39 @@ logger = logging.getLogger(__name__)
 
 # Spec 1.1 credentials: three separate rows, exactly the fields GetCallLogs
 # requires for auth (ServiceName + AuthUser + AuthKey in the request body).
-ODS_SERVICE_NAME = "ods_service_name"
-ODS_AUTH_USER = "ods_auth_user"
-ODS_AUTH_KEY = "ods_auth_key"
+CLOUDFONE_SERVICE_NAME = "cloudfone_service_name"
+CLOUDFONE_AUTH_USER = "cloudfone_auth_user"
+CLOUDFONE_AUTH_KEY = "cloudfone_auth_key"
 # Pre-spec-1.1 single-key row: read-only legacy fallback for deployments that
 # stored a key before the split — it rides as AuthKey until re-saved.
-ODS_API_KEY = "ods_api_key"
-ODS_RECIPIENTS = "ods_recipients"
+CLOUDFONE_API_KEY = "cloudfone_api_key"
+CLOUDFONE_RECIPIENTS = "cloudfone_recipients"
 # Admin on/off switch for the daily insights send ("1"/"0"; unset = off).
-ODS_ENABLED = "ods_enabled"
+CLOUDFONE_ENABLED = "cloudfone_enabled"
 
-ODS_SETTING_KEYS = (
-    ODS_SERVICE_NAME,
-    ODS_AUTH_USER,
-    ODS_AUTH_KEY,
-    ODS_API_KEY,
-    ODS_RECIPIENTS,
-    ODS_ENABLED,
+CLOUDFONE_SETTING_KEYS = (
+    CLOUDFONE_SERVICE_NAME,
+    CLOUDFONE_AUTH_USER,
+    CLOUDFONE_AUTH_KEY,
+    CLOUDFONE_API_KEY,
+    CLOUDFONE_RECIPIENTS,
+    CLOUDFONE_ENABLED,
 )
 
-# The admin API speaks OdsIntegrationSettingsUpdate schema names; the KV table
+# The admin API speaks CloudfoneIntegrationSettingsUpdate schema names; the KV table
 # keeps the namespaced keys. One explicit map joins the two — and doubles as
 # the request whitelist (a PUT can never write an arbitrary integration row).
 API_FIELD_TO_SETTING_KEY = {
-    "service_name": ODS_SERVICE_NAME,
-    "auth_user": ODS_AUTH_USER,
-    "auth_key": ODS_AUTH_KEY,
-    "recipients": ODS_RECIPIENTS,
-    "enabled": ODS_ENABLED,
+    "service_name": CLOUDFONE_SERVICE_NAME,
+    "auth_user": CLOUDFONE_AUTH_USER,
+    "auth_key": CLOUDFONE_AUTH_KEY,
+    "recipients": CLOUDFONE_RECIPIENTS,
+    "enabled": CLOUDFONE_ENABLED,
 }
 
 
 @dataclass(frozen=True)
-class OdsRuntimeConfig:
+class CloudfoneRuntimeConfig:
     service_name: str = ""
     auth_user: str = ""
     auth_key: str = ""
@@ -67,8 +67,8 @@ class OdsRuntimeConfig:
     enabled: bool = False
 
 
-class OdsSettingsMixin:
-    """Resolve/admin/persist for the ODS (CloudFone) insights integration."""
+class CloudfoneSettingsMixin:
+    """Resolve/admin/persist for the Cloudfone (CloudFone) insights integration."""
 
     if TYPE_CHECKING:
         # Supplied by IntegrationSettingsService, the class that mixes these in.
@@ -96,24 +96,24 @@ class OdsSettingsMixin:
             is_secret: bool,
         ) -> bool: ...
 
-    async def resolve_ods(self) -> OdsRuntimeConfig:
+    async def resolve_cloudfone(self) -> CloudfoneRuntimeConfig:
         """Stored-only resolution: no env fallback exists for these credentials."""
-        stored = await self._stored_values(ODS_SETTING_KEYS)
-        raw_enabled = (stored.get(ODS_ENABLED) or "").strip()
-        return OdsRuntimeConfig(
-            service_name=stored.get(ODS_SERVICE_NAME) or "",
-            auth_user=stored.get(ODS_AUTH_USER) or "",
+        stored = await self._stored_values(CLOUDFONE_SETTING_KEYS)
+        raw_enabled = (stored.get(CLOUDFONE_ENABLED) or "").strip()
+        return CloudfoneRuntimeConfig(
+            service_name=stored.get(CLOUDFONE_SERVICE_NAME) or "",
+            auth_user=stored.get(CLOUDFONE_AUTH_USER) or "",
             # Legacy single-key deployments keep working: the old row rides
             # as AuthKey until the admin saves the split credentials.
-            auth_key=stored.get(ODS_AUTH_KEY) or stored.get(ODS_API_KEY) or "",
-            recipients=tuple(parse_recipients(stored.get(ODS_RECIPIENTS))),
+            auth_key=stored.get(CLOUDFONE_AUTH_KEY) or stored.get(CLOUDFONE_API_KEY) or "",
+            recipients=tuple(parse_recipients(stored.get(CLOUDFONE_RECIPIENTS))),
             # Unset row = off: this integration is opt-in, unlike the digest
             # whose owner wanted the daily send running out of the box.
             enabled=raw_enabled in {"1", "true", "yes", "on"},
         )
 
-    async def admin_ods_view(self) -> dict:
-        cfg = await self.resolve_ods()
+    async def admin_cloudfone_view(self) -> dict:
+        cfg = await self.resolve_cloudfone()
         return {
             "service_name": cfg.service_name,
             "auth_user": cfg.auth_user,
@@ -131,8 +131,8 @@ class OdsSettingsMixin:
             ),
         }
 
-    async def update_ods(self, values: dict[str, object], *, actor_id) -> dict:
-        """Validate + persist the admin-editable ODS fields; returns the view.
+    async def update_cloudfone(self, values: dict[str, object], *, actor_id) -> dict:
+        """Validate + persist the admin-editable Cloudfone fields; returns the view.
 
         ``values`` uses the API field names (``service_name``, ``auth_user``,
         ``auth_key``, ``recipients``, ``enabled``) — the names the settings
@@ -146,9 +146,9 @@ class OdsSettingsMixin:
         changed: list[str] = []
 
         for field_name, setting_key, is_secret in (
-            ("service_name", ODS_SERVICE_NAME, False),
-            ("auth_user", ODS_AUTH_USER, False),
-            ("auth_key", ODS_AUTH_KEY, True),
+            ("service_name", CLOUDFONE_SERVICE_NAME, False),
+            ("auth_user", CLOUDFONE_AUTH_USER, False),
+            ("auth_key", CLOUDFONE_AUTH_KEY, True),
         ):
             raw = values.get(field_name)
             if raw is not None and str(raw).strip():
@@ -163,31 +163,31 @@ class OdsSettingsMixin:
         if "recipients" in values:
             recipients = parse_recipients(cast("str | list[str] | None", values.get("recipients")))
             await self._write_setting(
-                ODS_RECIPIENTS,
+                CLOUDFONE_RECIPIENTS,
                 ",".join(recipients),
                 actor_id=actor_id,
                 is_secret=False,
             )
-            changed.append(ODS_RECIPIENTS)
+            changed.append(CLOUDFONE_RECIPIENTS)
 
         if "enabled" in values:
             enabled = bool(values.get("enabled"))
             await self._write_setting(
-                ODS_ENABLED,
+                CLOUDFONE_ENABLED,
                 "1" if enabled else "0",
                 actor_id=actor_id,
                 is_secret=False,
             )
-            changed.append(ODS_ENABLED)
+            changed.append(CLOUDFONE_ENABLED)
 
         if changed:
             await record_audit(
                 self.db,
-                action="update_ods_settings",
+                action="update_cloudfone_settings",
                 actor_id=actor_id,
                 target_type="integration_settings",
-                target_id="ods",
+                target_id="cloudfone",
                 payload={"changed_keys": changed},
             )
             await self.db.commit()
-        return await self.admin_ods_view()
+        return await self.admin_cloudfone_view()
