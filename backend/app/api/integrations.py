@@ -415,7 +415,9 @@ async def test_email_digest(
             exc_info=True,
         )
         summarizer = None
-    return await send_test_digest(db, to_email=str(body.to_email), summarizer=summarizer)
+    return EmailDigestTestOut.model_validate(
+        await send_test_digest(db, to_email=str(body.to_email), summarizer=summarizer)
+    )
 
 
 @router.get("/cloudfone", response_model=CloudfoneIntegrationSettingsOut)
@@ -512,6 +514,7 @@ async def list_cloudfone_transcripts(
     caller: str | None = Query(default=None, max_length=64),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    response: Response = None,  # type: ignore[assignment]
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CloudfoneTranscriptPageOut:
@@ -522,6 +525,10 @@ async def list_cloudfone_transcripts(
     cache the daily insights pass writes after MiniMax STT.
     """
     from app.services.cloudfone_transcripts import list_call_transcripts
+
+    # Call metadata and content are PII — same proxy/history gap the
+    # credentials reveal closes (see the Facebook reveal endpoint).
+    response.headers["Cache-Control"] = "no-store"
 
     rows, total = await list_call_transcripts(
         db, day=day, caller=caller, page=page, page_size=page_size
@@ -539,11 +546,14 @@ async def list_cloudfone_transcripts(
 )
 async def get_cloudfone_transcript(
     call_id: str,
+    response: Response = None,  # type: ignore[assignment]
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CloudfoneTranscriptDetailOut:
     """One stored transcript (full text) by the vendor call id."""
     from app.services.cloudfone_transcripts import get_call_transcript
+
+    response.headers["Cache-Control"] = "no-store"
 
     row = await get_call_transcript(db, call_id)
     if row is None:

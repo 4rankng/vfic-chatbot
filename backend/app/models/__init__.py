@@ -137,8 +137,6 @@ __all__ = [
     "CaseFollowup",
     "CaseFollowupStatus",
     "PasswordResetOtp",
-    "ExternalSourceSyncState",
-    "SinglePageExternalSourceSyncState",
     "WorkerFeatureCatalog",
     "JobFeatureValue",
     "Conversation",
