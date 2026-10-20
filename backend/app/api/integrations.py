@@ -416,7 +416,8 @@ async def test_email_digest(
         )
         summarizer = None
     return EmailDigestTestOut.model_validate(
-        await send_test_digest(db, to_email=str(body.to_email), summarizer=summarizer)
+        await send_test_digest(db, to_email=str(body.to_email), summarizer=summarizer),
+        from_attributes=True,
     )
 
 

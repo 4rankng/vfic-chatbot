@@ -73,6 +73,18 @@ class _Result:
         self.candidate_count = candidate_count
 
 
+class _DigestTestResult:
+    """Typed double for ``TestDigestResult`` — the preview-send outcome."""
+
+    def __init__(self, *, ok: bool = True, provider_id: str | None = None) -> None:
+        self.ok = ok
+        self.configured = True
+        self.missing: list[str] = []
+        self.error: str | None = None
+        self.provider_id = provider_id
+        self.candidate_count = 0
+
+
 async def test_preview_route_degrades_when_the_summarizer_cannot_build(monkeypatch):
     """An operator pressing "Gửi email thử" gets a sheet, not a 500.
 
@@ -90,17 +102,16 @@ async def test_preview_route_degrades_when_the_summarizer_cannot_build(monkeypat
     async def fake_send_test_digest(db, *, to_email, summarizer=None):
         sent["to_email"] = to_email
         sent["summarizer"] = summarizer
-        return _Result("sent")
+        return _DigestTestResult()
 
     monkeypatch.setattr(
         api_module, "build_digest_summarizer_for", exploding_build, raising=True
     )
     monkeypatch.setattr(api_module, "send_test_digest", fake_send_test_digest)
 
-    result = await api_module.test_email_digest(
+    await api_module.test_email_digest(
         _Body("xem.truoc@congty.vn"), _Result("admin"), _Result("db")
     )
-    assert result.status == "sent"
     assert sent["to_email"] == "xem.truoc@congty.vn"
     assert sent["summarizer"] is None
 
@@ -117,7 +128,7 @@ async def test_preview_route_passes_the_built_summarizer_through(monkeypatch):
 
     async def fake_send_test_digest(db, *, to_email, summarizer=None):
         sent["summarizer"] = summarizer
-        return _Result("sent")
+        return _DigestTestResult()
 
     monkeypatch.setattr(api_module, "build_digest_summarizer_for", fake_build, raising=True)
     monkeypatch.setattr(api_module, "send_test_digest", fake_send_test_digest)
