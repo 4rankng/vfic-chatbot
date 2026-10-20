@@ -201,7 +201,7 @@ async def test_category_export_follows_active_pointers_in_canonical_order(integr
     assert "NEVER_EXPORT" not in exported.content
 
 
-@pytest.mark.parametrize("mode", ["direct", "category", "legacy"])
+@pytest.mark.parametrize("mode", ["direct", "category"])
 async def test_export_hides_retired_references_without_rewriting_historical_source(integration_session, mode):
     db = integration_session
     project, base = await _project(
@@ -215,13 +215,9 @@ async def test_export_hides_retired_references_without_rewriting_historical_sour
     if mode == "direct":
         row = await _direct(db, base, source)
         source_field = "raw_text"
-    elif mode == "category":
+    else:
         _category_row, row, _doc = await _category(db, project, "compensation", source)
         source_field = "source_markdown"
-    else:
-        version = await _version(db, project)
-        row, _doc = await _legacy(db, project, version, source)
-        source_field = "normalized_text"
     saved_sha = row.content_sha256
 
     exported = await ProjectService(db).export_knowledge(project.id)
@@ -235,7 +231,7 @@ async def test_export_hides_retired_references_without_rewriting_historical_sour
     assert row.content_sha256 == saved_sha
 
 
-@pytest.mark.parametrize("mode", ["direct", "category", "legacy"])
+@pytest.mark.parametrize("mode", ["direct", "category"])
 async def test_export_rejects_source_with_only_retired_reference_fields(integration_session, mode):
     db = integration_session
     project, base = await _project(
@@ -245,11 +241,8 @@ async def test_export_rejects_source_with_only_retired_reference_fields(integrat
     source = 'job_ids: ["old-role"]\njobs_ids: []\nvacancies: null\nemployment_type: null\n'
     if mode == "direct":
         await _direct(db, base, source)
-    elif mode == "category":
-        await _category(db, project, "compensation", source)
     else:
-        version = await _version(db, project)
-        await _legacy(db, project, version, source)
+        await _category(db, project, "compensation", source)
 
     with pytest.raises(ConflictError, match="chưa có kiến thức"):
         await ProjectService(db).export_knowledge(project.id)
@@ -301,9 +294,10 @@ async def test_export_rejects_unpublished_or_retired_backing_document(
         await ProjectService(db).export_knowledge(project.id)
 
 
-async def test_legacy_export_excludes_draft_version_pending_category_and_unlinked_source(
-    integration_session,
-):
+async def test_retained_legacy_source_is_no_longer_exportable(integration_session):
+    """Removed with the legacy export arm: Xuất KB unions direct pages and
+    category revisions only (commit 2674fc79), so draft/unlinked-version
+    exclusions have no live surface left to pin."""
     db = integration_session
     project, _base = await _project(db, authority=False)
     active = await _version(db, project)
@@ -314,31 +308,9 @@ async def test_legacy_export_excludes_draft_version_pending_category_and_unlinke
     await _legacy(db, project, draft, "DRAFT_VERSION")
     await _category(db, project, "jobs", "CATEGORY_PENDING_CUTOVER")
 
-    exported = await ProjectService(db).export_knowledge(project.id)
-
-    assert source in exported.content
-    for excluded in (
-        "UNLINKED_SOURCE",
-        "DRAFT_VERSION",
-        "CATEGORY_PENDING",
-        "OLD_UNREPAIRED",
-        "NEVER_EXPORT",
-    ):
-        assert excluded not in exported.content
-
-
-@pytest.mark.parametrize(
-    "status", [item for item in KBVersionStatus if item != KBVersionStatus.ACTIVE]
-)
-async def test_legacy_export_requires_active_version_not_just_project_pointer(
-    integration_session, status
-):
-    db = integration_session
-    project, _base = await _project(db, authority=False)
-    version = await _version(db, project, status=status)
-    await _legacy(db, project, version, "NOT_PUBLISHED_VERSION")
-
-    with pytest.raises(ConflictError):
+    # The retained source survives in the database, but the export arm that
+    # used to publish it is gone: the project has no exportable knowledge.
+    with pytest.raises(ConflictError, match="chưa có kiến thức"):
         await ProjectService(db).export_knowledge(project.id)
 
 
@@ -347,15 +319,12 @@ async def test_legacy_export_requires_active_version_not_just_project_pointer(
     [
         "category_document",
         "category_revision",
-        "legacy_document",
-        "legacy_file",
-        "legacy_version",
-        "base",
+        "foreign_base",
     ],
 )
 async def test_export_excludes_sources_owned_by_another_project(integration_session, broken_scope):
     db = integration_session
-    project, base = await _project(db, authority=broken_scope.startswith("category"))
+    project, base = await _project(db, authority=True)
     other, other_base = await _project(db)
     if broken_scope == "category_document":
         await _category(db, project, "jobs", "OTHER_OWNER", document_owner=other.id)
@@ -364,29 +333,19 @@ async def test_export_excludes_sources_owned_by_another_project(integration_sess
         _other_cat, other_rev, _other_doc = await _category(db, other, "jobs", "OTHER_OWNER")
         cat.active_revision_id = other_rev.id
     else:
-        version = await _version(db, other if broken_scope == "legacy_version" else project)
-        project.active_kb_version_id = version.id
-        await _legacy(
-            db,
-            project,
-            version,
-            "OTHER_OWNER",
-            document_owner=other.id if broken_scope == "legacy_document" else None,
-            file_owner=other.id if broken_scope == "legacy_file" else None,
-        )
-        if broken_scope == "base":
-            project.knowledge_base_id = None
-            other.knowledge_base_id = None
-            await db.flush()
-            other.knowledge_base_id = base.id
-            project.knowledge_base_id = other_base.id
+        await _category(db, project, "jobs", "LOCAL_SOURCE")
+        project.knowledge_base_id = None
+        other.knowledge_base_id = None
+        await db.flush()
+        other.knowledge_base_id = base.id
+        project.knowledge_base_id = other_base.id
     await db.flush()
 
     with pytest.raises(ConflictError):
         await ProjectService(db).export_knowledge(project.id)
 
 
-@pytest.mark.parametrize("mode", ["direct", "category", "legacy"])
+@pytest.mark.parametrize("mode", ["direct", "category"])
 async def test_legacy_null_reverse_kb_owner_still_exports_declared_project_source(
     integration_session, mode
 ):
@@ -399,18 +358,15 @@ async def test_legacy_null_reverse_kb_owner_still_exports_declared_project_sourc
     )
     if mode == "direct":
         await _direct(db, base, "OWNED_LEGACY_SOURCE")
-    elif mode == "category":
-        await _category(db, project, "jobs", "OWNED_LEGACY_SOURCE")
     else:
-        version = await _version(db, project)
-        await _legacy(db, project, version, "OWNED_LEGACY_SOURCE")
+        await _category(db, project, "jobs", "OWNED_LEGACY_SOURCE")
 
     exported = await ProjectService(db).export_knowledge(project.id)
 
     assert "OWNED_LEGACY_SOURCE" in exported.content
 
 
-@pytest.mark.parametrize("mode", ["direct", "category", "legacy"])
+@pytest.mark.parametrize("mode", ["direct", "category"])
 async def test_explicit_foreign_reverse_kb_owner_cannot_export(integration_session, mode):
     db = integration_session
     project, base = await _project(
@@ -424,11 +380,8 @@ async def test_explicit_foreign_reverse_kb_owner_cannot_export(integration_sessi
     base.project_id = other.id
     if mode == "direct":
         await _direct(db, base, "FOREIGN_SOURCE")
-    elif mode == "category":
-        await _category(db, project, "jobs", "FOREIGN_SOURCE")
     else:
-        version = await _version(db, project)
-        await _legacy(db, project, version, "FOREIGN_SOURCE")
+        await _category(db, project, "jobs", "FOREIGN_SOURCE")
     await db.flush()
 
     with pytest.raises(ConflictError):
@@ -469,7 +422,7 @@ async def test_unknown_project_is_not_found(integration_session):
 
 
 @pytest.mark.parametrize(
-    "publication", ["category_cutover", "legacy_publication", "direct_cutover"]
+    "publication", ["category_cutover", "direct_cutover"]
 )
 async def test_export_uses_one_statement_snapshot_and_ignores_cached_authority(
     integration_database,
@@ -488,37 +441,13 @@ async def test_export_uses_one_statement_snapshot_and_ignores_cached_authority(
                 else KnowledgeBaseMode.RAG,
             )
             project_id = project.id
-            version = await _version(setup, project)
             if publication == "direct_cutover":
                 await _direct(setup, base, "BEFORE_CUTOVER\n")
-            else:
-                await _legacy(setup, project, version, "BEFORE_CUTOVER\n")
-            if publication == "legacy_publication":
-                next_version = await _version(
-                    setup, project, number=2, pointed=False, status=KBVersionStatus.READY
-                )
-                await _legacy(setup, project, next_version, "AFTER_CUTOVER\n")
-            else:
-                await _category(setup, project, "jobs", "AFTER_CUTOVER\n")
+            await _category(setup, project, "jobs", "AFTER_CUTOVER\n")
             await setup.commit()
         async with sessions() as reader, sessions() as writer:
             cached = await reader.get(Project, project_id)
             current = await writer.get(Project, project_id)
-            if publication == "legacy_publication":
-                old_version = await writer.get(KBVersion, version.id)
-                new_version = await writer.get(KBVersion, next_version.id)
-                old_version.status = KBVersionStatus.ARCHIVED
-                # The real publisher archives before activating to respect
-                # the one-ACTIVE-version index, inside the same transaction.
-                await writer.flush()
-                new_version.status = KBVersionStatus.ACTIVE
-                current.active_kb_version_id = new_version.id
-            else:
-                current.category_authority_started = True
-                if publication == "direct_cutover":
-                    current_base = await writer.get(KnowledgeBase, base.id)
-                    current_base.mode = KnowledgeBaseMode.RAG
-            await writer.flush()
             statements = []
 
             def record_statement(_connection, _cursor, statement, _params, _context, _many):
@@ -526,20 +455,32 @@ async def test_export_uses_one_statement_snapshot_and_ignores_cached_authority(
 
             event.listen(engine.sync_engine, "before_cursor_execute", record_statement)
             try:
-                before = await ProjectService(reader).export_knowledge(project_id)
-                assert len(statements) == 1
-                assert statements[0].lstrip().startswith("SELECT")
-                assert "BEFORE_CUTOVER\n" in before.content
-                assert "AFTER_CUTOVER" not in before.content
-                await writer.commit()
+                if publication == "direct_cutover":
+                    # Before the cutover the direct page is the live source.
+                    before = await ProjectService(reader).export_knowledge(project_id)
+                    assert len(statements) == 1
+                    assert statements[0].lstrip().startswith("SELECT")
+                    assert "BEFORE_CUTOVER\n" in before.content
+                    assert "AFTER_CUTOVER" not in before.content
+                else:
+                    # Pure RAG mode before the authority flag: no exportable
+                    # source, so the export must be an explicit conflict.
+                    with pytest.raises(ConflictError, match="chưa có kiến thức"):
+                        await ProjectService(reader).export_knowledge(project_id)
+                current.category_authority_started = True
+                if publication == "direct_cutover":
+                    current_base = await writer.get(KnowledgeBase, base.id)
+                    current_base.mode = KnowledgeBaseMode.RAG
+                await writer.flush()
                 statements.clear()
+                await writer.commit()
                 after = await ProjectService(reader).export_knowledge(project_id)
                 assert len(statements) == 1
+                assert statements[0].lstrip().startswith("SELECT")
                 assert "AFTER_CUTOVER\n" in after.content
                 assert "BEFORE_CUTOVER" not in after.content
                 # A scalar snapshot must not read the stale identity-map flag.
                 assert cached.category_authority_started is False
-                assert cached.active_kb_version_id == version.id
             finally:
                 event.remove(engine.sync_engine, "before_cursor_execute", record_statement)
     finally:

@@ -375,10 +375,10 @@ async def test_auto_retry_skips_extraction_and_reuses_prepared_categories(
     original = TrainingCategoryBatch.prepare
     prepared = []
 
-    async def fail_second(self, doc, revision, embedder):
+    async def fail_second(self, doc, revision, embedder, llm_json=None):
         if prepared:
             raise RuntimeError("simulated category provider failure")
-        await original(self, doc, revision, embedder)
+        await original(self, doc, revision, embedder, llm_json=llm_json)
         prepared.append(revision.id)
 
     monkeypatch.setattr(TrainingCategoryBatch, "prepare", fail_second)
