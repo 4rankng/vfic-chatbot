@@ -27,6 +27,10 @@ FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "rag_gold"
 CHUNKS_JSON = FIXTURE_DIR / "chunks.json"
 CASES_JSON = FIXTURE_DIR / "cases.json"
 EMBEDDINGS_JSON = FIXTURE_DIR / "embeddings.json"
+# Contextual variant (chunks embedded WITH their metadata-first prefix, the way
+# ``rag_contextual_enabled`` production indexing does — b4da724e). Query vectors
+# are copied verbatim from EMBEDDINGS_JSON by the contextual seeder.
+EMBEDDINGS_CONTEXTUAL_JSON = FIXTURE_DIR / "embeddings_contextual.json"
 BASELINE_JSON = FIXTURE_DIR / "baseline.json"
 
 

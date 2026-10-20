@@ -134,9 +134,9 @@ async def _main() -> int:
     parser.add_argument("--output", type=Path, help="Optional JSON result path")
     parser.add_argument("--embeddings", type=Path, help=(
         "--gold only: score against an alternative canned-embeddings file "
-        "(e.g. the contextual-prefix embeddings produced by "
-        "scripts/seed_rag_gold_contextual_embeddings.py) instead of the "
-        "checked-in embeddings.json"
+        "(e.g. the unprefixed baseline embeddings.json) instead of the "
+        "default contextual set (embeddings_contextual.json, which mirrors "
+        "production's contextualized indexing)"
     ))
     parser.add_argument("--gate-output", type=Path, help=(
         "Optional reduced payload with golden_pass_rate_pct as its single "
@@ -191,13 +191,27 @@ def _run_gold(args: argparse.Namespace) -> int:
     if str(backend_root) not in sys.path:
         sys.path.insert(0, str(backend_root))
     # Late import so the legacy path doesn't pay for it.
-    from tests.rag_gold.loader import load_cases, load_chunks, load_embeddings
+    from tests.rag_gold.loader import (
+        EMBEDDINGS_CONTEXTUAL_JSON,
+        load_cases,
+        load_chunks,
+        load_embeddings,
+    )
     from tests.rag_gold.precision import aggregate, score_case
     from tests.services_runner import build_rows_for_case
 
     cases = load_cases()
     chunks = load_chunks()
-    embeddings = load_embeddings(args.embeddings) if args.embeddings else load_embeddings()
+    # Production indexes contextualized chunks — ``rag_contextual_enabled``
+    # defaults on and the metadata-first prefix is part of every embed input
+    # (b4da724e) — so the gold mirror defaults to the contextual set (54/54;
+    # the unprefixed baseline misses 4 cases its own commit fixed). The
+    # baseline stays available via --embeddings for A/B comparisons.
+    embeddings = (
+        load_embeddings(args.embeddings)
+        if args.embeddings
+        else load_embeddings(EMBEDDINGS_CONTEXTUAL_JSON)
+    )
     if not embeddings:
         print(
             "ERROR: embeddings.json missing. Run "
