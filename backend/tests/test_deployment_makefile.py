@@ -20,7 +20,9 @@ import json
 import re
 
 import os
+import shlex
 import subprocess
+import sys
 from pathlib import Path
 import textwrap
 
@@ -35,6 +37,24 @@ SCRIPTS = BACKEND_DIR / "scripts"
 
 def _read(name: str) -> str:
     return (SCRIPTS / name).read_text(encoding="utf-8")
+
+
+def _pin_sandbox_python3(bin_dir: Path) -> None:
+    """Resolve the stubs' ``#!/usr/bin/env python3`` shebangs inside bin_dir.
+
+    The fake binaries are python scripts invoked through ``/usr/bin/env
+    python3``. If PATH resolves ``python3`` to a manager shim whose own
+    shebang is ``#!/usr/bin/env bash`` (pyenv shims do this), ``env bash``
+    then finds THIS sandbox's ``bash`` stub — itself a python script — and
+    the two files recurse through the kernel's shebang handling until exec
+    fails with E2BIG ("env: bash: Argument list too long"). Pinning
+    ``python3`` to the interpreter running pytest, first on the sandbox PATH,
+    terminates resolution inside bin_dir and keeps the sandbox hermetic.
+    """
+    _write_executable(
+        bin_dir / "python3",
+        "#!/bin/bash\nexec {} \"$@\"\n".format(shlex.quote(sys.executable)),
+    )
 
 
 def _make_deploy_dry_run() -> str:
@@ -382,6 +402,7 @@ def _prepare_bg_deploy_sandbox(
     bin_dir = tmp_path / "bin"
     scripts_dir.mkdir(parents=True)
     bin_dir.mkdir(parents=True)
+    _pin_sandbox_python3(bin_dir)
 
     for name in ("bg_deploy.sh", "bg_rollback.sh", "flip_caddy.sh"):
         patched = _read(name).replace("/opt/vfic", str(root))
@@ -660,6 +681,7 @@ def _prepare_bg_rollback_sandbox(
     bin_dir = tmp_path / "bin"
     scripts_dir.mkdir(parents=True)
     bin_dir.mkdir(parents=True)
+    _pin_sandbox_python3(bin_dir)
 
     for name in ("bg_deploy.sh", "bg_rollback.sh", "flip_caddy.sh"):
         patched = _read(name).replace("/opt/vfic", str(root))
