@@ -1089,3 +1089,225 @@ def test_generate_daily_call_report_docx_creates_valid_document_with_charts():
     with zipfile.ZipFile(io.BytesIO(docx_bytes)) as z:
         media = [name for name in z.namelist() if "media/" in name]
         assert len(media) == 2
+
+
+# --- transcript cache: TranscriptStore seam over cloudfone_call_transcripts ---
+
+
+class _FakeTranscriptStore:
+    def __init__(self, preload: dict[str, str] | None = None) -> None:
+        self.rows: dict[str, str] = dict(preload or {})
+        self.saved: list[tuple[str, str, date]] = []
+        self.load_calls: list[str] = []
+        self.fail_load = False
+        self.fail_save = False
+
+    async def load(self, call_id: str) -> str | None:
+        self.load_calls.append(call_id)
+        if self.fail_load:
+            raise RuntimeError("cache read down")
+        return self.rows.get(call_id)
+
+    async def save(self, call: CallRecord, transcript: str, day: date) -> None:
+        if self.fail_save:
+            raise RuntimeError("cache write down")
+        self.rows[call.call_id] = transcript
+        self.saved.append((call.call_id, transcript, day))
+
+
+def _stt_eligible() -> list[CallRecord]:
+    return [
+        c for c in group_call_legs(REAL_DAY_LEGS) if c.recording_url and c.talk_seconds > 0
+    ]
+
+
+def _cached_day() -> dict[str, str]:
+    return {c.call_id: f"bản ghi đã lưu {c.call_id}" for c in _stt_eligible()}
+
+
+async def _real_day_fetcher(_day):
+    return group_call_legs(REAL_DAY_LEGS)
+
+
+def _flat_summarizer():
+    async def summarizer(_system: str, _user: str) -> str:
+        return "Tóm tắt."
+
+    return summarizer
+
+
+def _capturing_sender(sent: dict):
+    async def sender(**kwargs):
+        sent.update(kwargs)
+        return "resend-id-1"
+
+    return sender
+
+
+async def test_stored_transcripts_skip_download_and_stt(monkeypatch):
+    moment = datetime(2026, 10, 2, 1, 0, tzinfo=timezone.utc)
+    store = _FakeTranscriptStore(_cached_day())
+    stt_calls: list[bytes] = []
+    sent: dict = {}
+
+    async def no_download(url: str) -> bytes:
+        raise AssertionError("cache hit must not download the recording")
+
+    async def transcriber(audio: bytes) -> str:
+        stt_calls.append(audio)
+        return "S1: không được gọi"
+
+    monkeypatch.setattr(cloudfone_module, "download_recording", no_download)
+    result = await run_cloudfone_insights(
+        None,
+        now=moment,
+        settings_service=_FakeSettingsService(
+            _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="r")
+        ),
+        fetcher=_real_day_fetcher,
+        transcriber=transcriber,
+        sender=_capturing_sender(sent),
+        transcript_store=store,
+    )
+
+    assert result.status == STATUS_SENT
+    assert result.transcribed_count == 4
+    assert stt_calls == []
+    assert store.saved == []  # cache hits are never re-persisted
+    for text in _cached_day().values():
+        assert text in sent["html"]
+
+
+async def test_fresh_transcripts_are_stored_for_the_next_run(monkeypatch):
+    moment = datetime(2026, 10, 2, 1, 0, tzinfo=timezone.utc)
+    store = _FakeTranscriptStore()
+    sent: dict = {}
+
+    async def download(url: str) -> bytes:
+        return url.encode()
+
+    async def transcriber(audio: bytes) -> str:
+        return f"S1: nội dung {audio.decode()}"
+
+    monkeypatch.setattr(cloudfone_module, "download_recording", download)
+    result = await run_cloudfone_insights(
+        None,
+        now=moment,
+        settings_service=_FakeSettingsService(
+            _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="r")
+        ),
+        fetcher=_real_day_fetcher,
+        transcriber=transcriber,
+        sender=_capturing_sender(sent),
+        transcript_store=store,
+    )
+
+    assert result.status == STATUS_SENT
+    assert result.transcribed_count == 4
+    assert len(store.saved) == 4
+    assert {cid for cid, _text, _day in store.saved} == {c.call_id for c in _stt_eligible()}
+    # The stored day is the insights window day — analysis can query by date.
+    assert {day for _cid, _text, day in store.saved} == {date(2026, 10, 1)}
+    assert all(text.startswith("S1: nội dung ") for _cid, text, _day in store.saved)
+
+
+async def test_store_failures_stay_fail_soft(monkeypatch, caplog):
+    moment = datetime(2026, 10, 2, 1, 0, tzinfo=timezone.utc)
+    store = _FakeTranscriptStore()
+    store.fail_load = True
+    store.fail_save = True
+    sent: dict = {}
+
+    async def download(url: str) -> bytes:
+        return url.encode()
+
+    async def transcriber(audio: bytes) -> str:
+        return f"S1: nội dung {audio.decode()}"
+
+    monkeypatch.setattr(cloudfone_module, "download_recording", download)
+    with caplog.at_level("WARNING", logger="app.services.cloudfone"):
+        result = await run_cloudfone_insights(
+            None,
+            now=moment,
+            settings_service=_FakeSettingsService(
+                _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="r")
+            ),
+            fetcher=_real_day_fetcher,
+            transcriber=transcriber,
+            sender=_capturing_sender(sent),
+            transcript_store=store,
+        )
+
+    # A cache outage costs only the cache: STT fills the letter and the send goes out.
+    assert result.status == STATUS_SENT
+    assert result.transcribed_count == 4
+    assert store.saved == []
+    assert any("cache read failed" in record.message for record in caplog.records)
+    assert any("cache write failed" in record.message for record in caplog.records)
+
+
+async def test_rerun_reuses_stored_transcripts_and_never_retranscribes(monkeypatch):
+    moment = datetime(2026, 10, 2, 1, 0, tzinfo=timezone.utc)
+    store = _FakeTranscriptStore()
+    stt_calls: list[bytes] = []
+    downloads: list[str] = []
+
+    async def download(url: str) -> bytes:
+        downloads.append(url)
+        return url.encode()
+
+    async def transcriber(audio: bytes) -> str:
+        stt_calls.append(audio)
+        return f"S1: nội dung {audio.decode()}"
+
+    monkeypatch.setattr(cloudfone_module, "download_recording", download)
+    kwargs = dict(
+        now=moment,
+        settings_service=_FakeSettingsService(
+            _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="r")
+        ),
+        fetcher=_real_day_fetcher,
+        transcriber=transcriber,
+        sender=_capturing_sender({}),
+        transcript_store=store,
+    )
+    first = await run_cloudfone_insights(None, **kwargs)
+    assert first.transcribed_count == 4
+    assert len(downloads) == 4
+    assert len(stt_calls) == 4
+
+    second = await run_cloudfone_insights(None, **kwargs)
+
+    # The rerun pays nothing: no recording download, no STT, no duplicate rows.
+    assert second.status == STATUS_SENT
+    assert second.transcribed_count == 4
+    assert len(downloads) == 4
+    assert len(stt_calls) == 4
+    assert len(store.saved) == 4
+
+
+async def test_stored_transcripts_fill_the_letter_without_an_stt_provider(monkeypatch):
+    """Empty MiniMax key (transcriber None): cache hits still ship transcripts."""
+    moment = datetime(2026, 10, 2, 1, 0, tzinfo=timezone.utc)
+    store = _FakeTranscriptStore(_cached_day())
+    sent: dict = {}
+
+    async def no_download(url: str) -> bytes:
+        raise AssertionError("no STT provider means no download either")
+
+    monkeypatch.setattr(cloudfone_module, "download_recording", no_download)
+    result = await run_cloudfone_insights(
+        None,
+        now=moment,
+        settings_service=_FakeSettingsService(
+            _cloudfone_cfg(), EmailDigestRuntimeConfig(resend_api_key="r")
+        ),
+        fetcher=_real_day_fetcher,
+        sender=_capturing_sender(sent),
+        transcript_store=store,
+    )
+
+    assert result.status == STATUS_SENT
+    assert result.transcribed_count == 4
+    for text in _cached_day().values():
+        assert text in sent["html"]

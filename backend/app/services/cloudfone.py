@@ -5,12 +5,14 @@ HTTP API stays ``api.cloudfone.vn``). One ``run_cloudfone_insights`` pass: resol
 the admin config, fetch the previous full day's call legs from
 ``GetCallHistoryVer2``, cluster the legs into calls, download each call's
 recording (``linkFile`` WAV) and transcribe it through MiniMax speech-to-text
-(injected), summarize each answered call through the shared digest summarizer
+(injected), persist each transcript to ``cloudfone_call_transcripts`` so a rerun
+never repeats the download + STT cost, summarize each answered call through the
+shared digest summarizer
 (injected — services must not import the graph layer), let one LLM pass draft
 the day-level insights over the whole dataset, and email the letter to the
 admin-configured recipients through the same Resend sender the candidate digest
 uses. Re-running a day is idempotent: the tick always reports on the previous
-full day and no send-state row exists.
+full day, no send-state row exists, and stored transcripts skip STT.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import CLOUDFONE_API_BASE
+from app.services.cloudfone_transcripts import DbTranscriptStore, TranscriptStore
 from app.services.email_digest.renderer import DIGEST_FROM_EMAIL
 from app.services.email_service import EmailAttachment, EmailDeliveryError, send_email_via_resend
 from app.services.integration_settings.service import IntegrationSettingsService
@@ -722,6 +725,7 @@ async def run_cloudfone_insights(
     fetcher: Callable[[date], Awaitable[list[CallRecord]]] | None = None,
     transcriber: Callable[[bytes], Awaitable[str]] | None = None,
     sender: Callable[..., Awaitable[str | None]] | None = None,
+    transcript_store: TranscriptStore | None = None,
 ) -> CloudfoneInsightsResult:
     """One Cloudfone insights pass: fetch yesterday → transcribe → summarize → email.
 
@@ -730,6 +734,10 @@ async def run_cloudfone_insights(
     the stored key, transcribes through MiniMax with the admin-stored
     ``minimax_api_key`` (empty key → transcription skipped, letter intact) and
     sends through the shared Resend sender with the digest's from-address.
+
+    ``transcript_store`` persists every transcript (``DbTranscriptStore`` on the
+    caller's session by default), so a rerun or a later analysis pass reuses the
+    stored text instead of re-downloading recordings and re-running STT.
     """
     moment = now or datetime.now(timezone.utc)
     service = settings_service or IntegrationSettingsService(db)
@@ -778,7 +786,8 @@ async def run_cloudfone_insights(
         if minimax.api_key:
             transcribe = MiniMaxAsrClient(minimax.api_key).transcribe
 
-    calls = await _attach_transcripts(calls, transcribe)
+    store = transcript_store or (DbTranscriptStore(db) if db is not None else None)
+    calls = await _attach_transcripts(calls, transcribe, store, day)
     transcribed_count = sum(1 for call in calls if call.transcript)
     answered = [call for call in calls if call.status == "ANSWERED"]
     stats = build_daily_stats(calls)
@@ -833,20 +842,31 @@ async def run_cloudfone_insights(
 async def _attach_transcripts(
     calls: list[CallRecord],
     transcriber: Callable[[bytes], Awaitable[str]] | None,
+    store: TranscriptStore | None,
+    day: date,
 ) -> list[CallRecord]:
-    """Fill ``transcript`` per call from its recording, fail-soft per call.
+    """Fill ``transcript`` per call from the store or its recording, fail-soft per call.
 
-    Only calls with a recording and real talk time are transcribed — ring-only
-    recordings on unanswered legs are noise (verified). One bad recording or a
-    dead STT provider leaves that call's transcript empty and the send intact.
+    A stored transcript (a previous pass already ran STT for that call) is reused
+    as-is: no recording download, no STT. Only calls with a recording and real
+    talk time are transcribed — ring-only recordings on unanswered legs are noise
+    (verified). One bad recording or a dead STT provider leaves that call's
+    transcript empty and the send intact.
     """
-    if transcriber is None:
+    if transcriber is None and store is None:
         return calls
     transcribed: list[CallRecord] = []
     attempts = 0
     bound_warned = False
     for call in calls:
         if not call.recording_url or call.talk_seconds <= 0:
+            transcribed.append(call)
+            continue
+        cached = await _load_transcript(store, call.call_id)
+        if cached:
+            transcribed.append(replace(call, transcript=cached))
+            continue
+        if transcriber is None:
             transcribed.append(call)
             continue
         if attempts >= MAX_TRANSCRIPTIONS_PER_DAY:
@@ -862,10 +882,35 @@ async def _attach_transcripts(
         attempts += 1
         try:
             audio = await download_recording(call.recording_url)
-            text = (await transcriber(audio)) or ""
+            text = ((await transcriber(audio)) or "").strip()
         except Exception as exc:  # noqa: BLE001 — one bad call must not block the letter
             logger.warning("cloudfone insights transcribe failed: %s", exc)
             transcribed.append(call)
             continue
-        transcribed.append(replace(call, transcript=text.strip()))
+        if text:
+            await _store_transcript(store, call, text, day)
+        transcribed.append(replace(call, transcript=text))
     return transcribed
+
+
+async def _load_transcript(store: TranscriptStore | None, call_id: str) -> str | None:
+    """Best-effort cache read; a blip falls through to the STT path."""
+    if store is None:
+        return None
+    try:
+        return await store.load(call_id)
+    except Exception as exc:  # noqa: BLE001 — cache failure must not block the letter
+        logger.warning("cloudfone insights transcript cache read failed: %s", exc)
+        return None
+
+
+async def _store_transcript(
+    store: TranscriptStore | None, call: CallRecord, text: str, day: date
+) -> None:
+    """Best-effort cache write; a blip keeps the letter and this run's text intact."""
+    if store is None:
+        return
+    try:
+        await store.save(call, text, day)
+    except Exception as exc:  # noqa: BLE001 — cache failure must not block the letter
+        logger.warning("cloudfone insights transcript cache write failed: %s", exc)

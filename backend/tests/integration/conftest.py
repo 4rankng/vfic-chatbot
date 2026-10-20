@@ -283,6 +283,7 @@ async def _truncate_domain_tables_before_each_test(integration_database: Integra
                 "contacts",
                 "channel_accounts",
                 "integration_settings",
+                "cloudfone_call_transcripts",
             ):
                 exists = await conn.scalar(
                     sa_text("SELECT to_regclass(:t)"), {"t": f"public.{table}"}

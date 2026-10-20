@@ -33,6 +33,7 @@ from app.models.installation import (
 )
 from app.models.contact import Contact, ContactChannelIdentity
 from app.models.channel_account import ChannelAccount, ChannelAccountProject
+from app.models.cloudfone import CloudfoneCallTranscript
 from app.models.case_workflow import (
     CaseTagDefinition,
     CaseWorkflowStage,
@@ -95,6 +96,7 @@ __all__ = [
     "User",
     "Role",
     "AuditEvent",
+    "CloudfoneCallTranscript",
     "Company",
     "Project",
     "KnowledgeChunk",
