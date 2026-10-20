@@ -18,6 +18,10 @@ ZALO_OA_API_BASE: str = "https://openapi.zalo.me"
 # CloudFone API base — the call-center platform behind the Cloudfone voice-transcript
 # insights integration (code constant, not admin-editable runtime settings).
 CLOUDFONE_API_BASE: str = "https://api.cloudfone.vn/api/CloudFone"
+# MiniMax speech-to-text base — transcribes the Cloudfone call recordings into
+# the diarized transcripts the daily letter summarizes (code constant, not
+# admin-editable runtime settings).
+MINIMAX_ASR_BASE: str = "https://api.minimax.io"
 # Public Bot Platform inbound endpoint registered with Zalo (POST /webhooks/zalo/chatbot).
 # A code constant, NOT env — an empty/missing URL is exactly how the app and Zalo
 # desync the webhook secret and silently 401-drop all inbound. Update only if the
@@ -189,8 +193,8 @@ class Settings(BaseSettings):
     minimax_enable: bool = True
     minimax_api_key: str = ""
     minimax_base_url: str = "https://api.minimax.io/v1"
-    minimax_agent_model: str = "MiniMax-M3.1-Flash-Preview"
-    minimax_extractor_model: str = "MiniMax-M2.5-highspeed"
+    minimax_agent_model: str = "MiniMax-M3.1-Flash"
+    minimax_extractor_model: str = "MiniMax-M3.1-Flash"
     minimax_request_timeout: int = 60
     # Fast-tier model for low-complexity intents (Phase 5 model tiering). Empty = disabled
     # (every intent uses the reasoning agent model, the pre-tiering default). When set,
@@ -508,10 +512,11 @@ class Settings(BaseSettings):
     # expression to mean what it says. Like email_digest_tick_cron, this is a
     # plain env with a default — no docker-compose entry needed to change it.
     cloudfone_insights_cron: str = "0 1 * * *"
-    # The tick summarizes every transcript through the LLM before it sends, so
-    # a chatty day can exceed RQ's default 180s ceiling — same reason the
-    # digest carries its own job timeout.
-    cloudfone_insights_job_timeout_seconds: int = 600
+    # The tick transcribes each recording (sequential STT, ~10–15s per call),
+    # then summarizes every transcript through the LLM before it sends, so a
+    # busy day can exceed RQ's default 180s ceiling — same reason the digest
+    # carries its own job timeout. 1800s covers ~60 recordings + LLM passes.
+    cloudfone_insights_job_timeout_seconds: int = 1800
 
     @field_validator("email_digest_tick_cron")
     @classmethod

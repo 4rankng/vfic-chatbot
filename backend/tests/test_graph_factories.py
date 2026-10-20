@@ -375,7 +375,7 @@ async def test_focused_direct_context_turn_fetches_only_the_selected_file(monkey
     monkeypatch.setattr(cache_mod, "cache_set_json", noop_cache_set)
 
     async def fake_active_model(_db):
-        return "minimax", "MiniMax-M2.7-highspeed", 1_024_000
+        return "minimax", "MiniMax-M3.1-Flash", 1_024_000
 
     monkeypatch.setattr(
         knowledge_base_capacity, "_active_model_context", fake_active_model
@@ -397,8 +397,8 @@ class _Settings:
     llm_default_provider = "minimax"
     minimax_api_key = "sk-mm-fake"
     minimax_base_url = "https://api.minimax.io/v1"
-    minimax_agent_model = "MiniMax-M2.7-highspeed"
-    minimax_extractor_model = "MiniMax-M2.5-highspeed"
+    minimax_agent_model = "MiniMax-M3.1-Flash"
+    minimax_extractor_model = "MiniMax-M3.1-Flash"
     minimax_digest_model = ""
     minimax_request_timeout = 60
     minimax_digest_timeout = 180

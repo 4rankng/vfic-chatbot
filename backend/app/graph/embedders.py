@@ -13,7 +13,7 @@ caller needs is the one on this module.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from app.core.config import get_settings
 
@@ -85,7 +85,7 @@ class GeminiEmbedder:
         async with get_embed_semaphore():
             return await self._ensure_client().aio.models.embed_content(
                 model=self.s.gemini_embedding_model,
-                contents=chunk,
+                contents=cast(Any, chunk),
             )
 
     async def _embed_chunk(self, chunk: list[str]) -> list[list[float]]:

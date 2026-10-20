@@ -94,7 +94,7 @@ def _valid_revision_payload() -> dict[str, object]:
         "template_version_refs": [],
         "provider_policy": {
             "chat_integration_key": "openrouter",
-            "chat_model": "minimax/minimax-m2",
+            "chat_model": "minimax/minimax-m3.1-flash",
             "embedding_integration_key": "openrouter",
             "embedding_model": "google/gemini-embedding-001",
             "temperature": 0.2,

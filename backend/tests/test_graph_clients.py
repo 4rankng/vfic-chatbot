@@ -31,8 +31,8 @@ class _Settings:
     minimax_api_key = ""
     minimax_base_url = "https://api.minimax.io/v1"
     minimax_request_timeout = 60
-    minimax_agent_model = "MiniMax-M2.7-highspeed"
-    minimax_extractor_model = "MiniMax-M2.5-highspeed"
+    minimax_agent_model = "MiniMax-M3.1-Flash"
+    minimax_extractor_model = "MiniMax-M3.1-Flash"
     minimax_digest_model = ""
     minimax_digest_timeout = 180
     openrouter_enable = False
@@ -390,7 +390,7 @@ def test_build_embedder_uses_openrouter_by_default():
 def test_minimax_chat_missing_key_names_minimax(monkeypatch):
     monkeypatch.setattr("app.graph.providers.get_settings", lambda: _Settings())
     with pytest.raises(RuntimeError, match="MINIMAX_API_KEY"):
-        _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
+        _minimax_chat("MiniMax-M3.1-Flash", temperature=0.1)
 
 
 def test_active_llm_provider_returns_minimax_when_both_enabled():
@@ -559,7 +559,7 @@ def test_minimax_chat_sends_no_cache_marker_on_openai_compatible_endpoint(monkey
 
     monkeypatch.setattr("app.graph.providers.get_settings", lambda: _MiniMax())
 
-    chat = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
+    chat = _minimax_chat("MiniMax-M3.1-Flash", temperature=0.1)
     langchain_core = pytest.importorskip("langchain_core.messages")
     payload = chat._get_request_payload(
         [
@@ -588,7 +588,7 @@ def test_minimax_chat_sends_no_reasoning_field(monkeypatch):
 
     monkeypatch.setattr("app.graph.providers.get_settings", lambda: _MiniMax())
 
-    chat = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
+    chat = _minimax_chat("MiniMax-M3.1-Flash", temperature=0.1)
     langchain_core = pytest.importorskip("langchain_core.messages")
     payload = chat._get_request_payload(
         [langchain_core.HumanMessage(content="hi"), langchain_core.HumanMessage(content="again")]
@@ -605,8 +605,8 @@ def test_minimax_chat_applies_output_cap(monkeypatch):
 
     monkeypatch.setattr("app.graph.providers.get_settings", lambda: _MiniMax())
 
-    capped = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1, max_tokens=400)
-    uncapped = _minimax_chat("MiniMax-M2.7-highspeed", temperature=0.1)
+    capped = _minimax_chat("MiniMax-M3.1-Flash", temperature=0.1, max_tokens=400)
+    uncapped = _minimax_chat("MiniMax-M3.1-Flash", temperature=0.1)
 
     assert capped.max_tokens == 400
     assert uncapped.max_tokens is None

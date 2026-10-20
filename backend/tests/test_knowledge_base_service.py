@@ -215,7 +215,7 @@ async def test_project_job_count_selects_only_current_category_authority() -> No
 @pytest.mark.asyncio
 async def test_direct_context_capacity_uses_active_model_window(monkeypatch) -> None:
     async def active_model(_db):
-        return "minimax", "MiniMax-M2.7-highspeed", 204_800
+        return "minimax", "MiniMax-M3.1-Flash", 204_800
 
     monkeypatch.setattr(knowledge_base_capacity, "_active_model_context", active_model)
     direct_file = SimpleNamespace(normalized_text="x" * 100_000)
@@ -225,7 +225,7 @@ async def test_direct_context_capacity_uses_active_model_window(monkeypatch) -> 
     )
 
     assert capacity.provider == "minimax"
-    assert capacity.model == "MiniMax-M2.7-highspeed"
+    assert capacity.model == "MiniMax-M3.1-Flash"
     assert capacity.context_window_tokens == 204_800
     assert capacity.estimated_input_tokens == 50_000
     assert capacity.fits
@@ -248,7 +248,7 @@ async def test_direct_context_readiness_accepts_present_file(monkeypatch) -> Non
     db = _Db(get_values={})
     db.scalar_values.append(SimpleNamespace(normalized_text="x"))
     async def active_model(_db):
-        return "minimax", "MiniMax-M2.7-highspeed", 1_024_000
+        return "minimax", "MiniMax-M3.1-Flash", 1_024_000
 
     monkeypatch.setattr(knowledge_base_capacity, "_active_model_context", active_model)
 
@@ -262,7 +262,7 @@ async def test_ensure_direct_context_fits_returns_capacity_and_raises_over_limit
     monkeypatch,
 ) -> None:
     async def active_model(_db):
-        return "minimax", "MiniMax-M2.7-highspeed", 1_024_000
+        return "minimax", "MiniMax-M3.1-Flash", 1_024_000
 
     monkeypatch.setattr(knowledge_base_capacity, "_active_model_context", active_model)
 
@@ -295,7 +295,7 @@ async def test_active_model_context_uses_the_chatbot_window_for_every_provider(m
         OpenRouterRuntimeConfig,
     )
 
-    def minimax_with(provider: str, model: str = "MiniMax-M2.7-highspeed"):
+    def minimax_with(provider: str, model: str = "MiniMax-M3.1-Flash"):
         async def _resolve(self):
             return MinimaxRuntimeConfig(default_provider=provider, agent_model=model)
 
@@ -311,7 +311,7 @@ async def test_active_model_context_uses_the_chatbot_window_for_every_provider(m
     monkeypatch.setattr(IntegrationSettingsService, "resolve_openrouter", fake_openrouter)
 
     cases = (
-        (minimax_with("minimax"), "minimax", "MiniMax-M2.7-highspeed"),
+        (minimax_with("minimax"), "minimax", "MiniMax-M3.1-Flash"),
         # A model name the old registry did not know: it used to raise ConflictError.
         (minimax_with("minimax", "minimax-m9-turbo"), "minimax", "minimax-m9-turbo"),
         (minimax_with("custom"), "custom", "mimo-v2.5-pro"),

@@ -31,9 +31,10 @@ def run_cloudfone_insights_tick() -> str:
         )
     else:
         logger.info(
-            "cloudfone insights tick: %s calls=%d",
+            "cloudfone insights tick: %s calls=%d stt=%d",
             result.status,
             result.insights_count,
+            result.transcribed_count,
         )
     return result.status
 

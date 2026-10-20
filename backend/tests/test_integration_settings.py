@@ -62,8 +62,8 @@ class _Settings:
     minimax_api_key = ""
     minimax_enable = True
     minimax_base_url = "https://api.minimax.io/v1"
-    minimax_agent_model = "MiniMax-M2.7-highspeed"
-    minimax_extractor_model = "MiniMax-M2.5-highspeed"
+    minimax_agent_model = "MiniMax-M3.1-Flash"
+    minimax_extractor_model = "MiniMax-M3.1-Flash"
     openrouter_api_key = ""
     openrouter_enable = False
     openrouter_base_url = "https://openrouter.ai/api/v1"
@@ -437,7 +437,7 @@ async def test_minimax_admin_view_reports_status_only_for_stored_token():
         "preview": "23 ký tự",
     }
     assert view["minimax_base_url"] == "https://api.minimax.io/v1"
-    assert view["minimax_agent_model"] == "MiniMax-M2.7-highspeed"
+    assert view["minimax_agent_model"] == "MiniMax-M3.1-Flash"
     assert view["minimax_enable"] is True
     assert view["llm_default_provider"] == "minimax"
     # Nothing stored → the canonical ranking that reproduces the historic

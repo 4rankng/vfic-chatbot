@@ -61,7 +61,7 @@ Compose at `/opt/vfic`, Caddy edge.
           ▼                                            │
 ┌────────────────────────────────────────────────────────────────────┐
 │  LLM providers                                                     │
-│   MiniMax M2.7 (agent) / M2.5 (safety)  ── admin-selectable        │
+│   MiniMax M3.1-Flash (agent/safety) ── admin-selectable           │
 │   OpenRouter (deepseek-v4-flash)        ── admin-selectable        │
 │   OpenRouter text-embedding-3-large     ── embeddings (3072-dim)   │
 │   Gemini embedding-2                    ── embedding fallback       │
@@ -1090,7 +1090,7 @@ Per-chat bot locks are durable conversation-row fields:
 
 | Path | Model | Role |
 |---|---|---|
-| MiniMax | `MiniMax-M2.7-highspeed` (agent), `MiniMax-M2.5-highspeed` (safety) | Selected when `LLM_DEFAULT_PROVIDER=minimax`, or when it is the only enabled generation provider. |
+| MiniMax | `MiniMax-M3.1-Flash` (agent + safety) | Selected when `LLM_DEFAULT_PROVIDER=minimax`, or when it is the only enabled generation provider. |
 | OpenRouter | `deepseek/deepseek-v4-flash` default | Selected when `LLM_DEFAULT_PROVIDER=openrouter`, or when it is the only enabled generation provider. |
 | Embeddings | OpenRouter `text-embedding-3-large` (3072-dim) | Default. |
 | Embeddings fallback | Gemini `gemini-embedding-2` | `GeminiEmbedder` (`clients.py:127`). |

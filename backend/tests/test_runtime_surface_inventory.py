@@ -263,7 +263,13 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # provider-transport module). Delta verified against a HEAD-worktree scan.
     # +1: the self check-in status query (POST /integration/self-checkin/status
     # egress in tingting_selfcheckin.update_self_checkin pre-check).
-    "provider_boundary": 111,  # +1 the TingTing self check-in toggle's payroll egress site (3ab65a44)
+    "provider_boundary": 113,  # +1 the TingTing self check-in toggle's payroll egress site (3ab65a44)
+    # 2026-10-20: 111 → 113 — the Cloudfone STT rework adds the MiniMax ASR
+    # POST (services/speech_to_text.py::_post_http) and the recording-download
+    # GET (services/cloudfone.py::download_recording), plus the diarized
+    # transcript-render dict reads; the deleted _parse_transcript alias reads
+    # drop one row. Net +2. Old-tree digest reconstruct-checked: old
+    # cloudfone.py + no speech_to_text.py re-hashes to e7e981d3… exactly.
     # 2026-10-19: 105 → 111 — +7 the Cloudfone insights feature's six
     # provider-transport sites in app/services/cloudfone.py (envelope `.get`
     # reads + the `_post` transport POST; feature commit a3b5d38a shipped the
@@ -435,7 +441,11 @@ EXPECTED_BROAD_BOUNDARY_COUNTS = {
 # 2026-10-19: the CloudFone insights feature's boundary rows (see the
 # provider_boundary count note) and the ods→cloudfone rename; digest recomputed
 # from the post-change scan.
-EXPECTED_BROAD_BOUNDARY_SHA256 = "e7e981d388d6c205b31d3c561ea431000be85e42135968b0ca70c3e3965534b8"
+# 2026-10-20: the Cloudfone STT rework adds the MiniMax ASR POST and
+# recording-download GET; digest recomputed from the post-change scan (old-tree
+# reconstruct check passed: old cloudfone.py + no speech_to_text.py re-hashes
+# to e7e981d388d6c205b31d3c561ea431000be85e42135968b0ca70c3e3965534b8).
+EXPECTED_BROAD_BOUNDARY_SHA256 = "b323ba2b1e8ec87f0969ce9c3477adf8b7442b3c86499bfbc056a7241189a512"
 CALL_CATEGORIES = {
     "queue_producer": {
         "enqueue",

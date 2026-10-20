@@ -28,7 +28,7 @@ a human.
 | Capability | Description |
 |---|---|
 | **Inbound chatbot** | Zalo Bot Platform + Official Account webhooks → <1s ack → async turn pipeline → grounded reply. |
-| **Bot-turn pipeline** | Agent (MiniMax M2.7) → fast safety filter → LLM safety check (MiniMax M2.5) → pre-send guard → Zalo send. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
+| **Bot-turn pipeline** | Agent (MiniMax M3.1-Flash) → fast safety filter → LLM safety check (MiniMax M3.1-Flash) → pre-send guard → Zalo send. Tools: `search_knowledge`, `search_user_memory`, `search_bus_timetable`. |
 | **Lead extraction** | An explicit self-reported name is captured during inbound webhook handling; after each SENT reply, a `persistence_low` job enriches remaining/ambiguous lead fields and memory. |
 | **Lead kanban** | Stages, tags, assignee, follow-up tasks, AI-assisted actions, chatops shortcuts from the lead card. |
 | **Human inbox** | Realtime Socket.IO push, per-conversation rooms, take-over / release / semi-auto / close / reopen, virtualized thread (`virtua`). |

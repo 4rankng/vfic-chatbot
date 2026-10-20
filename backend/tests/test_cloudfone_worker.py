@@ -16,6 +16,7 @@ class _Result:
     def __init__(self, status: str, insights_count: int = 0, missing=None) -> None:
         self.status = status
         self.insights_count = insights_count
+        self.transcribed_count = 0
         self.missing = missing or []
         self.error = None
 
