@@ -552,6 +552,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/CloudfoneTranscriptsSection.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/integrations/CloudfoneSection.tsx",
           "type": "registry:component"
         },
