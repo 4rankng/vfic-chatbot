@@ -2,13 +2,12 @@
 
 Generates a publication-grade Word (.docx) document summarizing daily call center
 performance, containing:
-  1. Header with corporate identity and document reference.
-  2. Executive KPI scorecard cards (Total calls, Service rate %, Missed, AHT).
-  3. AI Insights & Highlights callout box (distilled from LLM daily notes).
-  4. Visual charts & illustrations (Hourly distribution stacked bar, Donut rate).
-  5. Detailed answered calls log with AI transcripts and summaries.
-  6. Callback action tracking for missed calls.
-  7. Recommended action plan and multi-party sign-off block.
+  1. Executive KPI scorecard cards (Total calls, Service rate %, Missed, AHT).
+  2. Highlights callout box (distilled from daily notes).
+  3. Visual charts & illustrations (Hourly distribution stacked bar, Donut rate).
+  4. Detailed answered calls log with transcripts and summaries.
+  5. Callback action tracking for missed calls.
+  6. Recommended action plan.
 """
 
 from __future__ import annotations
@@ -311,52 +310,10 @@ def generate_daily_call_report_docx(
         )
         p._p.get_or_add_pPr().append(bdr)
 
-    # 1. Corporate Header (2-column borderless table)
-    hdr_tbl = doc.add_table(rows=1, cols=2)
-    hdr_tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-    c_left = hdr_tbl.rows[0].cells[0]
-    c_right = hdr_tbl.rows[0].cells[1]
-    c_left.width = Inches(4.5)
-    c_right.width = Inches(2.27)
-    _set_cell_margins(c_left, top=0, bottom=60, left=0, right=0)
-    _set_cell_margins(c_right, top=0, bottom=60, left=0, right=0)
-    _set_cell_borders(c_left)
-    _set_cell_borders(c_right)
-
-    p_l = c_left.paragraphs[0]
-    p_l.paragraph_format.space_before = Pt(0)
-    p_l.paragraph_format.space_after = Pt(0)
-    r_c = p_l.add_run("CÔNG TY TNHH VẬN TẢI & LOGISTICS TING TING\n")
-    r_c.bold = True
-    r_c.font.size = Pt(10)
-    r_c.font.color.rgb = COLOR_PRIMARY
-    r_sub = p_l.add_run("HỆ THỐNG GIÁM SÁT TỔNG ĐÀI CLOUDFONE & AI INSIGHTS")
-    r_sub.font.size = Pt(8.5)
-    r_sub.font.color.rgb = COLOR_MUTED
-
-    p_r = c_right.paragraphs[0]
-    p_r.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_r.paragraph_format.space_before = Pt(0)
-    p_r.paragraph_format.space_after = Pt(0)
-    r_ref = p_r.add_run(
-        f"Số: BC-CF/{day.strftime('%Y%m%d')}\nNgày báo cáo: {day.strftime('%d/%m/%Y')}"
-    )
-    r_ref.font.size = Pt(8.5)
-    r_ref.font.color.rgb = COLOR_MUTED
-
-    # Header Divider Line
-    p_div = doc.add_paragraph()
-    p_div.paragraph_format.space_before = Pt(2)
-    p_div.paragraph_format.space_after = Pt(12)
-    div_xml = parse_xml(
-        f'<w:pBdr {nsdecls("w")}><w:bottom w:val="single" w:sz="12" w:space="1" w:color="{HEX_HEADER_BG}"/></w:pBdr>'
-    )
-    p_div._p.get_or_add_pPr().append(div_xml)
-
     # Document Title
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_title.paragraph_format.space_before = Pt(2)
+    p_title.paragraph_format.space_before = Pt(0)
     p_title.paragraph_format.space_after = Pt(3)
     r_t = p_title.add_run("BÁO CÁO VẬN HÀNH TỔNG ĐÀI & PHÂN TÍCH CUỘC GỌI")
     r_t.bold = True
@@ -368,7 +325,7 @@ def generate_daily_call_report_docx(
     p_subt.paragraph_format.space_before = Pt(0)
     p_subt.paragraph_format.space_after = Pt(14)
     r_st = p_subt.add_run(
-        f"Ngày theo dõi: {day.strftime('%d/%m/%Y')}   ·   Đầu số Hotline: 1800 7228   ·   Đơn vị: Ban Vận Hành"
+        f"Ngày theo dõi: {day.strftime('%d/%m/%Y')}   ·   Đầu số Hotline: 1800 7228"
     )
     r_st.italic = True
     r_st.font.size = Pt(9.5)
@@ -435,8 +392,8 @@ def generate_daily_call_report_docx(
         rs.font.size = Pt(7.5)
         rs.font.color.rgb = COLOR_MUTED
 
-    # 3. Highlights & AI Insights Callout Box
-    add_sec_heading("1. ĐIỂM TIN VẬN HÀNH & PHÁT HIỆN TRỌNG TÂM (AI INSIGHTS)")
+    # 2. Highlights Callout Box
+    add_sec_heading("1. ĐIỂM TIN VẬN HÀNH & PHÁT HIỆN TRỌNG TÂM")
 
     co_tbl = doc.add_table(rows=1, cols=1)
     co_tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -456,7 +413,7 @@ def generate_daily_call_report_docx(
     co_p.paragraph_format.space_before = Pt(2)
     co_p.paragraph_format.space_after = Pt(2)
     co_p.paragraph_format.line_spacing = 1.15
-    r_cot = co_p.add_run("TÓM TẮT TÌNH HÌNH & NHẬN ĐỊNH TỰ ĐỘNG QUA AI:\n")
+    r_cot = co_p.add_run("TÓM TẮT TÌNH HÌNH & GHI NHẬN HỆ THỐNG:\n")
     r_cot.bold = True
     r_cot.font.size = Pt(9.5)
     r_cot.font.color.rgb = COLOR_PRIMARY
@@ -505,8 +462,8 @@ def generate_daily_call_report_docx(
     p_img2.paragraph_format.space_after = Pt(10)
     p_img2.add_run().add_picture(donut_stream, width=Inches(6.6))
 
-    # 5. Answered Calls Detail Table
-    add_sec_heading("3. CHI TIẾT CÁC CUỘC GỌI ĐÃ PHỤC VỤ & PHÂN TÍCH AI")
+    # 4. Answered Calls Detail Table
+    add_sec_heading("3. CHI TIẾT CÁC CUỘC GỌI ĐÃ TIẾP NHẬN")
 
     sorted_insights = sorted(insights, key=lambda item: item.transcript.started_at)
     if sorted_insights:
@@ -516,7 +473,7 @@ def generate_daily_call_report_docx(
             "Số gọi",
             "Hướng / Nhánh",
             "Thời lượng",
-            "Tóm tắt nội dung đàm thoại (AI)",
+            "Tóm tắt nội dung cuộc gọi",
         ]
 
         tbl_ans = doc.add_table(rows=len(sorted_insights) + 1, cols=5)
@@ -672,8 +629,8 @@ def generate_daily_call_report_docx(
         r_ok.font.size = Pt(9)
         r_ok.font.color.rgb = COLOR_SUCCESS
 
-    # 7. Action Plan & Sign-off Block
-    add_sec_heading("5. ĐỀ XUẤT HÀNH ĐỘNG & XÁC NHẬN BÁO CÁO")
+    # 5. Operational Recommendations
+    add_sec_heading("5. ĐỀ XUẤT HÀNH ĐỘNG")
 
     p_rec = doc.add_paragraph()
     p_rec.paragraph_format.space_before = Pt(2)
@@ -684,49 +641,6 @@ def generate_daily_call_report_docx(
         "2. Kiểm tra các trường hợp khiếu nại hoặc khách hàng gọi lặp lại để chuyển phòng ban chuyên trách xử lý dứt điểm.\n"
         "3. Đảm bảo chất lượng thoại và tốc độ nhấc máy dưới 3 hồi chuông theo chuẩn SLA dịch vụ."
     )
-
-    sig_tbl = doc.add_table(rows=2, cols=3)
-    sig_tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-    s_widths = [Inches(2.25), Inches(2.25), Inches(2.27)]
-    roles = [
-        ("NGƯỜI LẬP BÁO CÁO", "Chuyên viên Hệ thống & AI Insights", "(Ký & ghi rõ họ tên)"),
-        ("TRƯỞNG BỘ PHẬN VẬN HÀNH / CSKH", "Quản lý Vận hành Tổng đài", "(Ký & ghi rõ họ tên)"),
-        ("BAN GIÁM ĐỐC", "Đại diện Lãnh đạo phê duyệt", "(Ký & ghi rõ họ tên)"),
-    ]
-
-    for col_i, (t1, t2, t3) in enumerate(roles):
-        c_top = sig_tbl.rows[0].cells[col_i]
-        c_top.width = s_widths[col_i]
-        _set_cell_margins(c_top, top=60, bottom=40, left=40, right=40)
-        _set_cell_borders(c_top)
-        p1 = c_top.paragraphs[0]
-        p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p1.paragraph_format.space_before = Pt(0)
-        p1.paragraph_format.space_after = Pt(0)
-
-        r1 = p1.add_run(f"{t1}\n")
-        r1.bold = True
-        r1.font.size = Pt(9)
-        r1.font.color.rgb = COLOR_PRIMARY
-
-        r2 = p1.add_run(f"{t2}\n")
-        r2.italic = True
-        r2.font.size = Pt(8)
-        r2.font.color.rgb = COLOR_MUTED
-
-        r3 = p1.add_run(t3)
-        r3.font.size = Pt(7.5)
-        r3.font.color.rgb = COLOR_MUTED
-
-        c_bot = sig_tbl.rows[1].cells[col_i]
-        c_bot.width = s_widths[col_i]
-        _set_cell_margins(c_bot, top=200, bottom=40, left=40, right=40)
-        _set_cell_borders(c_bot)
-        p2 = c_bot.paragraphs[0]
-        p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p2.paragraph_format.space_before = Pt(28)
-        p2.paragraph_format.space_after = Pt(0)
-        p2.add_run("")
 
     # Serialize to in-memory bytes
     out_stream = io.BytesIO()

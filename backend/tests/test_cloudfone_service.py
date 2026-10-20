@@ -1085,10 +1085,22 @@ def test_generate_daily_call_report_docx_creates_valid_document_with_charts():
     assert len(docx_bytes) > 20000
 
     doc = docx.Document(io.BytesIO(docx_bytes))
-    assert len(doc.tables) >= 5
+    assert len(doc.tables) >= 3
     with zipfile.ZipFile(io.BytesIO(docx_bytes)) as z:
         media = [name for name in z.namelist() if "media/" in name]
         assert len(media) == 2
+
+    # Verify no mention of "AI" or bureaucratic sign-off blocks
+    all_text = (
+        " ".join(p.text for p in doc.paragraphs)
+        + " "
+        + " ".join(c.text for t in doc.tables for r in t.rows for c in r.cells)
+    )
+    assert "AI" not in all_text
+    assert "Ban Vận Hành" not in all_text
+    assert "NGƯỜI LẬP BÁO CÁO" not in all_text
+    assert "BAN GIÁM ĐỐC" not in all_text
+    assert "CÔNG TY TNHH VẬN TẢI & LOGISTICS TING TING" not in all_text
 
 
 # --- transcript cache: TranscriptStore seam over cloudfone_call_transcripts ---
@@ -1116,9 +1128,7 @@ class _FakeTranscriptStore:
 
 
 def _stt_eligible() -> list[CallRecord]:
-    return [
-        c for c in group_call_legs(REAL_DAY_LEGS) if c.recording_url and c.talk_seconds > 0
-    ]
+    return [c for c in group_call_legs(REAL_DAY_LEGS) if c.recording_url and c.talk_seconds > 0]
 
 
 def _cached_day() -> dict[str, str]:
