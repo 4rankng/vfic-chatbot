@@ -134,7 +134,7 @@ export const SETTINGS_VIEW_COPY: Record<
     kicker: "Tích hợp",
     title: "Cloudfone · Phân tích cuộc gọi",
     description:
-      "Lấy bản ghi (voice transcript) cuộc gọi tổng đài CloudFone mỗi ngày, tóm tắt bằng AI và gửi email cho danh sách người nhận.",
+      "Lấy bản ghi cuộc gọi tổng đài CloudFone mỗi ngày, tự động phân tích và gửi email báo cáo tổng hợp.",
   },
   "settings-cloudfone-transcripts": {
     kicker: "Tích hợp",

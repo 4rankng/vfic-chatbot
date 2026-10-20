@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNotify } from "ra-core";
-import { PhoneCall } from "lucide-react";
+import { Clock, FileText, Mail, PhoneCall } from "lucide-react";
 
 import { Button } from "@/components/base/buttons/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -208,95 +208,207 @@ export const CloudfoneSection = ({
           }
           defaultOpen
         >
-          <PlainField
-            id="cloudfone_service_name"
-            label="CloudFone ServiceName"
-            configured={storedServiceName.length > 0}
-            statusState={statusState}
-            showMissingStatus={false}
-            value={serviceNameValue}
-            onChange={setServiceNameDraft}
-            hint="Tên dịch vụ trong body request CloudFone API 1.1. Để trống để giữ giá trị đã lưu."
-          />
-          <PlainField
-            id="cloudfone_auth_user"
-            label="CloudFone AuthUser"
-            configured={storedAuthUser.length > 0}
-            statusState={statusState}
-            showMissingStatus={false}
-            value={authUserValue}
-            onChange={setAuthUserDraft}
-            hint="Tài khoản xác thực CloudFone API 1.1. Để trống để giữ giá trị đã lưu."
-          />
-          <SecretField
-            id="cloudfone_auth_key"
-            label="CloudFone AuthKey"
-            placeholder="Nhập CloudFone AuthKey"
-            configured={settings?.auth_key?.configured ?? false}
-            statusState={statusState}
-            preview={settings?.auth_key?.preview ?? null}
-            value={authKeyDraft}
-            onChange={setAuthKeyDraft}
-            notify={notify}
-            hint="Để trống để giữ key đã lưu. Bộ ba ServiceName + AuthUser + AuthKey dùng để lấy bản ghi cuộc gọi tổng đài mỗi ngày."
-          />
+          {/* Quick Metrics Bar (Data-Dense Overview) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 rounded-lg border border-border/60 bg-muted/30">
+            <div className="flex items-center gap-2.5 px-2 py-1">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <PhoneCall className="size-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="block text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  CloudFone API 1.1
+                </span>
+                <span className="block truncate text-xs font-semibold text-foreground">
+                  {configuredFields === CLOUDFONE_FIELD_COUNT
+                    ? "Đã cấu hình đủ"
+                    : `${configuredFields}/${CLOUDFONE_FIELD_COUNT} thông số`}
+                </span>
+              </div>
+            </div>
 
-          <div className="settings-tingting-subhead">
-            <h3>Người nhận</h3>
-            <p>Danh sách trống = tắt email phân tích cuộc gọi.</p>
+            <div className="flex items-center gap-2.5 px-2 py-1 border-t sm:border-t-0 sm:border-l border-border/40">
+              <div
+                className={`flex size-7 shrink-0 items-center justify-center rounded-md ${
+                  enabled
+                    ? "bg-emerald-500/10 text-emerald-600"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <Clock className="size-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="block text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Lịch gửi tự động
+                </span>
+                <span className="block truncate text-xs font-semibold text-foreground">
+                  {enabled ? "08:00 hàng ngày (GMT+7)" : "Đang tạm tắt"}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 px-2 py-1 border-t sm:border-t-0 sm:border-l border-border/40">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-blue-500/10 text-blue-600">
+                <Mail className="size-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="block text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Người nhận báo cáo
+                </span>
+                <span className="block truncate text-xs font-semibold text-foreground">
+                  {parsedRecipients.length > 0
+                    ? `${parsedRecipients.length} email đăng ký`
+                    : "Chưa có người nhận"}
+                </span>
+              </div>
+            </div>
           </div>
-          <label
-            htmlFor="cloudfone_recipients"
-            className="text-body-sm text-foreground"
-          >
-            Danh sách email người nhận
-          </label>
-          <Textarea
-            id="cloudfone_recipients"
-            value={recipientsValue}
-            onChange={(event) => setRecipientsDraft(event.target.value)}
-            placeholder={"quanly@congty.vn\nkd@congty.vn"}
-            rows={3}
-            className="min-h-10"
-          />
-          <p className="text-body-xs text-text-substandard">
-            Phân tách bằng dấu phẩy hoặc xuống dòng. Email phân tích được gửi
-            lúc 08:00 sáng (giờ Việt Nam) với các cuộc gọi của ngày hôm trước.
+
+          {/* 3-Column API Credentials Row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <PlainField
+              id="cloudfone_service_name"
+              label="CloudFone ServiceName"
+              configured={storedServiceName.length > 0}
+              statusState={statusState}
+              showMissingStatus={false}
+              value={serviceNameValue}
+              onChange={setServiceNameDraft}
+            />
+            <PlainField
+              id="cloudfone_auth_user"
+              label="CloudFone AuthUser"
+              configured={storedAuthUser.length > 0}
+              statusState={statusState}
+              showMissingStatus={false}
+              value={authUserValue}
+              onChange={setAuthUserDraft}
+            />
+            <SecretField
+              id="cloudfone_auth_key"
+              label="CloudFone AuthKey"
+              placeholder="Nhập CloudFone AuthKey"
+              configured={settings?.auth_key?.configured ?? false}
+              statusState={statusState}
+              preview={settings?.auth_key?.preview ?? null}
+              value={authKeyDraft}
+              onChange={setAuthKeyDraft}
+              notify={notify}
+            />
+          </div>
+          <p className="text-body-xs text-text-substandard -mt-2">
+            Bộ ba ServiceName + AuthUser + AuthKey dùng để kết nối API 1.1 tổng
+            đài CloudFone. Để trống để giữ nguyên giá trị đã lưu.
           </p>
 
-          <div className="settings-tingting-subhead">
-            <h3>Cron</h3>
-            <p>Bật/tắt gửi email phân tích hàng ngày.</p>
-          </div>
-          <div
-            className="flex flex-wrap items-center gap-2"
-            role="group"
-            aria-label="Bật tắt cron Cloudfone"
-          >
-            <Button
-              type="button"
-              size="sm"
-              color={enabled ? "primary" : "secondary"}
-              className="uu-scope tt-btn-touch"
-              aria-pressed={enabled}
-              onClick={() => setEnabledDraft(true)}
-            >
-              Bật cron
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              color={enabled ? "secondary" : "primary"}
-              className="uu-scope tt-btn-touch"
-              aria-pressed={!enabled}
-              onClick={() => setEnabledDraft(false)}
-            >
-              Tắt cron
-            </Button>
+          {/* 2-Column Responsive Workspace: Recipients (Left 7 cols) & Schedule/Cron (Right 5 cols) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+            {/* Cột 1: Danh sách email */}
+            <div className="lg:col-span-7 flex flex-col gap-1.5 p-3 rounded-lg border border-border/60 bg-muted/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Mail className="size-3.5 text-muted-foreground" />
+                  <label
+                    htmlFor="cloudfone_recipients"
+                    className="text-body-sm font-medium text-foreground"
+                  >
+                    Danh sách email người nhận
+                  </label>
+                </div>
+                <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                  {parsedRecipients.length} email
+                </span>
+              </div>
+              <Textarea
+                id="cloudfone_recipients"
+                value={recipientsValue}
+                onChange={(event) => setRecipientsDraft(event.target.value)}
+                placeholder={"quanly@congty.vn\nkd@congty.vn"}
+                rows={3}
+                className="font-mono text-xs leading-relaxed resize-none bg-background"
+              />
+              <p className="text-body-xs text-text-substandard">
+                Phân tách bằng dấu phẩy hoặc xuống dòng. Danh sách trống = tắt
+                email phân tích cuộc gọi.
+              </p>
+            </div>
+
+            {/* Cột 2: Lịch gửi & Cron Toggle */}
+            <div className="lg:col-span-5 flex flex-col justify-between gap-2.5 p-3 rounded-lg border border-border/60 bg-muted/20">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="size-3.5 text-muted-foreground" />
+                    <span className="text-body-sm font-medium text-foreground">
+                      Lịch gửi tự động (Cron)
+                    </span>
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                      enabled
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                        : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                    }`}
+                  >
+                    <span
+                      className={`size-1.5 rounded-full ${
+                        enabled ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"
+                      }`}
+                    />
+                    {enabled ? "Đang bật" : "Đang tắt"}
+                  </span>
+                </div>
+                <p className="text-body-xs text-text-substandard leading-relaxed">
+                  Báo cáo kèm file Word (.docx) và biểu đồ được gửi định kỳ lúc{" "}
+                  <strong className="text-foreground">08:00 sáng</strong> hàng
+                  ngày (giờ Việt Nam).
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-border/40">
+                <span className="text-body-xs text-foreground font-medium">
+                  Bật/tắt gửi email phân tích hàng ngày
+                </span>
+                <div
+                  className="inline-flex rounded-lg border border-border/60 bg-muted/60 p-0.5"
+                  role="group"
+                  aria-label="Bật tắt cron Cloudfone"
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    color={enabled ? "primary" : "secondary"}
+                    className="uu-scope text-xs px-2.5 py-1 font-medium"
+                    aria-pressed={enabled}
+                    onClick={() => setEnabledDraft(true)}
+                  >
+                    Bật cron
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    color={enabled ? "secondary" : "primary"}
+                    className="uu-scope text-xs px-2.5 py-1 font-medium"
+                    aria-pressed={!enabled}
+                    onClick={() => setEnabledDraft(false)}
+                  >
+                    Tắt cron
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="settings-tingting-link">
-            <span className="settings-tingting-link-copy" role="status">
+          {/* Action & Status Strip */}
+          <div className="settings-tingting-link flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-lg border border-border/60 bg-muted/20">
+            <span
+              className="settings-tingting-link-copy text-body-xs flex items-center gap-1.5"
+              role="status"
+            >
+              <span
+                className={`size-2 shrink-0 rounded-full ${
+                  enabled ? "bg-emerald-500" : "bg-amber-500"
+                }`}
+              />
               {enabled
                 ? "Cloudfone đang bật. Email phân tích sẽ gửi hàng ngày lúc 08:00 (giờ VN)."
                 : enabledDraft === false
@@ -308,16 +420,21 @@ export const CloudfoneSection = ({
                     ? "Cloudfone đang tắt — cần đủ ServiceName, AuthUser, AuthKey và ít nhất một người nhận."
                     : "Cloudfone đang tắt — bấm Bật cron rồi Lưu cấu hình để bật."}
             </span>
-            <Button
-              type="button"
-              color="secondary"
-              className="uu-scope settings-test-button tt-btn-touch"
-              onClick={() => testConnection.mutate(probeDraft())}
-              isDisabled={testConnection.isPending}
-              aria-busy={testConnection.isPending}
-            >
-              {testConnection.isPending ? "Đang kiểm tra…" : "Kiểm tra kết nối"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                color="secondary"
+                size="sm"
+                className="uu-scope settings-test-button tt-btn-touch text-xs font-medium"
+                onClick={() => testConnection.mutate(probeDraft())}
+                isDisabled={testConnection.isPending}
+                aria-busy={testConnection.isPending}
+              >
+                {testConnection.isPending
+                  ? "Đang kiểm tra…"
+                  : "Kiểm tra kết nối"}
+              </Button>
+            </div>
           </div>
         </SettingsGroup>
 
@@ -326,9 +443,10 @@ export const CloudfoneSection = ({
             <Button
               type="button"
               color="secondary"
-              className="tt-btn-touch"
+              className="tt-btn-touch text-xs flex items-center gap-1.5"
               onClick={onOpenTranscripts}
             >
+              <FileText className="size-4" />
               Xem bản ghi cuộc gọi
             </Button>
           ) : null}
@@ -344,7 +462,7 @@ export const CloudfoneSection = ({
           <span className="settings-llm-footer-note">
             {dirty
               ? "Có thay đổi chưa lưu."
-              : "Hệ thống lấy phân tích cuộc gọi (voice transcript) từ CloudFone, tóm tắt bằng AI và gửi email cho người nhận."}
+              : "Hệ thống lấy bản ghi cuộc gọi từ CloudFone, tự động phân tích và gửi báo cáo tổng hợp."}
           </span>
         </div>
       </fieldset>
