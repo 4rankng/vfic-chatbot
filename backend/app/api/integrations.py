@@ -510,11 +510,11 @@ def _transcript_out(row) -> CloudfoneTranscriptOut:
 
 @router.get("/cloudfone/transcripts", response_model=CloudfoneTranscriptPageOut)
 async def list_cloudfone_transcripts(
+    response: Response,
     day: date | None = Query(default=None),
     caller: str | None = Query(default=None, max_length=64),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    response: Response = None,  # type: ignore[assignment]
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CloudfoneTranscriptPageOut:
@@ -545,8 +545,8 @@ async def list_cloudfone_transcripts(
     "/cloudfone/transcripts/{call_id}", response_model=CloudfoneTranscriptDetailOut
 )
 async def get_cloudfone_transcript(
+    response: Response,
     call_id: str,
-    response: Response = None,  # type: ignore[assignment]
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CloudfoneTranscriptDetailOut:
