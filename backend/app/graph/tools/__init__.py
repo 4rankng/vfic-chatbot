@@ -44,8 +44,12 @@ from app.graph.tools.tingting_selfcheckin import (
 )
 from app.graph.tools.income import compare_income
 from app.graph.tools.knowledge import (
+    CONTEXT_ORDER_POSITION_AWARE,
+    CONTEXT_ORDER_SIMILARITY,
     _format_knowledge_row,
     load_project_knowledge,
+    order_context_chunks,
+    resolve_context_order,
     search_knowledge,
 )
 from app.graph.tools.memory import search_user_memory
@@ -93,4 +97,8 @@ __all__ = [
     "_cache_digest",
     "cached_embed",
     "_format_knowledge_row",
+    "CONTEXT_ORDER_POSITION_AWARE",
+    "CONTEXT_ORDER_SIMILARITY",
+    "order_context_chunks",
+    "resolve_context_order",
 ]

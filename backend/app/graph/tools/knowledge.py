@@ -11,9 +11,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from itertools import islice
-from typing import Any
+from typing import Any, TypeVar
 
 from app.core.cache import cache_get_json, cache_set_json, cache_version
 from app.core.config import get_settings
@@ -47,6 +47,52 @@ _MAX_EVIDENCE_ROWS = 20
 _MAX_EVIDENCE_CHARS = 20000
 _MAX_EVIDENCE_ROW_CHARS = 4000
 _EVIDENCE_CACHE_FORMAT = "project-evidence-v2"
+
+CONTEXT_ORDER_POSITION_AWARE = "position-aware"
+CONTEXT_ORDER_SIMILARITY = "similarity"
+_VALID_CONTEXT_ORDERS = frozenset({CONTEXT_ORDER_POSITION_AWARE, CONTEXT_ORDER_SIMILARITY})
+_T = TypeVar("_T")
+
+
+def resolve_context_order(order: str | None = None, *, settings: Any | None = None) -> str:
+    """Resolve the context ordering mode from an explicit override or Settings."""
+    raw = order
+    if raw is None:
+        s = settings if settings is not None else get_settings()
+        raw = getattr(s, "rag_context_order", CONTEXT_ORDER_POSITION_AWARE)
+    normalized = str(raw or CONTEXT_ORDER_POSITION_AWARE).strip().lower()
+    if normalized == "rank":
+        normalized = CONTEXT_ORDER_SIMILARITY
+    if normalized not in _VALID_CONTEXT_ORDERS:
+        return CONTEXT_ORDER_POSITION_AWARE
+    return normalized
+
+
+def order_context_chunks(
+    chunks: Sequence[_T],
+    *,
+    order: str | None = None,
+) -> list[_T]:
+    """Reorder ranked chunks for LLM context assembly (Lost-in-the-Middle).
+
+    ``chunks`` is expected in descending relevance order (rank 1 first).
+    When ``order == "position-aware"`` (default):
+      - rank 1 (index 0) is placed at the start (index 0),
+      - rank 2 (index 1) is placed at the end (index -1),
+      - rank 3 (index 2) is placed second from start (index 1),
+      - rank 4 (index 3) is placed second from end (index -2),
+      - ... alternating inward so the weakest tail chunks occupy the middle of
+        the context where LLM attention is lowest (Liu et al., 2023).
+    When ``order == "similarity"`` (or ``len(chunks) <= 2``), original rank
+    order is preserved unchanged.
+    """
+    items = list(chunks)
+    resolved = resolve_context_order(order)
+    if resolved != CONTEXT_ORDER_POSITION_AWARE or len(items) <= 2:
+        return items
+    left = items[0::2]
+    right = list(reversed(items[1::2]))
+    return left + right
 
 
 def _format_knowledge_row(r) -> str:
@@ -198,10 +244,16 @@ async def search_knowledge(
     if project_ids is not None:
         project_ids = sorted(project_ids)
     s = get_settings()
+    context_order = resolve_context_order(settings=s)
+    cache_format = (
+        _EVIDENCE_CACHE_FORMAT
+        if context_order == CONTEXT_ORDER_POSITION_AWARE
+        else f"{_EVIDENCE_CACHE_FORMAT}:{context_order}"
+    )
     knowledge_version = await cache_version("knowledge") if s.rag_cache_enabled else "0"
     cache_key = (
         "rag:knowledge:"
-        f"{_cache_digest(query, project_slug, top_k, project_ids, knowledge_version, _EVIDENCE_CACHE_FORMAT)}"
+        f"{_cache_digest(query, project_slug, top_k, project_ids, knowledge_version, cache_format)}"
     )
 
     # --- Cache-read window: wrap exact + semantic lookup together so the
@@ -352,11 +404,17 @@ async def _search_knowledge_compute(
     # ``project_slug=None`` but a non-empty ``project_ids``, so "no slug" alone
     # must never be treated as the deployment-wide catalog (REL-07). Conservative
     # threshold.
+    context_order = resolve_context_order(settings=s)
+    cache_format = (
+        _EVIDENCE_CACHE_FORMAT
+        if context_order == CONTEXT_ORDER_POSITION_AWARE
+        else f"{_EVIDENCE_CACHE_FORMAT}:{context_order}"
+    )
     sem_scope: str | None = None
     if sem_enabled and not project_slug:
         from app.graph.semantic_cache import scope_key
 
-        sem_scope = f"{_EVIDENCE_CACHE_FORMAT}:{scope_key(project_ids, top_k)}"
+        sem_scope = f"{cache_format}:{scope_key(project_ids, top_k)}"
 
     if sem_scope is not None:
         from app.graph.semantic_cache import semantic_cache_get
@@ -395,20 +453,22 @@ async def _search_knowledge_compute(
             continue
         ordered.append(r)
     rendered = _render_capped_evidence(ordered)
+    kept_faq = min(len(faq_rows), len(rendered))
+    rendered = order_context_chunks(rendered, order=context_order)
     logger.debug(
-        "search_knowledge: %d rows (project=%s), %d faq rows, %d rendered",
+        "search_knowledge: %d rows (project=%s), %d faq rows, %d rendered (order=%s)",
         len(rows),
         project_slug,
         len(faq_rows),
         len(rendered),
+        context_order,
     )
-    # ``ordered`` is FAQ-first, so the leading rendered lines are the FAQ ones.
-    kept_faq = min(len(faq_rows), len(rendered))
+    # ``ordered`` is FAQ-first, so rank 1 (index 0) is always the top FAQ hit
+    # when ``kept_faq > 0`` under both ``similarity`` and ``position-aware``.
     lines: list[str] = []
     if kept_faq:
         lines.append("CÂU HỎI THƯỜNG GẶP (câu trả lời chuẩn):")
-        lines.extend(rendered[:kept_faq])
-    lines.extend(rendered[kept_faq:])
+    lines.extend(rendered)
     result = "\n".join(lines)
     if s.rag_cache_enabled and retrieval_complete:
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)

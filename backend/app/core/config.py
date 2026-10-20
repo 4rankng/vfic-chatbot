@@ -28,6 +28,7 @@ ZALO_BOT_WEBHOOK_URL: str = "https://bot.tingting.vip/webhooks/zalo/chatbot"
 # misconfigured JWT_ALGORITHM must fail at boot, not break every login at
 # request time.
 ALLOWED_JWT_ALGORITHMS: frozenset[str] = frozenset({"HS256", "HS384", "HS512"})
+ALLOWED_RAG_CONTEXT_ORDERS: frozenset[str] = frozenset({"position-aware", "similarity"})
 
 # ---------------------------------------------------------------------------
 # Knowledge pipeline constants (not configurable via env)
@@ -279,6 +280,11 @@ class Settings(BaseSettings):
     # say. Off = legacy behavior for new ingests (existing vectors unchanged);
     # see scripts/backfill_contextual_prefix.py to prefix existing chunks.
     rag_contextual_enabled: bool = True
+    # Lost-in-the-Middle context assembly (Liu et al., 2023): place the top-ranked
+    # chunk at the start of the assembled context and the second-best chunk at the
+    # end, alternating inward so the weakest tail chunks land in the middle where
+    # LLM attention is lowest. Set to "similarity" to preserve monotone rank order.
+    rag_context_order: str = "position-aware"
     rag_cache_enabled: bool = True
     rag_result_cache_ttl_seconds: int = 300
     embedding_cache_ttl_seconds: int = 86400
@@ -546,6 +552,18 @@ class Settings(BaseSettings):
         if normalized not in ALLOWED_JWT_ALGORITHMS:
             raise ValueError(
                 f"jwt_algorithm must be one of {sorted(ALLOWED_JWT_ALGORITHMS)} (got {value!r})"
+            )
+        return normalized
+
+    @field_validator("rag_context_order")
+    @classmethod
+    def _validate_rag_context_order(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized == "rank":
+            normalized = "similarity"
+        if normalized not in ALLOWED_RAG_CONTEXT_ORDERS:
+            raise ValueError(
+                f"rag_context_order must be one of {sorted(ALLOWED_RAG_CONTEXT_ORDERS)} (got {value!r})"
             )
         return normalized
 
