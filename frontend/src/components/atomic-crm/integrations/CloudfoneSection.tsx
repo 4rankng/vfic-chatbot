@@ -33,7 +33,11 @@ const cloudfoneSettingsKey = ["cloudfone-settings"] as const;
  * stays off until ServiceName AND AuthUser AND AuthKey AND a non-empty
  * recipient list are saved with cron enabled.
  */
-export const CloudfoneSection = () => {
+export const CloudfoneSection = ({
+  onOpenTranscripts,
+}: {
+  onOpenTranscripts?: () => void;
+}) => {
   const notify = useNotify();
   const queryClient = useQueryClient();
   // Untouched-draft sentinels: null shows (and keeps tracking) the server value.
@@ -318,6 +322,16 @@ export const CloudfoneSection = () => {
         </SettingsGroup>
 
         <div className={`settings-llm-footer${dirty ? " is-dirty" : ""}`}>
+          {onOpenTranscripts ? (
+            <Button
+              type="button"
+              color="secondary"
+              className="tt-btn-touch"
+              onClick={onOpenTranscripts}
+            >
+              Xem bản ghi cuộc gọi
+            </Button>
+          ) : null}
           <Button
             type="button"
             color="primary"

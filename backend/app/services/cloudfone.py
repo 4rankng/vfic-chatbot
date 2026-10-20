@@ -79,7 +79,11 @@ DAILY_INSIGHTS_SYSTEM_PROMPT = (
     "biến, thời lượng bất thường, tín hiệu chất lượng phục vụ — chọn những gì "
     "thực sự nổi bật trong dữ liệu này). Chỉ nêu phát hiện được dữ liệu chứng "
     "minh; không bịa. Trả về 3-7 gạch đầu dòng tiếng Việt, mỗi dòng bắt đầu bằng "
-    "'– ', không markdown khác, không phần mở đầu hay kết luận."
+    "'– ', không markdown khác, không phần mở đầu hay kết luận.\n"
+    "QUY ĐỊNH BẮT BUỘC VỀ NGÔN NGỮ:\n"
+    "- Sử dụng hoàn toàn tiếng Việt tự nhiên, KHÔNG dùng tiếng Anh (ví dụ: dùng 'gọi vào', 'gọi ra', "
+    "'gọi lại', 'thời lượng trung bình' thay vì 'Inbound', 'Outbound', 'Callback', 'AHT', 'SLA').\n"
+    "- TUYỆT ĐỐI KHÔNG nhắc đến từ 'AI'."
 )
 
 

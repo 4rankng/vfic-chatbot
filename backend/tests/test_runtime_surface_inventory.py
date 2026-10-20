@@ -59,7 +59,7 @@ EXPECTED_ROUTE_COUNTS = {
     # +3 candidate email digest: GET/PUT /email-digest config + POST test send
     # +1 POST /facebook/pages/{page_id}/bot-pause — the per-Page bot pause
     # switch (2026-10-08): Page stays connected, bot sends nothing.
-    "integrations": 42,  # +3 the Cloudfone insights settings trio (GET/PUT /cloudfone + POST /cloudfone/test; feature commit a3b5d38a, spec-1.1 rework 039f1d56)
+    "integrations": 44,  # +3 the Cloudfone insights settings trio (GET/PUT /cloudfone + POST /cloudfone/test; feature commit a3b5d38a, spec-1.1 rework 039f1d56); +2 the Cloudfone transcripts viewer read pair (GET /cloudfone/transcripts + GET /cloudfone/transcripts/{call_id}, 2026-10-20)
     # +2 the TingTing support OA: save-and-check the four credentials (PUT /tingting)
     # and a re-probe endpoint (POST /tingting/oa/check)
     # +2 deployment-wide TingTing app API key (GET / PUT, secrets status-only)
@@ -118,7 +118,10 @@ EXPECTED_ROUTE_COUNTS = {
 # (GET/PUT /cloudfone + POST /cloudfone/test, feature commit a3b5d38a added
 # them as /ods without touching this oracle; the ods→cloudfone rename kept the
 # count and renamed the three route functions, digest recomputed).
-EXPECTED_ROUTE_INVENTORY_SHA256 = "d8d3b5517acdd53c0f6ca5e1345889f1a7122a4e5737d878b7e1970495e81dca"
+# 2026-10-20: the Cloudfone transcripts viewer adds GET /cloudfone/transcripts
+# and GET /cloudfone/transcripts/{call_id} (read pair over cloudfone_call_transcripts);
+# digest recomputed from the post-change route scan.
+EXPECTED_ROUTE_INVENTORY_SHA256 = "9f8492ede7590238fd591dab2149698749de90df853da667f899b40a7f920261"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

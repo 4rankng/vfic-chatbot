@@ -100,7 +100,9 @@ const MobileSettingsNav = ({
           <span className="min-w-0 flex-1 text-left">
             <span className="settings-mobile-drawer-label">Cài đặt</span>
             <span className="settings-mobile-drawer-current">
-              {activeItem.label}
+              {activeItem.itemId === activeItemId
+                ? activeItem.label
+                : SETTINGS_VIEW_COPY[activeItemId].title}
             </span>
           </span>
         </Button>
@@ -179,10 +181,9 @@ export const SettingsChrome = ({
   children: ReactNode;
 }) => {
   const isMobile = useIsMobile();
-  const activeItem =
-    SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
-    SETTINGS_NAV_ITEMS[0];
-  const headerCopy = SETTINGS_VIEW_COPY[activeItem.itemId];
+  // Non-rail views (the transcripts viewer) carry their own copy; the rail
+  // highlights its own entry from `activeItemId` inside SettingsSideNav.
+  const headerCopy = SETTINGS_VIEW_COPY[activeItemId];
 
   // A new section starts at its own top; the workspace keeps one scroll box.
   useEffect(() => {
@@ -192,7 +193,7 @@ export const SettingsChrome = ({
         ?.scrollTo({ top: 0, behavior: "auto" });
     });
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeItem.itemId]);
+  }, [activeItemId]);
 
   return (
     <SettingsWorkspace>

@@ -3,6 +3,8 @@
 One row per call (``cloudfone_call_transcripts``, migration 0076). The pipeline
 reads it before downloading a recording and writes it after MiniMax STT, so a
 rerun or a later analysis pass never pays the WAV download + STT cost twice.
+The admin transcripts screen reads the same rows through the list/get queries
+below.
 """
 
 from __future__ import annotations
@@ -10,7 +12,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cloudfone import CloudfoneCallTranscript
@@ -59,3 +61,48 @@ class DbTranscriptStore:
             # race): the caller fail-softs and the letter must still go out.
             await self._db.rollback()
             raise
+
+
+async def list_call_transcripts(
+    db: AsyncSession,
+    *,
+    day: date | None = None,
+    caller: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[CloudfoneCallTranscript], int]:
+    """One page of stored transcripts, newest call first, plus the filtered total.
+
+    ``caller`` matches anywhere in the phone number (admin lookup habit: paste
+    a fragment); ``day`` filters on the call day the pipeline stored.
+    """
+    filters = []
+    if day is not None:
+        filters.append(CloudfoneCallTranscript.day == day)
+    if caller:
+        filters.append(CloudfoneCallTranscript.caller.contains(caller, autoescape=True))
+    total = await db.scalar(select(func.count()).select_from(CloudfoneCallTranscript).where(*filters))
+    rows = (
+        await db.scalars(
+            select(CloudfoneCallTranscript)
+            .where(*filters)
+            .order_by(
+                CloudfoneCallTranscript.started_at.desc(),
+                CloudfoneCallTranscript.id.desc(),
+            )
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).all()
+    return list(rows), int(total or 0)
+
+
+async def get_call_transcript(
+    db: AsyncSession, call_id: str
+) -> CloudfoneCallTranscript | None:
+    """One stored transcript by the vendor call id, or ``None``."""
+    return await db.scalar(
+        select(CloudfoneCallTranscript).where(
+            CloudfoneCallTranscript.call_id == call_id
+        )
+    )

@@ -338,9 +338,12 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0075_channel_account_bot_pause` (8 Oct 2026). This line is grepped by the
+- **HEAD:** `0076_cloudfone_call_transcripts` (20 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0075` adds the
+  new migration that does not update it blocks the release. `0076` adds the
+  Cloudfone call-transcript store (`cloudfone_call_transcripts`, one row per
+  transcribed call — unique `call_id`, indexed `day`): additive, so blue/green
+  runs either way; `downgrade()` drops the table. `0075` adds the
   per-Page bot pause switch (`channel_accounts.bot_paused`, default false):
   the Page stays connected and every candidate message is still persisted,
   but no bot turn is enqueued, recovered by the reconcile sweep, or sent —

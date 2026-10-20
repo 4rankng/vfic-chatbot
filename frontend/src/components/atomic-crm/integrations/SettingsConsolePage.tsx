@@ -18,6 +18,7 @@ import { GeocoderSection } from "./GeocoderSection";
 import { JevSection } from "./JevSection";
 import { LlmProvidersSection } from "./LlmProvidersSection";
 import { CloudfoneSection } from "./CloudfoneSection";
+import { CloudfoneTranscriptsSection } from "./CloudfoneTranscriptsSection";
 import { TingtingSection } from "./TingtingSection";
 import { SettingsChrome, SettingsWorkspace } from "./SettingsChrome";
 import { ZaloChannelSection } from "./ZaloChannelSection";
@@ -101,7 +102,19 @@ export const SettingsConsolePage = () => {
       case "settings-email-digest":
         return <EmailDigestSection />;
       case "settings-cloudfone":
-        return <CloudfoneSection />;
+        return (
+          <CloudfoneSection
+            onOpenTranscripts={() =>
+              setActiveItemId("settings-cloudfone-transcripts")
+            }
+          />
+        );
+      case "settings-cloudfone-transcripts":
+        return (
+          <CloudfoneTranscriptsSection
+            onBack={() => setActiveItemId("settings-cloudfone")}
+          />
+        );
       case "settings-geocoder":
         return <GeocoderSection />;
       case "settings-users":

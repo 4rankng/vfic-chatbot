@@ -1077,7 +1077,7 @@ def test_generate_daily_call_report_docx_creates_valid_document_with_charts():
     stats = build_daily_stats(calls)
     answered = [c for c in calls if c.status == "ANSWERED"]
     insights = [cloudfone_module.CallInsight(c, summary="Tóm tắt cuộc gọi") for c in answered]
-    notes = "– Điểm tin 1\n– Điểm tin 2"
+    notes = "– Inbound gọi nhỡ nhiều\n– Cần Callback gấp\n– Hệ thống ghi nhận"
     day = date(2026, 10, 1)
 
     docx_bytes = generate_daily_call_report_docx(stats, calls, insights, notes, day)
@@ -1090,7 +1090,7 @@ def test_generate_daily_call_report_docx_creates_valid_document_with_charts():
         media = [name for name in z.namelist() if "media/" in name]
         assert len(media) == 2
 
-    # Verify no mention of "AI" or bureaucratic sign-off blocks
+    # Verify no mention of "AI", English jargon, or bureaucratic sign-off blocks
     all_text = (
         " ".join(p.text for p in doc.paragraphs)
         + " "
@@ -1101,6 +1101,11 @@ def test_generate_daily_call_report_docx_creates_valid_document_with_charts():
     assert "NGƯỜI LẬP BÁO CÁO" not in all_text
     assert "BAN GIÁM ĐỐC" not in all_text
     assert "CÔNG TY TNHH VẬN TẢI & LOGISTICS TING TING" not in all_text
+    assert "NO ANSWER" not in all_text
+    assert "(AHT)" not in all_text
+    assert "CALLBACK ACTION" not in all_text
+    assert "Inbound" not in all_text
+    assert "Callback" not in all_text
 
 
 # --- transcript cache: TranscriptStore seam over cloudfone_call_transcripts ---

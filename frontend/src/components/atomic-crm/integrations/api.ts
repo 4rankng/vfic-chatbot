@@ -210,6 +210,39 @@ export type CloudfoneTestResult = {
   error: string | null;
 };
 
+/** One stored voice-call transcript row (admin list projection). */
+export type CloudfoneTranscriptSummary = {
+  call_id: string;
+  day: string;
+  started_at: string;
+  caller: string;
+  talk_seconds: number;
+  transcript_preview: string;
+  created_at: string;
+};
+
+/** The list projection plus the full transcript text. */
+export type CloudfoneTranscriptDetail = CloudfoneTranscriptSummary & {
+  transcript: string;
+};
+
+export type CloudfoneTranscriptPage = {
+  items: CloudfoneTranscriptSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+/** Filters for the transcripts list; omitted keys mean "no filter". */
+export type CloudfoneTranscriptQuery = {
+  /** ISO call day (YYYY-MM-DD). */
+  day?: string;
+  /** Phone-number fragment. */
+  caller?: string;
+  page?: number;
+  page_size?: number;
+};
+
 /** PUT body. Omit a key to keep the stored value. */
 export type GeocoderSettingsUpdate = {
   vietmap_api_key?: string;
@@ -491,6 +524,35 @@ export const zaloIntegrationGateway = {
         method: "POST",
         body: body ?? {},
       },
+    ),
+
+  /** Stored call transcripts for the admin viewer, newest call first. */
+  listCloudfoneTranscripts: async (
+    query: CloudfoneTranscriptQuery = {},
+  ): Promise<CloudfoneTranscriptPage> => {
+    const params = new URLSearchParams();
+    if (query.day) params.set("day", query.day);
+    if (query.caller) params.set("caller", query.caller);
+    if (query.page != null) params.set("page", String(query.page));
+    if (query.page_size != null) {
+      params.set("page_size", String(query.page_size));
+    }
+    const search = params.toString();
+    return apiJson<CloudfoneTranscriptPage>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/cloudfone/transcripts${
+        search ? `?${search}` : ""
+      }`,
+    );
+  },
+
+  /** One transcript by vendor call id (full text). */
+  loadCloudfoneTranscript: async (
+    callId: string,
+  ): Promise<CloudfoneTranscriptDetail> =>
+    apiJson<CloudfoneTranscriptDetail>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/cloudfone/transcripts/${encodeURIComponent(
+        callId,
+      )}`,
     ),
 } as const;
 

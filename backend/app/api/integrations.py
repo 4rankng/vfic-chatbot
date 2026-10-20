@@ -11,7 +11,9 @@ import logging
 import time
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Body, Depends, Response
+from datetime import date
+
+from fastapi import APIRouter, Body, Depends, Query, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,6 +53,9 @@ from app.schemas.integrations import (
     CloudfoneIntegrationSettingsOut,
     CloudfoneIntegrationSettingsUpdate,
     CloudfoneIntegrationTestOut,
+    CloudfoneTranscriptDetailOut,
+    CloudfoneTranscriptOut,
+    CloudfoneTranscriptPageOut,
     OpenRouterIntegrationSettingsOut,
     OpenRouterIntegrationSettingsUpdate,
     OpenRouterIntegrationTestOut,
@@ -485,6 +490,67 @@ async def test_cloudfone_integration_settings(
         configured=True,
         missing=[],
         latency_ms=int((time.perf_counter() - started) * 1000),
+    )
+
+
+def _transcript_out(row) -> CloudfoneTranscriptOut:
+    """ORM row → list/detail projection (preview keeps the page payload light)."""
+    return CloudfoneTranscriptOut(
+        call_id=row.call_id,
+        day=row.day,
+        started_at=row.started_at,
+        caller=row.caller,
+        talk_seconds=row.talk_seconds,
+        transcript_preview=row.transcript[:160],
+        created_at=row.created_at,
+    )
+
+
+@router.get("/cloudfone/transcripts", response_model=CloudfoneTranscriptPageOut)
+async def list_cloudfone_transcripts(
+    day: date | None = Query(default=None),
+    caller: str | None = Query(default=None, max_length=64),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CloudfoneTranscriptPageOut:
+    """Stored voice-call transcripts for the admin viewer, newest call first.
+
+    ``day`` filters on the call day the pipeline stored; ``caller`` matches a
+    phone-number fragment. Rows come from ``cloudfone_call_transcripts`` — the
+    cache the daily insights pass writes after MiniMax STT.
+    """
+    from app.services.cloudfone_transcripts import list_call_transcripts
+
+    rows, total = await list_call_transcripts(
+        db, day=day, caller=caller, page=page, page_size=page_size
+    )
+    return CloudfoneTranscriptPageOut(
+        items=[_transcript_out(row) for row in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get(
+    "/cloudfone/transcripts/{call_id}", response_model=CloudfoneTranscriptDetailOut
+)
+async def get_cloudfone_transcript(
+    call_id: str,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CloudfoneTranscriptDetailOut:
+    """One stored transcript (full text) by the vendor call id."""
+    from app.services.cloudfone_transcripts import get_call_transcript
+
+    row = await get_call_transcript(db, call_id)
+    if row is None:
+        raise NotFoundError("Không tìm thấy bản ghi cuộc gọi.")
+    return CloudfoneTranscriptDetailOut(
+        **_transcript_out(row).model_dump(),
+        transcript=row.transcript,
     )
 
 

@@ -25,6 +25,7 @@ export type SettingsItemId =
   | "settings-tingting"
   | "settings-email-digest"
   | "settings-cloudfone"
+  | "settings-cloudfone-transcripts"
   | "settings-geocoder"
   | "settings-users";
 
@@ -134,6 +135,12 @@ export const SETTINGS_VIEW_COPY: Record<
     title: "Cloudfone · Phân tích cuộc gọi",
     description:
       "Lấy bản ghi (voice transcript) cuộc gọi tổng đài CloudFone mỗi ngày, tóm tắt bằng AI và gửi email cho danh sách người nhận.",
+  },
+  "settings-cloudfone-transcripts": {
+    kicker: "Tích hợp",
+    title: "Cloudfone · Bản ghi cuộc gọi",
+    description:
+      "Xem lại transcript các cuộc gọi tổng đài đã được hệ thống chuyển đổi và lưu trữ.",
   },
   "settings-geocoder": {
     kicker: "Tích hợp",

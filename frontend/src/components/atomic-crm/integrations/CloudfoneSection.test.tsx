@@ -53,6 +53,23 @@ afterEach(async () => {
 });
 
 describe("CloudfoneSection", () => {
+  it("opens the transcripts viewer from the footer button", async () => {
+    mocks.loadCloudfoneSettings.mockResolvedValue(STORED_SETTINGS);
+    const onOpenTranscripts = vi.fn();
+    const screen = await render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <CloudfoneSection onOpenTranscripts={onOpenTranscripts} />
+      </QueryClientProvider>,
+    );
+
+    await screen.getByRole("button", { name: "Xem bản ghi cuộc gọi" }).click();
+    expect(onOpenTranscripts).toHaveBeenCalled();
+  });
+
   it("renders the stored configuration and the daily status line", async () => {
     mocks.loadCloudfoneSettings.mockResolvedValue(STORED_SETTINGS);
     const screen = await renderSection();

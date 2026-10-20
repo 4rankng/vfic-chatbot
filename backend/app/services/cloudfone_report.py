@@ -2,17 +2,18 @@
 
 Generates a publication-grade Word (.docx) document summarizing daily call center
 performance, containing:
-  1. Executive KPI scorecard cards (Total calls, Service rate %, Missed, AHT).
+  1. Thẻ điểm vận hành (Tổng cuộc gọi, Tỷ lệ phục vụ %, Cuộc nhỡ, Thời lượng TB).
   2. Highlights callout box (distilled from daily notes).
   3. Visual charts & illustrations (Hourly distribution stacked bar, Donut rate).
   4. Detailed answered calls log with transcripts and summaries.
-  5. Callback action tracking for missed calls.
+  5. Theo dõi cuộc gọi nhỡ và kế hoạch gọi lại.
   6. Recommended action plan.
 """
 
 from __future__ import annotations
 
 import io
+import re
 from datetime import date
 from typing import Sequence
 
@@ -233,7 +234,7 @@ def _build_summary_donut_chart(stats: DailyCallStats, calls: Sequence[CallRecord
     if inbound_count == 0 and outbound_count == 0:
         inbound_count = stats.total_calls
 
-    cats = ["Gọi vào (Inbound)", "Gọi ra (Outbound)"]
+    cats = ["Gọi vào", "Gọi ra"]
     vals = [inbound_count, outbound_count]
     bars = ax2.barh(cats, vals, color=["#2563eb", "#0d9488"], height=0.42)
     max_val = max(vals) if vals else 1
@@ -266,6 +267,20 @@ def _build_summary_donut_chart(stats: DailyCallStats, calls: Sequence[CallRecord
     plt.close(fig)
     buf.seek(0)
     return buf
+
+
+def _clean_vn(text: str) -> str:
+    """Ensure natural Vietnamese without English jargon or AI references."""
+    if not text:
+        return text
+    t = re.sub(r"\bInbound\b", "gọi vào", text, flags=re.IGNORECASE)
+    t = re.sub(r"\bOutbound\b", "gọi ra", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bCallback\b", "gọi lại", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bNO\s+ANSWER\b", "cuộc gọi nhỡ", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bAHT\b", "thời lượng trung bình", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bSLA\b", "chỉ tiêu", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bAI\b", "", t)
+    return t.strip()
 
 
 def generate_daily_call_report_docx(
@@ -342,7 +357,7 @@ def generate_daily_call_report_docx(
         (
             "TỶ LỆ PHỤC VỤ",
             f"{ans_pct:.1f}%",
-            f"{stats.answered_calls}/{stats.total_calls} đã nghe (SLA ≥ 80%)",
+            f"{stats.answered_calls}/{stats.total_calls} đã nghe (Mục tiêu ≥ 80%)",
             COLOR_SUCCESS if ans_pct >= 80 else COLOR_DANGER,
         ),
         (
@@ -352,9 +367,9 @@ def generate_daily_call_report_docx(
             COLOR_DANGER if stats.missed_calls > 0 else COLOR_MUTED,
         ),
         (
-            "THỜI LƯỢNG TB (AHT)",
+            "THỜI LƯỢNG TRUNG BÌNH",
             _fmt_duration(stats.avg_talk_seconds),
-            "Mục tiêu SLA < 03:00",
+            "Mục tiêu < 03:00",
             COLOR_PRIMARY,
         ),
     ]
@@ -419,7 +434,7 @@ def generate_daily_call_report_docx(
     r_cot.font.color.rgb = COLOR_PRIMARY
 
     if daily_notes:
-        clean_notes = daily_notes.strip()
+        clean_notes = _clean_vn(daily_notes.strip())
         r_cob = co_p.add_run(clean_notes)
         r_cob.font.size = Pt(9)
         r_cob.font.color.rgb = COLOR_DARK
@@ -427,7 +442,7 @@ def generate_daily_call_report_docx(
         summary_text = (
             f"• Trong ngày {day.strftime('%d/%m/%Y')}, tổng đài đã ghi nhận {stats.total_calls} cuộc gọi.\n"
             f"• Tỷ lệ phục vụ đạt {ans_pct:.1f}% ({stats.answered_calls} cuộc trả lời thành công, {stats.missed_calls} cuộc nhỡ).\n"
-            f"• Thời lượng đàm thoại bình quân (AHT) là {_fmt_duration(stats.avg_talk_seconds)} mỗi cuộc tiếp nhận."
+            f"• Thời lượng đàm thoại bình quân là {_fmt_duration(stats.avg_talk_seconds)} mỗi cuộc tiếp nhận."
         )
         r_cob = co_p.add_run(summary_text)
         r_cob.font.size = Pt(9)
@@ -511,11 +526,19 @@ def generate_daily_call_report_docx(
 
             time_val = _hhmm(call.started_at) or call.started_at[:16].replace("T", " ")
             caller_val = call.caller or "Không xác định"
-            dir_agent = f"{call.direction or 'Inbound'} · {call.agent or 'N/A'}"
+            direction_raw = (call.direction or "").strip().lower()
+            if direction_raw in ("inbound", "in", "gọi vào"):
+                dir_label = "Gọi vào"
+            elif direction_raw in ("outbound", "out", "gọi ra"):
+                dir_label = "Gọi ra"
+            else:
+                dir_label = call.direction or "Gọi vào"
+            dir_agent = f"{dir_label} · Nhánh {call.agent}" if call.agent else dir_label
             dur_val = _fmt_duration(call.talk_seconds)
-            summary_val = ins.summary or (
-                call.transcript[:150] + "..." if call.transcript else "(Transcript trống)"
+            raw_summary = ins.summary or (
+                call.transcript[:150] + "..." if call.transcript else "(Chưa có nội dung ghi âm)"
             )
+            summary_val = _clean_vn(raw_summary)
 
             row_data = [time_val, caller_val, dir_agent, dur_val, summary_val]
             for col_i, text_val in enumerate(row_data):
@@ -550,8 +573,8 @@ def generate_daily_call_report_docx(
         r_na.font.size = Pt(9)
         r_na.font.color.rgb = COLOR_MUTED
 
-    # 6. Missed Calls & Callback Action Tracking
-    add_sec_heading("4. THEO DÕI CUỘC GỌI NHỠ & KẾ HOẠCH GỌI LẠI (CALLBACK ACTION)")
+    # 5. Missed Calls & Callback Action Tracking
+    add_sec_heading("4. THEO DÕI CUỘC GỌI NHỠ & KẾ HOẠCH GỌI LẠI")
 
     if stats.missed:
         p_mis_warn = doc.add_paragraph()
@@ -598,7 +621,7 @@ def generate_daily_call_report_docx(
             m_data = [
                 time_txt,
                 caller or "Không hiển thị",
-                "Cuộc gọi nhỡ (NO ANSWER)",
+                "Cuộc gọi nhỡ",
                 "Cần gọi lại hỗ trợ / ghi nhận nhu cầu",
             ]
             for col_i, txt in enumerate(m_data):
@@ -629,7 +652,7 @@ def generate_daily_call_report_docx(
         r_ok.font.size = Pt(9)
         r_ok.font.color.rgb = COLOR_SUCCESS
 
-    # 5. Operational Recommendations
+    # 6. Operational Recommendations
     add_sec_heading("5. ĐỀ XUẤT HÀNH ĐỘNG")
 
     p_rec = doc.add_paragraph()
@@ -637,9 +660,9 @@ def generate_daily_call_report_docx(
     p_rec.paragraph_format.space_after = Pt(8)
     p_rec.paragraph_format.line_spacing = 1.15
     p_rec.add_run(
-        "1. Duy trì trực hotline liên tục trong giờ hành chính; rà soát cuộc gọi nhỡ để hoàn thành callback trong vòng 30 phút.\n"
+        "1. Duy trì trực hotline liên tục trong giờ hành chính; rà soát cuộc gọi nhỡ để hoàn thành gọi lại trong vòng 30 phút.\n"
         "2. Kiểm tra các trường hợp khiếu nại hoặc khách hàng gọi lặp lại để chuyển phòng ban chuyên trách xử lý dứt điểm.\n"
-        "3. Đảm bảo chất lượng thoại và tốc độ nhấc máy dưới 3 hồi chuông theo chuẩn SLA dịch vụ."
+        "3. Đảm bảo chất lượng thoại và tốc độ nhấc máy dưới 3 hồi chuông theo tiêu chuẩn chất lượng dịch vụ."
     )
 
     # Serialize to in-memory bytes

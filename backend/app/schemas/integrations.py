@@ -1,5 +1,6 @@
 """Schemas for admin-managed integrations."""
 
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -611,3 +612,28 @@ class CloudfoneIntegrationTestOut(BaseModel):
     missing: list[str]
     latency_ms: int | None = None
     error: str | None = None
+
+
+class CloudfoneTranscriptOut(BaseModel):
+    """One stored voice-call transcript row for the admin viewer (list projection)."""
+
+    call_id: str
+    day: date
+    started_at: str
+    caller: str
+    talk_seconds: int
+    transcript_preview: str
+    created_at: datetime
+
+
+class CloudfoneTranscriptDetailOut(CloudfoneTranscriptOut):
+    """The list projection plus the full transcript text."""
+
+    transcript: str
+
+
+class CloudfoneTranscriptPageOut(BaseModel):
+    items: list[CloudfoneTranscriptOut]
+    total: int
+    page: int
+    page_size: int
