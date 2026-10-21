@@ -24,6 +24,8 @@ export const integrationSettingsKeys = {
   openRouter: ["openrouter-settings"],
   customLlm: ["custom-llm-settings"],
   jev: ["jev-settings"],
+  cloudfone: ["cloudfone-settings"],
+  emailDigest: ["email-digest-settings"],
 } as const;
 
 const SETTINGS_STALE_TIME = 30_000;

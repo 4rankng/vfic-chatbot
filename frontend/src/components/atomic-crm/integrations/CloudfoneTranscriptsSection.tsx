@@ -1,15 +1,11 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type FormEvent,
-} from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNotify } from "ra-core";
 import {
   ChevronLeft,
   ChevronRight,
   CloudDownload,
+  Copy,
   FileText,
   RefreshCw,
   Search,
@@ -17,21 +13,27 @@ import {
   X,
 } from "lucide-react";
 
+import { BottomSheet } from "@/components/application/bottom-sheet/bottom-sheet";
 import { Button } from "@/components/base/buttons/button";
 import { InputBase } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
 import { Pagination } from "@/components/application/pagination/pagination-base";
 import { Table } from "@/components/application/table/table";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cx } from "@/utils/cx";
 import { EmptyState } from "../kit/page-shell";
 
 import { zaloIntegrationGateway, type CloudfoneTranscriptSummary } from "./api";
+import { copyCredentialFieldValue } from "./credentialClipboard";
+import { TranscriptConversation } from "./TranscriptConversation";
+
+import "./cloudfone-transcripts.css";
 
 /**
  * The stored voice-call transcripts viewer, reached from the Cloudfone
- * settings section: a filter bar (call day, phone fragment) over
+ * settings section: a filter surface (call day, phone fragment) over
  * `cloudfone_call_transcripts`, one page of results at a time, and the full
- * transcript of the selected call below the list.
+ * transcript of the selected call.
  *
  * A day the daily pass never covered (it only reports on the previous day)
  * would show an empty table, so the viewer fetches such a day from Cloudfone
@@ -40,20 +42,23 @@ import { zaloIntegrationGateway, type CloudfoneTranscriptSummary } from "./api";
  * A day the system already checked is left alone — it is known, and it may
  * legitimately hold nothing.
  *
- * Surface anatomy is Untitled UI's settings data table (filter bar → table
- * card → count strip + pagination), built from the vendored UUI primitives —
- * `frontend/AGENTS.md` § "UI/UX Component Sourcing". No Radix in this subtree:
- * React Aria owns the whole page.
- * Two responsive surfaces, one dataset, chosen by matchMedia at the `sm`
- * breakpoint (640px) rather than by CSS: the vitest browser project compiles
- * no Tailwind, so a class-only swap would leave both surfaces queryable in
- * unit tests, and a JS swap also keeps exactly one surface in the a11y tree.
- *  - ≥640px keeps Untitled UI's settings data table (filter bar → table card →
- *    count strip + pagination), built from the vendored UUI primitives —
- *    `frontend/AGENTS.md` § "UI/UX Component Sourcing".
- *  - <640px swaps in a card list (phone + duration badge, then call time +
- *    a "đã lưu" marker per card), stacked full-width filters, and a compact
- *    Trước/Sau pager — a five-column data table never fits a 390px phone.
+ * Two responsive surfaces, one dataset, split at the console's mobile
+ * breakpoint (768px — `useIsMobile`, the same seam the settings drill-down
+ * uses) rather than by CSS: the vitest browser project compiles no Tailwind,
+ * so a class-only swap would leave both surfaces queryable in unit tests, and
+ * a JS swap also keeps exactly one surface in the a11y tree.
+ *  - ≥768px keeps Untitled UI's settings data table (filter bar → table card →
+ *    count strip + pagination) and the transcript panel below it, built from
+ *    the vendored UUI primitives — `frontend/AGENTS.md` § "UI/UX Component
+ *    Sourcing".
+ *  - <768px swaps in the settings-mobile consult's phone surface: a sticky
+ *    search (44px/r10, 300ms debounce) with scrolling day-scope chips, one
+ *    bordered card per call (no five-column table fits a 390px phone), a
+ *    compact Trước/Sau pager — and the transcript opens in a draggable bottom
+ *    sheet instead of the panel below the list.
+ *
+ * The transcript itself renders as the same two-speaker conversation in both
+ * surfaces (`TranscriptConversation`) — the consult's §4 content contract.
  *
  * No Radix in this subtree: React Aria owns the whole page.
  */
@@ -66,23 +71,6 @@ const PAGE_SIZE = 20;
  * done. The bound keeps a pathological day from looping forever.
  */
 const MAX_BACKFILL_PASSES = 20;
-/** Tailwind's `sm` breakpoint — below this the card list replaces the table. */
-const PHONE_QUERY = "(max-width: 639px)";
-
-// Read synchronously so the first render already picks the right surface
-// (a phone must not paint the desktop table for one frame). False pre-hydration.
-const subscribePhone = (onChange: () => void) => {
-  const mql = window.matchMedia(PHONE_QUERY);
-  mql.addEventListener("change", onChange);
-  return () => mql.removeEventListener("change", onChange);
-};
-
-const useIsPhone = () =>
-  useSyncExternalStore(
-    subscribePhone,
-    () => window.matchMedia(PHONE_QUERY).matches,
-    () => false,
-  );
 
 /** "2026-10-01T17:02:35" → "01/10/2026 17:02" (Vietnam display order). */
 const fmtStarted = (iso: string): string => {
@@ -105,6 +93,22 @@ const fmtDuration = (seconds: number): string =>
 const ictYesterday = (): string => {
   const shifted = new Date(Date.now() + 7 * 3_600_000 - 86_400_000);
   return shifted.toISOString().slice(0, 10);
+};
+
+/** The current ICT calendar day as "YYYY-MM-DD" (same exact +7 offset). */
+const ictToday = (): string => {
+  const shifted = new Date(Date.now() + 7 * 3_600_000);
+  return shifted.toISOString().slice(0, 10);
+};
+
+/** The chip-row day scopes the mobile filter surface offers. */
+type DayScope = "all" | "today" | "yesterday" | "custom";
+
+const dayScopeOf = (day: string): DayScope => {
+  if (day === "") return "all";
+  if (day === ictToday()) return "today";
+  if (day === ictYesterday()) return "yesterday";
+  return "custom";
 };
 
 type TranscriptColumn = {
@@ -290,12 +294,16 @@ export const CloudfoneTranscriptsSection = ({
 }: {
   onBack: () => void;
 }) => {
-  const isPhone = useIsPhone();
+  const isMobile = useIsMobile();
+  const notify = useNotify();
   const [day, setDay] = useState("");
   const [callerDraft, setCallerDraft] = useState("");
   const [caller, setCaller] = useState("");
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Mobile chip row: "Chọn ngày" reveals the date field; a chosen date then
+  // owns the custom scope. Desktop keeps its always-visible filter form.
+  const [dateRowOpen, setDateRowOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const listQuery = useQuery({
@@ -384,6 +392,42 @@ export const CloudfoneTranscriptsSection = ({
     listQuery.isPending,
     requestBackfill,
   ]);
+
+  /**
+   * Mobile search-as-you-type: the phone-fragment filter follows the search
+   * field after a 300ms pause (consult §2), instead of the desktop form's
+   * explicit Lọc submit. Desktop typing stays inert until Lọc.
+   */
+  useEffect(() => {
+    if (!isMobile) return;
+    const handle = window.setTimeout(() => {
+      const next = callerDraft.trim();
+      if (next !== caller) {
+        setCaller(next);
+        setPage(1);
+        setSelectedId(null);
+      }
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [isMobile, callerDraft, caller]);
+
+  /** A chip picked on the mobile surface (custom only reveals the date field). */
+  const applyDayScope = (scope: DayScope) => {
+    if (scope === "all") {
+      setDay("");
+      setDateRowOpen(false);
+    } else if (scope === "today") {
+      setDay(ictToday());
+      setDateRowOpen(false);
+    } else if (scope === "yesterday") {
+      setDay(ictYesterday());
+      setDateRowOpen(false);
+    } else {
+      setDateRowOpen(true);
+    }
+    setPage(1);
+    setSelectedId(null);
+  };
 
   const applyCaller = (event: FormEvent) => {
     event.preventDefault();
@@ -481,7 +525,7 @@ export const CloudfoneTranscriptsSection = ({
     },
   ];
 
-  const pager = isPhone ? (
+  const pager = isMobile ? (
     <PhonePager
       page={page}
       pageCount={pageCount}
@@ -501,82 +545,171 @@ export const CloudfoneTranscriptsSection = ({
     />
   );
 
+  // One snapshot of the loaded record: closures below (copy-all) must not
+  // re-narrow a mutable query result.
+  const detail = detailQuery.data;
+
+  const detailBody = detailQuery.isPending ? (
+    <div className="space-y-2" aria-busy="true">
+      <span className="block h-3 w-3/4 animate-pulse rounded bg-tertiary" />
+      <span className="block h-3 w-1/2 animate-pulse rounded bg-tertiary" />
+    </div>
+  ) : detailQuery.isError ? (
+    <p role="alert" className="text-body-sm text-error">
+      Chưa tải được nội dung bản ghi.
+    </p>
+  ) : (
+    <TranscriptConversation
+      transcript={detailQuery.data.transcript}
+      notify={notify}
+    />
+  );
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          color="secondary"
-          size="md"
-          iconLeading={ChevronLeft}
-          className="uu-scope tt-btn-touch"
-          onClick={onBack}
-        >
-          Quay lại cài đặt Cloudfone
-        </Button>
-      </div>
-
-      {/* Filter bar: one row ≥640px, stacked full-width on a phone. */}
-      <form
-        className={cx(
-          "uu-scope flex items-end gap-3",
-          isPhone ? "flex-col items-stretch" : "flex-wrap",
-        )}
-        onSubmit={applyCaller}
-      >
-        <div
-          className={cx("flex flex-col gap-1.5", isPhone ? "w-full" : "w-48")}
-        >
-          <Label htmlFor="cloudfone-transcripts-day" isRequired={false}>
-            Ngày cuộc gọi
-          </Label>
-          <InputBase
-            id="cloudfone-transcripts-day"
-            type="date"
-            value={day}
-            onChange={(event) => {
-              setDay(event.target.value);
-              setPage(1);
-              setSelectedId(null);
-            }}
-          />
-        </div>
-        <div
-          className={cx("flex flex-col gap-1.5", isPhone ? "w-full" : "w-64")}
-        >
-          <Label htmlFor="cloudfone-transcripts-caller" isRequired={false}>
-            Số điện thoại
-          </Label>
-          <InputBase
-            id="cloudfone-transcripts-caller"
-            icon={Search}
-            placeholder="Nhập một phần số…"
-            value={callerDraft}
-            onChange={(event) => setCallerDraft(event.target.value)}
-          />
-        </div>
-        <Button
-          type="submit"
-          color="secondary"
-          size="md"
-          iconLeading={Search}
-          className={cx("tt-btn-touch", isPhone && "w-full")}
-        >
-          Lọc
-        </Button>
-        {filtered ? (
+      {/* Mobile back navigation lives in the settings app bar; the section
+          keeps its own explicit exit on desktop. */}
+      {!isMobile ? (
+        <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
             color="secondary"
             size="md"
-            iconLeading={X}
-            className={cx("tt-btn-touch", isPhone && "w-full")}
-            onClick={clearFilters}
+            iconLeading={ChevronLeft}
+            className="uu-scope tt-btn-touch"
+            onClick={onBack}
           >
-            Xóa lọc
+            Quay lại cài đặt Cloudfone
           </Button>
-        ) : null}
-      </form>
+        </div>
+      ) : null}
+
+      {isMobile ? (
+        /* Sticky phone filter surface (consult §2): search-as-you-type +
+           day-scope chips, the custom date field only when asked for.
+           `uu-scope` re-binds the UUI input semantics (the desktop form's
+           wrapper does the same). */
+        <div className="transcripts-toolbar uu-scope">
+          <InputBase
+            type="search"
+            icon={Search}
+            aria-label="Tìm số điện thoại"
+            placeholder="Tìm số điện thoại…"
+            value={callerDraft}
+            onChange={(event) => setCallerDraft(event.target.value)}
+            wrapperClassName="transcripts-search"
+          />
+          <div
+            className="transcripts-chips"
+            role="radiogroup"
+            aria-label="Lọc thời gian cuộc gọi"
+          >
+            {(
+              [
+                ["all", "Tất cả"],
+                ["today", "Hôm nay"],
+                ["yesterday", "Hôm qua"],
+                ["custom", "Chọn ngày"],
+              ] as Array<[DayScope, string]>
+            ).map(([scope, label]) => (
+              <label
+                key={scope}
+                className={cx(
+                  "transcripts-chip",
+                  dayScopeOf(day) === scope
+                    ? "border-transparent bg-brand-50 text-brand-700"
+                    : "border-neutral-200 bg-white text-neutral-600",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="cloudfone-day-scope"
+                  className="transcripts-chip-input"
+                  checked={dayScopeOf(day) === scope}
+                  onChange={() => applyDayScope(scope)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          {dateRowOpen ? (
+            <div className="transcripts-date-row">
+              <Label
+                htmlFor="cloudfone-transcripts-day-mobile"
+                isRequired={false}
+              >
+                Ngày cuộc gọi
+              </Label>
+              <InputBase
+                id="cloudfone-transcripts-day-mobile"
+                type="date"
+                value={day}
+                onChange={(event) => {
+                  setDay(event.target.value);
+                  setPage(1);
+                  setSelectedId(null);
+                }}
+                wrapperClassName="flex-1"
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        /* Desktop filter bar: one row, unchanged. */
+        <form
+          className="uu-scope flex flex-wrap items-end gap-3"
+          onSubmit={applyCaller}
+        >
+          <div className="flex w-48 flex-col gap-1.5">
+            <Label htmlFor="cloudfone-transcripts-day" isRequired={false}>
+              Ngày cuộc gọi
+            </Label>
+            <InputBase
+              id="cloudfone-transcripts-day"
+              type="date"
+              value={day}
+              onChange={(event) => {
+                setDay(event.target.value);
+                setPage(1);
+                setSelectedId(null);
+              }}
+            />
+          </div>
+          <div className="flex w-64 flex-col gap-1.5">
+            <Label htmlFor="cloudfone-transcripts-caller" isRequired={false}>
+              Số điện thoại
+            </Label>
+            <InputBase
+              id="cloudfone-transcripts-caller"
+              icon={Search}
+              placeholder="Nhập một phần số…"
+              value={callerDraft}
+              onChange={(event) => setCallerDraft(event.target.value)}
+            />
+          </div>
+          <Button
+            type="submit"
+            color="secondary"
+            size="md"
+            iconLeading={Search}
+            className="tt-btn-touch"
+          >
+            Lọc
+          </Button>
+          {filtered ? (
+            <Button
+              type="button"
+              color="secondary"
+              size="md"
+              iconLeading={X}
+              className="tt-btn-touch"
+              onClick={clearFilters}
+            >
+              Xóa lọc
+            </Button>
+          ) : null}
+        </form>
+      )}
 
       {listQuery.isPending ? (
         <section
@@ -692,134 +825,180 @@ export const CloudfoneTranscriptsSection = ({
             ) : undefined
           }
         />
+      ) : isMobile ? (
+        <>
+          {/* <768px: one bordered card per call — the card opens the
+              transcript sheet. */}
+          <ul role="list" className="call-card-list">
+            {items.map((row) => {
+              const isSelected = row.call_id === selectedId;
+              return (
+                <li key={row.call_id} role="listitem">
+                  <button
+                    type="button"
+                    // Compound control (row card), the documented opt-out
+                    // from the 40px control-height ceiling (index.css §3).
+                    data-allow-tall
+                    aria-selected={isSelected}
+                    onClick={() => setSelectedId(row.call_id)}
+                    className={cx(
+                      "call-card border transition-colors outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2",
+                      isSelected
+                        ? "border-brand-300 bg-brand-50"
+                        : "border-neutral-200 bg-white hover:bg-neutral-50",
+                    )}
+                  >
+                    <span className="call-card-top">
+                      <span className="call-card-name text-neutral-900">
+                        {row.caller}
+                      </span>
+                      <span className="call-card-duration text-neutral-500">
+                        {fmtDuration(row.talk_seconds)}
+                      </span>
+                    </span>
+                    <span className="call-card-middle">
+                      <span className="call-card-preview text-neutral-600">
+                        {row.transcript_preview}
+                      </span>
+                      <span className="call-card-time text-neutral-400">
+                        {fmtStarted(row.started_at)}
+                      </span>
+                    </span>
+                    <span className="call-card-badge bg-neutral-100 text-neutral-600">
+                      đã lưu
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="uu-scope overflow-hidden rounded-panel border border-secondary bg-primary">
+            {pager}
+          </div>
+        </>
       ) : (
         <section className="uu-scope overflow-hidden rounded-panel border border-secondary bg-primary">
-          {isPhone ? (
-            // <640px: one card per call — the card opens the transcript.
-            <ul role="list">
-              {items.map((row) => {
-                const isSelected = row.call_id === selectedId;
-                return (
-                  <li
-                    key={row.call_id}
-                    role="listitem"
-                    className="border-b border-secondary last:border-b-0"
-                  >
-                    <button
-                      type="button"
-                      // Compound control (row card), the documented opt-out
-                      // from the 40px control-height ceiling (index.css §3).
-                      data-allow-tall
-                      aria-selected={isSelected}
-                      onClick={() => setSelectedId(row.call_id)}
-                      className={cx(
-                        "flex min-h-11 w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2",
-                        isSelected
-                          ? "bg-secondary outline-2 -outline-offset-2"
-                          : "hover:bg-secondary",
-                      )}
+          {/* ≥768px: the settings data table, unchanged. */}
+          <Table aria-label="Bản ghi cuộc gọi" selectionMode="none">
+            <Table.Header columns={columns}>
+              {(column: TranscriptColumn) => (
+                <Table.Head
+                  id={column.id}
+                  label={column.header}
+                  isRowHeader={column.isRowHeader}
+                />
+              )}
+            </Table.Header>
+            <Table.Body items={items}>
+              {(row: CloudfoneTranscriptSummary) => (
+                <Table.Row
+                  id={row.call_id}
+                  columns={columns}
+                  className="h-auto!"
+                >
+                  {(column: TranscriptColumn) => (
+                    <Table.Cell
+                      className={cx("p-3 align-middle", column.cellClassName)}
                     >
-                      <span className="flex w-full items-center justify-between gap-3">
-                        <span className="tabular-nums text-body-sm font-semibold text-primary">
-                          {row.caller}
-                        </span>
-                        <span className="shrink-0 rounded-full border border-secondary px-2.5 py-0.5 text-helper font-medium tabular-nums text-secondary">
-                          {fmtDuration(row.talk_seconds)}
-                        </span>
-                      </span>
-                      <span className="flex w-full items-center justify-between gap-3">
-                        <span className="text-helper tabular-nums text-tertiary">
-                          {fmtStarted(row.started_at)}
-                        </span>
-                        <span className="text-helper text-tertiary">
-                          đã lưu
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            // ≥640px: the settings data table, unchanged.
-            <Table aria-label="Bản ghi cuộc gọi" selectionMode="none">
-              <Table.Header columns={columns}>
-                {(column: TranscriptColumn) => (
-                  <Table.Head
-                    id={column.id}
-                    label={column.header}
-                    isRowHeader={column.isRowHeader}
-                  />
-                )}
-              </Table.Header>
-              <Table.Body items={items}>
-                {(row: CloudfoneTranscriptSummary) => (
-                  <Table.Row
-                    id={row.call_id}
-                    columns={columns}
-                    className="h-auto!"
-                  >
-                    {(column: TranscriptColumn) => (
-                      <Table.Cell
-                        className={cx("p-3 align-middle", column.cellClassName)}
-                      >
-                        {column.cell(row)}
-                      </Table.Cell>
-                    )}
-                  </Table.Row>
-                )}
-              </Table.Body>
-            </Table>
-          )}
+                      {column.cell(row)}
+                    </Table.Cell>
+                  )}
+                </Table.Row>
+              )}
+            </Table.Body>
+          </Table>
 
           {pager}
         </section>
       )}
 
       {selectedId ? (
-        <section className="uu-scope rounded-panel border border-secondary bg-primary">
-          <header className="flex flex-wrap items-center gap-3 border-b border-secondary px-4 py-3">
-            <FileText className="size-5 text-tertiary" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <p className="break-words text-body-sm font-semibold text-primary">
-                {detailQuery.data
-                  ? `${detailQuery.data.caller} · ${fmtDuration(detailQuery.data.talk_seconds)}`
-                  : "Bản ghi cuộc gọi"}
-              </p>
-              {detailQuery.data ? (
-                <p className="text-helper text-tertiary">
-                  {fmtStarted(detailQuery.data.started_at)} · lưu{" "}
-                  {fmtStarted(detailQuery.data.created_at)}
-                </p>
-              ) : null}
-            </div>
-            <Button
-              type="button"
-              color="secondary"
-              size="sm"
-              iconLeading={X}
-              aria-label="Đóng bản ghi"
-              className="tt-btn-touch"
-              onClick={() => setSelectedId(null)}
-            />
-          </header>
-          <div className="px-4 py-3">
-            {detailQuery.isPending ? (
-              <div className="space-y-2" aria-busy="true">
-                <span className="block h-3 w-3/4 animate-pulse rounded bg-tertiary" />
-                <span className="block h-3 w-1/2 animate-pulse rounded bg-tertiary" />
+        isMobile ? (
+          /* <768px: the consult's bottom sheet replaces the panel below the
+             list — 50% of the viewport, drag the grip to 90%, scrim closes. */
+          <BottomSheet
+            isOpen
+            onOpenChange={(open) => {
+              if (!open) setSelectedId(null);
+            }}
+            title={
+              detail
+                ? `Bản ghi cuộc gọi của ${detail.caller}`
+                : "Bản ghi cuộc gọi"
+            }
+            header={
+              <div className="transcripts-sheet-header">
+                <div className="transcripts-sheet-heading">
+                  <p className="transcripts-sheet-title text-neutral-900">
+                    {detail ? detail.caller : "Bản ghi cuộc gọi"}
+                  </p>
+                  {detail ? (
+                    <p className="transcripts-sheet-meta text-neutral-400">
+                      {fmtStarted(detail.started_at)} ·{" "}
+                      {fmtDuration(detail.talk_seconds)}
+                    </p>
+                  ) : null}
+                </div>
+                {detail ? (
+                  <button
+                    type="button"
+                    className="transcripts-icon-action"
+                    aria-label="Sao chép toàn bộ bản ghi"
+                    onClick={() =>
+                      void copyCredentialFieldValue(
+                        "toàn bộ bản ghi",
+                        detail.transcript,
+                        notify,
+                      )
+                    }
+                  >
+                    <Copy aria-hidden="true" />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="transcripts-icon-action"
+                  aria-label="Đóng bản ghi"
+                  onClick={() => setSelectedId(null)}
+                >
+                  <X aria-hidden="true" />
+                </button>
               </div>
-            ) : detailQuery.isError ? (
-              <p role="alert" className="text-body-sm text-error">
-                Chưa tải được nội dung bản ghi.
-              </p>
-            ) : (
-              <p className="text-left break-words whitespace-pre-wrap text-body-sm text-primary">
-                {detailQuery.data.transcript}
-              </p>
-            )}
-          </div>
-        </section>
+            }
+          >
+            {detailBody}
+          </BottomSheet>
+        ) : (
+          /* ≥768px: the panel under the table, unchanged (bubbles body). */
+          <section className="uu-scope rounded-panel border border-secondary bg-primary">
+            <header className="flex flex-wrap items-center gap-3 border-b border-secondary px-4 py-3">
+              <FileText className="size-5 text-tertiary" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-body-sm font-semibold text-primary">
+                  {detail
+                    ? `${detail.caller} · ${fmtDuration(detail.talk_seconds)}`
+                    : "Bản ghi cuộc gọi"}
+                </p>
+                {detail ? (
+                  <p className="text-helper text-tertiary">
+                    {fmtStarted(detail.started_at)} · lưu{" "}
+                    {fmtStarted(detail.created_at)}
+                  </p>
+                ) : null}
+              </div>
+              <Button
+                type="button"
+                color="secondary"
+                size="sm"
+                iconLeading={X}
+                aria-label="Đóng bản ghi"
+                className="tt-btn-touch"
+                onClick={() => setSelectedId(null)}
+              />
+            </header>
+            <div className="px-4 py-3">{detailBody}</div>
+          </section>
+        )
       ) : null}
     </div>
   );

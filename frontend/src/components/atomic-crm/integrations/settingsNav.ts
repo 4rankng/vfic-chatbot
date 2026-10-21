@@ -162,19 +162,27 @@ const FACEBOOK_OAUTH_CALLBACK_KEYS = [
 ] as const;
 
 /**
- * The OAuth callback returns to the settings hash; landing on Messenger then
- * means the operator sees the Page picker instead of hunting for the section.
+ * True when the settings hash carries a Facebook OAuth callback. The mobile
+ * drill-down then starts on the Messenger sub-page directly (the Page picker
+ * must be on screen) instead of the grouped root.
  */
-export const resolveInitialSettingsItemId = (): SettingsItemId => {
-  if (typeof window === "undefined") return "settings-zalo-channel";
+export const hasFacebookOauthCallback = (): boolean => {
+  if (typeof window === "undefined") return false;
 
   const queryIndex = window.location.hash.indexOf("?");
-  if (queryIndex === -1) return "settings-zalo-channel";
+  if (queryIndex === -1) return false;
 
   const params = new URLSearchParams(
     window.location.hash.slice(queryIndex + 1),
   );
-  return FACEBOOK_OAUTH_CALLBACK_KEYS.some((key) => params.has(key))
+  return FACEBOOK_OAUTH_CALLBACK_KEYS.some((key) => params.has(key));
+};
+
+/**
+ * The OAuth callback returns to the settings hash; landing on Messenger then
+ * means the operator sees the Page picker instead of hunting for the section.
+ */
+export const resolveInitialSettingsItemId = (): SettingsItemId =>
+  hasFacebookOauthCallback()
     ? "settings-facebook-messenger"
     : "settings-zalo-channel";
-};

@@ -5,6 +5,7 @@ import { Button } from "@/components/base/buttons/button";
 import { EmptyState, PageShell } from "../kit/page-shell";
 import { PageHeading } from "../kit/page-heading";
 import { LoadingState } from "../misc/LoadingState";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { useProviderPanels } from "./useProviderPanels";
 import { useSettingsBundle } from "./useSettingsBundle";
@@ -23,6 +24,7 @@ import { TingtingSection } from "./TingtingSection";
 import { SettingsChrome, SettingsWorkspace } from "./SettingsChrome";
 import { ZaloChannelSection } from "./ZaloChannelSection";
 import {
+  hasFacebookOauthCallback,
   resolveInitialSettingsItemId,
   type SettingsItemId,
 } from "./settingsNav";
@@ -31,12 +33,36 @@ import {
  * The Settings resource: a console shell that switches between six section
  * views. Each view owns its own state and actions; this page only decides which
  * one is on screen and where the OAuth callback should land.
+ *
+ * Below 768px the same state machine drives the drill-down (consult §1): the
+ * grouped root list opens by default, every row pushes its section sub-page,
+ * and back climbs one level (transcripts → Cloudfone → root).
  */
 export const SettingsConsolePage = () => {
   const { permissions, isPending: permissionsPending } = usePermissions();
+  const isMobile = useIsMobile();
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(
     resolveInitialSettingsItemId,
   );
+  // Mobile starts on the grouped root; an OAuth callback deep-links straight
+  // to Messenger so the Page picker is on screen. Desktop ignores this flag.
+  const [mobileAtRoot, setMobileAtRoot] = useState(
+    () => isMobile && !hasFacebookOauthCallback(),
+  );
+
+  const selectItem = (itemId: SettingsItemId) => {
+    setActiveItemId(itemId);
+    setMobileAtRoot(false);
+  };
+
+  const mobileBack = () => {
+    // The IA's one nested step: the transcripts sub-page belongs to Cloudfone.
+    if (activeItemId === "settings-cloudfone-transcripts") {
+      setActiveItemId("settings-cloudfone");
+      return;
+    }
+    setMobileAtRoot(true);
+  };
 
   const isAdmin = !permissionsPending && permissions === "admin";
   const settings = useSettingsBundle(isAdmin);
@@ -125,7 +151,12 @@ export const SettingsConsolePage = () => {
   };
 
   return (
-    <SettingsChrome activeItemId={activeItemId} onItemSelect={setActiveItemId}>
+    <SettingsChrome
+      activeItemId={activeItemId}
+      onItemSelect={selectItem}
+      onMobileBack={mobileBack}
+      mobileAtRoot={mobileAtRoot}
+    >
       {settings.statusState === "error" &&
       [
         "settings-zalo-channel",

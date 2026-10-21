@@ -340,56 +340,201 @@ describe("CloudfoneTranscriptsSection", () => {
     await expect.element(card).toHaveAttribute("aria-selected", "false");
   });
 
-  it("stacks the filters and shows a compact pager at phone width", async () => {
+  it("renders the phone filter surface: search, day-scope chips, call cards", async () => {
     await page.viewport(390, 844);
-    // 21 rows → two pages, so the compact pager has somewhere to go.
-    const manyRows = Array.from({ length: 21 }, (_, index) => ({
-      ...ROWS[index % ROWS.length],
-      call_id: `call-${index}`,
-      caller: `09000000${String(index).padStart(2, "0")}`,
-    }));
-    mocks.listCloudfoneTranscripts.mockResolvedValue({
-      items: manyRows.slice(0, 20),
-      total: 21,
-      page: 1,
-      page_size: 20,
-    });
+    mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
     const { screen } = await renderSection();
-    await expect.element(screen.getByText("1p38s").first()).toBeVisible();
 
-    // Stacked filter bar: both field wrappers and the submit button go
-    // full-width (Tailwind classes are asserted, not computed widths —
-    // the vitest browser project compiles no CSS).
-    const form = screen.container.querySelector("form");
-    expect(form?.classList.contains("flex-col")).toBe(true);
-    expect(form?.classList.contains("items-stretch")).toBe(true);
-    const fieldWrappers = [
-      ...(form?.querySelectorAll(":scope > div") ?? []),
-    ].filter((div) => div.querySelector("input") !== null);
-    expect(fieldWrappers).toHaveLength(2);
-    for (const wrapper of fieldWrappers) {
-      expect(wrapper.classList.contains("w-full")).toBe(true);
-    }
-    const submit = form?.querySelector('button[type="submit"]');
-    expect(submit?.classList.contains("w-full")).toBe(true);
+    // Search field (44px/r10 geometry lives in cloudfone-transcripts.css).
+    const search = screen.getByRole("searchbox", { name: "Tìm số điện thoại" });
+    await expect.element(search).toBeVisible();
+    expect(search.element().closest(".transcripts-search")).not.toBeNull();
 
-    // Compact pager: Trước/Sau text buttons + "1/1", no page-number window.
+    // Single-select day-scope chips; "Tất cả" starts active.
+    await expect
+      .element(screen.getByRole("radio", { name: "Tất cả" }))
+      .toBeChecked();
+    await expect
+      .element(screen.getByRole("radio", { name: "Hôm nay" }))
+      .not.toBeChecked();
+    await expect
+      .element(screen.getByRole("radio", { name: "Hôm qua" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("radio", { name: "Chọn ngày" }))
+      .toBeVisible();
+
+    // One bordered card per call — no table at this width. Wait for the
+    // mocked page first: the toolbar renders before the list resolves.
+    await expect.element(screen.getByText("0362698948")).toBeVisible();
+    expect(
+      screen.container.querySelector('[role="table"], [role="grid"]'),
+    ).toBeNull();
+    expect(screen.container.querySelectorAll(".call-card")).toHaveLength(2);
+    expect(
+      screen.container.querySelector(".call-card-badge")?.textContent,
+    ).toBe("đã lưu");
+    expect(screen.container.querySelector(".call-card-name")?.textContent).toBe(
+      "0362698948",
+    );
+    expect(screen.container.querySelector(".call-card-time")?.textContent).toBe(
+      "01/10/2026 17:02",
+    );
+
+    // Compact pager below the cards.
     await expect
       .element(screen.getByRole("button", { name: "Trước", exact: true }))
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Sau", exact: true }))
       .toBeVisible();
+  });
 
-    // Page 1 — prev is disabled, so no new query can fire from it.
-    await expect
-      .element(screen.getByRole("button", { name: "Trước", exact: true }))
-      .toBeDisabled();
+  it("follows the phone search with the caller filter after a 300ms pause", async () => {
+    await page.viewport(390, 844);
+    mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
+    const { screen } = await renderSection();
 
-    await screen.getByRole("button", { name: "Sau", exact: true }).click();
+    await screen
+      .getByRole("searchbox", { name: "Tìm số điện thoại" })
+      .fill("036");
+
     await expect
       .poll(() => mocks.listCloudfoneTranscripts.mock.calls.at(-1)?.[0])
-      .toEqual({ day: undefined, caller: undefined, page: 2, page_size: 20 });
+      .toEqual({ day: undefined, caller: "036", page: 1, page_size: 20 });
+  });
+
+  it("switches day scope from the chips and reveals the date field on Chọn ngày", async () => {
+    await page.viewport(390, 844);
+    mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
+    const { screen } = await renderSection();
+
+    await screen.getByRole("radio", { name: "Hôm nay" }).click();
+    await expect
+      .poll(() => mocks.listCloudfoneTranscripts.mock.calls.at(-1)?.[0])
+      .toEqual({
+        day: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        caller: undefined,
+        page: 1,
+        page_size: 20,
+      });
+    await expect
+      .element(screen.getByRole("radio", { name: "Hôm nay" }))
+      .toBeChecked();
+
+    await screen.getByRole("radio", { name: "Chọn ngày" }).click();
+    await expect.element(screen.getByLabelText("Ngày cuộc gọi")).toBeVisible();
+  });
+
+  it("opens the transcript in a draggable bottom sheet at phone width", async () => {
+    await page.viewport(390, 844);
+    mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
+    mocks.loadCloudfoneTranscript.mockResolvedValue({
+      ...ROWS[0],
+      transcript: "S1: Alo ạ?\nS2: Hỏi giá dịch vụ.",
+    });
+    const { screen } = await renderSection();
+
+    await screen.getByRole("listitem").first().getByRole("button").click();
+
+    const dialog = screen.getByRole("dialog");
+    await expect.element(dialog).toBeVisible();
+    // React Aria owns the modal contract (aria-modal + focus containment).
+    expect(dialog.element().closest('[aria-modal="true"]')).not.toBeNull();
+    await expect
+      .poll(
+        () =>
+          dialog.element().contains(document.activeElement) ||
+          document.activeElement === dialog.element(),
+      )
+      .toBe(true);
+    await expect
+      .poll(() => mocks.loadCloudfoneTranscript.mock.calls)
+      .toEqual([["1790848955"]]);
+
+    // Starts at the 50% detent; the grip drags it to the 90% detent.
+    const sheet = dialog.element().parentElement as HTMLElement;
+    expect(sheet.style.height).toContain("0.5");
+    const grip = dialog
+      .element()
+      .querySelector<HTMLElement>(".bottom-sheet-handle")!;
+    grip.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        clientY: 700,
+        pointerId: 7,
+        pointerType: "touch",
+      }),
+    );
+    grip.dispatchEvent(
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        clientY: 480,
+        pointerId: 7,
+        pointerType: "touch",
+      }),
+    );
+    grip.dispatchEvent(
+      new PointerEvent("pointerup", {
+        bubbles: true,
+        clientY: 480,
+        pointerId: 7,
+        pointerType: "touch",
+      }),
+    );
+    await expect.poll(() => sheet.style.height).toContain("0.9");
+
+    await screen.getByRole("button", { name: "Đóng bản ghi" }).click();
+    await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("renders the conversation as S1/S2 bubbles with copy actions", async () => {
+    await page.viewport(390, 844);
+    mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
+    mocks.loadCloudfoneTranscript.mockResolvedValue({
+      ...ROWS[0],
+      transcript: "S1: Alo ạ?\nS2: Hỏi giá dịch vụ.\nS1: Dạ em nghe ạ.",
+    });
+    const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    });
+    const { screen } = await renderSection();
+
+    await screen.getByRole("listitem").first().getByRole("button").click();
+    const dialog = screen.getByRole("dialog");
+    await expect.element(dialog).toBeVisible();
+
+    // S1 left on gray-100, S2 right on primary-50 (brand-50 in the UUI layer).
+    const left = dialog.element().querySelectorAll(".transcript-bubble--left");
+    const right = dialog
+      .element()
+      .querySelectorAll(".transcript-bubble--right");
+    expect(left).toHaveLength(2);
+    expect(right).toHaveLength(1);
+    expect(left[0]?.className).toContain("bg-neutral-100");
+    expect(right[0]?.className).toContain("bg-brand-50");
+    expect(left[0]?.getAttribute("aria-label")).toBe("Speaker: S1. Alo ạ?");
+
+    // Per-utterance copy: the consult's "Sao chép" 44px icon action.
+    const copyButtons = dialog.element().querySelectorAll(".transcript-copy");
+    expect(copyButtons).toHaveLength(3);
+    (copyButtons[1] as HTMLButtonElement).click();
+    await expect
+      .poll(() => clipboardWrite.mock.calls)
+      .toEqual([["Hỏi giá dịch vụ."]]);
+
+    // Copy-all copies the whole stored transcript.
+    await screen
+      .getByRole("button", { name: "Sao chép toàn bộ bản ghi" })
+      .click();
+    await expect
+      .poll(() => clipboardWrite.mock.calls)
+      .toEqual([
+        ["Hỏi giá dịch vụ."],
+        ["S1: Alo ạ?\nS2: Hỏi giá dịch vụ.\nS1: Dạ em nghe ạ."],
+      ]);
   });
 
   it("keeps the desktop pager and inline filter row at desktop width", async () => {

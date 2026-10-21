@@ -16,6 +16,7 @@ import type { SettingsStatusState } from "./SettingsFieldStatus";
 import { SettingsGroupStatus } from "./SettingsFieldStatus";
 import { PlainField, SecretField } from "./SecretField";
 import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
+import { integrationSettingsKeys } from "./useSettingsBundle";
 
 /**
  * The badge-counted fields: the three CloudFone spec-1.1 credentials
@@ -24,7 +25,7 @@ import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
 const CLOUDFONE_FIELD_COUNT = 4;
 
 /** One query key for the endpoint, so a save can write back its own response. */
-const cloudfoneSettingsKey = ["cloudfone-settings"] as const;
+const cloudfoneSettingsKey = integrationSettingsKeys.cloudfone;
 
 /**
  * The Cloudfone (CloudFone tổng đài) voice-transcript insights view: the three
