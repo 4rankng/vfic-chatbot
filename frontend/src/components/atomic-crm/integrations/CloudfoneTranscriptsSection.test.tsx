@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -57,6 +58,7 @@ afterEach(async () => {
   await cleanup();
   mocks.listCloudfoneTranscripts.mockReset();
   mocks.loadCloudfoneTranscript.mockReset();
+  await page.viewport(1280, 720);
 });
 
 describe("CloudfoneTranscriptsSection", () => {
@@ -141,5 +143,125 @@ describe("CloudfoneTranscriptsSection", () => {
       .getByRole("button", { name: "Quay lại cài đặt Cloudfone" })
       .click();
     expect(onBack).toHaveBeenCalled();
+  });
+
+  it("swaps the table for a selectable card list at phone width", async () => {
+    await page.viewport(390, 844);
+    mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
+    const { screen } = await renderSection();
+
+    await expect
+      .element(screen.getByRole("listitem").first())
+      .toBeVisible();
+    // The phone surface renders no table at all — one surface per width.
+    expect(
+      screen.container.querySelector('[role="table"], [role="grid"]'),
+    ).toBeNull();
+    await expect.element(screen.getByText("1p38s")).toBeVisible();
+    await expect.element(screen.getByText("đã lưu").first()).toBeVisible();
+
+    const card = screen.getByRole("button", { name: /0362698948/ });
+    mocks.loadCloudfoneTranscript.mockResolvedValue({
+      ...ROWS[0],
+      transcript: "S1: Alo ạ?\nS2: Hỏi giá dịch vụ.",
+    });
+    await card.click();
+
+    await expect
+      .poll(() => mocks.loadCloudfoneTranscript.mock.calls)
+      .toEqual([["1790848955"]]);
+    await expect.element(card).toHaveAttribute("aria-selected", "true");
+    await expect.element(screen.getByText(/Hỏi giá dịch vụ/)).toBeVisible();
+
+    await screen
+      .getByRole("button", { name: "Đóng bản ghi", exact: true })
+      .click();
+    await expect.element(card).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("stacks the filters and shows a compact pager at phone width", async () => {
+    await page.viewport(390, 844);
+    // 21 rows → two pages, so the compact pager has somewhere to go.
+    const manyRows = Array.from({ length: 21 }, (_, index) => ({
+      ...ROWS[index % ROWS.length],
+      call_id: `call-${index}`,
+      caller: `09000000${String(index).padStart(2, "0")}`,
+    }));
+    mocks.listCloudfoneTranscripts.mockResolvedValue({
+      items: manyRows.slice(0, 20),
+      total: 21,
+      page: 1,
+      page_size: 20,
+    });
+    const { screen } = await renderSection();
+    await expect.element(screen.getByText("1p38s").first()).toBeVisible();
+
+    // Stacked filter bar: both field wrappers and the submit button go
+    // full-width (Tailwind classes are asserted, not computed widths —
+    // the vitest browser project compiles no CSS).
+    const form = screen.container.querySelector("form");
+    expect(form?.classList.contains("flex-col")).toBe(true);
+    expect(form?.classList.contains("items-stretch")).toBe(true);
+    const fieldWrappers = [...(form?.querySelectorAll(":scope > div") ?? [])].filter(
+      (div) => div.querySelector("input") !== null,
+    );
+    expect(fieldWrappers).toHaveLength(2);
+    for (const wrapper of fieldWrappers) {
+      expect(wrapper.classList.contains("w-full")).toBe(true);
+    }
+    const submit = form?.querySelector('button[type="submit"]');
+    expect(submit?.classList.contains("w-full")).toBe(true);
+
+    // Compact pager: Trước/Sau text buttons + "1/1", no page-number window.
+    await expect
+      .element(screen.getByRole("button", { name: "Trước", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Sau", exact: true }))
+      .toBeVisible();
+
+    // Page 1 — prev is disabled, so no new query can fire from it.
+    await expect
+      .element(screen.getByRole("button", { name: "Trước", exact: true }))
+      .toBeDisabled();
+
+    await screen.getByRole("button", { name: "Sau", exact: true }).click();
+    await expect
+      .poll(() => mocks.listCloudfoneTranscripts.mock.calls.at(-1)?.[0])
+      .toEqual({ day: undefined, caller: undefined, page: 2, page_size: 20 });
+  });
+
+  it("keeps the desktop pager and inline filter row at desktop width", async () => {
+    mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
+    const { screen } = await renderSection();
+
+    // Inline (not stacked) filter row, desktop pagination window. Wait for
+    // the async list render before probing the container synchronously.
+    await expect.element(screen.getByText("0362698948")).toBeVisible();
+    const form = screen.container.querySelector("form");
+    expect(form?.classList.contains("flex-col")).toBe(false);
+    expect(
+      screen.container.querySelector('[role="table"], [role="grid"]'),
+    ).not.toBeNull();
+    expect(
+      screen.container.querySelector('button[aria-label="Về trang trước"]'),
+    ).not.toBeNull();
+  });
+
+  it("hides Xóa lọc until a filter is active", async () => {
+    mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
+    const { screen } = await renderSection();
+
+    expect(
+      [...screen.container.querySelectorAll("button")].some(
+        (button) => button.textContent?.trim() === "Xóa lọc",
+      ),
+    ).toBe(false);
+
+    await screen.getByRole("textbox", { name: "Số điện thoại" }).fill("036");
+    await screen.getByRole("button", { name: "Lọc", exact: true }).click();
+    await expect
+      .element(screen.getByRole("button", { name: "Xóa lọc", exact: true }))
+      .toBeVisible();
   });
 });
