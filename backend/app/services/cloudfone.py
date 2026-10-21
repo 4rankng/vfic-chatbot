@@ -478,17 +478,11 @@ async def _llm_with_retry(
     raise RuntimeError("unreachable")  # pragma: no cover
 
 
-async def build_insights(
+async def _summarize_calls(
     calls: list[CallRecord],
     summarizer: Callable[[str, str], Awaitable[str]] | None,
 ) -> list[CallInsight]:
-    """Summarize each call's transcript through the LLM, fail-soft per call.
-
-    A transient provider blip is retried once; a persistent failure leaves
-    that call's summary empty and the rest of the letter — and the send —
-    intact, mirroring the digest's enrichment rule: a late/partial summary is
-    worth more than no email at all.
-    """
+    """One summarization sweep, fail-soft per call (bounded retry inside)."""
     insights: list[CallInsight] = []
     for call in calls:
         summary: str | None = None
@@ -505,6 +499,36 @@ async def build_insights(
                     "cloudfone insights summary failed call_id=%s", call.call_id, exc_info=True
                 )
         insights.append(CallInsight(transcript=call, summary=summary))
+    return insights
+
+
+async def build_insights(
+    calls: list[CallRecord],
+    summarizer: Callable[[str, str], Awaitable[str]] | None,
+) -> list[CallInsight]:
+    """Summarize each call's transcript through the LLM, fail-soft per call.
+
+    A transient blip is retried inside each sweep; a call whose summary is
+    still missing after the first sweep gets one more sweep before the letter
+    ships — the time the rest of the day's calls take to summarize gives a
+    flapping provider room to recover. A persistent failure leaves that
+    call's summary empty and the rest of the letter — and the send — intact,
+    mirroring the digest's enrichment rule: a late/partial summary is worth
+    more than no email at all.
+    """
+    insights = await _summarize_calls(calls, summarizer)
+    missing = [
+        index
+        for index, insight in enumerate(insights)
+        if insight.summary is None and insight.transcript.transcript
+    ]
+    if missing and summarizer is not None:
+        recovered = await _summarize_calls(
+            [insights[index].transcript for index in missing], summarizer
+        )
+        for slot, insight in zip(missing, recovered):
+            if insight.summary is not None:
+                insights[slot] = insight
     return insights
 
 

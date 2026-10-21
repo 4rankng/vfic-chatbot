@@ -532,6 +532,32 @@ async def test_build_insights_retries_a_transient_llm_failure(monkeypatch):
     assert len(attempts) == 2  # first attempt failed, second succeeded
 
 
+async def test_build_insights_re_sums_missing_summaries_in_a_second_pass(monkeypatch):
+    """A call whose summary is missing after the first sweep gets one more LLM
+    sweep; empty-transcript calls never reach the LLM in either sweep."""
+    monkeypatch.setattr(cloudfone_module, "LLM_RETRY_DELAY_SECONDS", 0)
+    calls_seen: list[str] = []
+
+    async def down_then_up(_system: str, user: str) -> str:
+        calls_seen.append(user)
+        if len(calls_seen) <= 2:  # both attempts of the first sweep fail
+            raise RuntimeError("first sweep down")
+        return "Khách hỏi về giá cước."
+
+    insights = await build_insights(
+        [
+            CallRecord(call_id="c1", transcript="Khách hỏi giá cước."),
+            CallRecord(call_id="c2", transcript=""),
+        ],
+        down_then_up,
+    )
+    assert insights[0].summary == "Khách hỏi về giá cước."
+    assert insights[1].summary is None  # empty transcript: never summarized
+    # 2 failed attempts + 1 recovered attempt; the empty call is never asked.
+    assert len(calls_seen) == 3
+    assert all("BẢN GHI CUỘC GỌI" in user for user in calls_seen)
+
+
 async def test_build_daily_insights_payload_and_bullets():
     """The LLM gets stats + one compact line per call and returns its bullets."""
     captured: dict = {}

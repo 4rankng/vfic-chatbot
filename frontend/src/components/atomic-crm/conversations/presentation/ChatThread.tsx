@@ -255,9 +255,14 @@ export const ChatThread = ({
   useEffect(() => {
     if (messages.length > 0 && !initialJumpDoneRef.current) {
       initialJumpDoneRef.current = true;
-      // Double-RAF to let virtua measure + lay out before scrolling.
+      // Double-RAF to let virtua measure + lay out before scrolling. The jump
+      // stays conditional: if the reader already moved away during the wait
+      // frames (their own scroll, a focus scroll, browser restoration), the
+      // ref says away and the deferred jump must not yank them back down.
       requestAnimationFrame(() =>
-        requestAnimationFrame(() => scrollToNewest()),
+        requestAnimationFrame(() => {
+          if (isAtBottomRef.current) scrollToNewest();
+        }),
       );
     }
   }, [messages, scrollToNewest]);
@@ -398,6 +403,10 @@ export const ChatThread = ({
   // Observing that shallower container with another ResizeObserver creates
   // skipped notifications in the same delivery loop. Follow its committed
   // layout changes after delivery instead, and coalesce scroll writes per frame.
+  // The at-bottom decision is captured when the mutation lands — a follow's own
+  // scroll echo dispatches at the next frame's scroll steps against the grown
+  // layout (old scrollTop, new scrollHeight), which would poison the ref to
+  // "away" before this RAF reads it and strand an at-bottom reader mid-growth.
   useEffect(() => {
     const el = scrollerElRef.current;
     if (!el || typeof MutationObserver === "undefined") return;
@@ -406,9 +415,10 @@ export const ChatThread = ({
     let pendingFrame: number | null = null;
     const obs = new MutationObserver(() => {
       if (pendingFrame !== null) return;
+      const wasAtBottom = isAtBottomRef.current;
       pendingFrame = requestAnimationFrame(() => {
         pendingFrame = null;
-        if (isAtBottomRef.current && !isPrependingRef.current) {
+        if (wasAtBottom && !isPrependingRef.current) {
           scrollToNewest();
         }
       });
