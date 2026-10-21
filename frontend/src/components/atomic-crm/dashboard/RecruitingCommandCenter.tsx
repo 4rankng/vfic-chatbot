@@ -13,7 +13,7 @@ import { VList, WindowVirtualizer } from "virtua";
 import { AlertFloating } from "@/components/application/alerts/alerts";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { Badge } from "@/components/base/badges/badges";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, useIsNarrow } from "@/hooks/use-mobile";
 
 import { EmptyState } from "../kit";
 import {
@@ -35,6 +35,8 @@ import {
   deriveCacheDiscriminators,
   filterHumanInterventions,
 } from "./recruitingCommandCenterLogic";
+import { DashboardKpiCards } from "./DashboardKpiCards";
+import { LeadCardList } from "./LeadCardList";
 
 type RecruitingCommandCenterProps = {
   variant?: "desktop" | "mobile";
@@ -196,6 +198,12 @@ export const RecruitingCommandCenter = ({
         </div>
       ) : null}
 
+      {/* Phone-first KPI strip (<md); the desktop keeps the worklist grid. */}
+      <DashboardKpiCards
+        candidates={candidatesQuery.data}
+        counters={data?.counters}
+      />
+
       <section
         className="recruiting-worklist"
         aria-label={translate("dashboard.queues_label")}
@@ -336,6 +344,13 @@ const CandidatePanel = ({
   const isEmpty =
     !state.showSkeleton && !state.showInitialError && !state.hasRows;
   const translate = useTranslate();
+  const isNarrow = useIsNarrow();
+  // Phone (<640px) renders the card directory over the same rows; the desktop
+  // keeps the day-grouped list unchanged.
+  const flatCandidates = useMemo(
+    () => groups.flatMap((group) => group.candidates),
+    [groups],
+  );
   const countLabel = state.showSkeleton
     ? translate("dashboard.candidates_count_loading")
     : state.showInitialError
@@ -376,6 +391,8 @@ const CandidatePanel = ({
               label={translate("dashboard.candidates_load_failed")}
               onRetry={onRetry}
             />
+          ) : isNarrow ? (
+            <LeadCardList candidates={flatCandidates} />
           ) : (
             <CandidateGroupedList
               groups={groups}

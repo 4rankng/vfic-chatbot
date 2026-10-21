@@ -600,6 +600,14 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/dashboard/leadCardDirectory.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/dashboard/kpiCards.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/dashboard/candidateDashboard.ts",
           "type": "registry:component"
         },
@@ -609,6 +617,14 @@
         },
         {
           "path": "src/components/atomic-crm/dashboard/RecruitingCommandCenter.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/dashboard/LeadCardList.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/dashboard/DashboardKpiCards.tsx",
           "type": "registry:component"
         },
         {
@@ -653,6 +669,10 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/ChannelAdapterSelector.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/presentation/use-swipe-back.ts",
           "type": "registry:component"
         },
         {
@@ -721,6 +741,10 @@
         },
         {
           "path": "src/components/atomic-crm/conversations/domain/reply-failure-messages.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/conversations/domain/phone-surface.ts",
           "type": "registry:component"
         },
         {
@@ -818,6 +842,10 @@
         {
           "path": "src/components/atomic-crm/capabilities/kernel/components.tsx",
           "type": "registry:component"
+        },
+        {
+          "path": "src/hooks/use-visual-viewport.ts",
+          "type": "registry:hook"
         },
         {
           "path": "src/hooks/use-breakpoint.ts",

@@ -46,3 +46,23 @@ export function useIsWideDesktop() {
 
   return isWideDesktop;
 }
+
+const NARROW_BREAKPOINT = 640;
+
+/** Phone card-list surfaces (the leads directory swaps below 640px). */
+export function useIsNarrow() {
+  const [isNarrow, setIsNarrow] = React.useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(`(max-width: ${NARROW_BREAKPOINT - 1}px)`).matches;
+  });
+
+  React.useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${NARROW_BREAKPOINT - 1}px)`);
+    const onChange = () => setIsNarrow(mql.matches);
+    mql.addEventListener("change", onChange);
+    setIsNarrow(mql.matches);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  return isNarrow;
+}

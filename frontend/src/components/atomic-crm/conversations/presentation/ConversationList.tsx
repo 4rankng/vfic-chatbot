@@ -6,6 +6,7 @@ import {
   memo,
   useRef,
   useDeferredValue,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -29,10 +30,12 @@ import { EmptyState } from "../../kit";
 import { formatVietnamDateTime } from "../../vietnamTime";
 import { Badge } from "@/components/base/badges/badges";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useVisualViewportInset } from "@/hooks/use-visual-viewport";
 import { loadConversationSnippets } from "../application/conversation-runtime";
 import { Skeleton } from "@/components/ui/skeleton";
 import { vietnameseSearchIncludes } from "@/lib/vietnameseSearch";
 import { LeadAvatar } from "../LeadAvatar";
+import { useSwipeBack } from "./use-swipe-back";
 import { useConversationCapabilitySlots } from "../useConversationCapabilitySlots";
 import {
   getConversationListKey,
@@ -956,11 +959,25 @@ const ConversationListContent = ({
     );
   }, []);
 
-  const backToList = () => {
-    setSearchParams((prev) => conversationSelectionParams(prev, null), {
-      replace: true,
-    });
-  };
+  // Stable identity: the swipe-back effect and the header/backdrop handlers
+  // must not re-subscribe on every navigation (see setSearchParamsRef above).
+  const backToList = useCallback(() => {
+    setSearchParamsRef.current(
+      (prev) => conversationSelectionParams(prev, null),
+      { replace: true },
+    );
+  }, []);
+
+  // Phone keyboard: shrink the workspace to the visual viewport so the sticky
+  // composer stays above the keyboard (0 on desktop / unsupported browsers).
+  const keyboardInset = useVisualViewportInset();
+  // Phone drill-down also exits via edge-swipe; the Back button and browser
+  // history remain authoritative (cheap additive affordance).
+  useSwipeBack({
+    enabled: isMobile && detailOpen,
+    containerRef: workspaceRef,
+    onBack: backToList,
+  });
 
   const onConversationDeleted = () => {
     // The list refresh follows this callback. Clear selection immediately so a
@@ -978,6 +995,11 @@ const ConversationListContent = ({
       className={`inbox-bg-container conversation-workspace ${
         isMobile && detailOpen ? "conversation-open" : ""
       }`}
+      style={
+        {
+          "--chat-keyboard-inset": `${keyboardInset}px`,
+        } as CSSProperties
+      }
     >
       <InboxIcons />
       <div
