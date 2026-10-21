@@ -12,8 +12,19 @@
   .workspace-frame:has(
       .workspace-frame-content > .conversation-workspace.conversation-open
     )
+    > .workspace-tabbar {
+    /* The chat detail is full-bleed: its composer owns the bottom edge, so
+       the fixed tab bar steps aside alongside the topbar. */
+    display: none;
+  }
+
+  .workspace-frame:has(
+      .workspace-frame-content > .conversation-workspace.conversation-open
+    )
     .workspace-frame-content {
     border-top-left-radius: 0;
+    /* No tab bar to reserve space for while it is hidden. */
+    padding-bottom: 0;
   }
 
   .workspace-frame:has(

@@ -97,7 +97,11 @@ export const LoginPage = ({ redirectTo }: { redirectTo?: string }) => {
             <Button
               type="submit"
               size="sm"
-              className="mt-1 w-full"
+              /* `data-allow-tall` + `.auth-submit` (auth.css) give phones the
+                 one ≥48px touch target in the auth surface; desktop keeps the
+                 sm button envelope. */
+              data-allow-tall
+              className="auth-submit mt-1 w-full"
               isDisabled={loading}
               isLoading={loading}
               showTextWhileLoading

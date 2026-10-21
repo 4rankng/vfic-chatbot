@@ -44,6 +44,24 @@ export const getWorkspaceDestinations = (
     (destination) => !destination.roles || destination.roles.includes(role),
   );
 
+/**
+ * Material's bottom navigation carries three to five destinations; more than
+ * five stops being tappable at 360–390px. The first five reachable
+ * destinations in declaration order are the primary ones (Tổng quan → Cài đặt
+ * for an admin, three for a recruiter); everything after that stays reachable
+ * in the slideout drawer, which the shell keeps one tap away.
+ */
+export const MOBILE_TAB_LIMIT = 5;
+
+export const getMobileTabDestinations = (
+  role: WorkspaceRole,
+  compiledDestinations: readonly WorkspaceDestination[],
+): readonly WorkspaceDestination[] =>
+  getWorkspaceDestinations(role, compiledDestinations).slice(
+    0,
+    MOBILE_TAB_LIMIT,
+  );
+
 /** Destinations grouped into sidebar sections; empty sections are dropped. */
 export const getWorkspaceSections = (
   role: WorkspaceRole,

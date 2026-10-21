@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { CompiledDestination } from "../capabilities/types";
 import {
+  getMobileTabDestinations,
   getWorkspaceDestination,
   getWorkspaceDestinations,
   getWorkspaceSections,
+  MOBILE_TAB_LIMIT,
   normalizeWorkspacePath,
 } from "./workspace-nav-model";
 
@@ -56,6 +58,28 @@ describe("workspace navigation model", () => {
     );
     expect(normalizeWorkspacePath("")).toBe("/");
     expect(normalizeWorkspacePath("projects")).toBe("/projects");
+  });
+
+  it("caps the mobile tab bar at the Material 3–5 band, in declaration order", () => {
+    const crowded: readonly CompiledDestination[] = [
+      ...navigation,
+      destination("projects", "operations"),
+      destination("performance", "system", { roles: ["admin"] }),
+    ];
+
+    // An admin sees the first five primary destinations; the rest stay in
+    // the slideout drawer.
+    expect(
+      getMobileTabDestinations("admin", crowded).map(({ id }) => id),
+    ).toEqual(["overview", "messages", "users", "settings", "projects"]);
+    expect(getMobileTabDestinations("admin", crowded)).toHaveLength(
+      MOBILE_TAB_LIMIT,
+    );
+
+    // A recruiter has fewer than five destinations — all of them fit.
+    expect(
+      getMobileTabDestinations("recruiter", crowded).map(({ id }) => id),
+    ).toEqual(["overview", "messages", "projects"]);
   });
 
   it("deep-links the inbox badge to the server-filtered reply queue", () => {

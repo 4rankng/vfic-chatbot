@@ -734,6 +734,178 @@ input:-webkit-autofill:focus {
 }
 
 /* --------------------------------------------------------------------------
+   Phone-width primary navigation (layout/mobile-tab-bar.tsx).
+   A fixed bottom tab bar below `md`; the element's own `md:hidden` utility
+   owns display, so nothing here sets `display` on `.workspace-tabbar` itself
+   (unlayered rules would outrank the layered utility). Height 60px within
+   the 56–64px band; every tab item is at least a 48px touch target; the
+   active tab carries a 3px brand indicator riding the bar's top edge.
+   -------------------------------------------------------------------------- */
+.workspace-tabbar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--workspace-paper);
+  border-top: 1px solid var(--workspace-border);
+  box-shadow: 0 -6px 24px
+    color-mix(in oklab, var(--workspace-shell) 10%, transparent);
+}
+
+.workspace-tabbar-list {
+  display: flex;
+  width: 100%;
+  height: 3.75rem;
+  margin: 0;
+  padding: 0 0.25rem;
+  list-style: none;
+}
+
+.workspace-tabbar-tab {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.workspace-tabbar-item {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 3rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--workspace-ink-muted);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.workspace-tabbar-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  width: 2.5rem;
+  height: 3px;
+  border-radius: 0 0 999px 999px;
+  background: transparent;
+}
+
+.workspace-tabbar-item[aria-current="page"] {
+  color: var(--workspace-action);
+}
+
+.workspace-tabbar-item[aria-current="page"]::before {
+  background: var(--workspace-action);
+}
+
+.workspace-tabbar-item:focus-visible {
+  outline: 2px solid var(--workspace-focus);
+  outline-offset: -2px;
+}
+
+.workspace-tabbar-icon {
+  position: relative;
+  display: flex;
+}
+
+.workspace-tabbar-badge {
+  position: absolute;
+  top: -5px;
+  right: -12px;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--workspace-danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1rem;
+  text-align: center;
+}
+
+.workspace-tabbar-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+/* The fixed bar overlays the document flow below `md`, so the scrolling
+   region reserves the same band — the last row of any workspace stays
+   reachable above the bar. The full-bleed chat detail cancels this in
+   layout/workspace-mobile-chat.css when it hides the bar. */
+@media (max-width: 767px) {
+  .workspace-frame-content {
+    padding-bottom: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Belt-and-braces twin of the `md:hidden` utility the element carries: the
+   bar never belongs to the ≥768px frame, even where the utility layer is
+   absent (the Vitest browser project compiles no Tailwind utilities). */
+@media (min-width: 768px) {
+  .workspace-tabbar {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Mobile bottom-sheet affordances (kit/app-modal.tsx).
+   The handle is a real drag surface: pointer capture, translated sheet,
+   Escape-path dismissal past ~96px. It renders inside every app modal but is
+   only visible under 640px, where the modal becomes a bottom sheet.
+   -------------------------------------------------------------------------- */
+.app-sheet-handle {
+  display: block;
+  flex: 0 0 auto;
+  padding: 10px 0 6px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.app-sheet-handle:active {
+  cursor: grabbing;
+}
+
+/* In the sheet posture the modal box is a flex column: the handle stays
+   pinned and the dialog after it takes the remaining height and scrolls
+   on its own (the vendored Dialog is already overflow-y-auto). */
+@media (max-width: 639px) {
+  .app-sheet-handle ~ [role="dialog"] {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+.app-sheet-handle-bar {
+  display: block;
+  width: 2.5rem;
+  height: 4px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.18);
+}
+
+/* Dragging suspends transitions so the sheet tracks the pointer 1:1. */
+.app-sheet-dragging {
+  transition: none !important;
+}
+
+@media (min-width: 640px) {
+  .app-sheet-handle {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
    Workspace content chrome.
    The console contract for everything rendered inside the authenticated shell,
    scoped to the element every workspace scrolls in (`.workspace-frame-content`,

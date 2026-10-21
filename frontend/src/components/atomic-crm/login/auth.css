@@ -44,10 +44,42 @@
   line-height: 18px;
 }
 
+/* Keyboard-aware canvas. `100svh`/`100dvh` track the browser chrome but not
+   the iOS on-screen keyboard; `--visual-viewport-height` (published by
+   hooks/use-visual-viewport.ts from the real VisualViewport) shrinks with
+   it, so the card and its submit stay above the keyboard while typing.
+   The desktop (`lg`) card keeps its authored fixed heights — these floors
+   only steer the flowing mobile/tablet card. */
+.auth-shell {
+  min-height: 100dvh;
+  min-height: var(--visual-viewport-height, 100dvh);
+}
+
+@media (max-width: 1023px) {
+  .auth-shell [data-slot="auth-frame"] {
+    min-height: calc(var(--visual-viewport-height, 100svh) - 1.5rem);
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .auth-shell [data-slot="auth-frame"] {
+    min-height: calc(var(--visual-viewport-height, 100svh) - 3rem);
+  }
+}
+
 @media (max-width: 767px) {
   .auth-shell [class~="group/input"],
   .auth-shell button.console-button {
     height: var(--crm-control-height-touch, 40px);
     min-height: var(--crm-control-height-touch, 40px);
+  }
+
+  /* The one control allowed past the 40px envelope: the primary submit is
+     the login form's single decisive action, and on a phone it is the
+     console's only ≥48px touch target (data-allow-tall opts it out of the
+     global console-button ceiling). */
+  .auth-shell button.console-button.auth-submit {
+    height: 48px;
+    min-height: 48px;
   }
 }

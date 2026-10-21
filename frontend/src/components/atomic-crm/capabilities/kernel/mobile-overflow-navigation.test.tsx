@@ -111,6 +111,33 @@ describe("kernel mobile navigation drawer", () => {
     await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("pins the primary destinations to a bottom tab bar beside the drawer affordance", async () => {
+    await page.viewport(390, 844);
+
+    const screen = await renderWorkspaceShell("/");
+
+    // The five primary destinations sit on the fixed bottom bar below md…
+    const tabbar = screen.container.querySelector<HTMLElement>(
+      "nav.workspace-tabbar",
+    );
+    expect(tabbar).toBeInstanceOf(HTMLElement);
+    expect(tabbar!.classList.contains("md:hidden")).toBe(true);
+    expect(
+      [...tabbar!.querySelectorAll("a")].map((link) =>
+        link.textContent?.trim(),
+      ),
+    ).toEqual(["Tổng quan", "Tin nhắn", "Dự án", "Người dùng", "Cài đặt"]);
+
+    // …while the drawer still opens with every destination, including the
+    // sixth (Hiệu suất) that the tab bar does not carry.
+    await screen.getByRole("button", { name: "Mở điều hướng" }).click();
+    const drawer = screen.getByRole("dialog");
+    await expect.element(drawer).toBeVisible();
+    await expect
+      .element(drawer.getByRole("link", { name: "Hiệu suất", exact: true }))
+      .toBeVisible();
+  });
+
   it("opens the drawer with every admin section and destination", async () => {
     await page.viewport(390, 844);
 
