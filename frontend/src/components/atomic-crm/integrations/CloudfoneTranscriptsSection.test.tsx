@@ -59,16 +59,38 @@ const UNCHECKED_DAY = {
   },
 };
 
-/** An empty day the system already checked — it is known, and it holds nothing. */
+/** A checked day whose calls carried no recording to transcribe. */
 const CHECKED_DAY = {
   ...UNCHECKED_DAY,
   day_state: {
     ...UNCHECKED_DAY.day_state,
     status: "checked" as const,
     call_count: 3,
-    recordable_count: 1,
+    recordable_count: 0,
     transcript_count: 0,
     checked_at: "2026-10-02T01:00:00",
+  },
+};
+
+/** A checked day whose recordings could not be transcribed. */
+const UNTRANSCRIBABLE_DAY = {
+  ...CHECKED_DAY,
+  day_state: {
+    ...CHECKED_DAY.day_state,
+    call_count: 3,
+    recordable_count: 1,
+    transcript_count: 0,
+  },
+};
+
+/** A checked day without a single call. */
+const CALL_FREE_DAY = {
+  ...CHECKED_DAY,
+  day_state: {
+    ...CHECKED_DAY.day_state,
+    call_count: 0,
+    recordable_count: 0,
+    transcript_count: 0,
   },
 };
 
@@ -219,6 +241,37 @@ describe("CloudfoneTranscriptsSection", () => {
       .element(screen.getByText("Ngày này không có bản ghi"))
       .toBeVisible();
     expect(mocks.backfillCloudfoneTranscripts).not.toHaveBeenCalled();
+  });
+
+  it("explains a day whose recordings could not be transcribed", async () => {
+    // The vendor clip was unusable (too short / broken), so the day holds no
+    // transcript — the admin needs to see that, not a bare "nothing here".
+    mocks.listCloudfoneTranscripts.mockResolvedValue(UNTRANSCRIBABLE_DAY);
+    const { screen } = await renderSection();
+
+    await screen.getByLabelText("Ngày cuộc gọi").fill("2026-10-01");
+
+    await expect
+      .element(screen.getByText("Không chuyển được bản ghi sang văn bản"))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByText(
+          /1 cuộc gọi có bản ghi nhưng không chuyển sang văn bản/,
+        ),
+      )
+      .toBeVisible();
+  });
+
+  it("explains a day without a single call", async () => {
+    mocks.listCloudfoneTranscripts.mockResolvedValue(CALL_FREE_DAY);
+    const { screen } = await renderSection();
+
+    await screen.getByLabelText("Ngày cuộc gọi").fill("2026-10-01");
+
+    await expect
+      .element(screen.getByText(/không có cuộc gọi nào/))
+      .toBeVisible();
   });
 
   it("shows the fetch progress while a day is being pulled", async () => {

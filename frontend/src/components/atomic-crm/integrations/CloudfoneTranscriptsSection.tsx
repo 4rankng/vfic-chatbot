@@ -419,6 +419,40 @@ export const CloudfoneTranscriptsSection = ({
     fetchDayFromCloudfone(target, true);
   };
 
+  /**
+   * Why a checked day holds no transcript.
+   *
+   * The marker counts what the fetch found: the calls of the day, the ones
+   * that carried a recording, and the ones that became a transcript. A day
+   * whose calls had recordings but produced no transcript is a different
+   * story from a day without calls — and the admin deserves to know which one
+   * they are looking at instead of a bare "nothing here".
+   */
+  const knownDayExplanation = (): string => {
+    if (!dayState) return "";
+    const calls = dayState.call_count;
+    const recordable = dayState.recordable_count;
+    const transcripts = dayState.transcript_count;
+    if (calls === 0)
+      return "Hệ thống đã kiểm tra ngày này: không có cuộc gọi nào.";
+    if (recordable === 0) {
+      return `Hệ thống đã kiểm tra ngày này: ${calls} cuộc gọi nhưng không có bản ghi để chuyển đổi.`;
+    }
+    if (transcripts === 0) {
+      return `Hệ thống đã kiểm tra ngày này: ${recordable} cuộc gọi có bản ghi nhưng không chuyển sang văn bản được (bản ghi quá ngắn hoặc bị Cloudfone lỗi).`;
+    }
+    return `Hệ thống đã kiểm tra ngày này: ${transcripts}/${recordable} cuộc gọi có bản ghi văn bản.`;
+  };
+
+  // The three empty situations the marker can describe, told apart.
+  const knownDay = Boolean(day) && dayState?.status === "checked";
+  const dayHasTranscripts = (dayState?.transcript_count ?? 0) > 0;
+  const dayHasRecordings = (dayState?.recordable_count ?? 0) > 0;
+  // The day holds transcripts but the phone filter excludes them all.
+  const numberFilteredOut = knownDay && dayHasTranscripts && Boolean(caller);
+  const nothingTranscribable =
+    knownDay && dayHasRecordings && !dayHasTranscripts;
+
   const changePage = (next: number) => {
     setPage(next);
     setSelectedId(null);
@@ -594,11 +628,15 @@ export const CloudfoneTranscriptsSection = ({
               ? "Đang tải bản ghi từ Cloudfone"
               : dayState?.status === "error"
                 ? "Chưa tải được dữ liệu từ Cloudfone"
-                : day && dayState?.status === "checked"
-                  ? "Ngày này không có bản ghi"
-                  : filtered
-                    ? "Không tìm thấy bản ghi phù hợp"
-                    : "Chưa có bản ghi cuộc gọi"
+                : numberFilteredOut
+                  ? "Không tìm thấy bản ghi phù hợp"
+                  : nothingTranscribable
+                    ? "Không chuyển được bản ghi sang văn bản"
+                    : knownDay
+                      ? "Ngày này không có bản ghi"
+                      : filtered
+                        ? "Không tìm thấy bản ghi phù hợp"
+                        : "Chưa có bản ghi cuộc gọi"
           }
           description={
             backfillMutation.isPending
@@ -606,11 +644,13 @@ export const CloudfoneTranscriptsSection = ({
               : dayState?.status === "error"
                 ? (dayState.error ??
                   "Cloudfone không phản hồi. Hãy thử lại sau ít phút.")
-                : day && dayState?.status === "checked"
-                  ? "Hệ thống đã kiểm tra ngày này và không tìm thấy bản ghi nào để lưu."
-                  : filtered
-                    ? "Thử thay đổi ngày hoặc số điện thoại."
-                    : "Bản ghi xuất hiện tại đây sau khi hệ thống lấy cuộc gọi từ Cloudfone."
+                : numberFilteredOut
+                  ? "Ngày đã chọn có bản ghi, nhưng không có cuộc gọi nào khớp với số điện thoại này."
+                  : knownDay
+                    ? knownDayExplanation()
+                    : filtered
+                      ? "Thử thay đổi ngày hoặc số điện thoại."
+                      : "Bản ghi xuất hiện tại đây sau khi hệ thống lấy cuộc gọi từ Cloudfone."
           }
           action={
             backfillMutation.isPending ? undefined : dayState?.status ===
@@ -623,7 +663,11 @@ export const CloudfoneTranscriptsSection = ({
               >
                 Thử lại
               </Button>
-            ) : day && dayState?.status === "checked" ? (
+            ) : numberFilteredOut ? (
+              <Button color="secondary" size="md" onClick={clearFilters}>
+                Xóa lọc
+              </Button>
+            ) : knownDay ? (
               <Button
                 color="secondary"
                 size="md"
