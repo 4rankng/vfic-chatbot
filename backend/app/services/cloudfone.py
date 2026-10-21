@@ -17,6 +17,7 @@ full day, no send-state row exists, and stored transcripts skip STT.
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import re
@@ -456,22 +457,45 @@ def insights_subject(day: date) -> str:
     return f"Cloudfone — Phân tích cuộc gọi ngày {day.strftime('%d/%m/%Y')}"
 
 
+# Transient provider blips (timeout, 429/5xx) are the common failure mode; one
+# delayed retry recovers most summaries without noticeably delaying the letter.
+LLM_ATTEMPTS = 2
+LLM_RETRY_DELAY_SECONDS = 2.0
+
+
+async def _llm_with_retry(
+    llm: Callable[[str, str], Awaitable[str]], system: str, user: str
+) -> str:
+    """Call the LLM with one bounded retry; re-raise after the last attempt."""
+    for attempt in range(1, LLM_ATTEMPTS + 1):
+        try:
+            return await llm(system, user)
+        except Exception:
+            if attempt >= LLM_ATTEMPTS:
+                raise
+            logger.warning("cloudfone LLM attempt %d failed; retrying", attempt, exc_info=True)
+            await asyncio.sleep(LLM_RETRY_DELAY_SECONDS)
+    raise RuntimeError("unreachable")  # pragma: no cover
+
+
 async def build_insights(
     calls: list[CallRecord],
     summarizer: Callable[[str, str], Awaitable[str]] | None,
 ) -> list[CallInsight]:
     """Summarize each call's transcript through the LLM, fail-soft per call.
 
-    One dead provider leaves that call's summary empty and the rest of the
-    letter — and the send — intact, mirroring the digest's enrichment rule: a
-    late/partial summary is worth more than no email at all.
+    A transient provider blip is retried once; a persistent failure leaves
+    that call's summary empty and the rest of the letter — and the send —
+    intact, mirroring the digest's enrichment rule: a late/partial summary is
+    worth more than no email at all.
     """
     insights: list[CallInsight] = []
     for call in calls:
         summary: str | None = None
         if summarizer is not None and call.transcript:
             try:
-                reply = await summarizer(
+                reply = await _llm_with_retry(
+                    summarizer,
                     INSIGHTS_SYSTEM_PROMPT,
                     "BẢN GHI CUỘC GỌI:\n" + call.transcript[:6000],
                 )
@@ -511,7 +535,7 @@ async def build_daily_insights(
             f"{call.agent} · {call.status} · {call.talk_seconds} · {excerpt}"
         )
     try:
-        reply = await llm(DAILY_INSIGHTS_SYSTEM_PROMPT, "\n".join(lines))
+        reply = await _llm_with_retry(llm, DAILY_INSIGHTS_SYSTEM_PROMPT, "\n".join(lines))
     except Exception:  # noqa: BLE001 — daily notes are optional enrichment
         logger.warning("cloudfone daily insights failed", exc_info=True)
         return None
@@ -676,10 +700,8 @@ def render_insights_html(
             '<div style="margin:0 0 16px 0;padding:12px;border:1px solid #e2e8f0;'
             'border-radius:8px">'
             f'<p style="margin:0 0 4px 0;font-size:12px;color:#64748b">{meta}</p>'
-            f'<p style="margin:0 0 8px 0;font-weight:600">{_escape(summary)}</p>'
-            f'<details><summary style="color:#64748b;font-size:12px">Transcript</summary>'
-            f'<p style="white-space:pre-wrap;font-size:12px">{_escape(call.transcript)}</p>'
-            "</details></div>"
+            f'<p style="margin:0">{_escape(summary)}</p>'
+            "</div>"
         )
     if rows:
         parts.append("".join(rows))

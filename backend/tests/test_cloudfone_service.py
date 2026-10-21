@@ -492,7 +492,9 @@ async def test_insights_window_is_the_previous_ict_day():
     )
 
 
-async def test_build_insights_fails_soft_per_call():
+async def test_build_insights_fails_soft_per_call(monkeypatch):
+    monkeypatch.setattr(cloudfone_module, "LLM_RETRY_DELAY_SECONDS", 0)
+
     async def flaky_summarizer(_system: str, user: str) -> str:
         if "tốt" in user:
             return "  Khách hỏi về ca làm.  "
@@ -509,6 +511,25 @@ async def test_build_insights_fails_soft_per_call():
     assert insights[0].summary == "Khách hỏi về ca làm."
     assert insights[1].summary is None  # LLM error → empty summary, no raise
     assert insights[2].summary is None  # empty transcript never asks the LLM
+
+
+async def test_build_insights_retries_a_transient_llm_failure(monkeypatch):
+    """One provider blip is retried; the second attempt wins and the summary
+    survives. Only a persistent failure leaves the summary empty."""
+    monkeypatch.setattr(cloudfone_module, "LLM_RETRY_DELAY_SECONDS", 0)
+    attempts: list[str] = []
+
+    async def blip_then_ok(_system: str, user: str) -> str:
+        attempts.append(user)
+        if len(attempts) == 1:
+            raise RuntimeError("transient blip")
+        return "  Khách hỏi về giá cước.  "
+
+    insights = await build_insights(
+        [CallRecord(call_id="c1", transcript="Khách hỏi giá cước.")], blip_then_ok
+    )
+    assert insights[0].summary == "Khách hỏi về giá cước."
+    assert len(attempts) == 2  # first attempt failed, second succeeded
 
 
 async def test_build_daily_insights_payload_and_bullets():
@@ -531,7 +552,9 @@ async def test_build_daily_insights_payload_and_bullets():
     assert notes == "– Gọi nhỡ tập trung buổi sáng.\n– Khách 0364489026 gọi lại nhiều lần."
 
 
-async def test_build_daily_insights_failures_return_none():
+async def test_build_daily_insights_failures_return_none(monkeypatch):
+    monkeypatch.setattr(cloudfone_module, "LLM_RETRY_DELAY_SECONDS", 0)
+
     assert await build_daily_insights(build_daily_stats([]), [], None) is None
 
     async def empty_reply(_system: str, _user: str) -> str:
@@ -592,7 +615,9 @@ def test_render_insights_html_shows_stats_missed_and_notes():
     assert "<p>– Gọi nhỡ tập trung buổi sáng.</p>" in html
     # Only answered calls get blocks — missed calls live in the missed line.
     assert html.count("border-radius:8px") == 4
-    assert html.count("<details>") == 4
+    # Call transcripts never ship in the letter — only the LLM summary does.
+    assert "<details>" not in html
+    assert "Transcript" not in html
     assert "07:50" not in html.split("border-radius:8px")[0].split("Cuộc gọi nhỡ")[0]
 
 
@@ -623,6 +648,8 @@ def test_render_insights_html_escapes_content():
     assert "Tóm tắt &lt;b&gt;này&lt;/b&gt;" in html
     assert "1p35s" in html
     assert "Tổng cuộc gọi: 1 · Trả lời: 1 (100.0%) · Nhỡ: 0" in html
+    # The transcript text itself must never reach the letter body.
+    assert "Nội dung &amp; chi tiết" not in html
 
 
 def test_render_insights_html_empty_day_keeps_the_placeholder():
@@ -798,7 +825,8 @@ async def test_run_transcribes_summarizes_and_sends_the_letter(monkeypatch):
     html = sent["html"]
     assert "Tổng cuộc gọi: 7 · Trả lời: 4 (57.1%) · Nhỡ: 3 · Thời gian trò chuyện TB: 1p28s" in html
     assert "Cuộc gọi nhỡ: 07:50 — 0364489026; 07:58 — 0364489026; 16:41 — 0902065233" in html
-    assert "S1: nội dung https://90.cloudfone.vn/Home?ID=rec-1702" in html
+    assert "Khách hỏi về giá dịch vụ." in html  # per-call summaries render
+    assert "S1: nội dung" not in html  # transcripts never ship in the letter
     assert "– Khách 0364489026 gọi lại 3 lần." in html
     assert len(sent.get("attachments", [])) == 1
     att = sent["attachments"][0]
@@ -953,7 +981,8 @@ async def test_run_respects_the_daily_transcription_bound(monkeypatch, caplog):
     assert any("bound reached" in record.message for record in caplog.records)
 
 
-async def test_run_daily_notes_are_omitted_when_the_llm_call_fails():
+async def test_run_daily_notes_are_omitted_when_the_llm_call_fails(monkeypatch):
+    monkeypatch.setattr(cloudfone_module, "LLM_RETRY_DELAY_SECONDS", 0)
     from dataclasses import replace
 
     async def fetcher(_day):
@@ -1108,6 +1137,36 @@ def test_generate_daily_call_report_docx_creates_valid_document_with_charts():
     assert "Callback" not in all_text
 
 
+def test_report_docx_never_embeds_call_transcripts():
+    """The report file carries per-call summaries only — even when the LLM
+    summary is missing, the raw transcript text must not leak into the DOCX."""
+    import io
+
+    import docx
+
+    from app.services.cloudfone_report import generate_daily_call_report_docx
+
+    calls = group_call_legs(REAL_DAY_LEGS)
+    stats = build_daily_stats(calls)
+    answered = [c for c in calls if c.status == "ANSWERED"]
+    leak = "S1: alo chị ơi khách hỏi giá cước nội dung riêng tư."
+    transcript_calls = [replace(c, transcript=leak) for c in answered]
+    insights = [cloudfone_module.CallInsight(c, summary=None) for c in transcript_calls]
+
+    docx_bytes = generate_daily_call_report_docx(
+        stats, transcript_calls, insights, None, date(2026, 10, 1)
+    )
+    doc = docx.Document(io.BytesIO(docx_bytes))
+    all_text = (
+        " ".join(p.text for p in doc.paragraphs)
+        + " "
+        + " ".join(c.text for t in doc.tables for r in t.rows for c in r.cells)
+    )
+    assert leak not in all_text
+    assert "nội dung riêng tư" not in all_text
+    assert "(Chưa có tóm tắt)" in all_text
+
+
 # --- transcript cache: TranscriptStore seam over cloudfone_call_transcripts ---
 
 
@@ -1189,8 +1248,9 @@ async def test_stored_transcripts_skip_download_and_stt(monkeypatch):
     assert result.transcribed_count == 4
     assert stt_calls == []
     assert store.saved == []  # cache hits are never re-persisted
-    for text in _cached_day().values():
-        assert text in sent["html"]
+    # Cache hits feed the pipeline (transcribed_count above); the transcript
+    # text itself never renders in the letter.
+    assert "bản ghi đã lưu" not in sent["html"]
 
 
 async def test_fresh_transcripts_are_stored_for_the_next_run(monkeypatch):
@@ -1302,7 +1362,7 @@ async def test_rerun_reuses_stored_transcripts_and_never_retranscribes(monkeypat
 
 
 async def test_stored_transcripts_fill_the_letter_without_an_stt_provider(monkeypatch):
-    """Empty MiniMax key (transcriber None): cache hits still ship transcripts."""
+    """Empty MiniMax key (transcriber None): cache hits still produce a letter."""
     moment = datetime(2026, 10, 2, 1, 0, tzinfo=timezone.utc)
     store = _FakeTranscriptStore(_cached_day())
     sent: dict = {}
@@ -1324,5 +1384,4 @@ async def test_stored_transcripts_fill_the_letter_without_an_stt_provider(monkey
 
     assert result.status == STATUS_SENT
     assert result.transcribed_count == 4
-    for text in _cached_day().values():
-        assert text in sent["html"]
+    assert "bản ghi đã lưu" not in sent["html"]  # transcripts never ship in the letter

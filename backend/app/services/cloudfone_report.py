@@ -5,7 +5,7 @@ performance, containing:
   1. Thẻ điểm vận hành (Tổng cuộc gọi, Tỷ lệ phục vụ %, Cuộc nhỡ, Thời lượng TB).
   2. Highlights callout box (distilled from daily notes).
   3. Visual charts & illustrations (Hourly distribution stacked bar, Donut rate).
-  4. Detailed answered calls log with transcripts and summaries.
+  4. Detailed answered calls log with per-call summaries.
   5. Theo dõi cuộc gọi nhỡ và kế hoạch gọi lại.
   6. Recommended action plan.
 """
@@ -535,9 +535,7 @@ def generate_daily_call_report_docx(
                 dir_label = call.direction or "Gọi vào"
             dir_agent = f"{dir_label} · Nhánh {call.agent}" if call.agent else dir_label
             dur_val = _fmt_duration(call.talk_seconds)
-            raw_summary = ins.summary or (
-                call.transcript[:150] + "..." if call.transcript else "(Chưa có nội dung ghi âm)"
-            )
+            raw_summary = ins.summary or "(Chưa có tóm tắt)"
             summary_val = _clean_vn(raw_summary)
 
             row_data = [time_val, caller_val, dir_agent, dur_val, summary_val]
