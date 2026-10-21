@@ -38,7 +38,20 @@ while any item is `PENDING` or `BLOCKED`.
 ## Result
 
 - Overall status: PASS
-- Remaining risks or follow-ups:
-  - The on-demand fetch runs inside the request, so a day with many recordable calls can take as long as the daily pass does (the viewer loops over `remaining`). If a real day ever exceeds the 60-call transcription cap in one request, the request should move to a queued job — not needed at the observed volume (≤7 calls/day).
-  - The transcripts of the days the daily pass covered before this change are not back-filled automatically; the admin picks the day in the viewer and the fetch stores them.
-  - `docs/API.docx` remains untracked in the worktree. It was moved aside (not deleted) while `make release-check` required a clean tree.
+
+### Deploy evidence (production, 2026-10-21)
+
+- Commits: `1e8f7b22` (the feature) + `5cea8cb1` (the empty-day explanation). Both pushed to `main`.
+- `make release-check` → all three lanes green (backend pyright/ruff/pytest+coverage, frontend audit/lint/typecheck/registry/coverage/build/smoke, data migration roundtrip + golden retrieval + changed-surface integration).
+- `make deploy` → the concurrent backup/push lanes aborted once (the frontend image push failed under concurrency); the backend image was already pushed, the frontend push succeeded on its own, and the blue/green cutover then ran clean: migration `0077` applied, 5 smoke probes OK, Caddy flipped to `web-blue`, post-flip readiness OK (queue drained), old color stopped. `ACTIVE_COLOR=blue`, `PREV=green@f036712a` (rollback available, no rebuild).
+- Frontend fast-track (`make deploy-frontend`) shipped `5cea8cb1` (the mobile 390px fix merged in parallel + the empty-day explanation); the backend stays on `1e8f7b22`, which carries the whole API change.
+- Production state after the deploy: `alembic_version = 0077_cloudfone_transcript_days`; both routes answer 401 unauthenticated (registered, admin-gated); edge health `{"status":"ok","env":"production"}`.
+- Real-vendor fetch run inside the prod container: 2026-10-19 → 6 calls, 5 recordable, **5 transcripts stored** (real Vietnamese ASR text); a second fetch of the same day → `skipped` (the marker holds). 2026-10-18 → 3 calls, 1 recordable, **0 transcripts**: the vendor's WAV for that call is 0.44 s long (7 KB) while the call row claims 12 s of talk, and MiniMax rejects it with HTTP 422. Vendor-side, fail-softed by design — the viewer now says so ("1 cuộc gọi có bản ghi nhưng không chuyển sang văn bản được") instead of a bare "no records".
+- Post-deploy API payloads (admin token minted inside the prod container): 18/10 → `day_state {checked, calls 3, recordable 1, transcripts 0}`; 19/10 → 5 items; 20/10 → 1 item.
+
+### Remaining risks or follow-ups
+
+- The on-demand fetch runs inside the request, so a day with many recordable calls can take as long as the daily pass does (the viewer loops over `remaining`). If a real day ever exceeds the 60-call transcription cap in one request, the request should move to a queued job — not needed at the observed volume (≤7 calls/day).
+- The transcripts of the days the daily pass covered before this change are not back-filled automatically; the admin picks the day in the viewer and the fetch stores them (19/10 was back-filled this way).
+- Days the daily pass covered *before* the new marker existed carry no marker (20/10 is one). Their stored rows make the viewer skip the fetch anyway; a day with no rows from that era would be fetched once on first view — one vendor call, no STT cost.
+- `docs/API.docx` remains untracked in the worktree. It was moved aside (not deleted) while `make release-check` required a clean tree, and restored afterwards.
