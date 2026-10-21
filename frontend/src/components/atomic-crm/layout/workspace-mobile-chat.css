@@ -21,7 +21,7 @@
     )
     .workspace-frame-content
     > .conversation-workspace.conversation-open {
-    height: 100dvh;
-    min-height: 100dvh;
+    height: calc(100dvh - var(--chat-keyboard-inset, 0px));
+    min-height: calc(100dvh - var(--chat-keyboard-inset, 0px));
   }
 }

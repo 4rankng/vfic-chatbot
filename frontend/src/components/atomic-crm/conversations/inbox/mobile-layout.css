@@ -72,31 +72,42 @@
      shared surface a real viewport height so its internal scroll pane remains
      visible for knowledge, projects, and personas. */
   .workspace-frame-content > .inbox-bg-container {
-    height: 100vh;
-    height: 100dvh;
-    min-height: 100dvh;
+    height: calc(100vh - var(--chat-keyboard-inset, 0px));
+    height: calc(100dvh - var(--chat-keyboard-inset, 0px));
+    min-height: calc(100dvh - var(--chat-keyboard-inset, 0px));
   }
 
   .inbox-bg-container {
     /* The base phone surface fills the viewport; the authenticated inbox list
-       reserves its global app bar below. */
+       reserves its global app bar below. The keyboard inset (set from the
+       VisualViewport API on the open conversation workspace) shrinks the
+       surface so the sticky composer stays above the on-screen keyboard. */
     padding: 0;
-    height: 100vh;
-    height: 100dvh;
+    height: calc(100vh - var(--chat-keyboard-inset, 0px));
+    height: calc(100dvh - var(--chat-keyboard-inset, 0px));
   }
   .inbox-bg-container.conversation-open {
     margin-top: 0;
-    height: 100vh;
-    height: 100dvh;
+    height: calc(100vh - var(--chat-keyboard-inset, 0px));
+    height: calc(100dvh - var(--chat-keyboard-inset, 0px));
   }
 
   /* The inbox list keeps the global app bar. The shell's
      workspace-mobile-chat.css expands an open phone conversation to the full
      viewport when that same rendered detail state hides the global bar. */
   .workspace-frame-content > .inbox-bg-container.conversation-workspace {
-    height: calc(100vh - 3.5rem - env(safe-area-inset-top, 0px));
-    height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px));
-    min-height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px));
+    height: calc(
+      100vh - 3.5rem - env(safe-area-inset-top, 0px) -
+        var(--chat-keyboard-inset, 0px)
+    );
+    height: calc(
+      100dvh - 3.5rem - env(safe-area-inset-top, 0px) -
+        var(--chat-keyboard-inset, 0px)
+    );
+    min-height: calc(
+      100dvh - 3.5rem - env(safe-area-inset-top, 0px) -
+        var(--chat-keyboard-inset, 0px)
+    );
   }
 
   /* Non-conversation workspace shells (projects, knowledge, settings, profile,
@@ -457,7 +468,7 @@
     line-height: var(--chat-lh-message);
   }
   .inbox-bg-container .composer-wrap {
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    padding: 10px 12px max(12px, env(safe-area-inset-bottom));
   }
   .inbox-bg-container .composer {
     gap: 6px;

@@ -11,12 +11,14 @@ const {
   mockNotify,
   mockPermissions,
   mockMobile,
+  mockNarrow,
 } = vi.hoisted(() => ({
   mockApiJson: vi.fn(),
   mockDataProviderUpdate: vi.fn(),
   mockNotify: vi.fn(),
   mockPermissions: { value: "recruiter" },
   mockMobile: { value: false },
+  mockNarrow: { value: false },
 }));
 
 vi.mock("@/lib/apiClient", () => ({
@@ -35,6 +37,7 @@ vi.mock("ra-core", async (importOriginal) => {
 
 vi.mock("@/hooks/use-mobile", () => ({
   useIsMobile: () => mockMobile.value,
+  useIsNarrow: () => mockNarrow.value,
 }));
 
 import { RecruitingCommandCenter } from "./RecruitingCommandCenter";
@@ -71,6 +74,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
     mockNotify.mockReset();
     mockPermissions.value = "recruiter";
     mockMobile.value = false;
+    mockNarrow.value = false;
   });
 
   afterEach(async () => {
@@ -83,6 +87,7 @@ describe("RecruitingCommandCenter candidate rows", () => {
     async (width) => {
       await page.viewport(width, 844);
       mockMobile.value = width < 768;
+      mockNarrow.value = width < 640;
       const attention = {
         updated_at: "2026-07-12T10:00:00Z",
         counters: {

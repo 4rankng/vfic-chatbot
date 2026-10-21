@@ -323,9 +323,9 @@ export const ConversationContextPanel = ({
         }}
         isDismissable={!isSaving}
         isKeyboardDismissDisabled={isSaving}
-        className="uu-scope z-50 pl-0"
+        className="uu-scope conversation-context-overlay z-50 pl-0"
       >
-        <Modal>
+        <Modal className="conversation-context-modal">
           <Dialog
             id="conversation-context-panel"
             aria-label={translate("leads.profile_title")}

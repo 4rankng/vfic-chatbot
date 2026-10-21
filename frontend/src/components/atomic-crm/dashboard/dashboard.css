@@ -427,3 +427,338 @@ button.dashboard-candidate-row:focus-visible {
     transition: none;
   }
 }
+
+/* ── Phone KPI strip (<md) ─────────────────────────────────────────────────
+   Four cards in the first mobile viewport: dark pipeline headline, new leads
+   vs the previous period, conversion trend and open conversations. 1 column
+   below 640px, 2 columns up to md. At ≥md the strip is hidden — the desktop
+   dashboard keeps its existing worklist grid exactly as it is. */
+.dashboard-kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+@media (min-width: 640px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .dashboard-kpi-grid {
+    display: none;
+  }
+}
+
+.dashboard-kpi-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--workspace-border, var(--border));
+  border-radius: var(--radius-panel);
+  background: var(--workspace-surface, var(--card));
+}
+
+.dashboard-kpi-card--headline {
+  border-color: transparent;
+  background: var(--primary);
+  color: #fff;
+}
+
+.dashboard-kpi-label {
+  margin: 0;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+}
+
+.dashboard-kpi-card--headline .dashboard-kpi-label {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.dashboard-kpi-value {
+  margin: 0;
+  color: var(--workspace-ink, var(--foreground));
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.dashboard-kpi-card--headline .dashboard-kpi-value {
+  color: #fff;
+}
+
+.dashboard-kpi-delta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: var(--fs-meta);
+}
+
+.dashboard-kpi-delta-figure {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: var(--fw-semibold);
+}
+
+.dashboard-kpi-delta-figure svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dashboard-kpi-delta-label {
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+}
+
+.dashboard-kpi-delta--good .dashboard-kpi-delta-figure {
+  color: var(--workspace-success, var(--color-success));
+}
+
+.dashboard-kpi-delta--bad .dashboard-kpi-delta-figure {
+  color: var(--danger, #b42318);
+}
+
+.dashboard-kpi-delta--neutral .dashboard-kpi-delta-figure {
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+}
+
+.dashboard-kpi-card--headline .dashboard-kpi-delta-label {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.dashboard-kpi-card--headline
+  .dashboard-kpi-delta--good
+  .dashboard-kpi-delta-figure {
+  color: #bbf7d0;
+}
+
+.dashboard-kpi-card--headline
+  .dashboard-kpi-delta--bad
+  .dashboard-kpi-delta-figure {
+  color: #fecaca;
+}
+
+.dashboard-kpi-card--headline
+  .dashboard-kpi-delta--neutral
+  .dashboard-kpi-delta-figure {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dashboard-kpi-caption {
+  margin: 0;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  font-size: var(--fs-caption);
+}
+
+.dashboard-kpi-card--headline .dashboard-kpi-caption {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* ── Phone leads card directory (<640px) ──────────────────────────────────
+   Sticky search-as-you-type on top, horizontally scrolling stage chips below
+   it, sort control beside the search box. Cards: name (title) · desired
+   position (subtitle) · expected salary (trailing) · stage badge; tapping
+   opens the conversation record like the desktop rows. ≥640px keeps the
+   existing day-grouped rows. */
+.lead-card-directory {
+  display: grid;
+  gap: 10px;
+}
+
+.lead-card-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--workspace-border, var(--border));
+  background: var(--workspace-surface, var(--card));
+}
+
+.lead-card-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lead-card-search {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+}
+
+.lead-card-search-icon {
+  position: absolute;
+  left: 10px;
+  width: 16px;
+  height: 16px;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  pointer-events: none;
+}
+
+.lead-card-search input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--workspace-border, var(--border));
+  border-radius: 10px;
+  background: var(--workspace-surface, var(--card));
+  color: var(--workspace-ink, var(--foreground));
+  font-size: var(--fs-meta);
+}
+
+.lead-card-search input:focus-visible {
+  outline: 2px solid var(--workspace-action, var(--primary));
+  outline-offset: 1px;
+}
+
+.lead-card-sort {
+  flex: 0 0 auto;
+}
+
+.lead-card-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.lead-card-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.lead-chip {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--workspace-border, var(--border));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--workspace-ink, var(--foreground));
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+}
+
+.lead-chip.is-active {
+  border-color: transparent;
+  background: var(--primary);
+  color: #fff;
+}
+
+.lead-card-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lead-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 12px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--workspace-border, var(--border));
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+button.lead-card {
+  cursor: pointer;
+}
+
+button.lead-card:active {
+  background: var(--workspace-surface-muted, var(--muted));
+}
+
+.lead-card.is-static {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.lead-card-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.lead-card-title {
+  overflow: hidden;
+  color: var(--workspace-ink, var(--foreground));
+  font-size: var(--fs-body);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lead-card-subtitle {
+  overflow: hidden;
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  font-size: var(--fs-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lead-card-value {
+  align-self: center;
+  color: var(--workspace-ink, var(--foreground));
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lead-card-badge {
+  justify-self: start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+}
+
+.lead-card-badge--new {
+  background: #e7ecf3;
+  color: #2f4a6e;
+}
+
+.lead-card-badge--contacting {
+  background: #dcecfb;
+  color: #0b5fa5;
+}
+
+.lead-card-badge--registered {
+  background: var(--lead-warm-bg);
+  color: var(--lead-warm-ink);
+}
+
+.lead-card-badge--skipped {
+  background: #ececec;
+  color: #52525b;
+}
+
+.lead-card-badge--unknown {
+  background: var(--workspace-surface-muted, var(--muted));
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+}
+
+.lead-card-empty {
+  margin: 12px 0;
+  padding: 14px;
+  border-radius: var(--radius-panel);
+  background: var(--workspace-surface-muted, var(--muted));
+  color: var(--workspace-ink-muted, var(--muted-foreground));
+  font-size: var(--fs-meta);
+  text-align: center;
+}
