@@ -25,13 +25,14 @@ import {
 import type { SettingsStatusState } from "./SettingsFieldStatus";
 import { SettingsGroupStatus } from "./SettingsFieldStatus";
 import { SecretField } from "./SecretField";
+import { integrationSettingsKeys } from "./useSettingsBundle";
 import { SettingsGroup, SettingsSectionPanel } from "./SettingsGroup";
 
 /** The Resend key and the recipient list — the two fields the badge counts. */
 const EMAIL_DIGEST_FIELD_COUNT = 2;
 
 /** One query key for the endpoint, so a save can write back its own response. */
-const emailDigestSettingsKey = ["email-digest-settings"] as const;
+const emailDigestSettingsKey = integrationSettingsKeys.emailDigest;
 
 /** Half-hour send-time options (ICT), matching what the worker accepts. */
 const SEND_TIMES: string[] = Array.from({ length: 48 }, (_, index) => {

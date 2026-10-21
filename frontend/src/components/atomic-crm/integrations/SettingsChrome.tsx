@@ -1,13 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { ChevronDown, Menu } from "lucide-react";
-import { DialogTrigger } from "react-aria-components";
+import { useEffect, type ReactNode } from "react";
+import { ChevronLeft } from "lucide-react";
 
-import { Button } from "@/components/base/buttons/button";
-import {
-  Dialog,
-  Modal,
-  ModalOverlay,
-} from "@/components/application/slideout-menus/slideout-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import "../conversations/inbox.css";
@@ -18,6 +11,7 @@ import {
   type SettingsItemId,
   type SettingsSectionNavItem,
 } from "./settingsNav";
+import { SettingsMobileGroups } from "./SettingsMobileGroups";
 
 const SettingsNavLinkContent = ({
   label,
@@ -74,83 +68,6 @@ const SettingsSideNav = ({
   </aside>
 );
 
-const MobileSettingsNav = ({
-  activeItemId,
-  onItemSelect,
-}: {
-  activeItemId: SettingsItemId;
-  onItemSelect: (itemId: SettingsItemId) => void;
-}) => {
-  const [open, setOpen] = useState(false);
-  const activeItem =
-    SETTINGS_NAV_ITEMS.find((item) => item.itemId === activeItemId) ??
-    SETTINGS_NAV_ITEMS[0];
-
-  return (
-    <div className="settings-mobile-topbar">
-      <DialogTrigger isOpen={open} onOpenChange={setOpen}>
-        <Button
-          color="secondary"
-          size="md"
-          className="settings-mobile-drawer-trigger uu-scope"
-          aria-label="Mở danh mục cài đặt"
-          iconLeading={Menu}
-          iconTrailing={ChevronDown}
-        >
-          <span className="min-w-0 flex-1 text-left">
-            <span className="settings-mobile-drawer-label">Cài đặt</span>
-            <span className="settings-mobile-drawer-current">
-              {activeItem.itemId === activeItemId
-                ? activeItem.label
-                : SETTINGS_VIEW_COPY[activeItemId].title}
-            </span>
-          </span>
-        </Button>
-        <ModalOverlay className="z-50 justify-start pl-0 sm:justify-start">
-          <Modal className="settings-mobile-drawer-panel h-full w-full max-w-[85vw] outline-hidden sm:max-w-sm">
-            <Dialog
-              aria-label="Cài đặt"
-              className="settings-mobile-drawer uu-scope flex size-full flex-col items-stretch gap-0"
-            >
-              <h2 className="settings-mobile-drawer-title">Cài đặt</h2>
-              <p className="settings-mobile-drawer-description">
-                Chọn khu vực bạn muốn cấu hình.
-              </p>
-              <nav
-                className="settings-mobile-drawer-list"
-                aria-label="Mục cài đặt"
-              >
-                {SETTINGS_NAV_ITEMS.map((item) => {
-                  const active = item.itemId === activeItemId;
-
-                  return (
-                    <button
-                      key={item.itemId}
-                      type="button"
-                      className={`settings-mobile-drawer-item${active ? " is-active" : ""}`}
-                      aria-current={active ? "page" : undefined}
-                      onClick={() => {
-                        onItemSelect(item.itemId);
-                        setOpen(false);
-                      }}
-                    >
-                      <SettingsNavLinkContent
-                        label={item.label}
-                        description={item.description}
-                        Icon={item.Icon}
-                      />
-                    </button>
-                  );
-                })}
-              </nav>
-            </Dialog>
-          </Modal>
-        </ModalOverlay>
-      </DialogTrigger>
-    </div>
-  );
-};
-
 /** Desktop workspace shell; mobile renders the content bare. */
 export const SettingsWorkspace = ({ children }: { children: ReactNode }) => {
   const isMobile = useIsMobile();
@@ -168,16 +85,24 @@ export const SettingsWorkspace = ({ children }: { children: ReactNode }) => {
 };
 
 /**
- * Settings console chrome: the navigation rail (or its mobile drawer), the view
- * header and the slot the active section renders into.
+ * Settings console chrome: the navigation rail on desktop, the drill-down
+ * surfaces on mobile — the grouped inset-card root (consult §1) and one
+ * sticky-back app bar per sub-page — and the slot the active section renders
+ * into. Desktop keeps the rail workspace exactly as it was.
  */
 export const SettingsChrome = ({
   activeItemId,
   onItemSelect,
+  onMobileBack,
+  mobileAtRoot,
   children,
 }: {
   activeItemId: SettingsItemId;
   onItemSelect: (itemId: SettingsItemId) => void;
+  /** Mobile sub-page back: one level up the drill-down. */
+  onMobileBack: () => void;
+  /** Mobile root (the grouped list) vs. a section sub-page. */
+  mobileAtRoot: boolean;
   children: ReactNode;
 }) => {
   const isMobile = useIsMobile();
@@ -195,22 +120,61 @@ export const SettingsChrome = ({
     return () => window.cancelAnimationFrame(animationFrame);
   }, [activeItemId]);
 
+  if (isMobile && mobileAtRoot) {
+    return (
+      <SettingsWorkspace>
+        <div className="settings-workspace-content text-foreground">
+          <div className="settings-mobile-page bg-neutral-50">
+            <header className="ops-command-header settings-command-header">
+              <div className="ops-command-title">
+                <div className="min-w-0">
+                  <p className="ops-kicker">Không gian cài đặt</p>
+                  <h1>Cài đặt</h1>
+                  <p>Chọn khu vực bạn muốn cấu hình.</p>
+                </div>
+              </div>
+            </header>
+            <SettingsMobileGroups onItemSelect={onItemSelect} />
+          </div>
+        </div>
+      </SettingsWorkspace>
+    );
+  }
+
+  if (isMobile) {
+    return (
+      <SettingsWorkspace>
+        <div className="settings-workspace-content text-foreground">
+          <div className="settings-mobile-subpage">
+            <header className="settings-mobile-appbar">
+              <button
+                type="button"
+                className="settings-mobile-appbar-back"
+                aria-label="Quay lại"
+                onClick={onMobileBack}
+              >
+                <ChevronLeft aria-hidden="true" className="size-5" />
+              </button>
+              <h1 className="settings-mobile-appbar-title">
+                {headerCopy.title}
+              </h1>
+            </header>
+            <div className="settings-main">{children}</div>
+          </div>
+        </div>
+      </SettingsWorkspace>
+    );
+  }
+
   return (
     <SettingsWorkspace>
       <div className="settings-workspace-content text-foreground">
         <div className="ops-page-shell settings-page-shell">
           <div className="settings-console">
-            {isMobile ? (
-              <MobileSettingsNav
-                activeItemId={activeItemId}
-                onItemSelect={onItemSelect}
-              />
-            ) : (
-              <SettingsSideNav
-                activeItemId={activeItemId}
-                onItemSelect={onItemSelect}
-              />
-            )}
+            <SettingsSideNav
+              activeItemId={activeItemId}
+              onItemSelect={onItemSelect}
+            />
 
             <div className="settings-main">
               <header className="ops-command-header settings-command-header">

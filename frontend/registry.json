@@ -472,6 +472,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/transcript-utterances.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/integrations/statusCopy.ts",
           "type": "registry:component"
         },
@@ -504,7 +508,15 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/TranscriptConversation.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/integrations/TingtingSection.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/SettingsMobileGroups.tsx",
           "type": "registry:component"
         },
         {
@@ -897,6 +909,10 @@
         },
         {
           "path": "src/components/atomic-crm/integrations/settings.css",
+          "type": "registry:style"
+        },
+        {
+          "path": "src/components/atomic-crm/integrations/cloudfone-transcripts.css",
           "type": "registry:style"
         },
         {

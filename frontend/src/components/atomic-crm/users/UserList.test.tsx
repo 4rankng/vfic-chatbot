@@ -108,7 +108,12 @@ describe("UserList", () => {
       ];
       const screen = await render(
         <MemoryRouter>
-          <SettingsChrome activeItemId="settings-users" onItemSelect={() => {}}>
+          <SettingsChrome
+            activeItemId="settings-users"
+            onItemSelect={() => {}}
+            onMobileBack={() => {}}
+            mobileAtRoot={false}
+          >
             <div className="settings-embedded-resource settings-embedded-users">
               <UserList embedded />
             </div>

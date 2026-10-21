@@ -75,8 +75,8 @@ const console = (children: React.ReactNode) => (
           <header className="settings-command-header">
             <h1>Cài đặt</h1>
           </header>
-          <button type="button" className="settings-mobile-drawer-trigger">
-            Mục cục
+          <button type="button" data-allow-tall className="settings-mobile-row">
+            <span className="settings-mobile-row-label">Mục cài đặt</span>
           </button>
           <SettingsSectionPanel id="providers">
             {/* `grid` is a Tailwind utility the console applies; the CRM
@@ -304,6 +304,8 @@ describe("settings configuration group card", () => {
       <SettingsChrome
         activeItemId="settings-zalo-channel"
         onItemSelect={() => {}}
+        onMobileBack={() => {}}
+        mobileAtRoot={false}
       >
         {group(<span />)}
       </SettingsChrome>,
@@ -469,12 +471,12 @@ describe("settings action sizing", () => {
     expect(button.getBoundingClientRect().height).toBe(40);
   });
 
-  it("keeps the mobile navigation trigger and group rows touch-safe", async () => {
+  it("keeps the mobile drill-down row and group rows touch-safe", async () => {
     await page.viewport(phone, 844);
 
     const screen = await render(console(group(<span />)));
-    const trigger = screen.container.querySelector<HTMLElement>(
-      ".settings-mobile-drawer-trigger",
+    const row = screen.container.querySelector<HTMLElement>(
+      ".settings-mobile-row",
     )!;
     const summary = screen.container.querySelector<HTMLElement>(
       ".settings-mobile-group-summary",
@@ -486,7 +488,11 @@ describe("settings action sizing", () => {
       ".settings-command-header h1",
     )!;
 
-    expect(trigger.getBoundingClientRect().height).toBe(40);
+    // The consult's row band: 44–56px, `data-allow-tall` over the 40px
+    // control ceiling as a compound row surface.
+    const rowBox = row.getBoundingClientRect();
+    expect(rowBox.height).toBeGreaterThanOrEqual(44);
+    expect(rowBox.height).toBeLessThanOrEqual(56);
     expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     // The collapse row must not re-inherit the details padding that ships with
     // `<details>`, which pushed the chevron off the row.

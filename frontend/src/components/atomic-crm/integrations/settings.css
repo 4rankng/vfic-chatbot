@@ -48,8 +48,7 @@
   height: 16px;
 }
 
-.settings-workspace-content .settings-group-icon,
-.settings-mobile-drawer .settings-side-nav-icon {
+.settings-workspace-content .settings-group-icon {
   width: 20px;
   height: 20px;
   border: 0;
@@ -79,25 +78,13 @@
   line-height: 1.5;
 }
 
-.settings-workspace-content .settings-mobile-drawer-trigger > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.settings-workspace-content .settings-mobile-drawer-label,
-.settings-workspace-content .settings-mobile-drawer-current {
-  display: inline;
-}
-
 @media (max-width: 767px) {
   .settings-workspace-content {
     --settings-control-height: var(--crm-control-height-touch);
     --settings-action-height: var(--crm-control-height-touch);
   }
 
-  .settings-workspace-content .settings-input,
-  .settings-workspace-content .settings-mobile-drawer-trigger {
+  .settings-workspace-content .settings-input {
     height: var(--crm-control-height-touch);
     max-height: none;
   }
@@ -269,144 +256,6 @@
 }
 
 @media (max-width: 767px) {
-  .settings-mobile-topbar {
-    position: sticky;
-    top: 0;
-    z-index: 20;
-    margin: -12px -12px 8px;
-    border-bottom: 1px solid var(--settings-border);
-    background: color-mix(in srgb, var(--settings-canvas) 94%, transparent);
-    padding: calc(6px + env(safe-area-inset-top)) 12px 6px;
-    backdrop-filter: blur(12px);
-  }
-
-  .settings-mobile-drawer-trigger {
-    width: 100%;
-    height: var(--settings-touch-target);
-    min-height: var(--settings-touch-target);
-    justify-content: flex-start;
-    border-color: var(--settings-border);
-    border-radius: 9px;
-    background: var(--settings-elevated);
-    color: var(--ink);
-    padding-inline: 10px;
-    font-size: var(--fs-body-sm);
-  }
-
-  .settings-mobile-drawer-trigger > span {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-  }
-
-  .settings-mobile-drawer-trigger > svg:first-child {
-    width: 18px;
-    height: 18px;
-  }
-
-  .settings-mobile-drawer-trigger > svg:last-child {
-    width: 14px;
-    height: 14px;
-  }
-
-  .settings-mobile-drawer-label,
-  .settings-mobile-drawer-current {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .settings-mobile-drawer-label {
-    color: var(--ink-muted);
-    font-size: var(--fs-caption);
-    font-weight: var(--fw-semibold);
-    letter-spacing: 0;
-    line-height: 1.2;
-    text-transform: none;
-  }
-
-  .settings-mobile-drawer-label::after {
-    content: "/";
-    margin-left: 6px;
-    color: var(--settings-border);
-  }
-
-  .settings-mobile-drawer-current {
-    margin-top: 0;
-    font-size: var(--fs-body-sm);
-    font-weight: var(--fw-bold);
-    line-height: 1.2;
-  }
-
-  .settings-mobile-drawer {
-    --settings-accent: var(--workspace-action);
-    --settings-accent-strong: var(--workspace-action-strong);
-    --settings-accent-soft: var(--workspace-teal-soft);
-    --settings-border: #d4dce6;
-    --ink: #111827;
-    --ink-muted: #4b5563;
-    --surface-solid: #ffffff;
-    --border: #d4dce6;
-    width: min(88vw, 21rem);
-    gap: 0;
-    border-color: var(--settings-border);
-    background: #ffffff;
-    color: var(--ink);
-    padding: calc(20px + env(safe-area-inset-top)) 14px 18px;
-    box-shadow: none;
-  }
-
-  /* The slideout module animates toward the right edge; a left-anchored drawer
-     must slide in from (and out to) the left. Unlayered, so it beats the
-     utility layer that `slide-in-from-right` lives in. */
-  .settings-mobile-drawer-panel {
-    --tw-enter-translate-x: -100%;
-    --tw-exit-translate-x: -100%;
-  }
-
-  .settings-mobile-drawer-title {
-    color: var(--ink);
-    font-size: var(--crm-fs-section-title);
-    font-weight: var(--fw-bold);
-  }
-
-  .settings-mobile-drawer-description {
-    margin: 5px 0 18px;
-    color: var(--ink-muted);
-    font-size: var(--crm-fs-body-sm);
-    line-height: 1.45;
-  }
-
-  .settings-mobile-drawer-list {
-    display: grid;
-    gap: 6px;
-  }
-
-  .settings-mobile-drawer-item {
-    width: 100%;
-    min-height: var(--settings-mobile-row-height);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border: 0;
-    border-radius: 9px;
-    background: transparent;
-    color: var(--ink);
-    padding: 6px 8px;
-    text-align: left;
-  }
-
-  .settings-mobile-drawer-item.is-active {
-    background: var(--settings-accent-soft);
-    color: var(--settings-accent-strong);
-  }
-
-  .settings-mobile-drawer-item .settings-side-nav-icon {
-    width: 28px;
-    height: 28px;
-  }
-
   .settings-workspace-content {
     padding: 12px 12px calc(88px + env(safe-area-inset-bottom));
   }
@@ -1693,4 +1542,115 @@
   .settings-messenger-credentials > .settings-messenger-group-heading {
     padding-inline: 12px;
   }
+}
+
+/* ── Mobile drill-down (settings-mobile consult §1) ──────────────────────
+   <768px the settings root is a grouped inset-card list over gray-50 and
+   every row drills into a sub-page with a sticky back app bar (17px/600
+   title). Rows are compound surfaces — `data-allow-tall` opts them out of
+   the 40px control ceiling; the 44px icon actions opt out via specificity,
+   the settings icon-action pattern. ≥768px keeps the rail workspace. */
+
+.settings-mobile-page {
+  display: grid;
+  gap: 24px;
+  padding: 16px 16px 32px;
+}
+
+.settings-mobile-groups {
+  display: grid;
+  gap: 24px;
+}
+
+.settings-mobile-group-title {
+  margin: 0 0 8px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.settings-mobile-card {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.settings-mobile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+}
+
+/* Hairline between rows inside one card (iOS grouped-list pattern). */
+.settings-mobile-row + .settings-mobile-row {
+  border-top: 1px solid var(--settings-border, #d4dce6);
+}
+
+.settings-mobile-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px; /* Untitled UI text-md — the consult's row label scale. */
+  font-weight: 500;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-mobile-row-value {
+  flex: 0 0 auto;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+}
+
+.settings-mobile-row-chevron {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.settings-mobile-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 4px;
+  border-bottom: 1px solid var(--settings-border, #d4dce6);
+  background: var(--settings-canvas, #ffffff);
+}
+
+/* The element prefix lifts the 44px action over the global 40px ceiling
+   (`src/index.css` §3), same as `.settings-input-action` in forms. */
+header.settings-mobile-appbar .settings-mobile-appbar-back {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  max-height: none;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.settings-mobile-appbar-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-mobile-subpage .settings-main {
+  padding-top: 12px;
 }

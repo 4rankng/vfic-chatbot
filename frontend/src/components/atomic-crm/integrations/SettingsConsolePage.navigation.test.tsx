@@ -68,6 +68,20 @@ const mocks = vi.hoisted(() => ({
   ),
   saveMinimaxSettings: vi.fn(),
   saveOpenRouterSettings: vi.fn(),
+  loadCloudfoneSettings: vi.fn(() => Promise.resolve({ enabled: false })),
+  saveCloudfoneSettings: vi.fn(() => Promise.resolve({ enabled: false })),
+  loadEmailDigestSettings: vi.fn(() =>
+    Promise.resolve({
+      enabled: false,
+      frequency: "daily" as const,
+      send_time: "09:00",
+      recipients: [],
+    }),
+  ),
+  saveEmailDigestSettings: vi.fn(),
+  listCloudfoneTranscripts: vi.fn(),
+  loadCloudfoneTranscript: vi.fn(),
+  backfillCloudfoneTranscripts: vi.fn(),
   testOaConnection: vi.fn(() =>
     Promise.resolve({
       configured: true,
@@ -149,6 +163,13 @@ vi.mock("./api", () => ({
       }),
     ),
     saveTingtingSettings: vi.fn(),
+    loadCloudfoneSettings: mocks.loadCloudfoneSettings,
+    saveCloudfoneSettings: mocks.saveCloudfoneSettings,
+    loadEmailDigestSettings: mocks.loadEmailDigestSettings,
+    saveEmailDigestSettings: mocks.saveEmailDigestSettings,
+    listCloudfoneTranscripts: mocks.listCloudfoneTranscripts,
+    loadCloudfoneTranscript: mocks.loadCloudfoneTranscript,
+    backfillCloudfoneTranscripts: mocks.backfillCloudfoneTranscripts,
   },
   facebookIntegrationGateway: {
     loadStatus: mocks.loadFacebookStatus,
@@ -179,6 +200,13 @@ afterEach(async () => {
   mocks.loadFacebookStatus.mockClear();
   mocks.loadFacebookCredentials.mockClear();
   mocks.loadFacebookOAuthPages.mockClear();
+  mocks.loadCloudfoneSettings.mockClear();
+  mocks.saveCloudfoneSettings.mockClear();
+  mocks.loadEmailDigestSettings.mockClear();
+  mocks.saveEmailDigestSettings.mockClear();
+  mocks.listCloudfoneTranscripts.mockClear();
+  mocks.loadCloudfoneTranscript.mockClear();
+  mocks.backfillCloudfoneTranscripts.mockClear();
   mocks.notify.mockClear();
   mocks.permissionsPending = false;
   window.history.replaceState(null, "", "/#/settings");
@@ -328,7 +356,14 @@ describe("SettingsConsolePage navigation", () => {
       </QueryClientProvider>,
     );
 
+    // <768px opens on the grouped drill-down root; Zalo lives one tap deep.
+    await expect
+      .element(screen.getByText("Kênh & Tích hợp", { exact: true }))
+      .toBeVisible();
+    await screen.getByRole("button", { name: "Zalo", exact: true }).click();
+
     const input = screen.getByRole("textbox", { name: "Bot Token" });
+    await expect.element(input).toBeVisible();
     await input.fill("mobile-secret");
 
     const revealButton = screen.getByRole("button", {
@@ -567,7 +602,7 @@ describe("SettingsConsolePage navigation", () => {
     expect(messengerSection).not.toBeNull();
   });
 
-  it("opens the existing Facebook Messenger integration from the mobile drawer", async () => {
+  it("opens the existing Facebook Messenger integration from the mobile drill-down", async () => {
     mocks.isMobile = true;
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -578,28 +613,181 @@ describe("SettingsConsolePage navigation", () => {
       </QueryClientProvider>,
     );
 
-    await expect
-      .element(screen.getByRole("button", { name: "Mở danh mục cài đặt" }))
-      .toBeVisible();
+    // The grouped root lists the three consult groups.
+    for (const group of [
+      "Kênh & Tích hợp",
+      "Tài khoản & Bảo mật",
+      "Hiển thị & Thông báo",
+    ]) {
+      await expect
+        .element(screen.getByText(group, { exact: true }))
+        .toBeVisible();
+    }
 
-    await screen.getByRole("button", { name: "Mở danh mục cài đặt" }).click();
+    await screen
+      .getByRole("button", { name: "Messenger", exact: true })
+      .click();
 
-    await expect
-      .element(screen.getByRole("dialog", { name: "Cài đặt" }))
-      .toBeVisible();
-
-    const messengerButton = await screen.getByRole("button", {
-      name: /Messenger/,
-    });
-    await expect.element(messengerButton).toBeVisible();
-    await messengerButton.click();
-
+    // The sub-page app bar carries the section title; the section renders
+    // full-screen beneath it.
     await expect
       .element(screen.getByRole("heading", { name: "Messenger", exact: true }))
       .toBeVisible();
     await expect
+      .element(screen.getByRole("button", { name: "Quay lại" }))
+      .toBeVisible();
+    await expect
       .element(screen.getByRole("button", { name: "Kết nối Facebook" }))
       .toBeVisible();
+  });
+
+  it("climbs the drill-down one level per back tap", async () => {
+    mocks.isMobile = true;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <SettingsConsolePage />
+      </QueryClientProvider>,
+    );
+
+    await screen
+      .getByRole("button", { name: "Người dùng", exact: true })
+      .click();
+    await expect
+      .element(screen.getByRole("heading", { name: "Người dùng", exact: true }))
+      .toBeVisible();
+
+    await screen.getByRole("button", { name: "Quay lại" }).click();
+    await expect
+      .element(screen.getByText("Kênh & Tích hợp", { exact: true }))
+      .toBeVisible();
+
+    await screen
+      .getByRole("button", { name: "Messenger", exact: true })
+      .click();
+    await expect
+      .element(screen.getByRole("heading", { name: "Messenger", exact: true }))
+      .toBeVisible();
+    await screen.getByRole("button", { name: "Quay lại" }).click();
+    await expect
+      .element(screen.getByText("Tài khoản & Bảo mật", { exact: true }))
+      .toBeVisible();
+  });
+
+  it("opens Cloudfone, then its transcripts sub-page, and back walks Cloudfone → root", async () => {
+    mocks.isMobile = true;
+    mocks.listCloudfoneTranscripts.mockResolvedValue({
+      items: [
+        {
+          call_id: "call-1",
+          day: "2026-10-21",
+          started_at: "2026-10-21T09:15:11",
+          caller: "0362698948",
+          talk_seconds: 98,
+          transcript_preview: "S1: Alo ạ?",
+          created_at: "2026-10-22T01:00:00",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <SettingsConsolePage />
+      </QueryClientProvider>,
+    );
+
+    await screen.getByRole("button", { name: /^Cloudfone/ }).click();
+    await expect
+      .element(
+        screen.getByRole("heading", {
+          name: "Cloudfone · Phân tích cuộc gọi",
+          exact: true,
+        }),
+      )
+      .toBeVisible();
+
+    await screen.getByRole("button", { name: "Xem bản ghi cuộc gọi" }).click();
+    await expect
+      .element(
+        screen.getByRole("heading", {
+          name: "Cloudfone · Bản ghi cuộc gọi",
+          exact: true,
+        }),
+      )
+      .toBeVisible();
+    await expect.element(screen.getByText("0362698948")).toBeVisible();
+
+    // Transcripts belongs to Cloudfone: back lands on the Cloudfone sub-page.
+    await screen.getByRole("button", { name: "Quay lại" }).click();
+    await expect
+      .element(
+        screen.getByRole("heading", {
+          name: "Cloudfone · Phân tích cuộc gọi",
+          exact: true,
+        }),
+      )
+      .toBeVisible();
+
+    await screen.getByRole("button", { name: "Quay lại" }).click();
+    await expect
+      .element(screen.getByText("Kênh & Tích hợp", { exact: true }))
+      .toBeVisible();
+  });
+
+  it("saves the notification toggles from the mobile root", async () => {
+    mocks.isMobile = true;
+    mocks.loadEmailDigestSettings.mockResolvedValue({
+      enabled: false,
+      frequency: "daily",
+      send_time: "09:00",
+      recipients: [],
+    });
+    mocks.saveEmailDigestSettings.mockResolvedValue({
+      enabled: true,
+      frequency: "daily",
+      send_time: "09:00",
+      recipients: [],
+    });
+    mocks.loadCloudfoneSettings.mockResolvedValue({ enabled: true });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <SettingsConsolePage />
+      </QueryClientProvider>,
+    );
+
+    // The switch's native input is visually hidden; the visible label is the
+    // real tap target (and drives the same input via htmlFor).
+    await expect
+      .element(screen.getByRole("switch", { name: "Gửi email ứng viên mới" }))
+      .toBeEnabled();
+    await screen.getByText("Gửi email ứng viên mới").click();
+
+    await expect
+      .poll(() => mocks.saveEmailDigestSettings.mock.calls)
+      .toEqual([[{ enabled: true }]]);
+    await expect
+      .poll(() => mocks.notify.mock.calls)
+      .toContainEqual(["Đã bật gửi email ứng viên mới.", { type: "success" }]);
+    await expect
+      .element(screen.getByRole("switch", { name: "Gửi email ứng viên mới" }))
+      .toBeChecked();
+
+    // The Cloudfone report toggle reflects its stored state as the row value.
+    await expect
+      .element(
+        screen.getByRole("switch", { name: "Báo cáo cuộc gọi Cloudfone" }),
+      )
+      .toBeChecked();
   });
 });
 
