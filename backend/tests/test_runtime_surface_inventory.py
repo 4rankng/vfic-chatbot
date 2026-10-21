@@ -59,7 +59,7 @@ EXPECTED_ROUTE_COUNTS = {
     # +3 candidate email digest: GET/PUT /email-digest config + POST test send
     # +1 POST /facebook/pages/{page_id}/bot-pause — the per-Page bot pause
     # switch (2026-10-08): Page stays connected, bot sends nothing.
-    "integrations": 44,  # +3 the Cloudfone insights settings trio (GET/PUT /cloudfone + POST /cloudfone/test; feature commit a3b5d38a, spec-1.1 rework 039f1d56); +2 the Cloudfone transcripts viewer read pair (GET /cloudfone/transcripts + GET /cloudfone/transcripts/{call_id}, 2026-10-20)
+    "integrations": 45,  # +3 the Cloudfone insights settings trio (GET/PUT /cloudfone + POST /cloudfone/test; feature commit a3b5d38a, spec-1.1 rework 039f1d56); +2 the Cloudfone transcripts viewer read pair (GET /cloudfone/transcripts + GET /cloudfone/transcripts/{call_id}, 2026-10-20); +1 the on-demand day fetch (POST /cloudfone/transcripts/backfill, 2026-10-21)
     # +2 the TingTing support OA: save-and-check the four credentials (PUT /tingting)
     # and a re-probe endpoint (POST /tingting/oa/check)
     # +2 deployment-wide TingTing app API key (GET / PUT, secrets status-only)
@@ -121,7 +121,10 @@ EXPECTED_ROUTE_COUNTS = {
 # 2026-10-20: the Cloudfone transcripts viewer adds GET /cloudfone/transcripts
 # and GET /cloudfone/transcripts/{call_id} (read pair over cloudfone_call_transcripts);
 # digest recomputed from the post-change route scan.
-EXPECTED_ROUTE_INVENTORY_SHA256 = "9f8492ede7590238fd591dab2149698749de90df853da667f899b40a7f920261"
+# 2026-10-21: the viewer's on-demand day fetch adds POST /cloudfone/transcripts/backfill
+# (the admin pulls a day from Cloudfone when the stored table has nothing for it);
+# digest recomputed from the post-change route scan.
+EXPECTED_ROUTE_INVENTORY_SHA256 = "4a63541daaf53ea51e6b07c7c905f481cde37e62fbc2097a26f0e9b32243da35"
 EXPECTED_BROAD_BOUNDARY_COUNTS = {
     # Scan the complete application tree so composition roots and bounded-context
     # adapters remain covered after transport logic moves out of legacy packages.

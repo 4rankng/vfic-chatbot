@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
+  CloudDownload,
   FileText,
   RefreshCw,
   Search,
@@ -26,6 +27,13 @@ import { zaloIntegrationGateway, type CloudfoneTranscriptSummary } from "./api";
  * `cloudfone_call_transcripts`, one page of rows at a time, and the full
  * transcript of the selected call below the table.
  *
+ * A day the daily pass never covered (it only reports on the previous day)
+ * would show an empty table, so the viewer fetches such a day from Cloudfone
+ * on demand: the list response carries the inspected-day marker, and a day
+ * without one is pulled once (the transcripts are then stored like any other).
+ * A day the system already checked is left alone — it is known, and it may
+ * legitimately hold nothing.
+ *
  * Surface anatomy is Untitled UI's settings data table (filter bar → table
  * card → count strip + pagination), built from the vendored UUI primitives —
  * `frontend/AGENTS.md` § "UI/UX Component Sourcing". No Radix in this subtree:
@@ -33,6 +41,13 @@ import { zaloIntegrationGateway, type CloudfoneTranscriptSummary } from "./api";
  */
 
 const PAGE_SIZE = 20;
+
+/**
+ * One on-demand fetch transcribes at most the daily cap, so a day with more
+ * calls than that needs a second pass — the loop continues until the day is
+ * done. The bound keeps a pathological day from looping forever.
+ */
+const MAX_BACKFILL_PASSES = 20;
 
 /** "2026-10-01T17:02:35" → "01/10/2026 17:02" (Vietnam display order). */
 const fmtStarted = (iso: string): string => {
@@ -47,6 +62,15 @@ const fmtDuration = (seconds: number): string =>
   seconds >= 60
     ? `${Math.floor(seconds / 60)}p${seconds % 60}s`
     : `${seconds}s`;
+
+/**
+ * The previous ICT calendar day (the day the daily pass reports on) as
+ * "YYYY-MM-DD". Vietnam has no DST, so the +7 offset is exact.
+ */
+const ictYesterday = (): string => {
+  const shifted = new Date(Date.now() + 7 * 3_600_000 - 86_400_000);
+  return shifted.toISOString().slice(0, 10);
+};
 
 type TranscriptColumn = {
   id: string;
@@ -98,6 +122,7 @@ export const CloudfoneTranscriptsSection = ({
   const [caller, setCaller] = useState("");
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const listQuery = useQuery({
     queryKey: ["cloudfone-transcripts", { day, caller, page }],
@@ -117,13 +142,74 @@ export const CloudfoneTranscriptsSection = ({
     staleTime: 300_000,
   });
 
+  /**
+   * Pull a day from Cloudfone and store its transcripts.
+   *
+   * One pass transcribes at most the daily cap, so a day with more calls than
+   * that continues in the next pass (the stored ones are reused, not
+   * re-transcribed). The list is refreshed when the day is done.
+   */
+  const backfillMutation = useMutation({
+    mutationFn: async ({
+      day: target,
+      force = false,
+    }: {
+      day: string;
+      force?: boolean;
+    }) => {
+      for (let pass = 0; pass < MAX_BACKFILL_PASSES; pass += 1) {
+        const result =
+          await zaloIntegrationGateway.backfillCloudfoneTranscripts({
+            day: target,
+            force,
+          });
+        if (result.status !== "checked" || result.remaining === 0)
+          return result;
+        // The day is checked by now, so continuing needs the explicit force.
+        force = true;
+      }
+      return null;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["cloudfone-transcripts"],
+      });
+    },
+  });
+  const { mutate: requestBackfill } = backfillMutation;
+
   const pageData = listQuery.data;
   const items = pageData?.items ?? [];
   const total = pageData?.total ?? 0;
+  const dayState = pageData?.day_state ?? null;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const pageEnd = Math.min(page * PAGE_SIZE, total);
   const filtered = Boolean(day || caller);
+
+  /**
+   * A day the system never checked is fetched once, on its own: the admin
+   * opened a day, the stored table has nothing for it, and the vendor still
+   * has the calls. The guard keeps the fetch to one attempt per day — the
+   * marker the fetch writes stops it from repeating.
+   */
+  const autoFetchedDays = useRef(new Set<string>());
+  useEffect(() => {
+    if (!day) return;
+    if (listQuery.isPending || listQuery.isError) return;
+    if (items.length > 0) return;
+    if (dayState?.status !== "unchecked") return;
+    if (autoFetchedDays.current.has(day)) return;
+    autoFetchedDays.current.add(day);
+    requestBackfill({ day });
+  }, [
+    day,
+    dayState,
+    items.length,
+    listQuery.isError,
+    listQuery.isPending,
+    requestBackfill,
+  ]);
 
   const applyCaller = (event: FormEvent) => {
     event.preventDefault();
@@ -138,6 +224,25 @@ export const CloudfoneTranscriptsSection = ({
     setCaller("");
     setPage(1);
     setSelectedId(null);
+  };
+
+  /** Pull a day from Cloudfone on the admin's request (never automatic). */
+  const fetchDayFromCloudfone = (target: string, force = false) => {
+    autoFetchedDays.current.add(target);
+    requestBackfill({ day: target, force });
+  };
+
+  /**
+   * Load the most recent call day — the one the daily pass reports on. The
+   * filter follows the fetch so the admin sees that day's result (and its
+   * marker) instead of an unfiltered list that may stay empty.
+   */
+  const loadMostRecentDay = () => {
+    const target = ictYesterday();
+    setDay(target);
+    setPage(1);
+    setSelectedId(null);
+    fetchDayFromCloudfone(target, true);
   };
 
   const columns: TranscriptColumn[] = [
@@ -267,19 +372,68 @@ export const CloudfoneTranscriptsSection = ({
         />
       ) : items.length === 0 ? (
         <EmptyState
-          icon={<FileText className="size-6" aria-hidden="true" />}
+          icon={
+            backfillMutation.isPending ? (
+              <RefreshCw className="size-6 animate-spin" aria-hidden="true" />
+            ) : dayState?.status === "error" ? (
+              <TriangleAlert className="size-6" aria-hidden="true" />
+            ) : (
+              <FileText className="size-6" aria-hidden="true" />
+            )
+          }
           title={
-            filtered
-              ? "Không tìm thấy bản ghi phù hợp"
-              : "Chưa có bản ghi cuộc gọi"
+            backfillMutation.isPending
+              ? "Đang tải bản ghi từ Cloudfone"
+              : dayState?.status === "error"
+                ? "Chưa tải được dữ liệu từ Cloudfone"
+                : day && dayState?.status === "checked"
+                  ? "Ngày này không có bản ghi"
+                  : filtered
+                    ? "Không tìm thấy bản ghi phù hợp"
+                    : "Chưa có bản ghi cuộc gọi"
           }
           description={
-            filtered
-              ? "Thử thay đổi ngày hoặc số điện thoại."
-              : "Bản ghi sẽ xuất hiện tại đây sau khi hệ thống chạy phân tích cuộc gọi hằng ngày."
+            backfillMutation.isPending
+              ? "Hệ thống đang lấy cuộc gọi của ngày này và chuyển giọng nói thành văn bản. Việc này có thể mất vài phút."
+              : dayState?.status === "error"
+                ? (dayState.error ??
+                  "Cloudfone không phản hồi. Hãy thử lại sau ít phút.")
+                : day && dayState?.status === "checked"
+                  ? "Hệ thống đã kiểm tra ngày này và không tìm thấy bản ghi nào để lưu."
+                  : filtered
+                    ? "Thử thay đổi ngày hoặc số điện thoại."
+                    : "Bản ghi xuất hiện tại đây sau khi hệ thống lấy cuộc gọi từ Cloudfone."
           }
           action={
-            filtered ? (
+            backfillMutation.isPending ? undefined : dayState?.status ===
+              "error" ? (
+              <Button
+                color="secondary"
+                size="md"
+                iconLeading={RefreshCw}
+                onClick={() => fetchDayFromCloudfone(day, true)}
+              >
+                Thử lại
+              </Button>
+            ) : day && dayState?.status === "checked" ? (
+              <Button
+                color="secondary"
+                size="md"
+                iconLeading={CloudDownload}
+                onClick={() => fetchDayFromCloudfone(day, true)}
+              >
+                Kiểm tra lại từ Cloudfone
+              </Button>
+            ) : !day ? (
+              <Button
+                color="secondary"
+                size="md"
+                iconLeading={CloudDownload}
+                onClick={loadMostRecentDay}
+              >
+                Tải bản ghi ngày gần nhất
+              </Button>
+            ) : filtered ? (
               <Button color="secondary" size="md" onClick={clearFilters}>
                 Xóa lọc
               </Button>

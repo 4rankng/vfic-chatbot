@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from app.api import integrations as integrations_api
 from app.api.auth_dependencies import require_admin
 from app.core.errors import register_domain_exception_handlers
-from app.models.cloudfone import CloudfoneCallTranscript
+from app.models.cloudfone import CloudfoneCallTranscript, CloudfoneTranscriptDay
 from app.shared.infrastructure.db import get_request_db
 
 _LONG_TRANSCRIPT = "S1: Alo ạ? " + "khách hỏi về giá dịch vụ. " * 12
@@ -40,13 +40,17 @@ def _row(call_id: str = "1790848955", transcript: str = "S1: Alo ạ?") -> Cloud
 
 
 class _ListSession:
-    """Typed double: answers the count query and the page query."""
+    """Typed double: answers the count query, the page query and the day marker."""
 
-    def __init__(self, rows, total: int) -> None:
+    def __init__(self, rows, total: int, day_state=None) -> None:
         self._rows = rows
         self._total = total
+        self._day_state = day_state
 
-    async def scalar(self, _query):
+    async def scalar(self, query):
+        # The day marker is a different table than the transcript page/count.
+        if "cloudfone_transcript_days" in str(query):
+            return self._day_state
         return self._total
 
     async def scalars(self, _query):
@@ -111,6 +115,60 @@ def test_list_query_bounds_are_enforced() -> None:
     assert ok.json()["page_size"] == 5
 
 
+def test_list_reports_the_day_marker_so_the_viewer_knows_what_to_fetch() -> None:
+    """The day filter rides along with the marker of that day's inspection.
+
+    ``unchecked`` means the day was never fetched from Cloudfone (the viewer
+    fetches it on demand); ``checked`` means the day is known — and the
+    viewer leaves it alone.
+    """
+    unchecked = _client(_ListSession([], total=0)).get(
+        "/api/v1/admin/integrations/cloudfone/transcripts",
+        params={"day": "2026-10-01"},
+    )
+    assert unchecked.status_code == 200
+    assert unchecked.json()["day_state"] == {
+        "day": "2026-10-01",
+        "status": "unchecked",
+        "call_count": 0,
+        "recordable_count": 0,
+        "transcript_count": 0,
+        "checked_at": None,
+        "error": None,
+    }
+
+    checked = _client(
+        _ListSession(
+            [],
+            total=0,
+            day_state=CloudfoneTranscriptDay(
+                day=date(2026, 10, 1),
+                status="checked",
+                call_count=3,
+                recordable_count=1,
+                transcript_count=1,
+                checked_at=datetime(2026, 10, 2, 1, 0),
+            ),
+        )
+    ).get(
+        "/api/v1/admin/integrations/cloudfone/transcripts",
+        params={"day": "2026-10-01"},
+    )
+    assert checked.status_code == 200
+    state = checked.json()["day_state"]
+    assert state["status"] == "checked"
+    assert state["call_count"] == 3
+    assert state["transcript_count"] == 1
+
+
+def test_list_without_a_day_filter_carries_no_marker() -> None:
+    client = _client(_ListSession([_row()], total=1))
+
+    body = client.get("/api/v1/admin/integrations/cloudfone/transcripts").json()
+
+    assert body["day_state"] is None
+
+
 def test_detail_returns_the_full_transcript() -> None:
     client = _client(_DetailSession(_row(transcript=_LONG_TRANSCRIPT)))
 
@@ -129,3 +187,51 @@ def test_detail_unknown_call_is_404() -> None:
 
     assert response.status_code == 404
     assert "Không tìm thấy bản ghi cuộc gọi." in response.text
+
+
+def test_backfill_returns_the_day_fetch_outcome(monkeypatch) -> None:
+    """The on-demand fetch answers with what it did, so the viewer can refresh."""
+    from app.services import cloudfone as cloudfone_service
+
+    session = _ListSession([], total=0)
+
+    async def fake_backfill(db, day, *, force=False):
+        assert db is session
+        assert day == date(2026, 10, 18)
+        assert force is False
+        return cloudfone_service.CloudfoneTranscriptBackfill(
+            day=day,
+            status=cloudfone_service.BACKFILL_CHECKED,
+            calls=3,
+            recordable=1,
+            transcripts=1,
+            added=1,
+            remaining=0,
+        )
+
+    monkeypatch.setattr(cloudfone_service, "backfill_day_transcripts", fake_backfill)
+    client = _client(session)
+
+    response = client.post(
+        "/api/v1/admin/integrations/cloudfone/transcripts/backfill",
+        json={"day": "2026-10-18"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["day"] == "2026-10-18"
+    assert body["status"] == "checked"
+    assert body["calls"] == 3
+    assert body["added"] == 1
+    assert body["remaining"] == 0
+
+
+def test_backfill_rejects_a_day_that_is_not_a_date() -> None:
+    client = _client(_ListSession([], total=0))
+
+    response = client.post(
+        "/api/v1/admin/integrations/cloudfone/transcripts/backfill",
+        json={"day": "khong-phai-ngay"},
+    )
+
+    assert response.status_code == 422

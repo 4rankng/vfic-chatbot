@@ -338,9 +338,13 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0076_cloudfone_call_transcripts` (20 Oct 2026). This line is grepped by the
+- **HEAD:** `0077_cloudfone_transcript_days` (21 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0076` adds the
+  new migration that does not update it blocks the release. `0077` adds the
+  Cloudfone per-day marker (`cloudfone_transcript_days`, one row per inspected
+  call day — `status`, `call_count`, `recordable_count`, `transcript_count`):
+  additive, so blue/green runs either way; `downgrade()` drops the table.
+  `0076` adds the
   Cloudfone call-transcript store (`cloudfone_call_transcripts`, one row per
   transcribed call — unique `call_id`, indexed `day`): additive, so blue/green
   runs either way; `downgrade()` drops the table. `0075` adds the

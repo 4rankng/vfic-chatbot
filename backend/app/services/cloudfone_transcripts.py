@@ -5,20 +5,32 @@ reads it before downloading a recording and writes it after MiniMax STT, so a
 rerun or a later analysis pass never pays the WAV download + STT cost twice.
 The admin transcripts screen reads the same rows through the list/get queries
 below.
+
+``cloudfone_transcript_days`` (migration 0077) is the per-day marker: it
+records that a day was already fetched from the vendor, so the viewer knows a
+day is known (and possibly empty) instead of fetching it again.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Protocol
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.cloudfone import CloudfoneCallTranscript
+from app.models.cloudfone import CloudfoneCallTranscript, CloudfoneTranscriptDay
 
 if TYPE_CHECKING:
     from app.services.cloudfone import CallRecord
+
+# The day was fetched from Cloudfone — it is known, and it will not be fetched
+# again unless the admin forces it.
+DAY_STATUS_CHECKED = "checked"
+# The fetch failed (vendor down, bad credentials) — a later attempt may retry.
+DAY_STATUS_ERROR = "error"
+# The day was never fetched — there is no marker row for it yet.
+DAY_STATUS_UNCHECKED = "unchecked"
 
 
 class TranscriptStore(Protocol):
@@ -106,3 +118,42 @@ async def get_call_transcript(
             CloudfoneCallTranscript.call_id == call_id
         )
     )
+
+
+async def get_day_state(
+    db: AsyncSession, day: date
+) -> CloudfoneTranscriptDay | None:
+    """The marker for one call day, or ``None`` when the day was never fetched."""
+    return await db.scalar(
+        select(CloudfoneTranscriptDay).where(CloudfoneTranscriptDay.day == day)
+    )
+
+
+async def record_day_state(
+    db: AsyncSession,
+    day: date,
+    *,
+    status: str,
+    call_count: int = 0,
+    recordable_count: int = 0,
+    transcript_count: int = 0,
+    error: str | None = None,
+) -> CloudfoneTranscriptDay:
+    """Upsert the marker for one call day and return the stored row.
+
+    One row per day, so a later fetch of the same day replaces the counts
+    instead of piling up.
+    """
+    row = await get_day_state(db, day)
+    if row is None:
+        row = CloudfoneTranscriptDay(day=day, status=status)
+        db.add(row)
+    row.status = status
+    row.call_count = call_count
+    row.recordable_count = recordable_count
+    row.transcript_count = transcript_count
+    row.error = error
+    row.checked_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(row)
+    return row

@@ -5,12 +5,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   listCloudfoneTranscripts: vi.fn(),
   loadCloudfoneTranscript: vi.fn(),
+  backfillCloudfoneTranscripts: vi.fn(),
 }));
 
 vi.mock("./api", () => ({
   zaloIntegrationGateway: {
     listCloudfoneTranscripts: mocks.listCloudfoneTranscripts,
     loadCloudfoneTranscript: mocks.loadCloudfoneTranscript,
+    backfillCloudfoneTranscripts: mocks.backfillCloudfoneTranscripts,
   },
 }));
 
@@ -39,6 +41,47 @@ const ROWS = [
 
 const PAGE = { items: ROWS, total: 2, page: 1, page_size: 20 };
 
+/** An empty day the system has never looked at — the viewer must fetch it. */
+const UNCHECKED_DAY = {
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: 20,
+  day_state: {
+    day: "2026-10-01",
+    status: "unchecked" as const,
+    call_count: 0,
+    recordable_count: 0,
+    transcript_count: 0,
+    checked_at: null,
+    error: null,
+  },
+};
+
+/** An empty day the system already checked — it is known, and it holds nothing. */
+const CHECKED_DAY = {
+  ...UNCHECKED_DAY,
+  day_state: {
+    ...UNCHECKED_DAY.day_state,
+    status: "checked" as const,
+    call_count: 3,
+    recordable_count: 1,
+    transcript_count: 0,
+    checked_at: "2026-10-02T01:00:00",
+  },
+};
+
+const BACKFILLED = {
+  day: "2026-10-01",
+  status: "checked" as const,
+  calls: 3,
+  recordable: 1,
+  transcripts: 1,
+  added: 1,
+  remaining: 0,
+  message: null,
+};
+
 const renderSection = async () => {
   const onBack = vi.fn();
   const screen = await render(
@@ -57,6 +100,7 @@ afterEach(async () => {
   await cleanup();
   mocks.listCloudfoneTranscripts.mockReset();
   mocks.loadCloudfoneTranscript.mockReset();
+  mocks.backfillCloudfoneTranscripts.mockReset();
 });
 
 describe("CloudfoneTranscriptsSection", () => {
@@ -141,5 +185,72 @@ describe("CloudfoneTranscriptsSection", () => {
       .getByRole("button", { name: "Quay lại cài đặt Cloudfone" })
       .click();
     expect(onBack).toHaveBeenCalled();
+  });
+
+  it("fetches a day from Cloudfone when the system has never checked it", async () => {
+    // The daily pass only covers the previous day, so an older day the admin
+    // opens has no stored transcripts — the viewer pulls it from the vendor.
+    mocks.listCloudfoneTranscripts.mockResolvedValue(UNCHECKED_DAY);
+    mocks.backfillCloudfoneTranscripts.mockResolvedValue(BACKFILLED);
+    const { screen } = await renderSection();
+
+    await screen.getByLabelText("Ngày cuộc gọi").fill("2026-10-01");
+
+    await expect
+      .poll(() => mocks.backfillCloudfoneTranscripts.mock.calls.at(-1)?.[0])
+      .toEqual({ day: "2026-10-01", force: false });
+    // The list is refreshed once the day is stored.
+    await expect
+      .poll(() => mocks.listCloudfoneTranscripts.mock.calls.length)
+      .toBeGreaterThan(1);
+  });
+
+  it("does not fetch a day the system already checked", async () => {
+    // The marker says the day is known — and it holds nothing, so there is
+    // nothing to fetch.
+    mocks.listCloudfoneTranscripts.mockResolvedValue(CHECKED_DAY);
+    const { screen } = await renderSection();
+
+    await screen.getByLabelText("Ngày cuộc gọi").fill("2026-10-01");
+
+    await expect
+      .element(screen.getByText("Ngày này không có bản ghi"))
+      .toBeVisible();
+    expect(mocks.backfillCloudfoneTranscripts).not.toHaveBeenCalled();
+  });
+
+  it("shows the fetch progress while a day is being pulled", async () => {
+    mocks.listCloudfoneTranscripts.mockResolvedValue(UNCHECKED_DAY);
+    // The fetch stays pending — a real one downloads recordings and transcribes.
+    mocks.backfillCloudfoneTranscripts.mockReturnValue(new Promise(() => {}));
+    const { screen } = await renderSection();
+
+    await screen.getByLabelText("Ngày cuộc gọi").fill("2026-10-01");
+
+    await expect
+      .element(screen.getByText("Đang tải bản ghi từ Cloudfone"))
+      .toBeVisible();
+  });
+
+  it("offers the most recent day when nothing is stored at all", async () => {
+    mocks.listCloudfoneTranscripts.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 20,
+    });
+    mocks.backfillCloudfoneTranscripts.mockResolvedValue(BACKFILLED);
+    const { screen } = await renderSection();
+
+    await expect
+      .element(screen.getByText("Chưa có bản ghi cuộc gọi"))
+      .toBeVisible();
+    await screen
+      .getByRole("button", { name: "Tải bản ghi ngày gần nhất" })
+      .click();
+
+    await expect
+      .poll(() => mocks.backfillCloudfoneTranscripts.mock.calls.at(-1)?.[0])
+      .toEqual({ day: expect.any(String), force: true });
   });
 });

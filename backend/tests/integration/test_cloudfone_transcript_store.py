@@ -5,6 +5,9 @@ row mapping of migration 0076 shipped unexercised: a column mismatch between
 model and migration would only surface in production, on the first daily tick.
 These tests commit real rows against the disposable database so that drift is
 caught here instead.
+
+The per-day marker (migration 0077) is covered the same way — it is what tells
+the admin viewer that a day was already fetched from the vendor.
 """
 
 from __future__ import annotations
@@ -16,9 +19,13 @@ from sqlalchemy.exc import IntegrityError
 
 from app.services.cloudfone import CallRecord
 from app.services.cloudfone_transcripts import (
+    DAY_STATUS_CHECKED,
+    DAY_STATUS_ERROR,
     DbTranscriptStore,
     get_call_transcript,
+    get_day_state,
     list_call_transcripts,
+    record_day_state,
 )
 
 pytestmark = pytest.mark.integration
@@ -156,3 +163,55 @@ async def test_get_by_call_id(integration_session):
     assert found is not None
     assert found.transcript == "Nội dung đầy đủ."
     assert await get_call_transcript(integration_session, "khong-ton-tai") is None
+
+
+async def test_a_day_without_a_marker_was_never_fetched(integration_session):
+    assert await get_day_state(integration_session, date(2026, 10, 18)) is None
+
+
+async def test_recording_a_day_marker_stores_its_counts(integration_session):
+    row = await record_day_state(
+        integration_session,
+        date(2026, 10, 18),
+        status=DAY_STATUS_CHECKED,
+        call_count=3,
+        recordable_count=1,
+        transcript_count=1,
+    )
+
+    assert row.day == date(2026, 10, 18)
+    assert row.status == DAY_STATUS_CHECKED
+    assert row.call_count == 3
+    assert row.recordable_count == 1
+    assert row.transcript_count == 1
+    assert row.error is None
+    assert row.checked_at is not None
+
+    stored = await get_day_state(integration_session, date(2026, 10, 18))
+    assert stored is not None
+    assert stored.transcript_count == 1
+
+
+async def test_recording_a_day_marker_twice_updates_the_same_row(integration_session):
+    """One row per day — a later fetch replaces the counts."""
+    await record_day_state(
+        integration_session,
+        date(2026, 10, 19),
+        status=DAY_STATUS_ERROR,
+        error="CloudFone không phản hồi",
+    )
+    row = await record_day_state(
+        integration_session,
+        date(2026, 10, 19),
+        status=DAY_STATUS_CHECKED,
+        call_count=6,
+        recordable_count=5,
+        transcript_count=5,
+    )
+
+    assert row.status == DAY_STATUS_CHECKED
+    assert row.error is None
+    assert row.call_count == 6
+    stored = await get_day_state(integration_session, date(2026, 10, 19))
+    assert stored is not None
+    assert stored.transcript_count == 5

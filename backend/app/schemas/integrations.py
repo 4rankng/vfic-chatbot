@@ -632,8 +632,51 @@ class CloudfoneTranscriptDetailOut(CloudfoneTranscriptOut):
     transcript: str
 
 
+class CloudfoneTranscriptDayStateOut(BaseModel):
+    """How far the system got with one call day.
+
+    ``status`` is ``unchecked`` (the day was never fetched from Cloudfone),
+    ``checked`` (it was fetched — ``transcript_count`` says whether it held
+    anything) or ``error`` (the fetch failed, so a later attempt may retry).
+    """
+
+    day: date
+    status: str
+    call_count: int = 0
+    recordable_count: int = 0
+    transcript_count: int = 0
+    checked_at: datetime | None = None
+    error: str | None = None
+
+
 class CloudfoneTranscriptPageOut(BaseModel):
     items: list[CloudfoneTranscriptOut]
     total: int
     page: int
     page_size: int
+    # The inspected-day marker for the requested day (None when no day filter
+    # is set): it tells the viewer whether the day was already fetched from
+    # Cloudfone — and is therefore known — or must be fetched on demand.
+    day_state: CloudfoneTranscriptDayStateOut | None = None
+
+
+class CloudfoneTranscriptBackfillIn(BaseModel):
+    """Ask the viewer to fetch one call day from Cloudfone on demand."""
+
+    day: date
+    # Refetch a day that was already checked (the admin knows it is empty and
+    # wants to try again).
+    force: bool = False
+
+
+class CloudfoneTranscriptBackfillOut(BaseModel):
+    """Outcome of an on-demand day fetch."""
+
+    day: date
+    status: str
+    calls: int = 0
+    recordable: int = 0
+    transcripts: int = 0
+    added: int = 0
+    remaining: int = 0
+    message: str | None = None

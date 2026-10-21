@@ -56,6 +56,9 @@ from app.schemas.integrations import (
     CloudfoneTranscriptDetailOut,
     CloudfoneTranscriptOut,
     CloudfoneTranscriptPageOut,
+    CloudfoneTranscriptDayStateOut,
+    CloudfoneTranscriptBackfillIn,
+    CloudfoneTranscriptBackfillOut,
     OpenRouterIntegrationSettingsOut,
     OpenRouterIntegrationSettingsUpdate,
     OpenRouterIntegrationTestOut,
@@ -68,6 +71,7 @@ from app.schemas.integrations import (
     ZaloOaSignatureVerifyRequest,
 )
 from app.composition.email_digest import build_digest_summarizer_for
+from app.services.cloudfone_transcripts import DAY_STATUS_UNCHECKED
 from app.services.email_digest import send_test_digest
 from app.services.integration_settings import IntegrationSettingsService
 from app.services.integrations.facebook_oauth_flow import (
@@ -509,6 +513,21 @@ def _transcript_out(row) -> CloudfoneTranscriptOut:
     )
 
 
+def _day_state_out(day: date, state) -> CloudfoneTranscriptDayStateOut:
+    """The inspected-day marker → its API projection (``None`` = never fetched)."""
+    if state is None:
+        return CloudfoneTranscriptDayStateOut(day=day, status=DAY_STATUS_UNCHECKED)
+    return CloudfoneTranscriptDayStateOut(
+        day=state.day,
+        status=state.status,
+        call_count=state.call_count,
+        recordable_count=state.recordable_count,
+        transcript_count=state.transcript_count,
+        checked_at=state.checked_at,
+        error=state.error,
+    )
+
+
 @router.get("/cloudfone/transcripts", response_model=CloudfoneTranscriptPageOut)
 async def list_cloudfone_transcripts(
     response: Response,
@@ -524,8 +543,16 @@ async def list_cloudfone_transcripts(
     ``day`` filters on the call day the pipeline stored; ``caller`` matches a
     phone-number fragment. Rows come from ``cloudfone_call_transcripts`` — the
     cache the daily insights pass writes after MiniMax STT.
+
+    The response also carries the inspected-day marker for the requested day:
+    the viewer fetches a day from Cloudfone on demand when the marker says the
+    day was never checked, and leaves it alone when the marker says the day is
+    already known.
     """
-    from app.services.cloudfone_transcripts import list_call_transcripts
+    from app.services.cloudfone_transcripts import (
+        get_day_state,
+        list_call_transcripts,
+    )
 
     # Call metadata and content are PII — same proxy/history gap the
     # credentials reveal closes (see the Facebook reveal endpoint).
@@ -534,11 +561,48 @@ async def list_cloudfone_transcripts(
     rows, total = await list_call_transcripts(
         db, day=day, caller=caller, page=page, page_size=page_size
     )
+    day_state = None
+    if day is not None:
+        day_state = _day_state_out(day, await get_day_state(db, day))
     return CloudfoneTranscriptPageOut(
         items=[_transcript_out(row) for row in rows],
         total=total,
         page=page,
         page_size=page_size,
+        day_state=day_state,
+    )
+
+
+@router.post(
+    "/cloudfone/transcripts/backfill", response_model=CloudfoneTranscriptBackfillOut
+)
+async def backfill_cloudfone_transcripts(
+    body: CloudfoneTranscriptBackfillIn,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CloudfoneTranscriptBackfillOut:
+    """Fetch one call day from CloudFone on demand and store its transcripts.
+
+    The daily insights pass only covers the previous day, so an admin opening
+    an older day in the viewer would see an empty table. This pulls that day
+    from the vendor (same call history, same recording download, same MiniMax
+    STT) and stores the transcripts. It never sends the insights email.
+
+    A day that was already checked is skipped — the marker says the day is
+    known — unless the request forces it.
+    """
+    from app.services.cloudfone import backfill_day_transcripts
+
+    outcome = await backfill_day_transcripts(db, body.day, force=body.force)
+    return CloudfoneTranscriptBackfillOut(
+        day=outcome.day,
+        status=outcome.status,
+        calls=outcome.calls,
+        recordable=outcome.recordable,
+        transcripts=outcome.transcripts,
+        added=outcome.added,
+        remaining=outcome.remaining,
+        message=outcome.message,
     )
 
 

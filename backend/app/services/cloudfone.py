@@ -29,7 +29,14 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import CLOUDFONE_API_BASE
-from app.services.cloudfone_transcripts import DbTranscriptStore, TranscriptStore
+from app.services.cloudfone_transcripts import (
+    DAY_STATUS_CHECKED,
+    DAY_STATUS_ERROR,
+    DbTranscriptStore,
+    TranscriptStore,
+    get_day_state,
+    record_day_state,
+)
 from app.services.email_digest.renderer import DIGEST_FROM_EMAIL
 from app.services.email_service import EmailAttachment, EmailDeliveryError, send_email_via_resend
 from app.services.integration_settings.service import IntegrationSettingsService
@@ -140,6 +147,53 @@ class CloudfoneInsightsResult:
     provider_id: str | None = None
     error: str | None = None
     missing: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class DayTranscriptionResult:
+    """What one day of calls yielded when it was fetched and transcribed.
+
+    ``calls`` is every call the vendor returned for the day; ``recordable`` the
+    ones with a recording and real talk time (the only ones worth an STT call);
+    ``cached`` the ones whose transcript was already stored; ``transcribed``
+    the ones this pass sent to STT successfully; ``failed`` the recordable ones
+    that ended without a transcript (STT error, or no STT provider at all);
+    ``skipped`` the ones left out by the daily transcription cap.
+    """
+
+    calls: int = 0
+    recordable: int = 0
+    cached: int = 0
+    transcribed: int = 0
+    failed: int = 0
+    skipped: int = 0
+
+    @property
+    def remaining(self) -> int:
+        """Calls still waiting for a transcript (the cap cut the pass short)."""
+        return self.skipped
+
+
+@dataclass(frozen=True)
+class CloudfoneTranscriptBackfill:
+    """Outcome of an on-demand day fetch for the admin transcripts viewer."""
+
+    day: date
+    status: str
+    calls: int = 0
+    recordable: int = 0
+    transcripts: int = 0
+    added: int = 0
+    remaining: int = 0
+    message: str | None = None
+    missing: list[str] = field(default_factory=list)
+
+
+# Backfill outcomes (the viewer maps them onto its own states).
+BACKFILL_CHECKED = "checked"  # the day was fetched; transcripts are stored
+BACKFILL_SKIPPED = "skipped"  # the day was already known — nothing to fetch
+BACKFILL_UNCONFIGURED = "unconfigured"  # no Cloudfone credentials or no STT key
+BACKFILL_FAILED = "failed"  # the vendor fetch failed
 
 
 def _first(data: dict, *names: str, default: str = "") -> str:
@@ -825,9 +879,11 @@ async def run_cloudfone_insights(
         calls = await fetch(day)
     except CloudfoneError as exc:
         logger.warning("cloudfone insights fetch failed: %s", exc)
+        await _record_day_error(db, day, str(exc))
         return CloudfoneInsightsResult(status=STATUS_UNCONFIGURED, error=str(exc))
 
     if not calls:
+        await _record_day_checked(db, day, call_count=0)
         return CloudfoneInsightsResult(status=STATUS_EMPTY)
 
     transcribe = transcriber
@@ -837,7 +893,15 @@ async def run_cloudfone_insights(
             transcribe = MiniMaxAsrClient(minimax.api_key).transcribe
 
     store = transcript_store or (DbTranscriptStore(db) if db is not None else None)
-    calls = await _attach_transcripts(calls, transcribe, store, day)
+    calls, day_result = await _attach_transcripts(calls, transcribe, store, day)
+    # The day is now known: the viewer will not fetch it again on its own.
+    await _record_day_checked(
+        db,
+        day,
+        call_count=day_result.calls,
+        recordable_count=day_result.recordable,
+        transcript_count=day_result.transcribed + day_result.cached,
+    )
     transcribed_count = sum(1 for call in calls if call.transcript)
     answered = [call for call in calls if call.status == "ANSWERED"]
     stats = build_daily_stats(calls)
@@ -894,7 +958,9 @@ async def _attach_transcripts(
     transcriber: Callable[[bytes], Awaitable[str]] | None,
     store: TranscriptStore | None,
     day: date,
-) -> list[CallRecord]:
+    *,
+    max_transcriptions: int | None = None,
+) -> tuple[list[CallRecord], DayTranscriptionResult]:
     """Fill ``transcript`` per call from the store or its recording, fail-soft per call.
 
     A stored transcript (a previous pass already ran STT for that call) is reused
@@ -902,32 +968,42 @@ async def _attach_transcripts(
     talk time are transcribed — ring-only recordings on unanswered legs are noise
     (verified). One bad recording or a dead STT provider leaves that call's
     transcript empty and the send intact.
+
+    Returns the enriched calls plus what the pass actually did, so the caller
+    can record the day's counts (and tell a capped pass from a finished one).
     """
+    if max_transcriptions is None:
+        max_transcriptions = MAX_TRANSCRIPTIONS_PER_DAY
+    recordable = cached = transcribed = failed = skipped = 0
     if transcriber is None and store is None:
-        return calls
-    transcribed: list[CallRecord] = []
+        return calls, DayTranscriptionResult(calls=len(calls))
+    transcribed_calls: list[CallRecord] = []
     attempts = 0
     bound_warned = False
     for call in calls:
         if not call.recording_url or call.talk_seconds <= 0:
-            transcribed.append(call)
+            transcribed_calls.append(call)
             continue
-        cached = await _load_transcript(store, call.call_id)
-        if cached:
-            transcribed.append(replace(call, transcript=cached))
+        recordable += 1
+        cached_text = await _load_transcript(store, call.call_id)
+        if cached_text:
+            cached += 1
+            transcribed_calls.append(replace(call, transcript=cached_text))
             continue
         if transcriber is None:
-            transcribed.append(call)
+            failed += 1
+            transcribed_calls.append(call)
             continue
-        if attempts >= MAX_TRANSCRIPTIONS_PER_DAY:
+        if attempts >= max_transcriptions:
             if not bound_warned:
                 logger.warning(
                     "cloudfone insights transcribe bound reached: %d/day, "
                     "the rest of the day ships without transcripts",
-                    MAX_TRANSCRIPTIONS_PER_DAY,
+                    max_transcriptions,
                 )
                 bound_warned = True
-            transcribed.append(call)
+            skipped += 1
+            transcribed_calls.append(call)
             continue
         attempts += 1
         try:
@@ -935,12 +1011,23 @@ async def _attach_transcripts(
             text = ((await transcriber(audio)) or "").strip()
         except Exception as exc:  # noqa: BLE001 — one bad call must not block the letter
             logger.warning("cloudfone insights transcribe failed: %s", exc)
-            transcribed.append(call)
+            failed += 1
+            transcribed_calls.append(call)
             continue
         if text:
             await _store_transcript(store, call, text, day)
-        transcribed.append(replace(call, transcript=text))
-    return transcribed
+            transcribed += 1
+        else:
+            failed += 1
+        transcribed_calls.append(replace(call, transcript=text))
+    return transcribed_calls, DayTranscriptionResult(
+        calls=len(calls),
+        recordable=recordable,
+        cached=cached,
+        transcribed=transcribed,
+        failed=failed,
+        skipped=skipped,
+    )
 
 
 async def _load_transcript(store: TranscriptStore | None, call_id: str) -> str | None:
@@ -964,3 +1051,144 @@ async def _store_transcript(
         await store.save(call, text, day)
     except Exception as exc:  # noqa: BLE001 — cache failure must not block the letter
         logger.warning("cloudfone insights transcript cache write failed: %s", exc)
+
+
+async def _record_day_checked(
+    db: AsyncSession | None,
+    day: date,
+    *,
+    call_count: int,
+    recordable_count: int = 0,
+    transcript_count: int = 0,
+) -> None:
+    """Mark the day as fetched so the viewer stops fetching it on its own."""
+    if db is None:
+        return
+    try:
+        await record_day_state(
+            db,
+            day,
+            status=DAY_STATUS_CHECKED,
+            call_count=call_count,
+            recordable_count=recordable_count,
+            transcript_count=transcript_count,
+        )
+    except Exception as exc:  # noqa: BLE001 — the marker must never break the letter
+        logger.warning("cloudfone day marker write failed: %s", exc)
+
+
+async def _record_day_error(
+    db: AsyncSession | None, day: date, error: str
+) -> None:
+    """Mark the day as failed so a later attempt may fetch it again."""
+    if db is None:
+        return
+    try:
+        await record_day_state(db, day, status=DAY_STATUS_ERROR, error=error)
+    except Exception as exc:  # noqa: BLE001 — the marker must never break the caller
+        logger.warning("cloudfone day marker write failed: %s", exc)
+
+
+async def backfill_day_transcripts(
+    db: AsyncSession,
+    day: date,
+    *,
+    service: IntegrationSettingsService | None = None,
+    client: CloudfoneClient | None = None,
+    transcriber: Callable[[bytes], Awaitable[str]] | None = None,
+    fetcher: Callable[[date], Awaitable[list[CallRecord]]] | None = None,
+    store: TranscriptStore | None = None,
+    force: bool = False,
+) -> CloudfoneTranscriptBackfill:
+    """Fetch one call day from Cloudfone on demand and store its transcripts.
+
+    The daily insights pass only ever covers the previous day, so an admin
+    opening an older day in the transcripts viewer would see an empty table.
+    This is the viewer's own fetch: same vendor call, same recording download,
+    same MiniMax STT, same stored rows — it just runs when an admin asks for
+    that day instead of on the daily schedule. It never sends the insights
+    email.
+
+    A day that is already marked as checked is known (it was fetched before,
+    possibly with nothing in it) and is not fetched again unless ``force`` is
+    set. ``remaining`` reports calls the daily transcription cap left out, so
+    the caller can continue the pass.
+    """
+    service = service or IntegrationSettingsService(db)
+    cfg = await service.resolve_cloudfone()
+
+    missing = [
+        name
+        for name, value in (
+            ("service_name", cfg.service_name),
+            ("auth_user", cfg.auth_user),
+            ("auth_key", cfg.auth_key),
+        )
+        if not value
+    ]
+    if missing:
+        return CloudfoneTranscriptBackfill(
+            day=day,
+            status=BACKFILL_UNCONFIGURED,
+            missing=missing,
+            message="Chưa cấu hình đầy đủ thông tin Cloudfone.",
+        )
+
+    if not force:
+        state = await get_day_state(db, day)
+        if state is not None and state.status == DAY_STATUS_CHECKED:
+            # The day is known — do not ask the vendor again.
+            return CloudfoneTranscriptBackfill(
+                day=day,
+                status=BACKFILL_SKIPPED,
+                calls=state.call_count,
+                recordable=state.recordable_count,
+                transcripts=state.transcript_count,
+                message="Ngày này đã được kiểm tra.",
+            )
+
+    minimax = await service.resolve_minimax()
+    transcribe = transcriber
+    if transcribe is None:
+        if not minimax.api_key:
+            return CloudfoneTranscriptBackfill(
+                day=day,
+                status=BACKFILL_UNCONFIGURED,
+                missing=["minimax_api_key"],
+                message="Chưa cấu hình MiniMax để chuyển giọng nói thành văn bản.",
+            )
+        transcribe = MiniMaxAsrClient(minimax.api_key).transcribe
+
+    cloudfone_client = client or CloudfoneClient(
+        cfg.service_name, cfg.auth_user, cfg.auth_key, timeout=30.0
+    )
+    fetch = fetcher or (lambda d: _default_fetcher(cloudfone_client, d))
+    try:
+        calls = await fetch(day)
+    except CloudfoneError as exc:
+        logger.warning("cloudfone backfill fetch failed: %s", exc)
+        await _record_day_error(db, day, str(exc))
+        return CloudfoneTranscriptBackfill(
+            day=day,
+            status=BACKFILL_FAILED,
+            message=str(exc),
+        )
+
+    store = store or DbTranscriptStore(db)
+    _, result = await _attach_transcripts(calls, transcribe, store, day)
+    await _record_day_checked(
+        db,
+        day,
+        call_count=result.calls,
+        recordable_count=result.recordable,
+        transcript_count=result.transcribed + result.cached,
+    )
+    return CloudfoneTranscriptBackfill(
+        day=day,
+        status=BACKFILL_CHECKED,
+        calls=result.calls,
+        recordable=result.recordable,
+        transcripts=result.transcribed + result.cached,
+        added=result.transcribed,
+        remaining=result.remaining,
+    )

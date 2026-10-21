@@ -231,6 +231,37 @@ export type CloudfoneTranscriptPage = {
   total: number;
   page: number;
   page_size: number;
+  /** How far the system got with the requested day (null without a day filter). */
+  day_state?: CloudfoneTranscriptDayState | null;
+};
+
+/**
+ * The inspected-day marker.
+ *
+ * `unchecked` — the day was never fetched from Cloudfone, so the viewer
+ * fetches it on demand. `checked` — the day is known (it was fetched; it may
+ * hold nothing). `error` — the fetch failed, so a later attempt may retry.
+ */
+export type CloudfoneTranscriptDayState = {
+  day: string;
+  status: "unchecked" | "checked" | "error";
+  call_count: number;
+  recordable_count: number;
+  transcript_count: number;
+  checked_at: string | null;
+  error: string | null;
+};
+
+/** Outcome of an on-demand day fetch. */
+export type CloudfoneTranscriptBackfill = {
+  day: string;
+  status: "checked" | "skipped" | "unconfigured" | "failed";
+  calls: number;
+  recordable: number;
+  transcripts: number;
+  added: number;
+  remaining: number;
+  message: string | null;
 };
 
 /** Filters for the transcripts list; omitted keys mean "no filter". */
@@ -553,6 +584,22 @@ export const zaloIntegrationGateway = {
       `${ADMIN_INTEGRATIONS_BASE_PATH}/cloudfone/transcripts/${encodeURIComponent(
         callId,
       )}`,
+    ),
+
+  /**
+   * Fetch one call day from Cloudfone on demand and store its transcripts.
+   *
+   * The daily pass only covers the previous day, so an older day the admin
+   * opens would otherwise show an empty table. A day the system already
+   * checked is skipped server-side unless `force` is set.
+   */
+  backfillCloudfoneTranscripts: async (body: {
+    day: string;
+    force?: boolean;
+  }): Promise<CloudfoneTranscriptBackfill> =>
+    apiJson<CloudfoneTranscriptBackfill>(
+      `${ADMIN_INTEGRATIONS_BASE_PATH}/cloudfone/transcripts/backfill`,
+      { method: "POST", body },
     ),
 } as const;
 
