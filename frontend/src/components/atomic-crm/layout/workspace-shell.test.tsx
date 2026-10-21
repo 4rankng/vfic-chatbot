@@ -217,7 +217,9 @@ describe("WorkspaceShell phone conversation chrome", () => {
     await screen.getByRole("link", { name: "Danh sách hội thoại" }).click();
     await expect.element(topbar).toBeVisible();
     expect(main.getBoundingClientRect().top).toBe(56);
-    expect(inbox.getBoundingClientRect().height).toBe(788);
+    // The list view reserves the fixed bottom tab bar (60px) below the
+    // topbar (56px): 844 - 56 - 60 = 728.
+    expect(inbox.getBoundingClientRect().height).toBe(728);
 
     await router!.navigate("/conversations?id=candidate-1");
     await expect.element(topbar).not.toBeVisible();
@@ -345,6 +347,113 @@ describe("WorkspaceShell phone drawer", () => {
     expect(panel!.className).toContain("max-w-[85vw]");
     // The dialog fills the panel instead of re-declaring a narrower width.
     expect(drawer.element().className).not.toMatch(/(^|\s)w-72(\s|$)/);
+  });
+});
+
+describe("WorkspaceShell phone tab bar", () => {
+  const TABBAR_LABELS = [
+    "Tổng quan",
+    "Tin nhắn",
+    "Dự án",
+    "Người dùng",
+    "Cài đặt",
+  ];
+
+  it("carries the five primary destinations below md and hides from md up", async () => {
+    await page.viewport(390, 844);
+    const screen = await renderWorkspaceShell("/conversations");
+
+    const tabbar = screen.container.querySelector<HTMLElement>(
+      "nav.workspace-tabbar",
+    );
+    expect(tabbar).toBeInstanceOf(HTMLElement);
+    await expect.element(tabbar!).toBeVisible();
+    // The class contract that keeps the desktop untouched: the bar only ever
+    // renders below `md` (Tailwind utilities are not compiled in this
+    // project, mirroring the rail's hidden/lg:flex assertions above).
+    expect(tabbar!.classList.contains("md:hidden")).toBe(true);
+    expect(tabbar!.getAttribute("aria-label")).toBe("Điều hướng chính");
+
+    const links = [...tabbar!.querySelectorAll<HTMLAnchorElement>("a[href]")];
+    expect(links.map((link) => link.textContent?.trim())).toEqual(
+      TABBAR_LABELS,
+    );
+
+    // Material's 3–5 band: the sixth destination (Hiệu suất) stays in the
+    // drawer, reachable but not pinned to the bottom edge.
+    expect(
+      [...tabbar!.querySelectorAll("a")].some((link) =>
+        link.textContent?.includes("Hiệu suất"),
+      ),
+    ).toBe(false);
+
+    // The current route marks exactly one tab.
+    expect(
+      links
+        .filter((link) => link.getAttribute("aria-current") === "page")
+        .map((link) => link.textContent?.trim()),
+    ).toEqual(["Tin nhắn"]);
+  });
+
+  it("navigates between workspaces from the bar", async () => {
+    await page.viewport(390, 844);
+    const screen = await renderWorkspaceShell("/conversations");
+
+    // DOM-level click: the unstyled rail also exposes a "Dự án" link in this
+    // project (no Tailwind utilities), so a role query would be ambiguous.
+    screen.container
+      .querySelector<HTMLAnchorElement>(
+        "nav.workspace-tabbar a[href='#/projects']",
+      )!
+      .click();
+
+    await expect
+      .poll(() =>
+        [
+          ...screen.container.querySelectorAll<HTMLAnchorElement>(
+            "nav.workspace-tabbar a[aria-current='page']",
+          ),
+        ].map((link) => link.textContent?.trim()),
+      )
+      .toEqual(["Dự án"]);
+  });
+
+  it("badges the inbox tab with the attention count", async () => {
+    await page.viewport(390, 844);
+    attention.count = 120;
+    const screen = await renderWorkspaceShell("/conversations");
+
+    const inboxTab = screen.container.querySelector<HTMLAnchorElement>(
+      "nav.workspace-tabbar a[href='#/conversations?needs_attention=true']",
+    );
+    expect(inboxTab).toBeInstanceOf(HTMLElement);
+    expect(inboxTab!.getAttribute("aria-label")).toBe(
+      "Tin nhắn, 99+ tin chưa đọc",
+    );
+    expect(
+      inboxTab!.querySelector(".workspace-tabbar-badge")?.textContent,
+    ).toBe("99+");
+  });
+
+  it("keeps the bar out of the desktop frame from md up", async () => {
+    await page.viewport(768, 900);
+    const screen = await renderWorkspaceShell(
+      "/conversations",
+      <InboxRouteFixture />,
+    );
+
+    const tabbar = screen.container.querySelector<HTMLElement>(
+      "nav.workspace-tabbar",
+    );
+    // Rendered but hidden by the md:hidden contract above `md`, exactly like
+    // the phone rail is hidden below `lg`.
+    expect(tabbar?.classList.contains("md:hidden")).toBe(true);
+    // The tablet inbox rule (768–1023) never reserved a tab bar band: only
+    // the 56px topbar comes off the 900px viewport.
+    const inbox = screen.container.querySelector<HTMLElement>(
+      ".conversation-workspace",
+    )!;
+    expect(inbox.getBoundingClientRect().height).toBe(844);
   });
 });
 

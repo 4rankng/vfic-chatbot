@@ -26,3 +26,4 @@ export {
   type ListTableClassNames,
   type ListTableColumn,
 } from "./list-table";
+export { AppModal, AppModalOverlay, SheetDragHandle } from "./app-modal";

@@ -90,13 +90,20 @@
     height: 100dvh;
   }
 
-  /* The inbox list keeps the global app bar. The shell's
+  /* The inbox list keeps the global app bar and, below `md`, the fixed
+     bottom tab bar; reserve both bands so the list's own scroll region ends
+     at the bar's top edge instead of continuing underneath it. The shell's
      workspace-mobile-chat.css expands an open phone conversation to the full
-     viewport when that same rendered detail state hides the global bar. */
+     viewport when that same rendered detail state hides both bars. */
   .workspace-frame-content > .inbox-bg-container.conversation-workspace {
-    height: calc(100vh - 3.5rem - env(safe-area-inset-top, 0px));
-    height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px));
-    min-height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px));
+    height: calc(
+      100dvh - 3.5rem - 3.75rem - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px)
+    );
+    min-height: calc(
+      100dvh - 3.5rem - 3.75rem - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px)
+    );
   }
 
   /* Non-conversation workspace shells (projects, knowledge, settings, profile,

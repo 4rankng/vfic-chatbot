@@ -15,7 +15,9 @@ import { AccountMenu } from "./topbar/account-menu";
 import { CommandPalette } from "./topbar/command-palette";
 import { NotificationsMenu } from "./topbar/notifications-menu";
 import { useNotifications } from "./topbar/useNotifications";
+import { MobileTabBar } from "./mobile-tab-bar";
 import {
+  getMobileTabDestinations,
   getWorkspaceDestination,
   getWorkspaceSections,
   normalizeWorkspacePath,
@@ -144,7 +146,10 @@ const BrandMark = ({ className }: { className?: string }) => (
  * rounded inset beside them.
  *
  * Below the rail breakpoint the same navigation moves into a React Aria
- * slideout, so no Radix subtree is ever nested inside a React Aria one.
+ * slideout, so no Radix subtree is ever nested inside a React Aria one, and
+ * below `md` the five primary destinations are additionally pinned to a
+ * fixed bottom tab bar (layout/mobile-tab-bar.tsx) — the drawer keeps the
+ * full list. The phone chat detail hides both bars for its full-bleed pane.
  *
  * `.workspace-frame` stays the token root (every feature stylesheet reads
  * `--workspace-*` from it) and `.workspace-frame-content` stays the scrolling
@@ -169,6 +174,7 @@ export const WorkspaceShell = ({
       : `${location.pathname}${location.search}`;
   const path = normalizeWorkspacePath(routeValue);
   const sections = getWorkspaceSections(role, navigation);
+  const mobileTabs = getMobileTabDestinations(role, navigation);
 
   // A new route starts at the top of its own scroll container; feature panels
   // keep their own internal scroll position otherwise.
@@ -232,7 +238,7 @@ export const WorkspaceShell = ({
                   </span>
                 </SlideoutMenu.Header>
                 <SlideoutMenu.Content className="gap-0 px-0">
-                  <nav aria-label="Điều hướng chính">
+                  <nav aria-label="Điều hướng mở rộng">
                     <SidebarSections
                       sections={sections}
                       path={path}
@@ -283,6 +289,18 @@ export const WorkspaceShell = ({
           {children}
         </main>
       </div>
+
+      {/*
+        Phone-width primary navigation. Fixed to the bottom edge (safe-area
+        padded) below `md`; the desktop rail above keeps its exact geometry.
+        The chat workspace hides it for its full-bleed detail pane via
+        workspace-mobile-chat.css.
+      */}
+      <MobileTabBar
+        tabs={mobileTabs}
+        path={path}
+        attentionCount={attentionCount}
+      />
     </div>
   );
 };

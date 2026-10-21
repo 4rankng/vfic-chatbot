@@ -101,9 +101,10 @@ src/
 │       ├── capabilities/   # static runtime contributions and compilation
 │       ├── conversations/  # domain/application/infrastructure/presentation
 │       ├── dashboard/      # recruiter/admin dashboard
-│       ├── layout/         # app shell, header, topbar, notifications
+│       ├── layout/         # app shell, header, topbar, phone bottom tab bar, notifications
 │       ├── leads/          # recruitment lead feature layers
 │       ├── login/          # auth page
+│       ├── kit/            # console-owned primitives: page shells, form controls, app modal (mobile bottom sheet)
 │       ├── projects/       # projects resource
 │       ├── providers/      # REST/auth/i18n/realtime adapters
 │       ├── notifications/  # Web Push subscribe/test + the bell toggle

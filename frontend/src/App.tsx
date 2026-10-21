@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { RuntimeGenerationBundle } from "@/components/atomic-crm/capabilities/types";
 import { ensureRuntimeGeneration } from "@/components/atomic-crm/root/reset-runtime-state";
 import { Button } from "@/components/ui/button";
+import { useVisualViewportHeight } from "@/hooks/use-visual-viewport";
 
 /**
  * Application entry point
@@ -99,6 +100,10 @@ export const RecruitmentWorkspaceLoading = () => (
 
 const App = () => {
   const { manifest } = useInstallationContext();
+
+  // Publishes the on-screen-keyboard-aware viewport height every surface
+  // (auth card, modal sheets) sizes itself against.
+  useVisualViewportHeight();
 
   return (
     <ReadyRecruitmentApplication

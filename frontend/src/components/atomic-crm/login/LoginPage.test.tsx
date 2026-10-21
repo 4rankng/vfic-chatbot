@@ -84,12 +84,15 @@ describe("LoginPage", () => {
       for (const label of labels) {
         expect(getComputedStyle(label).fontSize).toBe("13px");
       }
-      expect(
-        screen
-          .getByRole("button", { name: "Đăng nhập" })
-          .element()
-          .getBoundingClientRect().height,
-      ).toBe(width < 768 ? 40 : 36);
+      // The primary submit is the one control past the 40px envelope on
+      // phones: it opts out via data-allow-tall and grows to a 48px touch
+      // target (desktop keeps the 36px envelope — the opt-out attribute is
+      // inert there because the 48px height is mobile-scoped in auth.css).
+      const submit = screen.getByRole("button", { name: "Đăng nhập" });
+      expect(submit.element().hasAttribute("data-allow-tall")).toBe(true);
+      expect(submit.element().getBoundingClientRect().height).toBe(
+        width < 768 ? 48 : 36,
+      );
     },
   );
   it.each([320, 390])(
@@ -112,6 +115,30 @@ describe("LoginPage", () => {
         .toHaveAttribute("type", "text");
     },
   );
+  it("stacks the sign-in form into one column and sizes the submit for a thumb", async () => {
+    await page.viewport(390, 844);
+    const screen = await renderLogin();
+
+    // One column at 390px: the submit is a full-width block in the form's
+    // grid (single-column stacking is the grid's default below sm), and the
+    // plain-CSS touch rule gives it a ≥48px thumb target.
+    const submit = screen.getByRole("button", { name: "Đăng nhập" });
+    const submitElement = submit.element();
+    expect(submitElement.className).toContain("w-full");
+    expect(submitElement.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+      48,
+    );
+
+    // The fields stack: both visible field wrappers start at the same left
+    // edge as the submit.
+    const email = screen
+      .getByRole("textbox", { name: "Email" })
+      .element()
+      .closest<HTMLElement>('[class~="group/input"]')!;
+    expect(email.getBoundingClientRect().left).toBe(
+      submitElement.getBoundingClientRect().left,
+    );
+  });
   it("keeps credentials and offers an inline error when sign-in fails", async () => {
     mocks.login.mockRejectedValue(new Error("Email hoặc mật khẩu không đúng."));
     const screen = await renderLogin();
