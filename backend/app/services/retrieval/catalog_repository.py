@@ -21,7 +21,12 @@ from app.models.company import Company, Project
 from app.models.job import Job, JobStatus
 from app.models.knowledge import KnowledgeCategory
 from app.models.worker_feature import JobFeatureValue, WorkerFeatureCatalog
-from app.recruitment.domain.recommendation import ProjectFeatures, ProjectScopeItem
+from app.recruitment.domain.recommendation import (
+    ProjectFeatures,
+    ProjectScopeItem,
+    aggregate_heavy_lifting,
+    aggregate_posture,
+)
 from app.services.knowledge.category_contracts import validate_category_payload
 from app.services.knowledge.category_projections import render_category_units
 from app.services.knowledge.derived_jobs import salary_from_feature
@@ -281,6 +286,9 @@ class CatalogRepository:
                     Job.district,
                     Job.address,
                     Job.factory_name,
+                    Job.posture,
+                    Job.heavy_lifting,
+                    Job.health_cert,
                     Company.name.label("company_name"),
                     Company.project_id.label("project_id"),
                 )
@@ -322,6 +330,9 @@ class CatalogRepository:
                     salary_max=row.salary_max,
                     age_min=row.age_min,
                     age_max=row.age_max,
+                    posture=str(getattr(row, "posture", None) or "unknown"),
+                    heavy_lifting=str(getattr(row, "heavy_lifting", None) or "unknown"),
+                    health_cert=str(getattr(row, "health_cert", None) or "unknown"),
                 )
             )
             meta = meta_by_project.setdefault(row.project_id, {})
@@ -369,6 +380,8 @@ class CatalogRepository:
                         aliases=tuple(_card_items(getattr(row, "aliases", None))),
                         latitude=row.latitude,
                         longitude=row.longitude,
+                        posture=aggregate_posture(scope),
+                        heavy_lifting=aggregate_heavy_lifting(scope),
                     )
                 )
                 continue

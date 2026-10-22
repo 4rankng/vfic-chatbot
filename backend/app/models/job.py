@@ -47,6 +47,19 @@ class Job(Base):
     description: Mapped[str | None] = mapped_column(Text)
     requirements: Mapped[str | None] = mapped_column(Text)
     benefits: Mapped[str | None] = mapped_column(Text)
+    # Structured physical attributes (Zalo post-mortem 2026-10-21). Plain
+    # string columns with the domain Literals as contract — same pattern as
+    # ``gender_requirement``/``experience_required``; "unknown" is the DB
+    # default so an unparsed posting never satisfies a stated constraint.
+    posture: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="unknown"
+    )
+    heavy_lifting: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="unknown"
+    )
+    health_cert: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default="unknown"
+    )
     source_document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("knowledge_documents.id", ondelete="SET NULL")
     )
