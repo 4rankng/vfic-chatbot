@@ -2,11 +2,14 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNotify } from "ra-core";
 import {
+  MessageCircleMore,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   CloudDownload,
   Copy,
   FileText,
+  Phone,
   RefreshCw,
   Search,
   TriangleAlert,
@@ -26,6 +29,7 @@ import { EmptyState } from "../kit/page-shell";
 import { zaloIntegrationGateway, type CloudfoneTranscriptSummary } from "./api";
 import { copyCredentialFieldValue } from "./credentialClipboard";
 import { TranscriptConversation } from "./TranscriptConversation";
+import { parseTranscriptUtterances } from "./transcript-utterances";
 
 import "./cloudfone-transcripts.css";
 
@@ -51,14 +55,17 @@ import "./cloudfone-transcripts.css";
  *    count strip + pagination) and the transcript panel below it, built from
  *    the vendored UUI primitives — `frontend/AGENTS.md` § "UI/UX Component
  *    Sourcing".
- *  - <768px swaps in the settings-mobile consult's phone surface: a sticky
- *    search (44px/r10, 300ms debounce) with scrolling day-scope chips, one
- *    bordered card per call (no five-column table fits a 390px phone), a
- *    compact Trước/Sau pager — and the transcript opens in a draggable bottom
- *    sheet instead of the panel below the list.
+ *  - <768px swaps in the phone surface (cloudfone redesign consult 22/10): a
+ *    sticky search (h-10, 300ms debounce) with scrolling h-7 day-scope chips,
+ *    one ~76px bordered card per call (call icon + number + time-of-day over
+ *    a one-line preview + duration pill, no five-column table fits a 390px
+ *    phone), a compact Trước/Sau pager — and the transcript opens in a
+ *    draggable bottom sheet (50% → 92vh) instead of the panel below the list.
  *
  * The transcript itself renders as the same two-speaker conversation in both
- * surfaces (`TranscriptConversation`) — the consult's §4 content contract.
+ * surfaces (`TranscriptConversation`) — S1 left gray-100 / S2 right brand-50,
+ * copy-all in the surface header. The sheet's three body states (skeleton
+ * bubbles, empty, error + retry) follow the consult's §3.
  *
  * No Radix in this subtree: React Aria owns the whole page.
  */
@@ -85,6 +92,18 @@ const fmtDuration = (seconds: number): string =>
   seconds >= 60
     ? `${Math.floor(seconds / 60)}p${seconds % 60}s`
     : `${seconds}s`;
+
+/** "2026-10-01T17:02:35" → "5:02 CH" (Vietnamese 12-hour clock) — the call
+ * card's time-of-day, per the redesign consult's "10:45 SA" example. */
+const fmtTimeOfDay = (iso: string): string => {
+  const timePart = iso.split("T")[1] ?? "";
+  const [hRaw = "", m = ""] = timePart.split(":");
+  const h = Number(hRaw);
+  if (!hRaw || !m || !Number.isFinite(h)) return iso;
+  const suffix = h < 12 ? "SA" : "CH";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${m} ${suffix}`;
+};
 
 /**
  * The previous ICT calendar day (the day the daily pass reports on) as
@@ -549,20 +568,60 @@ export const CloudfoneTranscriptsSection = ({
   // re-narrow a mutable query result.
   const detail = detailQuery.data;
 
+  // The sheet/panel body's three states + the conversation (consult §3):
+  // three alternating skeleton bubbles while loading, an explanatory empty
+  // state for a stored call without utterances, an error card with a retry,
+  // and the S1/S2 bubbles once the transcript parses.
   const detailBody = detailQuery.isPending ? (
-    <div className="space-y-2" aria-busy="true">
-      <span className="block h-3 w-3/4 animate-pulse rounded bg-tertiary" />
-      <span className="block h-3 w-1/2 animate-pulse rounded bg-tertiary" />
+    <div className="transcript-skeleton" aria-busy="true">
+      <span
+        aria-hidden="true"
+        className="transcript-skeleton-bubble is-left bg-neutral-200 animate-pulse"
+        style={{ height: 48, width: "58%" }}
+      />
+      <span
+        aria-hidden="true"
+        className="transcript-skeleton-bubble is-right bg-neutral-200 animate-pulse"
+        style={{ height: 64, width: "72%" }}
+      />
+      <span
+        aria-hidden="true"
+        className="transcript-skeleton-bubble is-left bg-neutral-200 animate-pulse"
+        style={{ height: 40, width: "44%" }}
+      />
     </div>
   ) : detailQuery.isError ? (
-    <p role="alert" className="text-body-sm text-error">
-      Chưa tải được nội dung bản ghi.
-    </p>
+    <div className="sheet-state" role="alert">
+      <CircleAlert className="size-10 text-rose-500" aria-hidden="true" />
+      <p className="sheet-state-title text-neutral-800">
+        Không thể tải hội thoại
+      </p>
+      <p className="sheet-state-sub text-neutral-500">
+        Đã xảy ra lỗi khi bóc băng hoặc tải dữ liệu
+      </p>
+      <button
+        type="button"
+        className="sheet-state-retry bg-neutral-900 text-white active:scale-95 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+        onClick={() => void detailQuery.refetch()}
+      >
+        Thử lại
+      </button>
+    </div>
+  ) : parseTranscriptUtterances(detailQuery.data.transcript).length === 0 ? (
+    <div className="sheet-state">
+      <MessageCircleMore
+        className="size-10 text-neutral-300"
+        aria-hidden="true"
+      />
+      <p className="sheet-state-title text-neutral-700">
+        Chưa có nội dung cuộc gọi
+      </p>
+      <p className="sheet-state-sub text-neutral-400">
+        Nội dung bóc băng sẽ hiển thị tại đây
+      </p>
+    </div>
   ) : (
-    <TranscriptConversation
-      transcript={detailQuery.data.transcript}
-      notify={notify}
-    />
+    <TranscriptConversation transcript={detailQuery.data.transcript} />
   );
 
   return (
@@ -617,8 +676,8 @@ export const CloudfoneTranscriptsSection = ({
                 className={cx(
                   "transcripts-chip",
                   dayScopeOf(day) === scope
-                    ? "border-transparent bg-brand-50 text-brand-700"
-                    : "border-neutral-200 bg-white text-neutral-600",
+                    ? "border-brand-600 bg-brand-50 font-semibold text-brand-700"
+                    : "border-neutral-300 bg-white font-medium text-neutral-700",
                 )}
               >
                 <input
@@ -827,8 +886,9 @@ export const CloudfoneTranscriptsSection = ({
         />
       ) : isMobile ? (
         <>
-          {/* <768px: one bordered card per call — the card opens the
-              transcript sheet. */}
+          {/* <768px: one ~76px bordered card per call (consult §4) — call
+              icon + number + time-of-day over a one-line preview + duration
+              pill. The card opens the transcript sheet. */}
           <ul role="list" className="call-card-list">
             {items.map((row) => {
               const isSelected = row.call_id === selectedId;
@@ -842,30 +902,36 @@ export const CloudfoneTranscriptsSection = ({
                     aria-selected={isSelected}
                     onClick={() => setSelectedId(row.call_id)}
                     className={cx(
-                      "call-card border transition-colors outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2",
+                      "call-card border shadow-xs transition-colors outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2",
                       isSelected
                         ? "border-brand-300 bg-brand-50"
-                        : "border-neutral-200 bg-white hover:bg-neutral-50",
+                        : "border-neutral-200 bg-white hover:bg-neutral-50 active:bg-neutral-50",
                     )}
                   >
                     <span className="call-card-top">
-                      <span className="call-card-name text-neutral-900">
-                        {row.caller}
+                      {/* The stored row carries no direction, so the neutral
+                          phone glyph stands in for the consult's
+                          call-in/call-out pair until the API exposes one. */}
+                      <span className="call-card-headline">
+                        <Phone
+                          className="call-card-icon text-neutral-500"
+                          aria-hidden="true"
+                        />
+                        <span className="call-card-name text-neutral-900">
+                          {row.caller}
+                        </span>
                       </span>
-                      <span className="call-card-duration text-neutral-500">
-                        {fmtDuration(row.talk_seconds)}
+                      <span className="call-card-time text-neutral-500">
+                        {fmtTimeOfDay(row.started_at)}
                       </span>
                     </span>
                     <span className="call-card-middle">
-                      <span className="call-card-preview text-neutral-600">
+                      <span className="call-card-preview text-neutral-500">
                         {row.transcript_preview}
                       </span>
-                      <span className="call-card-time text-neutral-400">
-                        {fmtStarted(row.started_at)}
+                      <span className="call-card-badge bg-neutral-100 text-neutral-600">
+                        {fmtDuration(row.talk_seconds)}
                       </span>
-                    </span>
-                    <span className="call-card-badge bg-neutral-100 text-neutral-600">
-                      đã lưu
                     </span>
                   </button>
                 </li>
@@ -915,7 +981,9 @@ export const CloudfoneTranscriptsSection = ({
       {selectedId ? (
         isMobile ? (
           /* <768px: the consult's bottom sheet replaces the panel below the
-             list — 50% of the viewport, drag the grip to 90%, scrim closes. */
+             list — 50% of the viewport, drag the grip to 92%, scrim closes.
+             Header: number + "duration • date" left, copy-all + close right
+             (44px round icon actions, 20px glyphs). */
           <BottomSheet
             isOpen
             onOpenChange={(open) => {
@@ -933,16 +1001,16 @@ export const CloudfoneTranscriptsSection = ({
                     {detail ? detail.caller : "Bản ghi cuộc gọi"}
                   </p>
                   {detail ? (
-                    <p className="transcripts-sheet-meta text-neutral-400">
-                      {fmtStarted(detail.started_at)} ·{" "}
-                      {fmtDuration(detail.talk_seconds)}
+                    <p className="transcripts-sheet-meta text-neutral-500">
+                      {fmtDuration(detail.talk_seconds)} •{" "}
+                      {fmtStarted(detail.started_at)}
                     </p>
                   ) : null}
                 </div>
                 {detail ? (
                   <button
                     type="button"
-                    className="transcripts-icon-action"
+                    className="transcripts-icon-action text-neutral-500 hover:bg-neutral-100 active:bg-neutral-200"
                     aria-label="Sao chép toàn bộ bản ghi"
                     onClick={() =>
                       void copyCredentialFieldValue(
@@ -957,7 +1025,7 @@ export const CloudfoneTranscriptsSection = ({
                 ) : null}
                 <button
                   type="button"
-                  className="transcripts-icon-action"
+                  className="transcripts-icon-action text-neutral-500 hover:bg-neutral-100 active:bg-neutral-200"
                   aria-label="Đóng bản ghi"
                   onClick={() => setSelectedId(null)}
                 >
@@ -969,7 +1037,9 @@ export const CloudfoneTranscriptsSection = ({
             {detailBody}
           </BottomSheet>
         ) : (
-          /* ≥768px: the panel under the table, unchanged (bubbles body). */
+          /* ≥768px: the panel under the table, unchanged (bubbles body).
+             Copy-all joined the header when the per-bubble copy buttons left
+             the shared conversation — the panel keeps its copy affordance. */
           <section className="uu-scope rounded-panel border border-secondary bg-primary">
             <header className="flex flex-wrap items-center gap-3 border-b border-secondary px-4 py-3">
               <FileText className="size-5 text-tertiary" aria-hidden="true" />
@@ -986,6 +1056,23 @@ export const CloudfoneTranscriptsSection = ({
                   </p>
                 ) : null}
               </div>
+              {detail ? (
+                <Button
+                  type="button"
+                  color="secondary"
+                  size="sm"
+                  iconLeading={Copy}
+                  aria-label="Sao chép toàn bộ bản ghi"
+                  className="tt-btn-touch"
+                  onClick={() =>
+                    void copyCredentialFieldValue(
+                      "toàn bộ bản ghi",
+                      detail.transcript,
+                      notify,
+                    )
+                  }
+                />
+              ) : null}
               <Button
                 type="button"
                 color="secondary"

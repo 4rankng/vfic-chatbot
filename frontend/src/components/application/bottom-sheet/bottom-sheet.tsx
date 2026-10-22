@@ -15,25 +15,27 @@ import { cx } from "@/utils/cx";
  * Sourcing: geometry comes from the design consult, tokens from the console's
  * UUI layer).
  *
- * Contract (settings-mobile consult, §3):
+ * Contract (cloudfone redesign consult 22/10, §3):
  * - slides up from the bottom edge over a 40% scrim; tapping the scrim or
  *   pressing Escape dismisses (`isDismissable`), the same path a drag below
  *   the minimum would take if one were wired later;
- * - starts at 50% of the visual viewport and the grip drags it to 90%
- *   (two detents, snap-to-nearest on release);
+ * - starts at 50% of the visual viewport and the grip drags it to 92%
+ *   (two detents, snap-to-nearest on release); the full snap never rises
+ *   past `env(safe-area-inset-top, 44px)` from the top edge;
  * - React Aria owns `aria-modal`, the focus trap and dismissal, exactly like
  *   the console's other modal surfaces — no hand-rolled focus code here.
  *
  * Height is an inline `calc()` over `--visual-viewport-height` (App publishes
  * it on `<html>`, `dvh` fallback) so an on-screen keyboard cannot cover the
- * sheet body — same mechanism as the vendored modal kit.
+ * sheet body — same mechanism as the vendored modal kit. The body keeps the
+ * consult's safe-area bottom padding: `16px + env(safe-area-inset-bottom)`.
  *
  * Only the grip drags. The body keeps native scrolling: one gesture surface,
  * one scroll surface, no arbitration code.
  */
 
 /** Start and full detents, as fractions of the visual viewport. */
-const DETENTS = [0.5, 0.9] as const;
+const DETENTS = [0.5, 0.92] as const;
 
 type BottomSheetProps = {
   isOpen: boolean;
@@ -126,11 +128,13 @@ export const BottomSheet = ({
     >
       <Modal
         className={cx(
-          "bottom-sheet flex w-full flex-col overflow-hidden rounded-t-xl bg-white outline-hidden",
+          "bottom-sheet flex w-full flex-col overflow-hidden rounded-t-2xl bg-white outline-hidden",
           dragging ? "" : "transition-[height] duration-200 ease-out",
         )}
         style={{
           height: `calc(var(--visual-viewport-height, 100dvh) * ${ratio})`,
+          // The 92% snap must still clear the notch in landscape.
+          maxHeight: "calc(100% - env(safe-area-inset-top, 44px))",
         }}
       >
         {/*
@@ -146,14 +150,14 @@ export const BottomSheet = ({
           className="flex min-h-0 flex-1 flex-col outline-hidden"
         >
           <div
-            className="bottom-sheet-handle flex w-full cursor-grab touch-none flex-col items-center pb-2 pt-3 active:cursor-grabbing"
+            className="bottom-sheet-handle flex w-full cursor-grab touch-none flex-col items-center pb-2 pt-8 active:cursor-grabbing"
             onPointerDown={handlePointerDown}
             aria-hidden="true"
           >
             <span className="h-1 w-8 rounded-full bg-neutral-300" />
           </div>
           {header}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3 pb-[calc(16px+env(safe-area-inset-bottom,20px))]">
             {children}
           </div>
         </Dialog>

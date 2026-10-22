@@ -1,8 +1,8 @@
-/* Mobile transcripts surface + conversation bubbles (settings-mobile consult
-   21/10, §2–4). Geometry and type sizes live here — measured rules the
+/* Mobile transcripts surface + conversation bubbles (cloudfone redesign
+   consult 22/10). Geometry and type sizes live here — measured rules the
    vitest browser lane can assert (it compiles no Tailwind, see
-   CloudfoneTranscriptsSection.test.tsx). Colours stay Untitled UI utility
-   classes in the JSX.
+   CloudfoneTranscriptsSection.test.tsx). Colours stay utility classes in
+   the JSX.
 
    Unscoped on purpose: the conversation also renders inside the bottom
    sheet's portal, outside `.settings-workspace-content`, and the same bubbles
@@ -14,7 +14,7 @@
    specificity), and the whole call card opts out with `data-allow-tall` as a
    compound row surface. */
 
-/* ── Sticky toolbar: search (44px, r10) + scrolling filter chips (32px) ── */
+/* ── Sticky toolbar: search (40px, r10) + scrolling day-scope chips (28px) ── */
 
 .transcripts-toolbar {
   position: sticky;
@@ -28,15 +28,15 @@
   background: var(--settings-canvas, #ffffff);
 }
 
+/* h-10 (40px) search — the consult §2 phone search field. 40px sits exactly
+   at the control envelope's ceiling, so no opt-out is needed. */
 .transcripts-toolbar .transcripts-search {
-  height: 44px;
-  max-height: none;
+  height: 40px;
   border-radius: 10px;
 }
 
 .transcripts-toolbar .transcripts-search input {
   height: 100%;
-  max-height: none;
   border-radius: 10px;
 }
 
@@ -46,11 +46,13 @@
   gap: 8px;
 }
 
+/* h-8 (32px) chip row, horizontally scrollable, no scrollbar. */
 .transcripts-chips {
   display: flex;
+  height: 32px;
+  align-items: center;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 2px;
   scrollbar-width: none;
 }
 
@@ -58,24 +60,25 @@
   display: none;
 }
 
+/* h-7 (28px) chip, rounded-md — the redesign consult's filter chip. */
 .transcripts-chip {
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  height: 32px;
+  height: 28px;
   padding: 0 12px;
-  border: 1px solid var(--settings-border, #d4dce6);
-  border-radius: 999px;
-  font-size: var(--fs-helper);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 /* The chip is a label over a visually hidden radio: real single-select
-   semantics, and the 32px chip shape stays under the console's control
-   envelope (labels are not controls). The input overlays the whole chip so
-   taps — and test drivers — land on a real box. */
+   semantics. The input overlays the whole chip so taps — and test drivers —
+   land on a real box. */
 .transcripts-chip-input {
   position: absolute;
   inset: 0;
@@ -91,13 +94,14 @@
   outline-offset: 2px;
 }
 
-/* ── Call cards (no table below 768px) ────────────────────────────────── */
+/* ── Call cards (no table below 768px) ──────────────────────────────────
+   p-3.5 (14px), rounded-xl, ~76px tall, 10px (mb-2.5) between cards. */
 
 .call-card-list {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -108,10 +112,10 @@
   min-width: 0;
   overflow: hidden;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
-  min-height: 44px;
-  padding: 16px;
+  min-height: 76px;
+  padding: 14px;
   border-radius: 12px;
   text-align: left;
 }
@@ -123,51 +127,71 @@
 .call-card-middle {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
 }
 
+.call-card-headline {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+/* size-4 (16px) call icon in front of the number. The stored row has no
+   direction field, so the neutral phone glyph stands in for the consult's
+   call-in/call-out pair until the backend exposes one. */
+.call-card-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+/* text-sm (14px) semibold number. */
 .call-card-name {
   min-width: 0;
   overflow: hidden;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.call-card-duration {
+/* text-xs (12px) time-of-day, e.g. "10:45 SA". */
+.call-card-time {
   flex: 0 0 auto;
-  font-size: 14px;
+  font-size: 12px;
 }
 
+/* text-xs (12px) one-line transcript preview, capped at 210px. */
 .call-card-preview {
   min-width: 0;
+  max-width: 210px;
   overflow: hidden;
-  font-size: 14px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.call-card-time {
-  flex: 0 0 auto;
-  font-size: 13px;
-}
-
+/* 11px duration pill (px-2 py-0.5 rounded-full gray-100). */
 .call-card-badge {
-  align-self: flex-start;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 12px;
+  flex: 0 0 auto;
+  justify-self: end;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
-/* ── Conversation bubbles (sheet + desktop panel) ─────────────────────── */
+/* ── Conversation bubbles (sheet + desktop panel) ───────────────────────
+   12px between turns, 6px between same-speaker turns; bubble 10x14 padding,
+   16px radius with the 4px corner toward the speaker's side (top corner —
+   under the speaker label); text 14px/20px. */
 
 .transcript-conversation {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -186,59 +210,103 @@
   margin-left: auto;
 }
 
+.transcript-turn + .transcript-turn {
+  margin-top: 12px;
+}
+
+/* Same speaker continues: the spec's 6px spacing. */
+.transcript-turn.is-continued {
+  margin-top: 6px;
+}
+
+/* 11px speaker label (medium), coloured per side in the JSX. */
 .transcript-speaker {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .transcript-bubble {
   max-width: 100%;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: 16px;
 }
 
-/* The corner nearest the speaker softens to 4px (consult: 16 16 16 4). */
+/* The corner nearest the speaker softens to 4px — the top corner, under the
+   speaker label (consult: rounded-tl-sm / rounded-tr-sm). */
 .transcript-bubble--left {
-  border-bottom-left-radius: 4px;
+  border-top-left-radius: 4px;
 }
 
 .transcript-bubble--right {
-  border-bottom-right-radius: 4px;
+  border-top-right-radius: 4px;
 }
 
 .transcript-text {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 20px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-/* 16px glyph, 44px target — the settings icon-action pattern. The element
-   prefix lifts specificity over the global 40px ceiling (`src/index.css` §3),
-   same as `.settings-input-action` does in forms. */
-.transcript-conversation li .transcript-copy,
-div.transcripts-sheet-header .transcripts-icon-action {
-  position: relative;
-  display: inline-flex;
+/* ── Sheet states: loading skeletons (48/64/40px, alternating sides) ────── */
+
+.transcript-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.transcript-skeleton-bubble {
+  border-radius: 16px;
+}
+
+.transcript-skeleton-bubble.is-left {
+  align-self: flex-start;
+  border-top-left-radius: 4px;
+}
+
+.transcript-skeleton-bubble.is-right {
+  align-self: flex-end;
+  border-top-right-radius: 4px;
+}
+
+/* ── Sheet states: empty / error ───────────────────────────────────────── */
+
+.sheet-state {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  max-height: none;
+  gap: 4px;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.sheet-state-title {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sheet-state-sub {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* "Thử lại": h-9 px-4 rounded-lg, dark fill (colours in the JSX). */
+.sheet-state-retry {
+  height: 36px;
+  margin-top: 8px;
+  padding: 0 16px;
   border: 0;
   border-radius: 8px;
-  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
 }
 
-.transcript-conversation li .transcript-copy svg,
-div.transcripts-sheet-header .transcripts-icon-action svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* ── Bottom-sheet header: caller, time/duration, copy-all, close ───────── */
+/* ── Bottom-sheet header: caller, duration • date, copy-all, close ─────── */
 
 .transcripts-sheet-header {
   display: flex;
@@ -249,18 +317,47 @@ div.transcripts-sheet-header .transcripts-icon-action svg {
 }
 
 .transcripts-sheet-heading {
+  display: flex;
   min-width: 0;
   flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
+/* text-sm (14px) semibold number. */
 .transcripts-sheet-title {
   overflow: hidden;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* text-xs (12px) "duration • date" meta line. */
 .transcripts-sheet-meta {
-  font-size: var(--fs-helper);
+  font-size: 12px;
+}
+
+/* 44x44 round icon actions with 20px glyphs — the consult's copy-all/close
+   targets. The element prefix lifts specificity over the global 40px ceiling
+   (`src/index.css` §3), same as `.settings-input-action` does in forms. */
+div.transcripts-sheet-header .transcripts-icon-action {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  max-height: none;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+}
+
+div.transcripts-sheet-header .transcripts-icon-action svg {
+  width: 20px;
+  height: 20px;
 }
