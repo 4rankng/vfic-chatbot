@@ -252,10 +252,12 @@ with psycopg.connect("postgresql://vfic:vfic@127.0.0.1:5443/${DB}") as c:
 
   // ── 06 desktop: table + panel below, unchanged surface (same browser
   // context so the admin session carries over).
-  const desktopPage = await page.context().newPage({
+  const desktopCtx = await browser.newContext({
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 2,
+    storageState: await page.context().storageState(),
   });
+  const desktopPage = await desktopCtx.newPage();
   const dlog = [];
   desktopPage.on("response", (r) => {
     if (r.url().includes("/api/v1/")) dlog.push(`${r.status()} ${r.url().replace(API, "")}`);
@@ -263,7 +265,17 @@ with psycopg.connect("postgresql://vfic:vfic@127.0.0.1:5443/${DB}") as c:
   await desktopPage.goto(`${APP}/#/settings`, { timeout: 60_000 });
   await desktopPage.getByRole("button", { name: "Cloudfone Phân tích cuộc gọi" }).click();
   await desktopPage.getByRole("button", { name: "Xem bản ghi cuộc gọi" }).click();
-  await desktopPage.getByRole("cell", { name: "0362698948" }).waitFor({ timeout: 30_000 });
+  // day-scoped desktop viewer: load the seeded day (cf-qa-1/2 live on 2026-10-21)
+  await desktopPage.evaluate(() => {
+    const input = document.querySelector("#cloudfone-transcripts-day");
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value",
+    ).set;
+    setter.call(input, "2026-10-21");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await desktopPage.getByText("0362698948", { exact: true }).first().waitFor({ timeout: 30_000 });
   await desktopPage.getByRole("button", { name: "Xem", exact: true }).first().click();
   await desktopPage.locator(".transcript-bubble--right").first().waitFor({ timeout: 15_000 });
   ok((await desktopPage.locator('[role="table"], [role="grid"]').count()) > 0, "desktop table renders");
