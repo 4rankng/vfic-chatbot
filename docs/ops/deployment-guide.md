@@ -338,7 +338,7 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0077_cloudfone_transcript_days` (21 Oct 2026). This line is grepped by the
+- **HEAD:** `0078_job_physical_attributes` (22 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
   new migration that does not update it blocks the release. `0077` adds the
   Cloudfone per-day marker (`cloudfone_transcript_days`, one row per inspected
