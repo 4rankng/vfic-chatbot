@@ -225,7 +225,7 @@ export const WorkspaceShell = ({
             // The width belongs on the panel: it is the box anchored to the
             // viewport edge, so the drawer sits flush right with no strip of
             // scrim showing beside it.
-            panelClassName="uu-scope w-72 max-w-[85vw]"
+            panelClassName="uu-scope w-72 max-w-[85vw] pb-[env(safe-area-inset-bottom)]"
           >
             {({ close }) => (
               <>

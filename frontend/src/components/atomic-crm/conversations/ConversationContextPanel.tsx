@@ -8,11 +8,11 @@ import { CloseButton } from "@/components/base/buttons/close-button";
 import { InputBase, TextField } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
 import { TextArea } from "@/components/base/textarea/textarea";
+import { Dialog } from "@/components/application/modals/modal";
 import {
-  Dialog,
-  Modal,
-  ModalOverlay,
-} from "@/components/application/slideout-menus/slideout-menu";
+  AppModal,
+  AppModalOverlay,
+} from "@/components/atomic-crm/kit/app-modal";
 import type { Lead, ProjectInterest } from "../types";
 import {
   candidateProfileDraft,
@@ -310,9 +310,14 @@ export const ConversationContextPanel = ({
     />
   );
 
-  if (isMobile) {
+  // Every non-wide-desktop band opens the context as the console's one modal
+  // system (kit AppModal): a drag-dismissable bottom sheet under 640px, the
+  // vendored centered modal at sm+. This replaces both legacy scrims — the
+  // old slideout overlay and the fixed-panel `.context-overlay-scrim` — with
+  // the vendored `bg-overlay/70` scrim.
+  if (!persistent) {
     return (
-      <ModalOverlay
+      <AppModalOverlay
         isOpen={open}
         onOpenChange={(nextOpen) => {
           if (nextOpen || isSaving) return;
@@ -323,20 +328,20 @@ export const ConversationContextPanel = ({
         }}
         isDismissable={!isSaving}
         isKeyboardDismissDisabled={isSaving}
-        className="uu-scope conversation-context-overlay z-50 pl-0"
+        className="uu-scope z-50"
       >
-        <Modal className="conversation-context-modal">
+        <AppModal className="candidate-context-sheet w-full outline-hidden sm:max-w-md">
           <Dialog
             id="conversation-context-panel"
             aria-label={translate("leads.profile_title")}
-            className="candidate-context-sheet uu-scope flex flex-col gap-0 p-0 outline-hidden"
+            className="flex flex-col gap-0 p-0 outline-hidden"
           >
             <div className="inbox-bg-container conversation-context-sheet-body">
               {content}
             </div>
           </Dialog>
-        </Modal>
-      </ModalOverlay>
+        </AppModal>
+      </AppModalOverlay>
     );
   }
 

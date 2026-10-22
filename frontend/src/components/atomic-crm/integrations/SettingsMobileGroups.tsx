@@ -133,10 +133,10 @@ export const SettingsMobileGroups = ({
     <div className="settings-mobile-groups">
       {SETTINGS_MOBILE_GROUPS.map((group) => (
         <section key={group.title}>
-          <h2 className="settings-mobile-group-title text-neutral-500">
+          <h2 className="settings-mobile-group-title text-tertiary">
             {group.title}
           </h2>
-          <div className="settings-mobile-card bg-white">
+          <div className="settings-mobile-card bg-primary">
             {group.rows.map((row) => {
               if (row.kind === "profile") {
                 // A real navigation row (the profile is its own route, the
@@ -152,7 +152,7 @@ export const SettingsMobileGroups = ({
                     </span>
                     <ChevronRight
                       aria-hidden="true"
-                      className="settings-mobile-row-chevron text-neutral-400"
+                      className="settings-mobile-row-chevron text-quaternary"
                     />
                   </a>
                 );
@@ -221,13 +221,13 @@ export const SettingsMobileGroups = ({
                     {item?.label ?? row.itemId}
                   </span>
                   {value ? (
-                    <span className="settings-mobile-row-value text-neutral-500">
+                    <span className="settings-mobile-row-value text-tertiary">
                       {value}
                     </span>
                   ) : null}
                   <ChevronRight
                     aria-hidden="true"
-                    className="settings-mobile-row-chevron text-neutral-400"
+                    className="settings-mobile-row-chevron text-quaternary"
                   />
                 </button>
               );

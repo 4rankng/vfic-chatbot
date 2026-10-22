@@ -360,7 +360,8 @@ button.dashboard-candidate-row:focus-visible {
   }
 
   .dashboard-workspace-content {
-    padding: 20px 16px calc(104px + env(safe-area-inset-bottom));
+    padding: 20px 16px
+      calc(var(--workspace-tabbar-h) + env(safe-area-inset-bottom) + 44px);
   }
 
   .recruiting-command {

@@ -1,63 +1,9 @@
 /* Context drawer */
+/* The sheet box is the kit `AppModal` posture (bottom sheet under 640px with
+   the kit drag handle, centered vendored modal at sm+); this sheet only keeps
+   the flat-console shadow contract and its internal body layout. */
 .candidate-context-sheet {
-  width: 100%;
-  max-width: 100%;
   box-shadow: none !important;
-}
-
-/* Phone (<md): the candidate context opens as a bottom sheet from the header
-   info trigger instead of a full-height side drawer. The overlay anchors the
-   modal to the bottom edge; the dialog slides up with a grab handle and keeps
-   its internal scroll. Unlayered rules intentionally override the slideout
-   primitives' Tailwind drawer utilities (they live in @layer utilities). */
-@media (max-width: 767px) {
-  .conversation-context-overlay {
-    align-items: flex-end;
-    justify-content: center;
-    padding-left: 0;
-  }
-
-  .conversation-context-modal {
-    inset: auto 0 0 0;
-    top: auto;
-    height: auto;
-    width: 100%;
-    max-width: none;
-    max-height: 88dvh;
-    animation: none;
-  }
-
-  .candidate-context-sheet {
-    max-height: 88dvh;
-    border-radius: 24px 24px 0 0;
-    animation: conversation-sheet-in 0.28s var(--ease);
-  }
-
-  .candidate-context-sheet::before {
-    content: "";
-    display: block;
-    width: 40px;
-    height: 4px;
-    margin: 8px auto 0;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--ink-muted) 45%, transparent);
-    flex: 0 0 auto;
-  }
-}
-
-@keyframes conversation-sheet-in {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .candidate-context-sheet {
-    animation: none;
-  }
 }
 
 .candidate-context-sheet .conversation-context-sheet-body {

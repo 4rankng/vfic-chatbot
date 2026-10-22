@@ -355,9 +355,36 @@ div.transcripts-sheet-header .transcripts-icon-action {
   border: 0;
   border-radius: 9999px;
   background: transparent;
+  /* Console tokens, not `text-neutral-*` utilities: the sheet must survive
+     dark mode and the utility-less test build. */
+  color: var(--muted-foreground);
+}
+
+div.transcripts-sheet-header .transcripts-icon-action:hover {
+  background: var(--muted);
+}
+
+div.transcripts-sheet-header .transcripts-icon-action:active {
+  background: var(--accent, var(--muted));
 }
 
 div.transcripts-sheet-header .transcripts-icon-action svg {
   width: 20px;
   height: 20px;
+}
+
+/* Phone sheet: tighter turn rhythm keeps more of the transcript above the
+   fold inside the 2-detent bottom sheet. */
+@media (max-width: 767px) {
+  .transcript-conversation .transcript-turn + .transcript-turn {
+    margin-top: 10px;
+  }
+
+  .transcript-conversation .transcript-turn.is-continued {
+    margin-top: 4px;
+  }
+
+  .transcript-conversation .transcript-bubble {
+    padding: 8px 12px;
+  }
 }

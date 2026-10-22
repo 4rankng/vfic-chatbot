@@ -1010,7 +1010,7 @@ export const CloudfoneTranscriptsSection = ({
                 {detail ? (
                   <button
                     type="button"
-                    className="transcripts-icon-action text-neutral-500 hover:bg-neutral-100 active:bg-neutral-200"
+                    className="transcripts-icon-action"
                     aria-label="Sao chép toàn bộ bản ghi"
                     onClick={() =>
                       void copyCredentialFieldValue(
@@ -1025,7 +1025,7 @@ export const CloudfoneTranscriptsSection = ({
                 ) : null}
                 <button
                   type="button"
-                  className="transcripts-icon-action text-neutral-500 hover:bg-neutral-100 active:bg-neutral-200"
+                  className="transcripts-icon-action"
                   aria-label="Đóng bản ghi"
                   onClick={() => setSelectedId(null)}
                 >

@@ -1028,8 +1028,6 @@ const ConversationListContent = ({
             <WorkspaceEmptyState />
           </section>
         )}
-
-        <div className="backdrop" onClick={backToList}></div>
       </div>
     </div>
   );

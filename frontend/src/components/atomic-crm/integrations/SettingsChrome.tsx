@@ -1,7 +1,10 @@
 import { useEffect, type ReactNode } from "react";
-import { ChevronLeft } from "lucide-react";
 
 import { useIsMobile } from "@/hooks/use-mobile";
+// Direct import, not the `kit` barrel: the barrel re-exports the react-admin
+// bound form/list controls, and pulling those into this graph re-triggers a
+// ra-core dep optimization that drops `useInput` from the prebundle.
+import { MobilePageHeader } from "@/components/atomic-crm/kit/mobile-page-header";
 
 import "../conversations/inbox.css";
 import "./settings.css";
@@ -124,7 +127,7 @@ export const SettingsChrome = ({
     return (
       <SettingsWorkspace>
         <div className="settings-workspace-content text-foreground">
-          <div className="settings-mobile-page bg-neutral-50">
+          <div className="settings-mobile-page bg-secondary">
             <header className="ops-command-header settings-command-header">
               <div className="ops-command-title">
                 <div className="min-w-0">
@@ -146,19 +149,7 @@ export const SettingsChrome = ({
       <SettingsWorkspace>
         <div className="settings-workspace-content text-foreground">
           <div className="settings-mobile-subpage">
-            <header className="settings-mobile-appbar">
-              <button
-                type="button"
-                className="settings-mobile-appbar-back"
-                aria-label="Quay lại"
-                onClick={onMobileBack}
-              >
-                <ChevronLeft aria-hidden="true" className="size-5" />
-              </button>
-              <h1 className="settings-mobile-appbar-title">
-                {headerCopy.title}
-              </h1>
-            </header>
+            <MobilePageHeader title={headerCopy.title} onBack={onMobileBack} />
             <div className="settings-main">{children}</div>
           </div>
         </div>

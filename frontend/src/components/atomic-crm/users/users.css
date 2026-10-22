@@ -278,7 +278,7 @@
   display: inline-flex;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .user-account-dialog [class~="group/input"],
   .user-account-dialog button.console-button {
     height: var(--crm-control-height-touch, 40px);
@@ -298,97 +298,77 @@
     max-height: none;
   }
 
-  .user-directory-identity h3,
-  .user-directory-identity p span {
-    overflow: visible;
-    overflow-wrap: anywhere;
-    text-overflow: clip;
-    white-space: normal;
+  /* The directory renders the kit's phone card list below md
+     (`ListTable.renderMobileCard`); the table anatomy — and every rule that
+     linearised it — is gone from this band. Plain CSS, not utilities: the
+     browser test project compiles no Tailwind, and containment is a contract. */
+  .user-directory-phone-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    padding: 12px;
   }
 
-  .user-directory-identity p {
-    align-items: flex-start;
-  }
-
-  .user-directory-identity p svg {
-    flex: 0 0 auto;
-  }
-
-  /* A phone row is a three-band card, not a table row: drop the table box roles
-     first (a block inside a table box would be re-wrapped in anonymous table
-     boxes), then place the cells on two tracks plus a full-width action band
-     the row's four icon buttons need. */
-  .user-directory-table,
-  .user-directory-body {
-    display: block;
-  }
-
-  .user-directory-head {
-    display: none;
-  }
-
-  .user-directory-card {
-    border-inline: 0;
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .user-directory-header {
-    padding-inline: 0;
-  }
-
-  .user-directory-row {
-    display: grid;
-    grid-template-columns: 36px auto auto minmax(0, 1fr);
+  .user-directory-phone-card-identity {
+    display: flex;
     align-items: center;
-    column-gap: 10px;
-    row-gap: 4px;
-    min-height: 84px;
-    padding: 8px 0;
-    background: transparent;
-  }
-
-  /* The cells own the desktop `p-3`; the phone card drives its own rhythm. */
-  .user-directory-row > * {
-    padding: 0;
-  }
-
-  .user-directory-cell-avatar {
-    grid-area: 1 / 1;
-    width: 36px;
-    align-self: start;
-  }
-
-  .user-directory-cell-identity {
-    grid-area: 1 / 2 / 2 / 5;
+    gap: 12px;
     min-width: 0;
   }
 
-  /* The four actions take the band under the metadata: a 44px touch row of
-     their own is the only way they fit a phone without crushing the identity. */
-  .user-directory-cell-actions {
-    grid-area: 3 / 1 / 4 / 5;
-    justify-self: end;
+  .user-directory-phone-card-identity > div {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
-  /* Role, status and creation date keep their own cells and share the second
-     line, so the identity above them is never narrowed by their badges. */
-  .user-directory-cell-role {
-    grid-area: 2 / 2;
-    width: auto;
+  .user-directory-phone-card-identity > :first-child {
+    flex: 0 0 auto;
   }
 
-  .user-directory-cell-status {
-    grid-area: 2 / 3;
-    width: auto;
+  .user-directory-phone-card-name {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-body);
+    font-weight: var(--fw-semibold);
   }
 
-  .user-directory-cell-created {
-    /* Spans the metadata band's tail so the date is right-aligned against the
-       card edge. */
-    grid-area: 2 / 4 / 3 / 5;
-    width: auto;
-    justify-self: end;
+  .user-directory-phone-card-email {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    margin: 2px 0 0;
+    color: var(--muted-foreground);
+    font-size: var(--fs-body-sm);
+  }
+
+  .user-directory-phone-card-email svg {
+    flex: 0 0 auto;
+  }
+
+  .user-directory-phone-card-email > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .user-directory-phone-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .user-directory-phone-card-created {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-inline-start: auto;
+    color: var(--muted-foreground);
+    font-size: var(--fs-body-sm);
   }
 
   .user-account-form {
@@ -448,36 +428,5 @@
     min-width: 44px;
     min-height: 44px;
     align-items: center;
-  }
-}
-
-@media (max-width: 479px) {
-  /* The embedded settings card leaves less width than the standalone page.
-     Give the date its own line instead of forcing three metadata cells into
-     the space beside the avatar. */
-  .user-directory-row {
-    grid-template-columns: 36px minmax(0, 1fr) auto;
-    row-gap: 8px;
-  }
-
-  .user-directory-cell-identity {
-    grid-area: 1 / 2;
-  }
-
-  .user-directory-cell-status {
-    grid-area: 2 / 3;
-    justify-self: end;
-  }
-
-  .user-directory-cell-created {
-    grid-area: 3 / 2 / 4 / 4;
-    justify-self: start;
-  }
-
-  /* The action band closes the card: the four 44px buttons need the full row,
-     which at this width nothing else can spare. */
-  .user-directory-cell-actions {
-    grid-area: 4 / 1 / 5 / 4;
-    justify-self: end;
   }
 }

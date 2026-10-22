@@ -32,6 +32,7 @@ import {
 } from "./conversation-message-state";
 import { ChatMessageRow } from "./ChatMessageRow";
 import { LoadingState } from "../../misc/LoadingState";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/base/buttons/button";
 import {
   Tooltip,
@@ -62,6 +63,15 @@ const COMPOSER_RESERVE_GAP_PX = 16;
 const CHAT_AT_BOTTOM_THRESHOLD_PX = 96;
 // Distance from the top (px) within which we trigger history load-more.
 const HISTORY_LOAD_TOP_THRESHOLD_PX = 100;
+
+/** Initial-load placeholder: five alternating incoming/outgoing bubble ghosts. */
+const THREAD_SKELETON_BUBBLES = [
+  { side: "is-left", width: "72%", height: 40 },
+  { side: "is-right", width: "60%", height: 40 },
+  { side: "is-left", width: "80%", height: 56 },
+  { side: "is-right", width: "64%", height: 40 },
+  { side: "is-left", width: "70%", height: 40 },
+] as const;
 
 export interface ChatThreadProps {
   conversationId: string;
@@ -642,7 +652,21 @@ export const ChatThread = ({
               </Button>
             </div>
           ) : messages.length === 0 && isLoading ? (
-            <LoadingState className="min-h-full" label="Đang tải tin nhắn…" />
+            <div
+              className="chat-thread-skeleton"
+              role="status"
+              aria-busy="true"
+              aria-label="Đang tải tin nhắn…"
+            >
+              {THREAD_SKELETON_BUBBLES.map((bubble, index) => (
+                <Skeleton
+                  key={index}
+                  aria-hidden="true"
+                  className={`chat-thread-skeleton-bubble ${bubble.side}`}
+                  style={{ width: bubble.width, height: bubble.height }}
+                />
+              ))}
+            </div>
           ) : null}
           {rows.map(({ message, kind, isGrouped }) => (
             <Fragment key={`${message.conversation_id}:${message.id}`}>

@@ -218,18 +218,10 @@ export const ConversationShowContent = ({
               }
             />
 
-            {showWorkspacePanel &&
-              context.renderPanel &&
-              isContextOpen &&
-              !isMobile &&
-              !isWideDesktop && (
-                <button
-                  type="button"
-                  className="context-overlay-scrim"
-                  aria-label="Đóng ngữ cảnh"
-                  onClick={closeContextPanel}
-                />
-              )}
+            {/*
+              No scrim here: the context panel renders inside the kit AppModal
+              below 1180px, and the vendored overlay owns the single scrim.
+            */}
           </section>
           {showWorkspacePanel && context.renderPanel
             ? context.renderPanel({

@@ -137,7 +137,7 @@ const UserEditContent = () => {
               href={listHref}
               color="secondary"
               size="sm"
-              className="uu-scope user-account-secondary-action max-[760px]:w-full"
+              className="uu-scope user-account-secondary-action max-[767px]:w-full"
               isDisabled={submitting}
             >
               Hủy
@@ -145,7 +145,7 @@ const UserEditContent = () => {
             <Button
               type="submit"
               size="sm"
-              className="uu-scope user-account-submit max-[760px]:w-full"
+              className="uu-scope user-account-submit max-[767px]:w-full"
               isDisabled={submitting}
               isLoading={submitting}
               showTextWhileLoading

@@ -257,7 +257,8 @@
 
 @media (max-width: 767px) {
   .settings-workspace-content {
-    padding: 12px 12px calc(88px + env(safe-area-inset-bottom));
+    padding: 12px 12px
+      calc(var(--workspace-tabbar-h) + env(safe-area-inset-bottom) + 28px);
   }
 
   .settings-command-header {
@@ -442,7 +443,7 @@
   }
 }
 
-@media (max-width: 479px) {
+@media (max-width: 767px) {
   .settings-sensitive-input {
     grid-template-columns: minmax(0, 1fr) 44px 44px;
   }
@@ -716,9 +717,7 @@
   .settings-messenger-recovery-content {
     padding: 14px 0 18px;
   }
-}
 
-@media (max-width: 480px) {
   .settings-workspace-content
     .settings-messenger
     .settings-messenger-primary-action {
@@ -1607,48 +1606,8 @@
 }
 
 .settings-mobile-row-chevron {
-  flex: 0 0 auto;
   width: 20px;
   height: 20px;
-}
-
-.settings-mobile-appbar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px 4px 4px;
-  border-bottom: 1px solid var(--settings-border, #d4dce6);
-  background: var(--settings-canvas, #ffffff);
-}
-
-/* The element prefix lifts the 44px action over the global 40px ceiling
-   (`src/index.css` §3), same as `.settings-input-action` in forms. */
-header.settings-mobile-appbar .settings-mobile-appbar-back {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  max-height: none;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-}
-
-.settings-mobile-appbar-title {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .settings-mobile-subpage .settings-main {

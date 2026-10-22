@@ -666,6 +666,11 @@ input:-webkit-autofill:focus {
   --workspace-teal-soft: var(--color-accent);
   --workspace-paper: var(--color-primary-content);
   --workspace-paper-deep: var(--color-base-300);
+  /* Shell chrome geometry: the topbar and bottom tab bar heights every
+     mobile layout sizes against. Single source — never restate 3.5rem/3.75rem
+     in feature sheets. */
+  --workspace-topbar-h: 3.5rem;
+  --workspace-tabbar-h: 3.75rem;
   --background: var(--workspace-canvas);
   --foreground: var(--workspace-ink);
   --card: var(--workspace-surface);
@@ -727,7 +732,7 @@ input:-webkit-autofill:focus {
 }
 
 .workspace-topbar {
-  height: calc(3.5rem + env(safe-area-inset-top, 0px));
+  height: calc(var(--workspace-topbar-h) + env(safe-area-inset-top, 0px));
   padding-top: env(safe-area-inset-top, 0px);
   padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
   padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
@@ -756,7 +761,7 @@ input:-webkit-autofill:focus {
 .workspace-tabbar-list {
   display: flex;
   width: 100%;
-  height: 3.75rem;
+  height: var(--workspace-tabbar-h);
   margin: 0;
   padding: 0 0.25rem;
   list-style: none;
@@ -844,7 +849,9 @@ input:-webkit-autofill:focus {
    layout/workspace-mobile-chat.css when it hides the bar. */
 @media (max-width: 767px) {
   .workspace-frame-content {
-    padding-bottom: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(
+      var(--workspace-tabbar-h) + env(safe-area-inset-bottom, 0px)
+    );
   }
 }
 

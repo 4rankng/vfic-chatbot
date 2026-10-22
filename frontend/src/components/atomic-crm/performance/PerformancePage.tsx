@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { ClockRefresh } from "@untitledui/icons";
 
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobilePageHeader } from "@/components/atomic-crm/kit/mobile-page-header";
+
 import {
   ButtonGroup,
   ButtonGroupItem,
@@ -94,67 +97,84 @@ const PerformancePanel = () => {
   );
   const hasError = !data;
   const refreshing = Boolean(isPending || isFetching);
+  const isMobile = useIsMobile();
+  const refreshButton = (
+    <Button
+      type="button"
+      color="secondary"
+      size="sm"
+      className="performance-refresh"
+      onClick={() => void refetch()}
+      isDisabled={refreshing}
+      aria-label={freshness ? `Cập nhật lúc ${freshness}` : "Cập nhật dữ liệu"}
+      iconLeading={
+        <ClockRefresh
+          className={refreshing ? "is-spinning" : undefined}
+          aria-hidden={true}
+        />
+      }
+    >
+      {freshness ? (
+        <>
+          <span className="performance-refresh-prefix">Cập nhật lúc </span>
+          {/* `title` keeps the full timestamp reachable when the phone bar
+              squeezes the label to an ellipsis. */}
+          <span className="performance-refresh-time" title={freshness}>
+            {freshness}
+          </span>
+        </>
+      ) : (
+        "Cập nhật"
+      )}
+    </Button>
+  );
+  const windowSwitcher = (
+    <ButtonGroup
+      size="sm"
+      className="performance-window-switcher uu-scope"
+      aria-label="Khoảng thời gian"
+      selectedKeys={[windowKey]}
+      onSelectionChange={(keys) => {
+        const next = [...keys][0];
+        if (next) setWindowKey(next as PerfWindow);
+      }}
+    >
+      {WINDOWS.map((window) => (
+        <ButtonGroupItem
+          key={window.key}
+          id={window.key}
+          className="performance-window-option"
+        >
+          {window.label}
+        </ButtonGroupItem>
+      ))}
+    </ButtonGroup>
+  );
   return (
     <div className="performance-page" aria-busy={refreshing || undefined}>
-      <header className="performance-header">
-        <div>
-          <h1>Hiệu suất chatbot</h1>
-          <p>
-            Thời gian phản hồi và tỷ lệ thu được số điện thoại theo khoảng thời
-            gian.
-          </p>
-        </div>
-        <div className="performance-header-actions">
-          <ButtonGroup
-            size="sm"
-            className="performance-window-switcher uu-scope"
-            aria-label="Khoảng thời gian"
-            selectedKeys={[windowKey]}
-            onSelectionChange={(keys) => {
-              const next = [...keys][0];
-              if (next) setWindowKey(next as PerfWindow);
-            }}
-          >
-            {WINDOWS.map((window) => (
-              <ButtonGroupItem
-                key={window.key}
-                id={window.key}
-                className="performance-window-option"
-              >
-                {window.label}
-              </ButtonGroupItem>
-            ))}
-          </ButtonGroup>
-          <Button
-            type="button"
-            color="secondary"
-            size="sm"
-            className="performance-refresh"
-            onClick={() => void refetch()}
-            isDisabled={refreshing}
-            aria-label={
-              freshness ? `Cập nhật lúc ${freshness}` : "Cập nhật dữ liệu"
-            }
-            iconLeading={
-              <ClockRefresh
-                className={refreshing ? "is-spinning" : undefined}
-                aria-hidden={true}
-              />
-            }
-          >
-            {freshness ? (
-              <>
-                <span className="performance-refresh-prefix">
-                  Cập nhật lúc{" "}
-                </span>
-                {freshness}
-              </>
-            ) : (
-              "Cập nhật"
-            )}
-          </Button>
-        </div>
-      </header>
+      {isMobile ? (
+        <>
+          <MobilePageHeader
+            title="Hiệu suất chatbot"
+            primaryAction={refreshButton}
+          />
+          <div className="performance-header-actions">{windowSwitcher}</div>
+        </>
+      ) : (
+        <header className="performance-header">
+          <div>
+            <h1>Hiệu suất chatbot</h1>
+            <p>
+              Thời gian phản hồi và tỷ lệ thu được số điện thoại theo khoảng
+              thời gian.
+            </p>
+          </div>
+          <div className="performance-header-actions">
+            {windowSwitcher}
+            {refreshButton}
+          </div>
+        </header>
+      )}
       {data && isError ? (
         <div className="performance-stale-notice" role="alert">
           Chưa cập nhật được số liệu. Dữ liệu lần tải trước vẫn hiển thị; chọn

@@ -97,20 +97,32 @@
 
   .knowledge-workspace-content,
   .project-workspace-content {
-    padding-bottom: calc(112px + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom));
+    padding-bottom: calc(
+      var(--workspace-tabbar-h) + env(safe-area-inset-bottom) + 52px
+    );
+    scroll-padding-bottom: calc(
+      var(--workspace-tabbar-h) + env(safe-area-inset-bottom) + 52px
+    );
   }
 
   .settings-workspace-content {
-    padding-bottom: calc(112px + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom));
+    padding-bottom: calc(
+      var(--workspace-tabbar-h) + env(safe-area-inset-bottom) + 52px
+    );
+    scroll-padding-bottom: calc(
+      var(--workspace-tabbar-h) + env(safe-area-inset-bottom) + 52px
+    );
   }
 
   .persona-workspace-content {
     max-height: calc(100dvh - 68px);
     overflow-y: auto;
-    padding-bottom: calc(112px + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom));
+    padding-bottom: calc(
+      var(--workspace-tabbar-h) + env(safe-area-inset-bottom) + 52px
+    );
+    scroll-padding-bottom: calc(
+      var(--workspace-tabbar-h) + env(safe-area-inset-bottom) + 52px
+    );
     -webkit-overflow-scrolling: touch;
   }
 

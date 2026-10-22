@@ -617,10 +617,8 @@
   background: var(--surface-hover);
 }
 .inbox-bg-container:where(.conversation-workspace) .composer-action.send {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   border-radius: 13px;
   background: var(--brand);
   color: var(--primary-foreground);
@@ -638,4 +636,25 @@
   border: 0;
   box-shadow: none;
   opacity: 1;
+}
+
+/* Initial-load bubble ghosts (ChatThread): alternating incoming/outgoing
+   rounded rects while the message list is empty and pending. The kit
+   `Skeleton` carries surface + pulse; this only places the bubbles. */
+.inbox-bg-container:where(.conversation-workspace) .chat-thread-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 16px 24px;
+}
+
+.inbox-bg-container:where(.conversation-workspace)
+  .chat-thread-skeleton-bubble {
+  flex: 0 0 auto;
+  border-radius: 18px;
+}
+
+.inbox-bg-container:where(.conversation-workspace)
+  .chat-thread-skeleton-bubble.is-right {
+  align-self: flex-end;
 }

@@ -136,7 +136,7 @@
   color: var(--workspace-danger);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .account-profile-workspace-content {
     height: auto;
     overflow: visible;

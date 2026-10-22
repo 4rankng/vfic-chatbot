@@ -6,6 +6,8 @@ import {
   useTranslate,
 } from "ra-core";
 import { useHref } from "react-router";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobilePageHeader } from "@/components/atomic-crm/kit/mobile-page-header";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { Button } from "@/components/base/buttons/button";
 import { CalendarDays, Mail, Plus, ShieldOff, UserCog } from "lucide-react";
@@ -76,33 +78,45 @@ const UserListContent = ({
 }: {
   title: string;
   embedded: boolean;
-}) =>
-  embedded ? (
-    <div className="settings-embedded-users-list">
-      <header className="user-directory-toolbar">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-section-title font-semibold tracking-tight">
-            {title}
-          </h2>
-          <p className="mt-1 text-body-sm text-muted-foreground">
-            Quản lý tài khoản và quyền truy cập nội bộ.
-          </p>
-        </div>
-        <CreateUserButton />
-      </header>
-      <UserAccountTable />
-    </div>
-  ) : (
+}) => {
+  const isMobile = useIsMobile();
+
+  if (embedded)
+    return (
+      <div className="settings-embedded-users-list">
+        <header className="user-directory-toolbar">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-section-title font-semibold tracking-tight">
+              {title}
+            </h2>
+            <p className="mt-1 text-body-sm text-muted-foreground">
+              Quản lý tài khoản và quyền truy cập nội bộ.
+            </p>
+          </div>
+          <CreateUserButton />
+        </header>
+        <UserAccountTable />
+      </div>
+    );
+
+  return (
     <PageShell size="wide" className="user-directory-workspace">
-      <PageHeading
-        eyebrow="Quản trị truy cập"
-        title={title}
-        subtitle="Tài khoản và quyền truy cập nội bộ."
-        actions={<CreateUserButton />}
-      />
+      {isMobile ? (
+        // The phone chrome owns the page top; the desktop PageHeading stays
+        // untouched above md.
+        <MobilePageHeader title={title} primaryAction={<CreateUserButton />} />
+      ) : (
+        <PageHeading
+          eyebrow="Quản trị truy cập"
+          title={title}
+          subtitle="Tài khoản và quyền truy cập nội bộ."
+          actions={<CreateUserButton />}
+        />
+      )}
       <UserAccountTable className="user-directory-card" />
     </PageShell>
   );
+};
 
 const CreateUserButton = () => {
   const createPath = useCreatePath();
@@ -207,6 +221,40 @@ const UserAccountTable = ({ className }: { className?: string }) => (
     ariaLabel="Danh sách tài khoản"
     columns={USER_COLUMNS}
     rowActions={() => <UserActions />}
+    renderMobileCard={(user) => (
+      // Phone card: identity first (avatar + name + email), role/status/date
+      // as badges, then the same actions the desktop row carries — inline, not
+      // behind an overflow menu, per UserActions' stated design contract.
+      // Styling lives in users.css (plain CSS): containment must not depend on
+      // Tailwind utilities the browser test project never compiles.
+      <div className="uu-scope user-directory-phone-card">
+        <div className="user-directory-phone-card-identity">
+          <Avatar
+            size="md"
+            alt={user.full_name || user.email}
+            initials={initialsOf(user)}
+          />
+          <div>
+            <h3 className="user-directory-phone-card-name">
+              {user.full_name || "Chưa có tên"}
+            </h3>
+            <p className="user-directory-phone-card-email">
+              <Mail aria-hidden="true" />
+              <span>{user.email}</span>
+            </p>
+          </div>
+        </div>
+        <div className="user-directory-phone-card-meta">
+          <UserRoleBadge />
+          <UserStatusBadge />
+          <span className="user-directory-phone-card-created">
+            <CalendarDays aria-hidden="true" />
+            {formatDate(user.created_at)}
+          </span>
+        </div>
+        <UserActions />
+      </div>
+    )}
     header={<UserAccountCount />}
     classNames={{
       table: "user-directory-table w-full table-fixed border-collapse",

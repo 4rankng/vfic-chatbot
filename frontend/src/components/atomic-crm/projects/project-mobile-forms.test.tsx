@@ -17,6 +17,7 @@ import { SinglePageEditor } from "./presentation/SinglePageEditor";
 import { CategoryEditor } from "./presentation/CategoryEditor";
 import type { SinglePageDraft } from "./presentation/use-single-page-draft";
 import type { CategoryDraft } from "./presentation/use-category-draft";
+import { expectContained } from "@/test/mobile-containment";
 
 const mocks = vi.hoisted(() => ({ loadBus: vi.fn(), notify: vi.fn() }));
 const shownProject = vi.hoisted(() => ({
@@ -92,26 +93,6 @@ const workspace = (children: ReactNode) => (
     </div>
   </CoreAdminContext>
 );
-
-const expectContained = (container: HTMLElement, width: number) => {
-  const surface = container.querySelector<HTMLElement>(
-    ".project-workspace-content",
-  )!;
-  expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
-  expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(width + 1);
-  for (const element of surface.querySelectorAll<HTMLElement>(
-    "button, p, h2, h3, h4, summary",
-  )) {
-    if (element.getClientRects().length === 0) continue;
-    expect(
-      element.scrollWidth,
-      element.textContent ?? element.tagName,
-    ).toBeLessThanOrEqual(element.clientWidth + 1);
-    expect(element.getBoundingClientRect().right).toBeLessThanOrEqual(
-      surface.getBoundingClientRect().right + 1,
-    );
-  }
-};
 
 beforeEach(() => {
   mocks.loadBus.mockReset();

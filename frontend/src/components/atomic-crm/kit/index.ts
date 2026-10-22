@@ -27,3 +27,4 @@ export {
   type ListTableColumn,
 } from "./list-table";
 export { AppModal, AppModalOverlay, SheetDragHandle } from "./app-modal";
+export { MobilePageHeader } from "./mobile-page-header";

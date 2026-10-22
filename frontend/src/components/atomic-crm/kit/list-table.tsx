@@ -17,6 +17,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { cx } from "@/utils/cx";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { EmptyState } from "./page-shell";
 
 /**
@@ -72,6 +73,13 @@ type ListTableProps<RecordType extends { id: string | number }> = {
   columns: ListTableColumn<RecordType>[];
   /** Rendered per row in the trailing actions cell. */
   rowActions?: (record: RecordType) => ReactNode;
+  /**
+   * Phone-width fallback: when set and the viewport is below `md`, the table
+   * is replaced by a `<ul role="list">` of cards (one per record, each inside
+   * a `RecordContextProvider`). Without it the table simply scrolls
+   * horizontally on phones. Desktop is untouched either way.
+   */
+  renderMobileCard?: (record: RecordType) => ReactNode;
   /** Accessible name of the trailing actions column. */
   actionsLabel?: string;
   /** Rendered above the table, inside the card (e.g. the count strip). */
@@ -94,6 +102,7 @@ export const ListTable = <RecordType extends { id: string | number }>({
   ariaLabel,
   columns,
   rowActions,
+  renderMobileCard,
   actionsLabel = "Thao tác",
   header,
   empty,
@@ -104,6 +113,7 @@ export const ListTable = <RecordType extends { id: string | number }>({
 }: ListTableProps<RecordType>) => {
   const { data, isPending, error, refetch } = useListContext<RecordType>();
   const records = data ?? [];
+  const isMobile = useIsMobile();
   const actionsCellClassName = classNames?.actionsCell;
   const actionsHeadClassName = classNames?.actionsHead;
   // A stable identity matters: React Aria rebuilds its column collection when
@@ -198,6 +208,77 @@ export const ListTable = <RecordType extends { id: string | number }>({
     );
   }
 
+  // Phone card list: one list item per record. The card renderer receives the
+  // record inside a `RecordContextProvider`, exactly like a table cell, so
+  // cell components keep working in both anatomies.
+  const body =
+    isMobile && renderMobileCard ? (
+      <ul role="list" className="m-0 list-none divide-y divide-secondary p-0">
+        {records.map((record) => (
+          <li key={String(record.id)} className="min-h-11">
+            <RecordContextProvider value={record}>
+              {renderMobileCard(record)}
+            </RecordContextProvider>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <div className={isMobile ? "overflow-x-auto" : undefined}>
+        <Table
+          aria-label={ariaLabel}
+          selectionMode="none"
+          className={classNames?.table}
+        >
+          <Table.Header className={classNames?.head} columns={allColumns}>
+            {(column: ListTableColumn<RecordType>) =>
+              typeof column.header === "string" ? (
+                <Table.Head
+                  id={column.id}
+                  label={column.header}
+                  isRowHeader={column.isRowHeader}
+                  className={cx(headClassName, column.headClassName)}
+                />
+              ) : (
+                <Table.Head
+                  id={column.id}
+                  isRowHeader={column.isRowHeader}
+                  className={cx(headClassName, column.headClassName)}
+                >
+                  {column.header}
+                </Table.Head>
+              )
+            }
+          </Table.Header>
+          <Table.Body className={classNames?.body} items={records}>
+            {(record: RecordType) => (
+              <Table.Row
+                id={String(record.id)}
+                columns={allColumns}
+                className={cx("h-auto!", classNames?.row)}
+              >
+                {(column: ListTableColumn<RecordType>) => (
+                  <Table.Cell
+                    className={cx("p-3 align-middle", column.cellClassName)}
+                  >
+                    {/* react-admin's `Datagrid` gives every cell a record
+                        context, so cell components may legally call
+                        `useRecordContext()` (the users directory's no-props
+                        badges and row actions do). The wrap must sit inside the
+                        row's children function: React Aria renders only the
+                        cells from that function into the real DOM, so a
+                        provider around the `Table.Row` never wraps them. */}
+                    <RecordContextProvider value={record}>
+                      {column.cell(record)}
+                    </RecordContextProvider>
+                  </Table.Cell>
+                )}
+              </Table.Row>
+            )}
+          </Table.Body>
+        </Table>
+      </div>
+    );
+
   return (
     <section
       className={cx(
@@ -206,58 +287,7 @@ export const ListTable = <RecordType extends { id: string | number }>({
       )}
     >
       {header}
-      <Table
-        aria-label={ariaLabel}
-        selectionMode="none"
-        className={classNames?.table}
-      >
-        <Table.Header className={classNames?.head} columns={allColumns}>
-          {(column: ListTableColumn<RecordType>) =>
-            typeof column.header === "string" ? (
-              <Table.Head
-                id={column.id}
-                label={column.header}
-                isRowHeader={column.isRowHeader}
-                className={cx(headClassName, column.headClassName)}
-              />
-            ) : (
-              <Table.Head
-                id={column.id}
-                isRowHeader={column.isRowHeader}
-                className={cx(headClassName, column.headClassName)}
-              >
-                {column.header}
-              </Table.Head>
-            )
-          }
-        </Table.Header>
-        <Table.Body className={classNames?.body} items={records}>
-          {(record: RecordType) => (
-            <Table.Row
-              id={String(record.id)}
-              columns={allColumns}
-              className={cx("h-auto!", classNames?.row)}
-            >
-              {(column: ListTableColumn<RecordType>) => (
-                <Table.Cell
-                  className={cx("p-3 align-middle", column.cellClassName)}
-                >
-                  {/* react-admin's `Datagrid` gives every cell a record
-                      context, so cell components may legally call
-                      `useRecordContext()` (the users directory's no-props
-                      badges and row actions do). The wrap must sit inside the
-                      row's children function: React Aria renders only the
-                      cells from that function into the real DOM, so a
-                      provider around the `Table.Row` never wraps them. */}
-                  <RecordContextProvider value={record}>
-                    {column.cell(record)}
-                  </RecordContextProvider>
-                </Table.Cell>
-              )}
-            </Table.Row>
-          )}
-        </Table.Body>
-      </Table>
+      {body}
       {pagination === false ? null : (
         <ListPagination rowsPerPageOptions={pagination?.rowsPerPageOptions} />
       )}

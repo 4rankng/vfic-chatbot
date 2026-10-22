@@ -18,6 +18,9 @@
   --uu-inbox-message-meta: #5d5550;
   --uu-inbox-muted: #6d625c;
   --uu-inbox-faint: #9a8c83;
+  /* Attention ring ink (needs-attention rows). No console token matches this
+     amber; declared once here instead of inlined per rule. */
+  --uu-inbox-attention: #e5a429;
   --uu-inbox-canvas: #fff6ed;
   --uu-inbox-surface: #fffcf8;
   --uu-inbox-surface-subtle: #f5ede5;

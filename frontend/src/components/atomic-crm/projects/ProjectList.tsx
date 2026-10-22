@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import {
   ListBase,
+  useDeleteWithUndoController,
   useListContext,
   useNotify,
   useRedirect,
@@ -10,15 +12,27 @@ import {
 import {
   Boxes,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   EllipsisVertical,
   FileText,
   Pencil,
   Plus,
   Power,
   PowerOff,
+  Trash2,
 } from "lucide-react";
 import { ListPagination } from "@/components/admin/list-pagination";
 import { DeleteButton } from "@/components/admin";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobilePageHeader } from "@/components/atomic-crm/kit/mobile-page-header";
+import {
+  AppModal,
+  AppModalOverlay,
+} from "@/components/atomic-crm/kit/app-modal";
+import { Dialog } from "@/components/application/modals/modal";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import {
   Accordion,
   AccordionContent,
@@ -57,6 +71,7 @@ const ProjectListContent = () => {
     total,
     page,
     perPage,
+    setPage,
     filterValues,
     displayedFilters,
     setFilters,
@@ -134,32 +149,42 @@ const ProjectListContent = () => {
   );
 
   const projectTotal = total ?? projects.length;
+  const isMobile = useIsMobile();
+  // The phone card list opens the knowledge panel in the kit bottom sheet;
+  // the desktop accordion keeps its inline expandable panel.
+  const [sheetProject, setSheetProject] = useState<Project | null>(null);
+  const createButton = isAdmin ? (
+    <Button
+      size="sm"
+      onClick={() => redirect("create", "projects")}
+      className="project-create-button"
+      aria-label="Tạo dự án"
+    >
+      <Plus className="size-4" aria-hidden="true" />
+      Tạo dự án
+    </Button>
+  ) : null;
 
   return (
     <ProjectWorkspaceShell>
       <div className="project-workspace-content">
         <div className="ops-page-shell project-page-shell">
-          <header className="ops-command-header project-command-header">
-            <div className="ops-command-title">
-              <div className="min-w-0">
-                <h1>Dự án tuyển dụng</h1>
-                <p>Quản lý tuyển dụng và kiến thức tư vấn cho từng dự án.</p>
+          {isMobile ? (
+            <MobilePageHeader
+              title="Dự án tuyển dụng"
+              primaryAction={createButton}
+            />
+          ) : (
+            <header className="ops-command-header project-command-header">
+              <div className="ops-command-title">
+                <div className="min-w-0">
+                  <h1>Dự án tuyển dụng</h1>
+                  <p>Quản lý tuyển dụng và kiến thức tư vấn cho từng dự án.</p>
+                </div>
               </div>
-            </div>
-            <div className="project-command-actions">
-              {isAdmin && (
-                <Button
-                  size="sm"
-                  onClick={() => redirect("create", "projects")}
-                  className="project-create-button"
-                  aria-label="Tạo dự án"
-                >
-                  <Plus className="size-4" aria-hidden="true" />
-                  Tạo dự án
-                </Button>
-              )}
-            </div>
-          </header>
+              <div className="project-command-actions">{createButton}</div>
+            </header>
+          )}
 
           <ProjectDirectoryFilters
             query={query}
@@ -225,15 +250,28 @@ const ProjectListContent = () => {
           ) : isPending ? (
             <ProjectAccordionSkeleton />
           ) : projects.length > 0 ? (
-            <ProjectAccordionList
-              projects={projects}
-              isAdmin={isAdmin}
-              canEdit={canEdit}
-              onEdit={(project) => redirect("edit", "projects", project.id)}
-              onDeleted={() => refresh()}
-              onToggleActive={toggleActive}
-              isTogglingActive={isTogglingActive}
-            />
+            isMobile ? (
+              <ProjectMobileCardList
+                projects={projects}
+                isAdmin={isAdmin}
+                canEdit={canEdit}
+                onEdit={(project) => redirect("edit", "projects", project.id)}
+                onDeleted={() => refresh()}
+                onToggleActive={toggleActive}
+                isTogglingActive={isTogglingActive}
+                onOpenKnowledge={(project) => setSheetProject(project)}
+              />
+            ) : (
+              <ProjectAccordionList
+                projects={projects}
+                isAdmin={isAdmin}
+                canEdit={canEdit}
+                onEdit={(project) => redirect("edit", "projects", project.id)}
+                onDeleted={() => refresh()}
+                onToggleActive={toggleActive}
+                isTogglingActive={isTogglingActive}
+              />
+            )
           ) : (
             <EmptyState
               icon={<Boxes className="size-6" />}
@@ -247,15 +285,235 @@ const ProjectListContent = () => {
             />
           )}
 
-          {(projectTotal > perPage || page > 1) && (
-            <ListPagination
-              rowsPerPageOptions={[10, 25, 50, 100]}
-              className="ops-pagination"
-            />
-          )}
+          {(projectTotal > perPage || page > 1) &&
+            (isMobile ? (
+              <ProjectMobilePagination
+                page={page}
+                perPage={perPage}
+                total={projectTotal}
+                setPage={setPage}
+              />
+            ) : (
+              <ListPagination
+                rowsPerPageOptions={[10, 25, 50, 100]}
+                className="ops-pagination"
+              />
+            ))}
         </div>
       </div>
+      {sheetProject ? (
+        <AppModalOverlay
+          isOpen
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setSheetProject(null);
+          }}
+          isDismissable
+          className="uu-scope"
+        >
+          <AppModal className="w-full outline-hidden sm:max-w-md">
+            <Dialog
+              aria-label={`Kiến thức dự án ${sheetProject.name}`}
+              className="outline-hidden"
+            >
+              <div className="project-knowledge-sheet-body uu-scope">
+                <ProjectKnowledgePanel
+                  project={sheetProject}
+                  editable={canEdit}
+                  canManageSources={isAdmin}
+                />
+              </div>
+            </Dialog>
+          </AppModal>
+        </AppModalOverlay>
+      ) : null}
     </ProjectWorkspaceShell>
+  );
+};
+
+/**
+ * Row actions for one phone card, in the kit's base `Dropdown` (the
+ * LeadCardList idiom). Delete rides `useDeleteWithUndoController` — the same
+ * undo-notification flow the desktop `DeleteButton` uses, so data verbs and
+ * copy stay identical across anatomies.
+ */
+const ProjectCardMenu = ({
+  project,
+  isAdmin,
+  canEdit,
+  onEdit,
+  onToggleActive,
+  isTogglingActive,
+  onDeleted,
+}: {
+  project: Project;
+  isAdmin: boolean;
+  canEdit: boolean;
+  onEdit: (project: Project) => void;
+  onToggleActive?: (project: Project) => void;
+  isTogglingActive?: boolean;
+  onDeleted: () => void;
+}) => {
+  const { isPending: isDeleting, handleDelete } = useDeleteWithUndoController({
+    record: project,
+    resource: "projects",
+    redirect: false,
+    mutationOptions: { onSuccess: onDeleted },
+    successMessage: "Đã xóa dự án.",
+  });
+
+  return (
+    <Dropdown.Root>
+      <ButtonUtility
+        size="sm"
+        color="tertiary"
+        className="uu-scope project-card-menu-trigger"
+        aria-label={`Thao tác khác cho dự án ${project.name}`}
+        icon={<EllipsisVertical aria-hidden="true" />}
+      />
+      <Dropdown.Popover placement="bottom end" offset={8} className="uu-scope">
+        <Dropdown.Menu>
+          {canEdit ? (
+            <Dropdown.Item
+              id={`project-edit-${project.id}`}
+              label="Sửa dự án"
+              icon={Pencil}
+              onPress={() => onEdit(project)}
+            />
+          ) : null}
+          {canEdit && onToggleActive ? (
+            <Dropdown.Item
+              id={`project-toggle-${project.id}`}
+              label={project.is_active ? "Tắt dự án" : "Bật dự án"}
+              icon={project.is_active ? PowerOff : Power}
+              onPress={() => onToggleActive(project)}
+            />
+          ) : null}
+          {isAdmin ? (
+            <Dropdown.Item
+              id={`project-delete-${project.id}`}
+              label="Xóa dự án"
+              icon={Trash2}
+              isDisabled={isDeleting || isTogglingActive}
+              onPress={(event) =>
+                void handleDelete(event as unknown as ReactMouseEvent)
+              }
+            />
+          ) : null}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
+  );
+};
+
+/**
+ * Phone directory: one tappable card per project (title + meta badges), row
+ * actions in the base Dropdown. Tapping the card opens the knowledge panel in
+ * the bottom sheet — the phone counterpart of the desktop accordion's
+ * expandable panel.
+ */
+export const ProjectMobileCardList = ({
+  projects,
+  isAdmin,
+  canEdit,
+  onEdit,
+  onToggleActive,
+  isTogglingActive = false,
+  onDeleted,
+  onOpenKnowledge,
+}: {
+  projects: Project[];
+  isAdmin: boolean;
+  canEdit: boolean;
+  onEdit: (project: Project) => void;
+  onToggleActive?: (project: Project) => void;
+  isTogglingActive?: boolean;
+  onDeleted: () => void;
+  onOpenKnowledge: (project: Project) => void;
+}) => (
+  <ul className="project-card-list" role="list">
+    {projects.map((project) => {
+      const activeBadge = projectActiveBadge(project);
+      const ingestBadge = projectIngestBadge(project);
+
+      return (
+        <li key={String(project.id)}>
+          <div className="project-card">
+            <button
+              type="button"
+              className="project-card-main"
+              aria-label={`Mở kiến thức dự án ${project.name}`}
+              onClick={() => onOpenKnowledge(project)}
+            >
+              <span className="project-card-title">{project.name}</span>
+              <span className="project-card-badges">
+                <Badge variant="outline" className={activeBadge.className}>
+                  {activeBadge.label}
+                </Badge>
+                {ingestBadge ? (
+                  <Badge variant="outline" className={ingestBadge.className}>
+                    {ingestBadge.label}
+                  </Badge>
+                ) : null}
+              </span>
+            </button>
+            <ProjectCardMenu
+              project={project}
+              isAdmin={isAdmin}
+              canEdit={canEdit}
+              onEdit={onEdit}
+              onToggleActive={onToggleActive}
+              isTogglingActive={isTogglingActive}
+              onDeleted={onDeleted}
+            />
+          </div>
+        </li>
+      );
+    })}
+  </ul>
+);
+
+/** Two 44px page steppers and a compact "x / y" label. */
+const ProjectMobilePagination = ({
+  page,
+  perPage,
+  total,
+  setPage,
+}: {
+  page: number;
+  perPage: number;
+  total: number;
+  setPage: (page: number) => void;
+}) => {
+  const lastPage = Math.max(1, Math.ceil(total / perPage));
+
+  return (
+    <nav className="project-mobile-pagination" aria-label="Phân trang dự án">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="project-mobile-page-btn"
+        aria-label="Trang trước"
+        disabled={page <= 1}
+        onClick={() => setPage(page - 1)}
+      >
+        <ChevronLeft className="size-4" aria-hidden="true" />
+      </Button>
+      <span className="project-mobile-pagination-label">
+        {page} / {lastPage}
+      </span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="project-mobile-page-btn"
+        aria-label="Trang sau"
+        disabled={page >= lastPage}
+        onClick={() => setPage(page + 1)}
+      >
+        <ChevronRight className="size-4" aria-hidden="true" />
+      </Button>
+    </nav>
   );
 };
 

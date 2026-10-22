@@ -2,18 +2,6 @@
 .inbox-bg-container .mobile-toggle {
   display: none;
 }
-.inbox-bg-container .backdrop {
-  display: none;
-}
-.inbox-bg-container .context-overlay-scrim {
-  position: absolute;
-  inset: 0;
-  z-index: 45;
-  border: 0;
-  background: rgba(0, 0, 0, 0.32);
-  backdrop-filter: none;
-  cursor: default;
-}
 
 /* The shared frame enters document flow below 1024px. On tablets the inbox
    still has bounded, independently scrolling panes, so percentage heights
@@ -99,16 +87,19 @@
      viewport when that same rendered detail state hides both bars. */
   .workspace-frame-content > .inbox-bg-container.conversation-workspace {
     height: calc(
-      100vh - 3.5rem - 3.75rem - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px) - var(--chat-keyboard-inset, 0px)
+      100vh - var(--workspace-topbar-h) - var(--workspace-tabbar-h) -
+        env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+        var(--chat-keyboard-inset, 0px)
     );
     height: calc(
-      100dvh - 3.5rem - 3.75rem - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px) - var(--chat-keyboard-inset, 0px)
+      100dvh - var(--workspace-topbar-h) - var(--workspace-tabbar-h) -
+        env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+        var(--chat-keyboard-inset, 0px)
     );
     min-height: calc(
-      100dvh - 3.5rem - 3.75rem - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px) - var(--chat-keyboard-inset, 0px)
+      100dvh - var(--workspace-topbar-h) - var(--workspace-tabbar-h) -
+        env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+        var(--chat-keyboard-inset, 0px)
     );
   }
 
@@ -224,7 +215,7 @@
   }
 
   .inbox-bg-container .conversation.needs-attention .avatar {
-    box-shadow: inset 0 0 0 2px #e5a429;
+    box-shadow: inset 0 0 0 2px var(--uu-inbox-attention);
   }
 
   .inbox-bg-container .conv-top {
@@ -254,12 +245,9 @@
     row-gap: 3px;
   }
 
-  /* A conversation row is a scan-first queue item, not a stack of badges.
-     Urgency is carried by the avatar treatment and announced to screen
-     readers; status and priority are available in the conversation itself. */
-  .inbox-bg-container .conv-meta-row {
-    display: none;
-  }
+  /* Attention/priority badges stay visible on phones: the row is the triage
+     surface. The base `.conv-meta-row` (inline-flex, wrap, min-width 0) is
+     restored, so chips flow onto a second line instead of being hidden. */
   /* List: in-flow, full-width, visible by default. */
   .inbox-bg-container .left-panel {
     position: relative;
@@ -318,14 +306,6 @@
     visibility: visible;
   }
 
-  .inbox-bg-container .app.detail-open .backdrop {
-    display: block;
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: none;
-    z-index: 2;
-  }
   .inbox-bg-container .right-panel {
     width: 100%;
     max-width: 100%;
@@ -340,10 +320,6 @@
     border-left: 0;
     box-shadow: none;
     z-index: 70;
-  }
-  .inbox-bg-container .context-overlay-scrim {
-    position: fixed;
-    z-index: 65;
   }
   .conversation-actions-menu {
     width: min(20rem, calc(100vw - 1rem));

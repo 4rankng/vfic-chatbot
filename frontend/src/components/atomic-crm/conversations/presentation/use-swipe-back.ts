@@ -29,6 +29,10 @@ export function useSwipeBack({
     const container = containerRef.current;
     if (!container) return;
 
+    // Reduced motion: the gesture still commits the back navigation, but
+    // without the live drag-follow preview.
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
     let pane: HTMLElement | null = null;
     let startX = 0;
     let startY = 0;
@@ -69,6 +73,8 @@ export function useSwipeBack({
         }
       }
       if (axis !== "x" || dx <= 0) return;
+      // No live translate preview; release decides the commit.
+      if (reducedMotion.matches) return;
       pane.style.transition = "none";
       pane.style.transform = `translateX(${dx}px)`;
     };
