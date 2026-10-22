@@ -24,6 +24,9 @@ class AgentModel(Protocol):
     multiple tool calls arrive in one LLM response, each runs on its own session.
     ``required_tool`` forces the first tool round to establish an authority source;
     ``required_tool_args`` replaces model-supplied arguments for that tool.
+    ``required_tool_arg_overrides`` (optional) MERGES per-tool argument floors
+    into whatever the model supplied — used for hard constraints the model must
+    not be able to drop (e.g. the seated-work catalog pre-filter).
     ``on_delta`` (optional) receives answer text as it is streamed, enabling
     progressive delivery; without it the call is a single blocking ``ainvoke``.
     ``on_evidence`` (optional) receives the accumulated tool results after each
@@ -46,6 +49,7 @@ class AgentModel(Protocol):
         metrics: dict | None = None,
         required_tool: str | None = None,
         required_tool_args: dict | None = None,
+        required_tool_arg_overrides: dict[str, dict] | None = None,
         on_delta: Callable[[str], Awaitable[None]] | None = None,
         on_evidence: Callable[[list[str]], Awaitable[None]] | None = None,
     ) -> str: ...

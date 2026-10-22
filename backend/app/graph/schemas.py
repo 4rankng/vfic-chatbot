@@ -106,6 +106,25 @@ TOOL_SCHEMAS = [
                         "minimum": 1,
                         "description": "Mức lương tối thiểu ứng viên mong muốn (VND/tháng).",
                     },
+                    "work_posture": {
+                        "type": "string",
+                        "enum": ["seated"],
+                        "description": (
+                            "Ràng buộc tư thế làm việc của ứng viên. Truyền đúng 'seated' khi "
+                            "ứng viên nêu cần việc NGỒI (ngồi làm, không đứng lâu, tay chân khó "
+                            "vận động, ngồi làm việc): tool loại cứng mọi dự án đứng máy hoặc "
+                            "chưa rõ tư thế khỏi danh sách. Không truyền khi ứng viên không nêu "
+                            "ràng buộc này."
+                        ),
+                    },
+                    "no_heavy_lifting": {
+                        "type": "boolean",
+                        "description": (
+                            "Truyền true khi ứng viên nêu KHÔNG mang vác được (không mang vác, "
+                            "không nhấc đồ nặng, tay chân yếu): tool chỉ giữ các dự án có vị trí "
+                            "không phải mang vác theo dữ liệu trích xuất."
+                        ),
+                    },
                     "strict_criteria": {
                         "type": "boolean",
                         "description": (
@@ -558,6 +577,8 @@ async def _dispatch_tool(
                 salary_min_vnd=args.get("salary_min_vnd"),
                 sort_by=args.get("sort_by"),
                 strict_criteria=args.get("strict_criteria", False),
+                work_posture=args.get("work_posture"),
+                no_heavy_lifting=bool(args.get("no_heavy_lifting")),
             )
         elif name == "get_project_distance":
             result = await get_project_distance(

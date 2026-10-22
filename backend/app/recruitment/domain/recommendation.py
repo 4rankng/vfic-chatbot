@@ -20,6 +20,16 @@ from app.shared.domain.text import normalize_vietnamese_text
 
 SortBy = Literal["updated_at", "salary_desc", "salary_asc", "created_at"]
 
+# Structured physical attributes of a job opening (Zalo post-mortem 2026-10-21:
+# the bot pitched 4P Electronics "ngồi" when the plant stands its workers, and
+# the contradiction cost a follower). "unknown" is a first-class value — an
+# unparsed posting must NEVER be treated as satisfying a stated constraint.
+Posture = Literal["seated_only", "standing_only", "mixed", "unknown"]
+HeavyLifting = Literal["no", "light_under_5kg", "heavy_over_10kg", "unknown"]
+HealthCert = Literal[
+    "mandatory_candidate_pays", "company_sponsored", "none_initially", "unknown"
+]
+
 # Mean Earth radius in kilometres (IUGG). Used only to turn two coordinates into
 # a candidate-facing "cách … km" figure, so the few-hundred-metre difference
 # between this and an ellipsoidal mean is far below the precision the answer
@@ -129,6 +139,12 @@ class ProjectScopeItem:
     # search per turn.
     age_min: int | None = None
     age_max: int | None = None
+    # Structured physical attributes from the job row (posture/heavy lifting/
+    # health certificate). "unknown" mirrors the DB default: an unparsed
+    # posting carries no promise either way.
+    posture: str = "unknown"
+    heavy_lifting: str = "unknown"
+    health_cert: str = "unknown"
 
 
 @dataclass(frozen=True)
@@ -154,6 +170,53 @@ class ProjectFeatures:
     # ranker then carries no distance for it.
     latitude: float | None = None
     longitude: float | None = None
+    # Project-level physical-attribute aggregates over the project's job rows
+    # (card-only projects carry "unknown" — no job row, no promise). These feed
+    # the HARD physical-constraint filter: a candidate who must sit is never
+    # pitched a standing-only or unparsed project.
+    posture: str = "unknown"
+    heavy_lifting: str = "unknown"
+
+
+def aggregate_posture(items: tuple[ProjectScopeItem, ...] | list[ProjectScopeItem]) -> str:
+    """Roll job-row postures up to one project-level posture value.
+
+    The safe direction is "what can this project OFFER a seated candidate":
+    ``seated_only``  — every known row is seated work (unknown rows don't
+                       block the project; they just aren't the pitch),
+    ``standing_only``— at least one standing row and no seated/mixed row,
+    ``mixed``        — the project offers both seated and standing work,
+    ``unknown``      — nothing known at all (never satisfies a constraint).
+    """
+    known = {item.posture for item in items or ()} - {"unknown"}
+    if not known:
+        return "unknown"
+    seated_known = bool(known & {"seated_only", "mixed"})
+    standing_known = "standing_only" in known or "mixed" in known
+    if seated_known and standing_known:
+        return "mixed"
+    if seated_known:
+        return "seated_only"
+    if standing_known:
+        return "standing_only"
+    return "unknown"
+
+
+def aggregate_heavy_lifting(
+    items: tuple[ProjectScopeItem, ...] | list[ProjectScopeItem],
+) -> str:
+    """Roll job-row lifting classes up to the project's lightest known offer.
+
+    A project PASSES a "no heavy lifting" request when at least one of its rows
+    is known lifting-free; the aggregate therefore reports the LIGHTEST known
+    class (a heavy row beside a free row still leaves the project pitchable —
+    the heavy row simply isn't the pitch). Unknown rows never upgrade it.
+    """
+    order = {"no": 0, "light_under_5kg": 1, "heavy_over_10kg": 2}
+    known = [item.heavy_lifting for item in items or () if item.heavy_lifting in order]
+    if not known:
+        return "unknown"
+    return min(known, key=lambda value: order[value])
 
 
 @dataclass(frozen=True)
@@ -365,6 +428,25 @@ def _updated_at_sort_key(project: ProjectFeatures) -> tuple[bool, float]:
     return True, project.updated_at.timestamp()
 
 
+def _project_posture(project: ProjectFeatures) -> str:
+    """The project's effective posture: stored aggregate, else recomputed.
+
+    The catalog repository stores the aggregate; the recompute covers rows
+    built without it (tests, older call sites) from the same scope items, so
+    the hard filter never silently degrades a known-seated project to
+    ``unknown`` because a constructor skipped the field.
+    """
+    if project.posture != "unknown":
+        return project.posture
+    return aggregate_posture(project.scope)
+
+
+def _project_heavy_lifting(project: ProjectFeatures) -> str:
+    if project.heavy_lifting != "unknown":
+        return project.heavy_lifting
+    return aggregate_heavy_lifting(project.scope)
+
+
 def rank_projects(
     projects: list[ProjectFeatures],
     *,
@@ -376,6 +458,8 @@ def rank_projects(
     strict_criteria: bool = False,
     origin: tuple[float, float] | None = None,
     priority_ids: frozenset[str] | None = None,
+    work_posture: str | None = None,
+    no_heavy_lifting: bool = False,
 ) -> FitLookup:
     """Fit every active project against the stated preferences, best fit first.
 
@@ -386,6 +470,14 @@ def rank_projects(
     ``strict_criteria`` is for an explicit "only matching projects" request;
     every stated criterion then needs source-backed full evidence. Unknown
     values are not silently treated as matches.
+
+    Physical constraints (``work_posture="seated"``, ``no_heavy_lifting=True``)
+    are HARD filters like ``company`` — the 2026-10-21 Zalo post-mortem: the
+    bot pitched a standing-only plant to a candidate who must sit, and the
+    contradiction cost the follow. A seated request keeps only projects whose
+    aggregate posture is ``seated_only`` or ``mixed``; ``standing_only`` and
+    ``unknown`` NEVER survive to be pitched. ``no_heavy_lifting`` keeps only
+    projects with a known lifting-free row.
 
     ``origin`` is the candidate's own ``(lat, lng)``. When given, every fit
     carries ``distance_km`` and the default (fit) order becomes nearest-first,
@@ -398,8 +490,22 @@ def rank_projects(
     job_scope = (job_scope or "").strip() or None
     company = (company or "").strip() or None
     location = (location or "").strip() or None
+    seated_required = (work_posture or "").strip().casefold() == "seated"
 
     candidates = projects
+    if no_heavy_lifting or seated_required:
+        # Deterministic set logic BEFORE any scoring: excluded projects never
+        # reach the payload the LLM composes from, so no prompt rule has to be
+        # trusted for the promise to hold.
+        candidates = [
+            project
+            for project in candidates
+            if (
+                not seated_required
+                or _project_posture(project) in {"seated_only", "mixed"}
+            )
+            and (not no_heavy_lifting or _project_heavy_lifting(project) == "no")
+        ]
     company_terms = _filter_terms(company)
     if company_terms:
         candidates = [

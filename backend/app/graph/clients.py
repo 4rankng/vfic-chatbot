@@ -152,6 +152,7 @@ class _AgentTurn:
         "metrics",
         "required_tool",
         "required_tool_args",
+        "required_tool_arg_overrides",
         "forced_project_slug",
         "conversation_scope",
         "on_delta",
@@ -191,6 +192,7 @@ class _AgentTurn:
         metrics: dict | None,
         required_tool: str | None,
         required_tool_args: dict | None,
+        required_tool_arg_overrides: dict[str, dict] | None,
         forced_project_slug: str | None,
         conversation_scope: str = "",
         on_delta,
@@ -212,6 +214,12 @@ class _AgentTurn:
         self.metrics = metrics
         self.required_tool = required_tool
         self.required_tool_args = required_tool_args
+        # Per-tool arg floors MERGED into whatever the model supplied (unlike
+        # required_tool_args, which replaces). The lane uses this for
+        # hard-filters the model must not be able to drop — e.g. the
+        # seated-work pre-filter (Zalo post-mortem 2026-10-21): the constraint
+        # is injected server-side, so no prompt rule is load-bearing.
+        self.required_tool_arg_overrides = required_tool_arg_overrides or {}
         self.forced_project_slug = forced_project_slug
         # Server-side conversation identity (see lanes._agent_turn). Injected
         # into tool args at dispatch so per-conversation tools never trust a
@@ -283,6 +291,12 @@ class _AgentTurn:
             if name == self.required_tool and self.required_tool_args is not None
             else tc.get("args", {})
         )
+        # Hard-filter floors merge AFTER the replacement above: a forced-args
+        # call keeps its floor too, and the model's own composition survives
+        # beside the injected constraint (its location/company args still
+        # reach the tool — only the constraint keys are pinned).
+        if name in self.required_tool_arg_overrides:
+            raw_args = {**raw_args, **self.required_tool_arg_overrides[name]}
         if self.forced_project_slug and name in {
             "list_active_projects",
             "search_bus_timetable",
@@ -373,6 +387,7 @@ class MiniMaxAgent:
         metrics: dict | None = None,
         required_tool: str | None = None,
         required_tool_args: dict | None = None,
+        required_tool_arg_overrides: dict[str, dict] | None = None,
         forced_project_slug: str | None = None,
         conversation_scope: str = "",
         retry_empty_generation: bool = False,
@@ -403,6 +418,7 @@ class MiniMaxAgent:
             metrics=metrics,
             required_tool=required_tool,
             required_tool_args=required_tool_args,
+            required_tool_arg_overrides=required_tool_arg_overrides,
             forced_project_slug=forced_project_slug,
             conversation_scope=conversation_scope,
             on_delta=on_delta,

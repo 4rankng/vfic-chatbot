@@ -62,6 +62,18 @@ from app.graph.tingting_guide import (
     tingting_support_system_prompt,
 )
 from app.graph.types import BotRunState, GraphDeps, TurnOutcome
+from app.graph import trust_guards
+from app.graph.trust_guards import (
+    POST_PHONE_STOP_INSTRUCTION,
+    SEATED_CONSTRAINT_HINT,
+    escalation_reply,
+    identity_honesty_instruction,
+    is_escalation_message,
+    is_phone_handover,
+    physical_constraint_tool_args,
+    reply_repeats_prior_block,
+    REPETITION_RETRY_INSTRUCTION,
+)
 from app.prompts.vfic_persona import vfic_hotline_reply
 from app.recruitment.application.lead_lookup import (
     LeadLookup,
@@ -307,6 +319,7 @@ async def run_manifest_composed_agent(
     lookup_query: str | None = None,
     required_tool: str | None = None,
     required_tool_args: dict | None = None,
+    required_tool_arg_overrides: dict[str, dict] | None = None,
     metrics: dict | None = None,
 ) -> str | None:
     """Run an active manifest policy without granting legacy tool authority."""
@@ -336,6 +349,8 @@ async def run_manifest_composed_agent(
         agent_kwargs["required_tool"] = required_tool
     if required_tool_args is not None:
         agent_kwargs["required_tool_args"] = required_tool_args
+    if required_tool_arg_overrides:
+        agent_kwargs["required_tool_arg_overrides"] = required_tool_arg_overrides
     return await deps.agent.agent(
         user_text,
         **agent_kwargs,
@@ -480,6 +495,65 @@ async def _absence_self_check(
     return retry_reply
 
 
+async def _repetition_self_check(
+    *,
+    deps: GraphDeps,
+    reply: str,
+    agent_kwargs: dict,
+    timings: dict | None,
+    user_text: str,
+    chat_id: str,
+    recent_messages: list[Any],
+    lead_profile: str,
+    lead_collection_instruction: str,
+    route_hint: str,
+) -> str:
+    """Regenerate once when the reply re-sends a block of the previous reply.
+
+    Zalo post-mortem 2026-10-21: the bot re-pasted the same job/salary blurb
+    across consecutive turns and the user unfollowed. Detection is
+    deterministic (:func:`reply_repeats_prior_block`); one bounded retry runs
+    the agent again under a no-repeat instruction. At most one retry, never a
+    loop; a failed/empty retry ships the ORIGINAL reply — a repetitive answer
+    still beats suppressing the turn.
+    """
+    if timings is None:
+        return reply
+    prior_bot_reply = trust_guards._last_bot_body(recent_messages)
+    if not prior_bot_reply or not reply_repeats_prior_block(reply, prior_bot_reply):
+        return reply
+    timings["repetition_guard"] = "retrying"
+    retry_kwargs = dict(agent_kwargs)
+    # The retry must never append to a live progressive stream.
+    retry_kwargs.pop("on_delta", None)
+    retry_kwargs.pop("on_evidence", None)
+    retry_text = build_agent_user_text(
+        chat_id=chat_id,
+        current_user_text=user_text,
+        recent_messages=recent_messages,
+        lead_profile=lead_profile,
+        lead_collection_instruction=lead_collection_instruction,
+        route_hint=f"{route_hint}\n\n{REPETITION_RETRY_INSTRUCTION}"
+        if route_hint
+        else REPETITION_RETRY_INSTRUCTION,
+    )
+    try:
+        retry_reply = await deps.agent.agent(retry_text, **retry_kwargs)
+    except Exception:  # noqa: BLE001 — the guard must never break the turn
+        logger.warning("repetition retry failed; shipping original reply", exc_info=True)
+        timings["repetition_guard"] = "retry_error"
+        return reply
+    if not (retry_reply or "").strip():
+        timings["repetition_guard"] = "retry_empty"
+        return reply
+    timings["repetition_guard"] = (
+        "rewritten"
+        if not reply_repeats_prior_block(retry_reply, prior_bot_reply)
+        else "retry_still_repeating"
+    )
+    return retry_reply
+
+
 async def _agent_turn(
     state: BotRunState,
     deps: GraphDeps,
@@ -515,6 +589,22 @@ async def _agent_turn(
         # running a flow this channel cannot serve (the guide and the reset tools
         # are not bound here either).
         return TINGTING_RESET_REDIRECT_REPLY
+    if (
+        not tingting_support_account
+        and not tingting_reset_allowed
+        and is_escalation_message(user_text)
+    ):
+        # Zalo post-mortem 2026-10-21 (user Toàn, unfollowed): the user wrote he
+        # had broken limbs and the bot kept consulting on jobs. An injury/
+        # disability disclosure is a human matter, deterministically detected:
+        # the operator-approved hotline handoff IS the reply — one message, zero
+        # advisory questions, no pitch, no model round to go wrong. The TingTing
+        # accounts keep their own operator rule (fixed support-OA replies only).
+        if timings is not None:
+            timings.setdefault("intent", route.intent)
+            timings.setdefault("route_strategy", route.strategy)
+            timings.setdefault("route_reason", "injury_escalation")
+        return escalation_reply()
     if (
         tingting_support_account
         and decisions.self_checkin
@@ -668,6 +758,25 @@ async def _agent_turn(
         tingting_reset_allowed=tingting_reset_allowed,
     )
     vacancy_catalog_required = vacancy_catalog_required or age_eligibility_required
+    # Zalo post-mortem 2026-10-21: a stated physical constraint (ngồi / không
+    # mang vắc / tay chân khó vận động) forces the catalog tool AND pins its
+    # hard-filter args server-side — the model can neither skip the filter nor
+    # drop its arguments, so standing-only/unparsed projects cannot be pitched
+    # no matter what the prompt lost. Same route/focus conditions as the age
+    # gate: a focused project answers from its own KB; the TingTing accounts
+    # never touch the recruitment catalog.
+    physical_constraint_args: dict[str, object] = {}
+    if (
+        route.intent in _ELIGIBILITY_ROUTE_INTENTS
+        and not focused_project
+        and not tingting_support_account
+        and not tingting_reset_allowed
+    ):
+        physical_constraint_args = physical_constraint_tool_args(user_text)
+        if physical_constraint_args:
+            vacancy_catalog_required = True
+            if timings is not None:
+                timings["physical_constraint_filter"] = dict(physical_constraint_args)
     compare_income_required_args = _compare_income_required_args(
         user_text,
         route_intent=route.intent,
@@ -730,6 +839,13 @@ async def _agent_turn(
             # The model composes the vacancy criteria args from the conversation;
             # the tool ranks the whole catalog against whatever the candidate stated.
             required_tool_args=(None if vacancy_catalog_required else compare_income_required_args),
+            # The physical-constraint floor rides along even on manifest
+            # deployments: the hard filter must not depend on the prompt.
+            required_tool_arg_overrides=(
+                {"list_active_projects": dict(physical_constraint_args)}
+                if physical_constraint_args
+                else None
+            ),
             metrics=timings,
         )
         if composed is not None:
@@ -1030,12 +1146,33 @@ async def _agent_turn(
         if compare_income_required_args is not None
         else _AGE_ELIGIBILITY_HINT
         if age_eligibility_required
+        else SEATED_CONSTRAINT_HINT
+        if physical_constraint_args
         else routing_instruction(
             TurnRoute("recommend", "structured_lookup", reason="vacancy_listing")
         )
         if vacancy_catalog_required and route.reason != "vacancy_listing"
         else routing_instruction(route)
     )
+    # Post-mortem turn-level instructions (2026-10-21) — deterministic triggers,
+    # prompt-level reinforcement:
+    # - the turn a phone number arrives ENDS the interrogation (C.2): confirm
+    #   receipt, no new screening questions, no new pitch;
+    # - a direct "bot à / người thật à" question gets the honesty instruction
+    #   (D) beside the persona's own identity rule.
+    turn_instructions: list[str] = []
+    if not tingting_reset_allowed and not tingting_support_account:
+        if is_phone_handover(user_text):
+            turn_instructions.append(POST_PHONE_STOP_INSTRUCTION)
+            if timings is not None:
+                timings["post_phone_stop"] = True
+        identity_instruction = identity_honesty_instruction(user_text)
+        if identity_instruction is not None:
+            turn_instructions.append(identity_instruction)
+            if timings is not None:
+                timings["identity_honesty_hint"] = True
+    if turn_instructions:
+        route_hint = f"{route_hint}\n\n" + "\n\n".join(turn_instructions)
 
     contextual_user_text = build_agent_user_text(
         chat_id=chat_id,
@@ -1076,7 +1213,9 @@ async def _agent_turn(
         agent_kwargs["forced_project_slug"] = project_slug
     if vacancy_catalog_required:
         agent_kwargs["required_tool"] = "list_active_projects"
-        # No forced args: the model composes the criteria from the conversation.
+        # No forced args: the model composes the criteria from the conversation
+        # — EXCEPT the hard physical-constraint floor below, which merges in
+        # server-side whatever the model passes.
         agent_kwargs["required_tool_args"] = None
     elif compare_income_required_args is not None:
         agent_kwargs["required_tool"] = "compare_income"
@@ -1086,6 +1225,14 @@ async def _agent_turn(
         agent_kwargs["required_tool_args"] = {
             "query": evidence_query or user_text,
             "project_slug": getattr(project_context, "project_slug", None),
+        }
+    if physical_constraint_args:
+        # The hard-filter floor: merged into every list_active_projects call
+        # this turn at dispatch time (clients.dispatch_one), replacing any
+        # model-supplied value for the constrained keys while keeping the
+        # model's own location/company composition.
+        agent_kwargs["required_tool_arg_overrides"] = {
+            "list_active_projects": dict(physical_constraint_args)
         }
     if resolved_tool_registry is not None:
         agent_kwargs["resolved_tool_registry"] = resolved_tool_registry
@@ -1114,6 +1261,18 @@ async def _agent_turn(
         lead_collection_instruction=lead_collection_instruction,
         tingting_reset_allowed=tingting_reset_allowed,
         tingting_support_account=tingting_support_account,
+    )
+    reply = await _repetition_self_check(
+        deps=deps,
+        reply=reply,
+        agent_kwargs=agent_kwargs,
+        timings=timings,
+        user_text=user_text,
+        chat_id=chat_id,
+        recent_messages=recent_messages,
+        lead_profile=lead_profile,
+        lead_collection_instruction=lead_collection_instruction,
+        route_hint=route_hint,
     )
     if timings is not None:
         timings["tools_invoked"] = sorted(

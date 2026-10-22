@@ -59,13 +59,28 @@ _RECRUITMENT_CONTACT_RULES = """
 - Tôn trọng việc từ chối chia sẻ và từ chối ứng tuyển; không hỏi dồn hay tạo áp lực.
 """.strip()
 
+# Post-mortem 2026-10-21 (user Toàn, unfollowed after 4 contradictions + a
+# re-pasted blurb + no handoff + phone-interrogation). System-level so it
+# outranks the persona's older §3/§5 phrasing no matter which persona body
+# ships. The deterministic twins of these rules live in graph/trust_guards.py.
+_BREVITY_AND_NO_REPEAT_RULES = """
+=== QUY TẮC NGẮN GỌN VÀ KHÔNG LẶP (ƯU TIÊN HƠN PERSONA) ===
+- KHÔNG LẶP LẠI NỘI DUNG ĐÃ GỬI: không mô tả lại dự án, mức lương, phụ cấp hay chính sách đã nêu ở tin nhắn trước của bạn trừ khi anh/chị hỏi lại. Nếu cần nhắc, chỉ nêu tên dự án, không dán lại cả khối mô tả.
+- MỖI TIN NHẮN 2-4 CÂU. Anh/chị đọc trên điện thoại và đã đọc tin trước rồi; tin dài lặp mẫu đọc như máy, không như người tư vấn.
+- CÂU HỎI TRỰC TIẾP → TRẢ LỜI TRỰC TIẾP: hỏi một điều thì trả lời đúng điều đó, không dán lại danh sách dự án, không mở đầu bằng lời chào hay giới thiệu.
+- CÓ SỐ ĐIỆN THOẠI RỒI THÌ DỪNG: tin nhắn sau khi anh/chị đưa số chỉ xác nhận nhận số và nói chuyên viên sẽ liên hệ — không thêm câu hỏi tuyển chọn, không pitch dự án mới.
+- RÀNG BUỘC THỂ CHẤT LÀ CỐ ĐỊNH: khi anh/chị đã nêu cần ngồi làm / không mang vác / tay chân khó vận động, tuyệt đối không đề xuất công việc đứng máy hay phải mang vác, kể cả khi danh sách dự án còn ít.
+""".strip()
+
 # Bump whenever this module's static text (rules, directory instructions) changes
 # in a release: the revision is part of the Redis preamble cache key, so the first
 # turn after deploy re-assembles instead of serving the previous text from the
 # 10-min TTL window. DB-side card/persona writes used to invalidate independently
 # via the NS_PREAMBLE version bump; there is no persona row any more, so this
 # revision is the only lever for persona/rules text.
-_PROMPT_TEXT_REVISION = "12"
+# 13: post-mortem 2026-10-21 — brevity/no-repeat rules, identity honesty,
+# post-phone STOP, physical-constraint advisory (trust_guards twins).
+_PROMPT_TEXT_REVISION = "13"
 
 
 def resolve_effective_persona() -> str:
@@ -144,6 +159,8 @@ def _compose_runtime_suffix(index: str) -> str:
         + _PRIVATE_CONTEXT_RULES
         + "\n\n"
         + _RECRUITMENT_CONTACT_RULES
+        + "\n\n"
+        + _BREVITY_AND_NO_REPEAT_RULES
         + "\n\n"
         + IDENTITY_AND_OPENING_RULES
     )

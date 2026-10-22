@@ -129,7 +129,12 @@ _PRESENTATION_CONTRACT = (
     "dưới dạng \"khoảng X km\" — đó là ước tính theo bản đồ, không phải số đo chính xác; có "
     "duration_min thì nêu thêm \"khoảng Y phút\"; payload đã được xếp sẵn gần nhất trước — "
     "trình bày ĐÚNG thứ tự các dự án trong payload, tuyệt đối KHÔNG đảo lại theo mức lương, "
-    "fit hay cảm tính; không tự bịa khoảng cách hay địa chỉ."
+    "fit hay cảm tính; không tự bịa khoảng cách hay địa chỉ; "
+    "(9) khi tra cứu vừa lọc theo ràng buộc thể chất (work_posture=seated hoặc "
+    "no_heavy_lifting), danh sách payload ĐÃ LOẠI các dự án đứng máy/chưa rõ tư thế: tuyệt đối "
+    "KHÔNG tự thêm lại dự án nào ngoài payload cho yêu cầu đó, KHÔNG mô tả công việc là "
+    "\"ngồi được\" khi payload không ghi posture của vị trí đó, và KHÔNG đề xuất việc đứng "
+    "máy/mang vác cho ứng viên đã nêu ràng buộc tay chân."
 )
 
 _NO_CRITERIA_REPLY = (
@@ -289,12 +294,15 @@ def _project_payload(fit: ProjectFit) -> dict[str, object]:
                     "salary_max": item.salary_max,
                     "age_min": item.age_min,
                     "age_max": item.age_max,
+                    "posture": item.posture,
                 }.items()
-                if value not in (None, "")
+                if value not in (None, "", "unknown")
             }
             for item in project.scope
             if item.title
         ],
+        "posture": project.posture,
+        "heavy_lifting": project.heavy_lifting,
         "fit_score": round(fit.score, 2),
         "fit_notes": [_fit_note(fit, dimension) for dimension in fit.dimensions],
     }
@@ -349,12 +357,19 @@ async def list_active_projects(
     salary_min_vnd: int | None = None,
     sort_by: str | None = None,
     strict_criteria: bool = False,
+    work_posture: str | None = None,
+    no_heavy_lifting: bool = False,
 ) -> str:
     """Fit EVERY active project against the candidate's stated preferences.
 
     The matching authority: the payload carries the whole ranked project
     catalog (never capped) with per-dimension fit notes; the probe-then-
     introduce behavior lives in the presentation contract.
+
+    ``work_posture="seated"`` / ``no_heavy_lifting=True`` are HARD filters
+    (Zalo post-mortem 2026-10-21): standing-only and unparsed projects never
+    enter the payload, so the LLM cannot pitch them to a candidate who stated
+    a physical constraint.
     """
     if sort_by is not None and sort_by not in _ALLOWED_SORT_BY:
         sort_by = None
@@ -365,6 +380,7 @@ async def list_active_projects(
     ):
         salary_min_vnd = None
     strict_criteria = strict_criteria is True
+    no_heavy_lifting = no_heavy_lifting is True
     try:
         rows = await retrieval.list_active_projects()
     except Exception :  # noqa: BLE001
@@ -397,7 +413,10 @@ async def list_active_projects(
         origin=origin,
         priority_ids=getattr(
             retrieval, "channel_priority_project_ids", frozenset()
-        ) or None,
+        )
+        or None,
+        work_posture=work_posture,
+        no_heavy_lifting=no_heavy_lifting,
     )
     if lookup.status == "catalog_empty":
         return _project_tool_result("catalog_empty", [], _CATALOG_EMPTY_REPLY, total=0)

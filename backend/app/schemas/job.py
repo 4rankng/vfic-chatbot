@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from app.recruitment.domain.statuses import JobStatus
+
+PostureValue = Literal["seated_only", "standing_only", "mixed", "unknown"]
+HeavyLiftingValue = Literal["no", "light_under_5kg", "heavy_over_10kg", "unknown"]
+HealthCertValue = Literal[
+    "mandatory_candidate_pays", "company_sponsored", "none_initially", "unknown"
+]
 
 
 class JobBase(BaseModel):
@@ -30,6 +37,9 @@ class JobBase(BaseModel):
     meal_support: bool | None = None
     transport_support: bool | None = None
     vacancy_count: int | None = None
+    posture: PostureValue = "unknown"
+    heavy_lifting: HeavyLiftingValue = "unknown"
+    health_cert: HealthCertValue = "unknown"
     description: str | None = None
     requirements: str | None = None
     benefits: str | None = None
@@ -48,6 +58,9 @@ class JobUpdate(BaseModel):
     salary_max: int | None = None
     vacancy_count: int | None = None
     status: JobStatus | None = None
+    posture: PostureValue | None = None
+    heavy_lifting: HeavyLiftingValue | None = None
+    health_cert: HealthCertValue | None = None
     description: str | None = None
 
 

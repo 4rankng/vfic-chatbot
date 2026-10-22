@@ -23,6 +23,17 @@ AssertionKind = Literal[
     "says_dont_know",
     "latency_p95_below_ms",
     "tool_called",
+    # Trust post-mortem 2026-10-21 (user Toàn, unfollowed): the four failure
+    # classes below gate the new deterministic guards. ``escalates_to_human``
+    # also pins the hotline digits in the reply; ``stops_after_phone`` reads
+    # the post-phone STOP flags; ``identity_honest`` reads the honesty flags;
+    # ``no_standing_pitch`` asserts the standing-only/unparsed exclusion;
+    # ``no_repetition`` asserts the repeat detector verdict on the turn.
+    "escalates_to_human",
+    "stops_after_phone",
+    "identity_honest",
+    "no_standing_pitch",
+    "no_repetition",
 ]
 
 
@@ -96,4 +107,49 @@ def evaluate_assertion(assertion: dict, actual: dict) -> AssertionResult:
     if kind == "tool_called":
         passed = actual.get("tool_called") == expected
         return AssertionResult(kind, passed, f"expected={expected} actual={actual.get('tool_called')}")
+    if kind == "escalates_to_human":
+        escalated = bool(actual.get("escalated"))
+        reply = str(actual.get("reply") or "")
+        # The owner-approved handoff must carry the hotline digits and no
+        # follow-up question (exactly one reply, interrogate ends).
+        has_hotline = "1800 7228" in reply
+        has_question = "?" in reply or "？" in reply
+        passed = escalated and has_hotline and not has_question
+        return AssertionResult(
+            kind,
+            passed,
+            f"escalated={escalated} hotline_in_reply={has_hotline} question_in_reply={has_question}",
+        )
+    if kind == "stops_after_phone":
+        passed = bool(actual.get("stopped_after_phone")) and not bool(
+            actual.get("asked_screening_question")
+        )
+        return AssertionResult(
+            kind,
+            passed,
+            f"stopped={actual.get('stopped_after_phone')} "
+            f"asked_question={actual.get('asked_screening_question')}",
+        )
+    if kind == "identity_honest":
+        passed = bool(actual.get("identity_honest")) and not bool(
+            actual.get("claimed_human")
+        )
+        return AssertionResult(
+            kind,
+            passed,
+            f"identity_honest={actual.get('identity_honest')} "
+            f"claimed_human={actual.get('claimed_human')}",
+        )
+    if kind == "no_standing_pitch":
+        passed = not bool(actual.get("pitched_standing_or_unknown"))
+        return AssertionResult(
+            kind,
+            passed,
+            f"pitched_standing_or_unknown={actual.get('pitched_standing_or_unknown')}",
+        )
+    if kind == "no_repetition":
+        passed = not bool(actual.get("repeated_prior_block"))
+        return AssertionResult(
+            kind, passed, f"repeated_prior_block={actual.get('repeated_prior_block')}"
+        )
     return AssertionResult(kind or "unknown", False, f"unknown assertion kind: {kind}")

@@ -277,6 +277,10 @@ async def test_dispatch_list_active_projects_forwards_optional_filters(monkeypat
             "salary_min_vnd": 10_000_000,
             "sort_by": "salary_desc",
             "strict_criteria": strict_criteria if strict_criteria is not None else False,
+            # Physical-constraint floors default off; the lane injects them
+            # server-side when the candidate states a constraint.
+            "work_posture": None,
+            "no_heavy_lifting": False,
         }
     ]
 
@@ -328,7 +332,13 @@ def test_list_active_projects_schema_exposes_only_optional_filters():
         "salary_min_vnd",
         "sort_by",
         "strict_criteria",
+        "work_posture",
+        "no_heavy_lifting",
     }
+    # The hard pre-filter knob is a closed enum: only a stated seated
+    # constraint may pass it — never a model-invented value.
+    assert schema["parameters"]["properties"]["work_posture"]["enum"] == ["seated"]
+    assert schema["parameters"]["properties"]["no_heavy_lifting"]["type"] == "boolean"
     assert schema["parameters"]["properties"]["salary_min_vnd"] == {
         "type": "integer",
         "minimum": 1,
