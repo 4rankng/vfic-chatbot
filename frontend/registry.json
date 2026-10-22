@@ -440,6 +440,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/kit/mobile-page-header.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/kit/list-table.tsx",
           "type": "registry:component"
         },

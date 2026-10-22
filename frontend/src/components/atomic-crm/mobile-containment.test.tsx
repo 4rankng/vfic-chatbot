@@ -543,6 +543,9 @@ describe("mobile containment", () => {
       await expect
         .element(screen.getByRole("heading", { name: "Hiệu suất chatbot" }))
         .toBeVisible();
+      // Recharts' ResponsiveContainer sizes itself in a follow-up pass; read
+      // containment only after that settles or the pre-measure layout leaks.
+      await new Promise((resolve) => setTimeout(resolve, 150));
       expectContained(screen.container, width, ".performance-page");
     },
   );

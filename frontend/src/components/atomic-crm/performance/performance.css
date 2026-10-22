@@ -199,6 +199,9 @@
     gap: 12px;
     padding: 18px 14px
       calc(var(--workspace-tabbar-h) + env(safe-area-inset-bottom) + 36px);
+    /* The implicit `auto` grid column floors at the widest control's content
+       box, which overflowed a 320px phone. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* The kit header owns the page top; this row is the period switcher strip

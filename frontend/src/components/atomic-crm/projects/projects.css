@@ -1100,6 +1100,10 @@
 
     .project-page-shell {
       gap: 16px;
+      /* `1fr` tracks floor at the content minimum, so the card row's nowrap
+         title blew the column (and the page) out to ~500px. Pin the single
+         column so the kit card shrinks instead of the shell. */
+      grid-template-columns: minmax(0, 1fr);
     }
 
     .project-command-header,

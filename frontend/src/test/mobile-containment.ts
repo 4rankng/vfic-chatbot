@@ -14,7 +14,17 @@ export const expectContained = (
 ) => {
   const surface = container.querySelector<HTMLElement>(surfaceSelector)!;
   expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
-  expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(width + 1);
+  // The app clips sideways overflow at the shell frame (`overflow: hidden`);
+  // the bare harness document has no such owner, so measure the frame when
+  // the surface renders inside one and fall back to the document otherwise.
+  const frame = surface.closest<HTMLElement>(".workspace-frame");
+  if (frame) {
+    expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth + 1);
+  } else {
+    expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(
+      width + 1,
+    );
+  }
   for (const element of surface.querySelectorAll<HTMLElement>(
     "button, p, h2, h3, h4, summary",
   )) {
