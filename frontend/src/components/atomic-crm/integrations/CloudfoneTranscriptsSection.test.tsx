@@ -129,6 +129,10 @@ afterEach(async () => {
 
 describe("CloudfoneTranscriptsSection", () => {
   it("renders the stored rows with Vietnam time and letter-style duration", async () => {
+    // The vitest browser lane's default viewport (412x768) is a phone width;
+    // this test asserts the DESKTOP table, so pin the desktop viewport the
+    // afterEach normally leaves behind for later tests.
+    await page.viewport(1280, 720);
     mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
     const { screen } = await renderSection();
 
@@ -319,7 +323,6 @@ describe("CloudfoneTranscriptsSection", () => {
       screen.container.querySelector('[role="table"], [role="grid"]'),
     ).toBeNull();
     await expect.element(screen.getByText("1p38s")).toBeVisible();
-    await expect.element(screen.getByText("đã lưu").first()).toBeVisible();
 
     const card = screen.getByRole("button", { name: /0362698948/ });
     mocks.loadCloudfoneTranscript.mockResolvedValue({
@@ -345,7 +348,7 @@ describe("CloudfoneTranscriptsSection", () => {
     mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
     const { screen } = await renderSection();
 
-    // Search field (44px/r10 geometry lives in cloudfone-transcripts.css).
+    // Search field (h-10/r10 geometry lives in cloudfone-transcripts.css).
     const search = screen.getByRole("searchbox", { name: "Tìm số điện thoại" });
     await expect.element(search).toBeVisible();
     expect(search.element().closest(".transcripts-search")).not.toBeNull();
@@ -371,14 +374,16 @@ describe("CloudfoneTranscriptsSection", () => {
       screen.container.querySelector('[role="table"], [role="grid"]'),
     ).toBeNull();
     expect(screen.container.querySelectorAll(".call-card")).toHaveLength(2);
+    // The card's second line carries the duration pill; line 1 the 12-hour
+    // time-of-day (consult §4: "10:45 SA" style, never the full date).
     expect(
       screen.container.querySelector(".call-card-badge")?.textContent,
-    ).toBe("đã lưu");
+    ).toBe("1p38s");
     expect(screen.container.querySelector(".call-card-name")?.textContent).toBe(
       "0362698948",
     );
     expect(screen.container.querySelector(".call-card-time")?.textContent).toBe(
-      "01/10/2026 17:02",
+      "5:02 CH",
     );
 
     // Compact pager below the cards.
@@ -441,6 +446,11 @@ describe("CloudfoneTranscriptsSection", () => {
     await expect.element(dialog).toBeVisible();
     // React Aria owns the modal contract (aria-modal + focus containment).
     expect(dialog.element().closest('[aria-modal="true"]')).not.toBeNull();
+    // Header meta: "duration • date" (consult §1), never the old date-first
+    // order.
+    await expect
+      .element(screen.getByText("1p38s • 01/10/2026 17:02"))
+      .toBeVisible();
     await expect
       .poll(
         () =>
@@ -452,7 +462,7 @@ describe("CloudfoneTranscriptsSection", () => {
       .poll(() => mocks.loadCloudfoneTranscript.mock.calls)
       .toEqual([["1790848955"]]);
 
-    // Starts at the 50% detent; the grip drags it to the 90% detent.
+    // Starts at the 50% detent; the grip drags it to the 92% detent.
     const sheet = dialog.element().parentElement as HTMLElement;
     expect(sheet.style.height).toContain("0.5");
     const grip = dialog
@@ -482,18 +492,18 @@ describe("CloudfoneTranscriptsSection", () => {
         pointerType: "touch",
       }),
     );
-    await expect.poll(() => sheet.style.height).toContain("0.9");
+    await expect.poll(() => sheet.style.height).toContain("0.92");
 
     await screen.getByRole("button", { name: "Đóng bản ghi" }).click();
     await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("renders the conversation as S1/S2 bubbles with copy actions", async () => {
+  it("renders the conversation as S1/S2 bubbles and copies all from the header", async () => {
     await page.viewport(390, 844);
     mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
     mocks.loadCloudfoneTranscript.mockResolvedValue({
       ...ROWS[0],
-      transcript: "S1: Alo ạ?\nS2: Hỏi giá dịch vụ.\nS1: Dạ em nghe ạ.",
+      transcript: "S1: Alo ạ?\nS2: Hỏi giá dịch vụ.\nS2: Chị cho em 5 phút.",
     });
     const clipboardWrite = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window.navigator, "clipboard", {
@@ -511,30 +521,104 @@ describe("CloudfoneTranscriptsSection", () => {
     const right = dialog
       .element()
       .querySelectorAll(".transcript-bubble--right");
-    expect(left).toHaveLength(2);
-    expect(right).toHaveLength(1);
+    expect(left).toHaveLength(1);
+    expect(right).toHaveLength(2);
     expect(left[0]?.className).toContain("bg-neutral-100");
     expect(right[0]?.className).toContain("bg-brand-50");
     expect(left[0]?.getAttribute("aria-label")).toBe("Speaker: S1. Alo ạ?");
 
-    // Per-utterance copy: the consult's "Sao chép" 44px icon action.
-    const copyButtons = dialog.element().querySelectorAll(".transcript-copy");
-    expect(copyButtons).toHaveLength(3);
-    (copyButtons[1] as HTMLButtonElement).click();
-    await expect
-      .poll(() => clipboardWrite.mock.calls)
-      .toEqual([["Hỏi giá dịch vụ."]]);
+    // 11px speaker labels, coloured per side (S1 neutral-500, S2 brand-600).
+    const speakers = dialog.element().querySelectorAll(".transcript-speaker");
+    expect(speakers[0]?.className).toContain("text-neutral-500");
+    expect(speakers[1]?.className).toContain("text-brand-600");
 
-    // Copy-all copies the whole stored transcript.
+    // Same-speaker turns sit closer (6px vs 12px — the is-continued class).
+    expect(dialog.element().querySelectorAll(".is-continued")).toHaveLength(1);
+
+    // Copy lives once, in the sheet header — the consult's bubble row is
+    // label + text only.
+    expect(dialog.element().querySelectorAll(".transcript-copy")).toHaveLength(
+      0,
+    );
     await screen
       .getByRole("button", { name: "Sao chép toàn bộ bản ghi" })
       .click();
     await expect
       .poll(() => clipboardWrite.mock.calls)
-      .toEqual([
-        ["Hỏi giá dịch vụ."],
-        ["S1: Alo ạ?\nS2: Hỏi giá dịch vụ.\nS1: Dạ em nghe ạ."],
-      ]);
+      .toEqual([["S1: Alo ạ?\nS2: Hỏi giá dịch vụ.\nS2: Chị cho em 5 phút."]]);
+  });
+
+  it("shows the sheet's three body states: skeletons, error + retry, empty", async () => {
+    await page.viewport(390, 844);
+    mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
+
+    // Loading: three alternating skeleton bubbles while the detail is pending.
+    mocks.loadCloudfoneTranscript.mockReturnValue(new Promise(() => {}));
+    const loading = await renderSection();
+    await loading.screen
+      .getByRole("listitem")
+      .first()
+      .getByRole("button")
+      .click();
+    const loadingDialog = loading.screen.getByRole("dialog");
+    await expect.element(loadingDialog).toBeVisible();
+    const skeletons = loadingDialog
+      .element()
+      .querySelectorAll(".transcript-skeleton-bubble");
+    expect(skeletons).toHaveLength(3);
+    expect(skeletons[0]?.className).toContain("is-left");
+    expect(skeletons[1]?.className).toContain("is-right");
+    expect(skeletons[2]?.className).toContain("is-left");
+    expect(skeletons[0]?.getAttribute("style")).toContain("height: 48px");
+    expect(skeletons[1]?.getAttribute("style")).toContain("height: 64px");
+    expect(skeletons[2]?.getAttribute("style")).toContain("height: 40px");
+    await loading.screen
+      .getByRole("button", { name: "Đóng bản ghi", exact: true })
+      .click();
+    await cleanup();
+
+    // Error: the consult's card with a working retry.
+    mocks.loadCloudfoneTranscript.mockReset();
+    mocks.loadCloudfoneTranscript
+      .mockRejectedValueOnce(new Error("transcription broke"))
+      .mockResolvedValue({
+        ...ROWS[0],
+        transcript: "S1: Alo ạ?",
+      });
+    const errored = await renderSection();
+    await errored.screen
+      .getByRole("listitem")
+      .first()
+      .getByRole("button")
+      .click();
+    await expect
+      .element(errored.screen.getByText("Không thể tải hội thoại"))
+      .toBeVisible();
+    await expect
+      .element(errored.screen.getByText(/bóc băng hoặc tải dữ liệu/))
+      .toBeVisible();
+    await errored.screen.getByRole("button", { name: "Thử lại" }).click();
+    await expect.element(errored.screen.getByText(/^Alo ạ\?$/)).toBeVisible();
+    await cleanup();
+
+    // Empty: a stored call whose transcript parses to nothing.
+    mocks.loadCloudfoneTranscript.mockReset();
+    mocks.loadCloudfoneTranscript.mockResolvedValue({
+      ...ROWS[0],
+      transcript: "",
+    });
+    const empty = await renderSection();
+    await empty.screen
+      .getByRole("listitem")
+      .first()
+      .getByRole("button")
+      .click();
+    await expect
+      .element(empty.screen.getByText("Chưa có nội dung cuộc gọi"))
+      .toBeVisible();
+    await expect
+      .element(empty.screen.getByText(/Nội dung bóc băng sẽ hiển thị tại đây/))
+      .toBeVisible();
   });
 
   it("keeps the desktop pager and inline filter row at desktop width", async () => {

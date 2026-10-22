@@ -1,30 +1,27 @@
-import { Copy } from "lucide-react";
+import { cx } from "@/utils/cx";
 
-import {
-  copyCredentialFieldValue,
-  type CredentialFieldNotify,
-} from "./credentialClipboard";
 import { parseTranscriptUtterances } from "./transcript-utterances";
 
 /**
- * The transcript as a two-speaker chat (settings-mobile consult §4): S1 left
- * on gray-100, S2 right on brand-50, one bubble per utterance with the
- * speaker label above it and a copy action below. Used by both the mobile
- * bottom sheet and the desktop panel under the table — one content surface.
+ * The transcript as a two-speaker chat (cloudfone redesign consult 22/10 §2):
+ * S1 left on gray-100 with a 4px top-left corner, S2 right on brand-50 with a
+ * 4px top-right corner, 11px speaker labels above, 12px between turns and 6px
+ * between same-speaker turns. Used by both the mobile bottom sheet and the
+ * desktop panel under the table — one content surface.
  *
  * Each bubble carries `aria-label="Speaker: … . …"` so a screen reader hears
  * speaker and content as one utterance; the visible text stays readable for
  * everyone else. Contrast is near-black ink on two near-white fills.
  *
- * Per-utterance timestamps are not rendered: the stored transcript has none
- * (see transcript-utterances.ts), and inventing times would misinform.
+ * Copying lives in the surfaces' headers ("Sao chép toàn bộ bản ghi"), not on
+ * every bubble — the consult's bubble row is label + text only. Per-utterance
+ * timestamps are not rendered either: the stored transcript has none (see
+ * transcript-utterances.ts), and inventing times would misinform.
  */
 export const TranscriptConversation = ({
   transcript,
-  notify,
 }: {
   transcript: string;
-  notify: CredentialFieldNotify;
 }) => {
   const utterances = parseTranscriptUtterances(transcript);
 
@@ -32,13 +29,26 @@ export const TranscriptConversation = ({
     <ol className="transcript-conversation" aria-label="Nội dung bản ghi">
       {utterances.map((utterance, index) => {
         const who = utterance.speaker || "cuộc gọi";
+        const continued =
+          index > 0 && utterances[index - 1]!.speaker === utterance.speaker;
         return (
           <li
             key={`${utterance.speaker}-${index}`}
-            className={`transcript-turn is-${utterance.side}`}
+            className={cx(
+              "transcript-turn",
+              `is-${utterance.side}`,
+              continued && "is-continued",
+            )}
           >
             {utterance.speaker ? (
-              <span className="transcript-speaker text-neutral-700">
+              <span
+                className={cx(
+                  "transcript-speaker",
+                  utterance.side === "left"
+                    ? "text-neutral-500"
+                    : "text-brand-600",
+                )}
+              >
                 {utterance.speaker}
               </span>
             ) : null}
@@ -53,20 +63,6 @@ export const TranscriptConversation = ({
             >
               <p className="transcript-text">{utterance.text}</p>
             </div>
-            <button
-              type="button"
-              className="transcript-copy"
-              aria-label={`Sao chép nội dung của ${who}`}
-              onClick={() =>
-                void copyCredentialFieldValue(
-                  "nội dung",
-                  utterance.text,
-                  notify,
-                )
-              }
-            >
-              <Copy aria-hidden="true" className="size-4" />
-            </button>
           </li>
         );
       })}
