@@ -1552,12 +1552,16 @@
 
 .settings-mobile-page {
   display: grid;
+  /* minmax(0,1fr): an implicit `auto` track floors at min-content and blew
+     the grouped root past a 320px phone (group titles are nowrap). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   padding: 16px 16px 32px;
 }
 
 .settings-mobile-groups {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
 }
 

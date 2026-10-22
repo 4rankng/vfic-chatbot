@@ -90,10 +90,25 @@ test("renders real project detail at short phone and tablet sizes", async ({
     await expect(
       page.getByRole("heading", { name: "E2E Project", exact: true }),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Mở hoặc đóng kiến thức dự án E2E Project" })
-      .click();
-    await page.getByRole("button", { name: "Sửa dự án", exact: true }).click();
+    if (width < 768) {
+      // Phone anatomy: the card list replaced the accordion. Edit lives in
+      // the card menu; knowledge opens as a bottom sheet.
+      await page
+        .getByRole("button", {
+          name: "Thao tác khác cho dự án E2E Project",
+        })
+        .click();
+      await page.getByRole("menuitem", { name: "Sửa dự án" }).click();
+    } else {
+      await page
+        .getByRole("button", {
+          name: "Mở hoặc đóng kiến thức dự án E2E Project",
+        })
+        .click();
+      await page
+        .getByRole("button", { name: "Sửa dự án", exact: true })
+        .click();
+    }
     await expect(
       page.getByRole("heading", { name: "E2E Project", exact: true }),
     ).toBeVisible();
@@ -140,21 +155,22 @@ test("keeps every settings section accessible through desktop navigation and the
     ]) {
       const mobile = width < 768;
       if (mobile) {
+        // Phone anatomy: the grouped root lists every section inline — no
+        // side-nav drawer. Two-step hash navigation (root, then settings) so
+        // a same-hash goto cannot leave the previous drill-down mounted.
+        await page.goto("/#/");
+        await page.goto("/#/settings");
         await page
-          .getByRole("button", { name: "Mở danh mục cài đặt", exact: true })
+          .getByRole("button", { name: new RegExp(`^${label}`) })
           .click();
-      }
-      const navigation = mobile
-        ? page.getByRole("navigation", { name: "Mục cài đặt", exact: true })
-        : page.getByRole("complementary", {
-            name: "Nhóm cài đặt",
-            exact: true,
-          });
-      await navigation
-        .getByRole("button", { name: new RegExp(`^${label} `) })
-        .click();
-      if (mobile) {
-        await expect(navigation).not.toBeVisible();
+      } else {
+        const navigation = page.getByRole("complementary", {
+          name: "Nhóm cài đặt",
+          exact: true,
+        });
+        await navigation
+          .getByRole("button", { name: new RegExp(`^${label} `) })
+          .click();
       }
       await expect(
         page.getByRole("heading", { name: heading, exact: true }).first(),

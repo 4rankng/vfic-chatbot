@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 /** Check painted controls, not document width alone: overflow:hidden can crop
  * a field without widening the document. Scroll-edge clipping and off-canvas
@@ -429,142 +429,21 @@ async function expectMobileFormDensity(
     .toEqual([]);
 }
 
-async function expectSettingsFieldExposure(field: Locator, context: string) {
-  await expect
-    .poll(
-      () =>
-        field.evaluate((element) => {
-          const issues: string[] = [];
-          const navigation = document.querySelector(".settings-mobile-topbar");
-          if (!navigation) return ["sticky settings navigation is missing"];
-          const frame = element.closest('[class~="group/input"]') ?? element;
-          const rect = frame.getBoundingClientRect();
-          const navigationRect = navigation.getBoundingClientRect();
-          let scrollTop = 0;
-          let scrollBottom = innerHeight;
-          for (
-            let parent = frame.parentElement;
-            parent;
-            parent = parent.parentElement
-          ) {
-            if (
-              /^(auto|scroll|overlay)$/.test(
-                getComputedStyle(parent).overflowY,
-              ) &&
-              parent.scrollHeight > parent.clientHeight + 2
-            ) {
-              const bounds = parent.getBoundingClientRect();
-              scrollTop = Math.max(0, bounds.top + parent.clientTop);
-              scrollBottom = Math.min(
-                innerHeight,
-                scrollTop + parent.clientHeight,
-              );
-              break;
-            }
-          }
-          if (rect.top < Math.max(scrollTop, navigationRect.bottom) - 2)
-            issues.push("scrolled field is covered by sticky navigation");
-          if (rect.bottom > scrollBottom + 2)
-            issues.push("scrolled field extends past its scroll viewport");
-          if (rect.left < -2 || rect.right > innerWidth + 2)
-            issues.push("scrolled field extends past the phone width");
-          for (const y of [
-            rect.top + 2,
-            (rect.top + rect.bottom) / 2,
-            rect.bottom - 2,
-          ]) {
-            const exposed = document.elementFromPoint(
-              (rect.left + rect.right) / 2,
-              y,
-            );
-            if (!exposed || !frame.contains(exposed))
-              issues.push("scrolled field is not exposed for interaction");
-          }
-          return [...new Set(issues)];
-        }),
-      {
-        message: `${context}: scrolled fields remain exposed below sticky navigation`,
-      },
-    )
-    .toEqual([]);
-}
-
 async function expectExpandedMobileSettings(page: Page, context: string) {
-  const groups = page.locator("main details.settings-mobile-group");
-  expect(
-    await groups.count(),
-    "mobile settings retain expandable groups",
-  ).toBeGreaterThan(0);
-  for (let index = 0; index < (await groups.count()); index++) {
-    const group = groups.nth(index);
-    const summary = group.locator(":scope > summary");
-    const wasOpen = (await group.getAttribute("open")) !== null;
-    if (!wasOpen) await summary.click();
-    await expect(group).toHaveAttribute("open", "");
-    await summary.scrollIntoViewIfNeeded();
+  // Current grouped root: every section renders expanded (h2 title + one
+  // card of rows) — there is no collapsible details/summary anatomy anymore.
+  const cards = page.locator(".settings-mobile-card");
+  const cardCount = await cards.count();
+  expect(cardCount, "mobile settings keep their group cards").toBeGreaterThan(
+    0,
+  );
+  for (let index = 0; index < cardCount; index++) {
+    const card = cards.nth(index);
+    await card.scrollIntoViewIfNeeded();
     await expectMobileControlGeometry(
       page,
-      `${context}, expanded group ${index + 1}`,
+      `${context}, group card ${index + 1}`,
     );
-    await expectMobileFormDensity(
-      page,
-      ".settings-field",
-      `${context}, expanded group ${index + 1}`,
-    );
-
-    const fields = group.locator(
-      'input:not([type="hidden"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):visible, textarea:visible',
-    );
-    expect(
-      await fields.count(),
-      "expanded settings expose their fields",
-    ).toBeGreaterThan(0);
-    for (const [position, field] of [
-      ["first", fields.first()],
-      ["last", fields.last()],
-    ] as const) {
-      await field.scrollIntoViewIfNeeded();
-      await expectSettingsFieldExposure(
-        field,
-        `${context}, ${position} field in group ${index + 1}`,
-      );
-      await expectMobileControlGeometry(
-        page,
-        `${context}, ${position} field in group ${index + 1}`,
-      );
-      await expectMobileFormDensity(
-        page,
-        ".settings-field",
-        `${context}, ${position} field in group ${index + 1}`,
-      );
-    }
-
-    // Auxiliary disclosures, such as OA webhook health, are also checked open.
-    // Their collapsed contents must not masquerade as painted controls.
-    const disclosures = group.locator("details");
-    for (
-      let detailIndex = 0;
-      detailIndex < (await disclosures.count());
-      detailIndex++
-    ) {
-      const disclosure = disclosures.nth(detailIndex);
-      const detailSummary = disclosure.locator(":scope > summary");
-      const detailWasOpen = (await disclosure.getAttribute("open")) !== null;
-      if (!detailWasOpen) await detailSummary.click();
-      await expect(disclosure).toHaveAttribute("open", "");
-      await expectMobileControlGeometry(
-        page,
-        `${context}, auxiliary disclosure ${detailIndex + 1}`,
-      );
-      if (!detailWasOpen) {
-        await detailSummary.click();
-        await expect(disclosure).not.toHaveAttribute("open", "");
-      }
-    }
-    if (!wasOpen) {
-      await summary.click();
-      await expect(group).not.toHaveAttribute("open", "");
-    }
   }
 }
 
@@ -606,7 +485,9 @@ async function expectUnboxedConversationGlyphs(
 }
 
 async function expectMobileAccountRows(page: Page, context: string) {
-  const rows = page.locator(".user-directory-row");
+  // Phone anatomy: the kit card list (`ListTable.renderMobileCard`) replaced
+  // the linearised table row — one `.user-directory-phone-card` per account.
+  const rows = page.locator(".user-directory-phone-card");
   await expect(rows.first()).toBeVisible();
   await expect
     .poll(
@@ -617,14 +498,12 @@ async function expectMobileAccountRows(page: Page, context: string) {
             const bounds = row.getBoundingClientRect();
             if (bounds.height === 0) continue;
             const parts = [
-              row.querySelector(".user-directory-identity"),
-              row.querySelector(".user-directory-role > *"),
-              row.querySelector(".user-directory-status > *"),
-              row.querySelector(".user-directory-created"),
-              row.querySelector(".user-directory-created > span"),
+              row.querySelector(".user-directory-phone-card-name"),
+              row.querySelector(".user-directory-phone-card-meta"),
+              row.querySelector(".user-directory-phone-card-created"),
             ].filter((element): element is Element => element !== null);
-            if (parts.length !== 5)
-              issues.push("account identity, role, status, or date is missing");
+            if (parts.length !== 3)
+              issues.push("account name, role/status, or date is missing");
             for (const part of parts) {
               const rect = part.getBoundingClientRect();
               if (
@@ -632,16 +511,15 @@ async function expectMobileAccountRows(page: Page, context: string) {
                 rect.right > Math.min(innerWidth, bounds.right) + 2
               )
                 issues.push(
-                  `${part.className || part.tagName} extends outside its account row`,
+                  `${part.className || part.tagName} extends outside its account card`,
                 );
             }
-            // These are independent pieces of account metadata. Unlike a table's
-            // row/cell boxes, their visible badges and date must never intersect.
-            const metadata = [
-              row.querySelector(".user-directory-role > *"),
-              row.querySelector(".user-directory-status > *"),
-              row.querySelector(".user-directory-created"),
-            ].filter((element): element is Element => element !== null);
+            // The role badge, status badge, and date are independent pieces
+            // of metadata sharing one wrapped row — they must never overlap.
+            const metadata = Array.from(
+              row.querySelector(".user-directory-phone-card-meta")?.children ??
+                [],
+            );
             for (let index = 0; index < metadata.length; index++) {
               const first = metadata[index].getBoundingClientRect();
               for (const second of metadata.slice(index + 1)) {
@@ -661,7 +539,7 @@ async function expectMobileAccountRows(page: Page, context: string) {
           return [...new Set(issues)];
         }),
       {
-        message: `${context}: account metadata must fit inside separate mobile rows`,
+        message: `${context}: account metadata must fit inside separate mobile cards`,
       },
     )
     .toEqual([]);
@@ -682,7 +560,9 @@ test.describe("current recruitment workspace baseline", () => {
       ["/projects/create", "Tạo dự án"],
       ["/users", "Tài khoản"],
       ["/users/create", "Tạo tài khoản"],
-      ["/settings", "Zalo"],
+      // The mobile grouped root renders the group titles, not per-section
+      // headings; "Cài đặt" is the one heading both roots share.
+      ["/settings", "Cài đặt"],
       ["/profile", "Hồ sơ cá nhân"],
       ["/hieu-suat", "Hiệu suất chatbot"],
       ["/conversations", "Hộp thư"],
@@ -690,11 +570,17 @@ test.describe("current recruitment workspace baseline", () => {
     for (const width of [320, 360, 390, 768, 900, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       for (const [route, heading] of routes) {
+        // /settings renders two roots: the grouped mobile page (h1 "Cài đặt")
+        // and the desktop console whose default active section is Zalo —
+        // accept either heading.
+        const headingPattern = route === "/settings" ? /Cài đặt|Zalo/ : heading;
         await page.goto(`/#${route}`);
         // An arbitrary heading also matches a 404 page. Assert the actual
         // screen so a typo or removed route cannot count as layout coverage.
         await expect(
-          page.getByRole("heading", { name: heading, exact: true }).first(),
+          page
+            .getByRole("heading", { name: headingPattern, exact: true })
+            .first(),
         ).toBeVisible({ timeout: 15_000 });
         await page.evaluate(() => document.fonts.ready);
         await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
@@ -725,13 +611,7 @@ test.describe("current recruitment workspace baseline", () => {
           }
           if (route === "/settings") {
             await expectExpandedMobileSettings(page, `settings at ${width}px`);
-            await page
-              .getByRole("button", { name: "Mở danh mục cài đặt", exact: true })
-              .click();
-            await page
-              .getByRole("navigation", { name: "Mục cài đặt", exact: true })
-              .getByRole("button", { name: /^Người dùng / })
-              .click();
+            await page.getByRole("button", { name: /^Người dùng/ }).click();
             await expect(
               page
                 .getByRole("heading", { name: "Người dùng", exact: true })

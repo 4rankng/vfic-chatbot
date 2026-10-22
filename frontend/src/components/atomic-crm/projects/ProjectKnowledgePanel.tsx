@@ -32,6 +32,7 @@ import { PasteTextArea } from "./presentation/PasteTextArea";
 import { WorkspaceCommandBar } from "./presentation/WorkspaceCommandBar";
 import {
   ProjectKnowledgeExport,
+  ProjectKnowledgeTemplate,
   useKnowledgeDownload,
 } from "./ProjectKnowledgeExport";
 import { CategoryEditor } from "./presentation/CategoryEditor";
@@ -439,6 +440,9 @@ const MigrationSection = ({ projectId }: { projectId: string }) => {
         buttonLabel="Nhập tệp và chuyển đổi"
         onCutover={migrate}
       />
+      {/* The 12-category template is most useful BEFORE cutover — keep it
+          reachable from the migration region at every width. */}
+      <ProjectKnowledgeTemplate projectId={projectId} />
     </section>
   );
 };

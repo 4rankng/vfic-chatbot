@@ -444,7 +444,7 @@ export const ProjectMobileCardList = ({
               aria-label={`Mở kiến thức dự án ${project.name}`}
               onClick={() => onOpenKnowledge(project)}
             >
-              <span className="project-card-title">{project.name}</span>
+              <h2 className="project-card-title">{project.name}</h2>
               <span className="project-card-badges">
                 <Badge variant="outline" className={activeBadge.className}>
                   {activeBadge.label}

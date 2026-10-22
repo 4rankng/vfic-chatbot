@@ -163,6 +163,8 @@ test("downloads the KB template with mouse, keyboard, and touch at phone, tablet
   );
   expect(project).toBeTruthy();
   await page.goto(`/#/projects/${project.id}`);
+  // The template download renders in the migration region (reachable at
+  // every width — most useful exactly before cutover).
   const button = page.getByRole("button", { name: "Tải mẫu KB", exact: true });
   await expect(button).toBeVisible();
   await expect(
@@ -195,21 +197,24 @@ test("downloads the KB template with mouse, keyboard, and touch at phone, tablet
     const destination = testInfo.outputPath(`mau-kb-${width}.md`);
     await template.saveAs(destination);
     const content = await readFile(destination, "utf8");
-    for (const category of [
-      "jobs",
-      "compensation",
-      "requirements",
-      "work_schedules",
-      "benefits",
-      "accommodation",
-      "meals",
-      "transportation",
-      "insurance",
-      "application",
-      "contacts",
-      "faq",
+    // The template ships one `## <danh mục>` section per category, in the
+    // canonical catalog order (Vietnamese headings, no legacy key: markers).
+    for (const section of [
+      "Thông tin tổng quan",
+      "Vị trí tuyển dụng",
+      "Lương & thu nhập",
+      "Yêu cầu ứng viên",
+      "Ca làm việc",
+      "Phúc lợi",
+      "Chỗ ở",
+      "Bữa ăn",
+      "Đưa đón & lịch xe",
+      "Bảo hiểm",
+      "Ứng tuyển & nhận việc",
+      "Liên hệ",
+      "Câu hỏi thường gặp",
     ])
-      expect(content).toContain(`category: ${category}`);
+      expect(content).toContain(`## ${section}`);
     expect(content).not.toMatch(
       /^\s*(?:jobs?_ids|vacancies|employment_type)\s*:/m,
     );
