@@ -121,6 +121,7 @@
   },
   "overrides": {
     "esbuild": "^0.28.1",
-    "decode-uri-component": "0.2.2"
+    "decode-uri-component": "0.2.2",
+    "postcss-selector-parser": "^7.1.6"
   }
 }
