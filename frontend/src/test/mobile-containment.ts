@@ -34,6 +34,11 @@ export const expectContained = (
     // containment failure. `visibility` inherits, so descendants of a parked
     // pane are skipped too.
     if (getComputedStyle(element).visibility === "hidden") continue;
+    // Deliberately truncating elements (ellipsis titles) report the clipped
+    // content in scrollWidth by design; their rect check below still bounds
+    // them. Anything without a clipping overflow must not scroll sideways.
+    const overflowX = getComputedStyle(element).overflowX;
+    if (overflowX === "hidden" || overflowX === "clip") continue;
     expect(
       element.scrollWidth,
       element.textContent ?? element.tagName,
