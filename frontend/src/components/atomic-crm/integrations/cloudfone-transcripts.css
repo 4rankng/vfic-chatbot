@@ -324,7 +324,7 @@
 /* "‹ Quay lại" — the drill-down back action, 44px touch target with a 20px
    glyph. The element prefix lifts specificity over the global 40px control
    ceiling (`src/index.css` §3), same pattern as the icon actions below. */
-div.transcript-fullscreen-header .transcripts-back-action {
+header.transcript-fullscreen-header .transcripts-back-action {
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
@@ -346,15 +346,15 @@ div.transcript-fullscreen-header .transcripts-back-action {
   cursor: pointer;
 }
 
-div.transcript-fullscreen-header .transcripts-back-action:hover {
+header.transcript-fullscreen-header .transcripts-back-action:hover {
   background: var(--muted);
 }
 
-div.transcript-fullscreen-header .transcripts-back-action:active {
+header.transcript-fullscreen-header .transcripts-back-action:active {
   background: var(--accent, var(--muted));
 }
 
-div.transcript-fullscreen-header .transcripts-back-action svg {
+header.transcript-fullscreen-header .transcripts-back-action svg {
   width: 20px;
   height: 20px;
 }
@@ -387,7 +387,7 @@ div.transcript-fullscreen-header .transcripts-back-action svg {
 
 /* 44x44 round icon action with a 20px glyph — the copy-all target. Same
    specificity opt-out over the 40px ceiling as the back action. */
-div.transcript-fullscreen-header .transcripts-icon-action {
+header.transcript-fullscreen-header .transcripts-icon-action {
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
@@ -404,15 +404,15 @@ div.transcript-fullscreen-header .transcripts-icon-action {
   color: var(--muted-foreground);
 }
 
-div.transcript-fullscreen-header .transcripts-icon-action:hover {
+header.transcript-fullscreen-header .transcripts-icon-action:hover {
   background: var(--muted);
 }
 
-div.transcript-fullscreen-header .transcripts-icon-action:active {
+header.transcript-fullscreen-header .transcripts-icon-action:active {
   background: var(--accent, var(--muted));
 }
 
-div.transcript-fullscreen-header .transcripts-icon-action svg {
+header.transcript-fullscreen-header .transcripts-icon-action svg {
   width: 20px;
   height: 20px;
 }

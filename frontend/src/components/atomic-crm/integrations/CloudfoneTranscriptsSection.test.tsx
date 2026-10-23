@@ -485,6 +485,24 @@ describe("CloudfoneTranscriptsSection", () => {
       .poll(() => mocks.loadCloudfoneTranscript.mock.calls)
       .toEqual([["1790848955"]]);
 
+    // 44px touch targets: the specificity opt-outs in cloudfone-transcripts.css
+    // (`header.transcript-fullscreen-header …`) must beat the global 40px
+    // control ceiling (`src/index.css` §3). A dead opt-out selector once
+    // slipped through eyeball QA — measure, don't trust.
+    await expect
+      .element(screen.getByRole("button", { name: "Sao chép toàn bộ bản ghi" }))
+      .toBeVisible();
+    const back = panel?.querySelector<HTMLElement>(".transcripts-back-action");
+    expect(back?.getBoundingClientRect().height ?? 0).toBeGreaterThanOrEqual(
+      44,
+    );
+    const copyAll = panel?.querySelector<HTMLElement>(
+      ".transcripts-icon-action",
+    );
+    expect(copyAll?.getBoundingClientRect().height ?? 0).toBeGreaterThanOrEqual(
+      44,
+    );
+
     // Back returns to the list and closes the overlay.
     await screen.getByRole("button", { name: "Quay lại", exact: true }).click();
     await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();

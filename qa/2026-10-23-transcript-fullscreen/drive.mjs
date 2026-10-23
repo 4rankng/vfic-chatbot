@@ -203,11 +203,14 @@ with psycopg.connect("postgresql://vfic:vfic@127.0.0.1:5443/${DB}") as c:
   ok((await page.locator(".bottom-sheet").count()) === 0, "no bottom sheet rendered");
 
   // Header row contents: ‹ Quay lại | number · duration · date | copy-all.
-  ok(await page.getByRole("button", { name: "Quay lại", exact: true }).isVisible(), "back button visible");
+  // (Scoped to the overlay: the settings app bar behind it also has a
+  // "Quay lại" button — the drill-down's own back.)
+  const backBtn = overlay.getByRole("button", { name: "Quay lại", exact: true });
+  ok(await backBtn.isVisible(), "back button visible");
   ok(await page.getByText("1p38s · 21/10/2026 17:02").isVisible(), "header meta 'duration · date' visible");
-  ok(await page.getByRole("button", { name: "Sao chép toàn bộ bản ghi" }).isVisible(), "copy-all visible");
-  const backBox = await page.getByRole("button", { name: "Quay lại", exact: true }).boundingBox();
-  const copyBox = await page.getByRole("button", { name: "Sao chép toàn bộ bản ghi" }).boundingBox();
+  ok(await overlay.getByRole("button", { name: "Sao chép toàn bộ bản ghi" }).isVisible(), "copy-all visible");
+  const backBox = await backBtn.boundingBox();
+  const copyBox = await overlay.getByRole("button", { name: "Sao chép toàn bộ bản ghi" }).boundingBox();
   ok(backBox && backBox.height >= 44 && backBox.width >= 44, `back target ≥44px (${JSON.stringify(backBox)})`);
   ok(copyBox && copyBox.height >= 44 && copyBox.width >= 44, `copy target ≥44px (${JSON.stringify(copyBox)})`);
 
@@ -216,16 +219,28 @@ with psycopg.connect("postgresql://vfic:vfic@127.0.0.1:5443/${DB}") as c:
   const bubblesR = await page.locator(".transcript-bubble--right").count();
   ok(bubblesL === 4 && bubblesR === 4, `bubbles S1=${bubblesL} left / S2=${bubblesR} right`);
   ok(await page.getByText("2 năm ở trung tâm cuộc gọi").isVisible(), "deep S2 bubble text readable");
-  // Body scrolls inside the overlay only (header stays pinned above it).
-  const bodyScroll = await page.locator(".transcript-fullscreen-body").evaluate(
-    (el) => el.scrollHeight > el.clientHeight,
+  // Body fills everything below the pinned header and is the scroll surface
+  // (the seed's 8 bubbles happen to fit without scrolling, so assert the
+  // geometry contract, not an actual scrollbar).
+  const bodyGeom = await page.locator(".transcript-fullscreen-body").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const overlay = el.closest(".transcript-fullscreen");
+    return {
+      bottom: r.bottom,
+      overlayBottom: overlay ? overlay.getBoundingClientRect().bottom : -1,
+      overflowY: getComputedStyle(el).overflowY,
+    };
+  });
+  ok(bodyGeom.overflowY === "auto", `body is the scroll surface (overflow-y: ${bodyGeom.overflowY})`);
+  ok(
+    Math.abs(bodyGeom.bottom - bodyGeom.overlayBottom) < 1,
+    `body fills the overlay below the header (body bottom ${bodyGeom.bottom} = overlay bottom ${bodyGeom.overlayBottom})`,
   );
-  ok(bodyScroll, "overlay body is the scroll surface (scrollHeight > clientHeight)");
   await page.screenshot({ path: path.join(__dirname, "01-mobile-fullscreen-open.png") });
   log("SHOT 01-mobile-fullscreen-open.png");
 
   // ── 02 ‹ Quay lại returns to the list.
-  await page.getByRole("button", { name: "Quay lại", exact: true }).click();
+  await backBtn.click();
   await overlay.waitFor({ state: "detached", timeout: 15_000 });
   ok((await page.locator(".call-card").count()) === 4, "back returns to the call-card list");
   ok(await firstCard.isVisible(), "the tapped card is visible again");
