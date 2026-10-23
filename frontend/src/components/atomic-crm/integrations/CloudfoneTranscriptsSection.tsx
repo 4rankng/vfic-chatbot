@@ -17,6 +17,11 @@ import {
 } from "lucide-react";
 
 import { BottomSheet } from "@/components/application/bottom-sheet/bottom-sheet";
+import {
+  AppModal,
+  AppModalOverlay,
+} from "@/components/atomic-crm/kit/app-modal";
+import { Dialog } from "@/components/application/modals/modal";
 import { Button } from "@/components/base/buttons/button";
 import { InputBase } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
@@ -1037,54 +1042,66 @@ export const CloudfoneTranscriptsSection = ({
             {detailBody}
           </BottomSheet>
         ) : (
-          /* ≥768px: the panel under the table, unchanged (bubbles body).
-             Copy-all joined the header when the per-bubble copy buttons left
-             the shared conversation — the panel keeps its copy affordance. */
-          <section className="uu-scope rounded-panel border border-secondary bg-primary">
-            <header className="flex flex-wrap items-center gap-3 border-b border-secondary px-4 py-3">
-              <FileText className="size-5 text-tertiary" aria-hidden="true" />
-              <div className="min-w-0 flex-1">
-                <p className="break-words text-body-sm font-semibold text-primary">
-                  {detail
-                    ? `${detail.caller} · ${fmtDuration(detail.talk_seconds)}`
-                    : "Bản ghi cuộc gọi"}
-                </p>
-                {detail ? (
-                  <p className="text-helper text-tertiary">
-                    {fmtStarted(detail.started_at)} · lưu{" "}
-                    {fmtStarted(detail.created_at)}
-                  </p>
-                ) : null}
-              </div>
-              {detail ? (
-                <Button
-                  type="button"
-                  color="secondary"
-                  size="sm"
-                  iconLeading={Copy}
-                  aria-label="Sao chép toàn bộ bản ghi"
-                  className="tt-btn-touch"
-                  onClick={() =>
-                    void copyCredentialFieldValue(
-                      "toàn bộ bản ghi",
-                      detail.transcript,
-                      notify,
-                    )
-                  }
-                />
-              ) : null}
-              <Button
-                type="button"
-                color="secondary"
-                size="sm"
-                iconLeading={X}
-                aria-label="Đóng bản ghi"
-                className="tt-btn-touch"
-                onClick={() => setSelectedId(null)}
-              />
-            </header>
-            <div className="px-4 py-3">{detailBody}</div>
-          </section>
+          /* ≥768px: the PRO modal pattern (application/modals family) — the
+             detail opens as a centered overlay instead of a panel below the
+             table, so clicking "Xem" never sends the operator hunting down
+             the page. Same header anatomy as the phone sheet. */
+          <AppModalOverlay
+            isOpen
+            onOpenChange={(open) => {
+              if (!open) setSelectedId(null);
+            }}
+            isDismissable
+            className="uu-scope"
+          >
+            <AppModal className="w-full outline-hidden sm:max-w-lg">
+              <Dialog
+                aria-label="Bản ghi cuộc gọi"
+                className="outline-hidden"
+              >
+                <div className="transcripts-sheet-header border-b border-secondary px-4 py-3">
+                  <div className="transcripts-sheet-heading">
+                    <p className="transcripts-sheet-title text-neutral-900">
+                      {detail ? detail.caller : "Bản ghi cuộc gọi"}
+                    </p>
+                    {detail ? (
+                      <p className="transcripts-sheet-meta text-neutral-500">
+                        {fmtDuration(detail.talk_seconds)} •{" "}
+                        {fmtStarted(detail.started_at)}
+                      </p>
+                    ) : null}
+                  </div>
+                  {detail ? (
+                    <button
+                      type="button"
+                      className="transcripts-icon-action"
+                      aria-label="Sao chép toàn bộ bản ghi"
+                      onClick={() =>
+                        void copyCredentialFieldValue(
+                          "toàn bộ bản ghi",
+                          detail.transcript,
+                          notify,
+                        )
+                      }
+                    >
+                      <Copy aria-hidden="true" />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="transcripts-icon-action"
+                    aria-label="Đóng bản ghi"
+                    onClick={() => setSelectedId(null)}
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="max-h-[70vh] overflow-y-auto px-4 py-3">
+                  {detailBody}
+                </div>
+              </Dialog>
+            </AppModal>
+          </AppModalOverlay>
         )
       ) : null}
     </div>

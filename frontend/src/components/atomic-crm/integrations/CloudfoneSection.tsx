@@ -445,10 +445,11 @@ export const CloudfoneSection = ({
               type="button"
               color="secondary"
               className="tt-btn-touch text-xs flex items-center gap-1.5"
+              aria-label="Xem bản ghi cuộc gọi"
               onClick={onOpenTranscripts}
             >
               <FileText className="size-4" />
-              Xem bản ghi cuộc gọi
+              Xem
             </Button>
           ) : null}
           <Button
