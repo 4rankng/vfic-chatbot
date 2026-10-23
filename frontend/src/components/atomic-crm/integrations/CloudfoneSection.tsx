@@ -444,11 +444,11 @@ export const CloudfoneSection = ({
             <Button
               type="button"
               color="secondary"
-              className="tt-btn-touch text-xs flex items-center gap-1.5"
+              className="tt-btn-touch shrink-0"
               aria-label="Xem bản ghi cuộc gọi"
+              iconLeading={FileText}
               onClick={onOpenTranscripts}
             >
-              <FileText className="size-4" />
               Xem
             </Button>
           ) : null}
@@ -461,11 +461,13 @@ export const CloudfoneSection = ({
           >
             {saveSettings.isPending ? "Đang lưu…" : "Lưu cấu hình"}
           </Button>
-          <span className="settings-llm-footer-note">
-            {dirty
-              ? "Có thay đổi chưa lưu."
-              : "Hệ thống lấy bản ghi cuộc gọi từ CloudFone, tự động phân tích và gửi báo cáo tổng hợp."}
-          </span>
+          {/* The page description already says what this section does — the
+              footer speaks only when there is unsaved state. */}
+          {dirty ? (
+            <span className="settings-llm-footer-note">
+              Có thay đổi chưa lưu.
+            </span>
+          ) : null}
         </div>
       </fieldset>
     </SettingsSectionPanel>
