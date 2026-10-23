@@ -337,9 +337,7 @@ describe("CloudfoneTranscriptsSection", () => {
     await expect.element(card).toHaveAttribute("aria-selected", "true");
     await expect.element(screen.getByText(/Hỏi giá dịch vụ/)).toBeVisible();
 
-    await screen
-      .getByRole("button", { name: "Đóng bản ghi", exact: true })
-      .click();
+    await screen.getByRole("button", { name: "Quay lại", exact: true }).click();
     await expect.element(card).toHaveAttribute("aria-selected", "false");
   });
 
@@ -431,7 +429,7 @@ describe("CloudfoneTranscriptsSection", () => {
     await expect.element(screen.getByLabelText("Ngày cuộc gọi")).toBeVisible();
   });
 
-  it("opens the transcript in a draggable bottom sheet at phone width", async () => {
+  it("opens the transcript as a full-screen overlay at phone width", async () => {
     await page.viewport(390, 844);
     mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
     mocks.loadCloudfoneTranscript.mockResolvedValue({
@@ -446,10 +444,35 @@ describe("CloudfoneTranscriptsSection", () => {
     await expect.element(dialog).toBeVisible();
     // React Aria owns the modal contract (aria-modal + focus containment).
     expect(dialog.element().closest('[aria-modal="true"]')).not.toBeNull();
-    // Header meta: "duration • date" (consult §1), never the old date-first
-    // order.
+
+    // Full screen (owner 23/10 09:24): the panel claims the whole visual
+    // viewport — inline height over --visual-viewport-height (dvh fallback),
+    // measured here because the Tailwind-less lane must not depend on
+    // compiled CSS for the claim.
+    const panel = dialog
+      .element()
+      .closest(".transcript-fullscreen") as HTMLElement | null;
+    expect(panel).not.toBeNull();
+    expect(panel?.style.height).toBe("var(--visual-viewport-height, 100dvh)");
+    const rect = panel?.getBoundingClientRect();
+    expect(rect?.height ?? 0).toBeGreaterThanOrEqual(window.innerHeight * 0.95);
+    expect(rect?.width ?? 0).toBe(window.innerWidth);
+
+    // The sheet is gone from this surface entirely.
+    expect(document.querySelector(".bottom-sheet")).toBeNull();
+
+    // One-row header: ‹ Quay lại | number · duration · date | copy-all.
+    const header = panel?.querySelector(".transcript-fullscreen-header");
+    expect(header).not.toBeNull();
+    // ~56px, one row (grows only under an iOS notch inset).
+    expect(
+      (header as HTMLElement).getBoundingClientRect().height,
+    ).toBeLessThanOrEqual(96);
     await expect
-      .element(screen.getByText("1p38s • 01/10/2026 17:02"))
+      .element(screen.getByRole("button", { name: "Quay lại", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("1p38s · 01/10/2026 17:02"))
       .toBeVisible();
     await expect
       .poll(
@@ -462,40 +485,10 @@ describe("CloudfoneTranscriptsSection", () => {
       .poll(() => mocks.loadCloudfoneTranscript.mock.calls)
       .toEqual([["1790848955"]]);
 
-    // Starts at the 50% detent; the grip drags it to the 92% detent.
-    const sheet = dialog.element().parentElement as HTMLElement;
-    expect(sheet.style.height).toContain("0.5");
-    const grip = dialog
-      .element()
-      .querySelector<HTMLElement>(".bottom-sheet-handle")!;
-    grip.dispatchEvent(
-      new PointerEvent("pointerdown", {
-        bubbles: true,
-        clientY: 700,
-        pointerId: 7,
-        pointerType: "touch",
-      }),
-    );
-    grip.dispatchEvent(
-      new PointerEvent("pointermove", {
-        bubbles: true,
-        clientY: 480,
-        pointerId: 7,
-        pointerType: "touch",
-      }),
-    );
-    grip.dispatchEvent(
-      new PointerEvent("pointerup", {
-        bubbles: true,
-        clientY: 480,
-        pointerId: 7,
-        pointerType: "touch",
-      }),
-    );
-    await expect.poll(() => sheet.style.height).toContain("0.92");
-
-    await screen.getByRole("button", { name: "Đóng bản ghi" }).click();
+    // Back returns to the list and closes the overlay.
+    await screen.getByRole("button", { name: "Quay lại", exact: true }).click();
     await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("listitem").first()).toBeVisible();
   });
 
   it("renders the conversation as S1/S2 bubbles and copies all from the header", async () => {
@@ -548,7 +541,7 @@ describe("CloudfoneTranscriptsSection", () => {
       .toEqual([["S1: Alo ạ?\nS2: Hỏi giá dịch vụ.\nS2: Chị cho em 5 phút."]]);
   });
 
-  it("shows the sheet's three body states: skeletons, error + retry, empty", async () => {
+  it("shows the overlay's three body states: skeletons, error + retry, empty", async () => {
     await page.viewport(390, 844);
     mocks.listCloudfoneTranscripts.mockResolvedValue(PAGE);
 
@@ -573,7 +566,7 @@ describe("CloudfoneTranscriptsSection", () => {
     expect(skeletons[1]?.getAttribute("style")).toContain("height: 64px");
     expect(skeletons[2]?.getAttribute("style")).toContain("height: 40px");
     await loading.screen
-      .getByRole("button", { name: "Đóng bản ghi", exact: true })
+      .getByRole("button", { name: "Quay lại", exact: true })
       .click();
     await cleanup();
 

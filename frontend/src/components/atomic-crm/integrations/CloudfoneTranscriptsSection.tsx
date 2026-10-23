@@ -16,7 +16,6 @@ import {
   X,
 } from "lucide-react";
 
-import { BottomSheet } from "@/components/application/bottom-sheet/bottom-sheet";
 import { Button } from "@/components/base/buttons/button";
 import { InputBase } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
@@ -29,6 +28,7 @@ import { EmptyState } from "../kit/page-shell";
 import { zaloIntegrationGateway, type CloudfoneTranscriptSummary } from "./api";
 import { copyCredentialFieldValue } from "./credentialClipboard";
 import { TranscriptConversation } from "./TranscriptConversation";
+import { TranscriptFullscreen } from "./TranscriptFullscreen";
 import { parseTranscriptUtterances } from "./transcript-utterances";
 
 import "./cloudfone-transcripts.css";
@@ -60,11 +60,16 @@ import "./cloudfone-transcripts.css";
  *    one ~76px bordered card per call (call icon + number + time-of-day over
  *    a one-line preview + duration pill, no five-column table fits a 390px
  *    phone), a compact Trước/Sau pager — and the transcript opens in a
- *    draggable bottom sheet (50% → 92vh) instead of the panel below the list.
+ *    full-screen overlay (owner decision 23/10 09:24, replacing the consult's
+ *    50% → 92vh bottom sheet): 100% of the visual viewport, one ~56px header
+ *    row (‹ Quay lại | number · duration · date | copy-all, 44px touch
+ *    targets), bubbles filling the rest, sliding in from the right like the
+ *    settings drill-down. The generic `BottomSheet` component stays for other
+ *    surfaces; this viewer no longer mounts it.
  *
  * The transcript itself renders as the same two-speaker conversation in both
  * surfaces (`TranscriptConversation`) — S1 left gray-100 / S2 right brand-50,
- * copy-all in the surface header. The sheet's three body states (skeleton
+ * copy-all in the surface header. The overlay's three body states (skeleton
  * bubbles, empty, error + retry) follow the consult's §3.
  *
  * No Radix in this subtree: React Aria owns the whole page.
@@ -591,32 +596,32 @@ export const CloudfoneTranscriptsSection = ({
       />
     </div>
   ) : detailQuery.isError ? (
-    <div className="sheet-state" role="alert">
+    <div className="detail-state" role="alert">
       <CircleAlert className="size-10 text-rose-500" aria-hidden="true" />
-      <p className="sheet-state-title text-neutral-800">
+      <p className="detail-state-title text-neutral-800">
         Không thể tải hội thoại
       </p>
-      <p className="sheet-state-sub text-neutral-500">
+      <p className="detail-state-sub text-neutral-500">
         Đã xảy ra lỗi khi bóc băng hoặc tải dữ liệu
       </p>
       <button
         type="button"
-        className="sheet-state-retry bg-neutral-900 text-white active:scale-95 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="detail-state-retry bg-neutral-900 text-white active:scale-95 outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
         onClick={() => void detailQuery.refetch()}
       >
         Thử lại
       </button>
     </div>
   ) : parseTranscriptUtterances(detailQuery.data.transcript).length === 0 ? (
-    <div className="sheet-state">
+    <div className="detail-state">
       <MessageCircleMore
         className="size-10 text-neutral-300"
         aria-hidden="true"
       />
-      <p className="sheet-state-title text-neutral-700">
+      <p className="detail-state-title text-neutral-700">
         Chưa có nội dung cuộc gọi
       </p>
-      <p className="sheet-state-sub text-neutral-400">
+      <p className="detail-state-sub text-neutral-400">
         Nội dung bóc băng sẽ hiển thị tại đây
       </p>
     </div>
@@ -888,7 +893,7 @@ export const CloudfoneTranscriptsSection = ({
         <>
           {/* <768px: one ~76px bordered card per call (consult §4) — call
               icon + number + time-of-day over a one-line preview + duration
-              pill. The card opens the transcript sheet. */}
+              pill. The card opens the full-screen transcript overlay. */}
           <ul role="list" className="call-card-list">
             {items.map((row) => {
               const isSelected = row.call_id === selectedId;
@@ -980,11 +985,13 @@ export const CloudfoneTranscriptsSection = ({
 
       {selectedId ? (
         isMobile ? (
-          /* <768px: the consult's bottom sheet replaces the panel below the
-             list — 50% of the viewport, drag the grip to 92%, scrim closes.
-             Header: number + "duration • date" left, copy-all + close right
-             (44px round icon actions, 20px glyphs). */
-          <BottomSheet
+          /* <768px: the full-screen overlay replaces the panel below the
+              list (owner 23/10 09:24 — reading a transcript should read like
+              a chat screen, not a sheet). One fixed ~56px header row — ‹
+              Quay lại | number · duration · date | copy-all (44px touch
+              targets) — and the bubbles scroll in everything below it;
+              slides in from the right like the settings drill-down, 200ms. */
+          <TranscriptFullscreen
             isOpen
             onOpenChange={(open) => {
               if (!open) setSelectedId(null);
@@ -995,14 +1002,22 @@ export const CloudfoneTranscriptsSection = ({
                 : "Bản ghi cuộc gọi"
             }
             header={
-              <div className="transcripts-sheet-header">
-                <div className="transcripts-sheet-heading">
-                  <p className="transcripts-sheet-title text-neutral-900">
+              <header className="transcript-fullscreen-header">
+                <button
+                  type="button"
+                  className="transcripts-back-action"
+                  onClick={() => setSelectedId(null)}
+                >
+                  <ChevronLeft aria-hidden="true" />
+                  <span>Quay lại</span>
+                </button>
+                <div className="transcripts-fullscreen-heading">
+                  <p className="transcripts-fullscreen-title text-neutral-900">
                     {detail ? detail.caller : "Bản ghi cuộc gọi"}
                   </p>
                   {detail ? (
-                    <p className="transcripts-sheet-meta text-neutral-500">
-                      {fmtDuration(detail.talk_seconds)} •{" "}
+                    <p className="transcripts-fullscreen-meta text-neutral-500">
+                      {fmtDuration(detail.talk_seconds)} ·{" "}
                       {fmtStarted(detail.started_at)}
                     </p>
                   ) : null}
@@ -1023,19 +1038,11 @@ export const CloudfoneTranscriptsSection = ({
                     <Copy aria-hidden="true" />
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className="transcripts-icon-action"
-                  aria-label="Đóng bản ghi"
-                  onClick={() => setSelectedId(null)}
-                >
-                  <X aria-hidden="true" />
-                </button>
-              </div>
+              </header>
             }
           >
             {detailBody}
-          </BottomSheet>
+          </TranscriptFullscreen>
         ) : (
           /* ≥768px: the panel under the table, unchanged (bubbles body).
              Copy-all joined the header when the per-bubble copy buttons left
