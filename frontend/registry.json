@@ -512,6 +512,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/TranscriptFullscreen.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/integrations/TranscriptConversation.tsx",
           "type": "registry:component"
         },

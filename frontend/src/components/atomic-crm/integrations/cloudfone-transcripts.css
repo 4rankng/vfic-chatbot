@@ -4,9 +4,9 @@
    CloudfoneTranscriptsSection.test.tsx). Colours stay utility classes in
    the JSX.
 
-   Unscoped on purpose: the conversation also renders inside the bottom
-   sheet's portal, outside `.settings-workspace-content`, and the same bubbles
-   serve the desktop panel.
+   Unscoped on purpose: the conversation also renders inside the full-screen
+   overlay's portal, outside `.settings-workspace-content`, and the same
+   bubbles serve the desktop panel.
 
    Touch/height notes: the global control envelope caps controls at 40px
    (`src/index.css` §3); 44px icon actions opt out the documented way the
@@ -184,7 +184,7 @@
   white-space: nowrap;
 }
 
-/* ── Conversation bubbles (sheet + desktop panel) ───────────────────────
+/* ── Conversation bubbles (full-screen overlay + desktop panel) ───────────
    12px between turns, 6px between same-speaker turns; bubble 10x14 padding,
    16px radius with the 4px corner toward the speaker's side (top corner —
    under the speaker label); text 14px/20px. */
@@ -249,7 +249,7 @@
   white-space: pre-wrap;
 }
 
-/* ── Sheet states: loading skeletons (48/64/40px, alternating sides) ────── */
+/* ── Body states: loading skeletons (48/64/40px, alternating sides) ────── */
 
 .transcript-skeleton {
   display: flex;
@@ -272,9 +272,9 @@
   border-top-right-radius: 4px;
 }
 
-/* ── Sheet states: empty / error ───────────────────────────────────────── */
+/* ── Body states: empty / error ────────────────────────────────────────── */
 
-.sheet-state {
+.detail-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -283,19 +283,19 @@
   text-align: center;
 }
 
-.sheet-state-title {
+.detail-state-title {
   margin: 8px 0 0;
   font-size: 14px;
   font-weight: 500;
 }
 
-.sheet-state-sub {
+.detail-state-sub {
   margin: 0;
   font-size: 12px;
 }
 
 /* "Thử lại": h-9 px-4 rounded-lg, dark fill (colours in the JSX). */
-.sheet-state-retry {
+.detail-state-retry {
   height: 36px;
   margin-top: 8px;
   padding: 0 16px;
@@ -306,43 +306,88 @@
   cursor: pointer;
 }
 
-/* ── Bottom-sheet header: caller, duration • date, copy-all, close ─────── */
+/* ── Full-screen overlay header (owner 23/10): one ~56px row — ‹ Quay lại |
+      number · duration · date | copy-all ───────────────────────────────── */
 
-.transcripts-sheet-header {
+.transcript-fullscreen-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
-  padding: 0 16px 12px;
+  /* Grows past 56px only under an iOS standalone notch. */
+  min-height: 56px;
+  padding: 6px 12px 6px 8px;
+  padding-top: max(6px, env(safe-area-inset-top, 0px));
   border-bottom: 1px solid var(--settings-border, #d4dce6);
 }
 
-.transcripts-sheet-heading {
+/* "‹ Quay lại" — the drill-down back action, 44px touch target with a 20px
+   glyph. The element prefix lifts specificity over the global 40px control
+   ceiling (`src/index.css` §3), same pattern as the icon actions below. */
+header.transcript-fullscreen-header .transcripts-back-action {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 44px;
+  height: 44px;
+  max-height: none;
+  margin-left: -4px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  /* Console tokens, not `text-neutral-*` utilities: the header must survive
+     dark mode and the utility-less test build. */
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+header.transcript-fullscreen-header .transcripts-back-action:hover {
+  background: var(--muted);
+}
+
+header.transcript-fullscreen-header .transcripts-back-action:active {
+  background: var(--accent, var(--muted));
+}
+
+header.transcript-fullscreen-header .transcripts-back-action svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* One line: semibold number, then "duration · date" meta, both truncating
+   from the right so a long number never pushes the actions off-screen. */
+.transcripts-fullscreen-heading {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-
-/* text-sm (14px) semibold number. */
-.transcripts-sheet-title {
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 600;
-  text-overflow: ellipsis;
+  align-items: baseline;
+  gap: 6px;
   white-space: nowrap;
 }
 
-/* text-xs (12px) "duration • date" meta line. */
-.transcripts-sheet-meta {
-  font-size: 12px;
+.transcripts-fullscreen-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
 }
 
-/* 44x44 round icon actions with 20px glyphs — the consult's copy-all/close
-   targets. The element prefix lifts specificity over the global 40px ceiling
-   (`src/index.css` §3), same as `.settings-input-action` does in forms. */
-div.transcripts-sheet-header .transcripts-icon-action {
+.transcripts-fullscreen-meta {
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+/* 44x44 round icon action with a 20px glyph — the copy-all target. Same
+   specificity opt-out over the 40px ceiling as the back action. */
+header.transcript-fullscreen-header .transcripts-icon-action {
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
@@ -352,29 +397,35 @@ div.transcripts-sheet-header .transcripts-icon-action {
   min-width: 44px;
   height: 44px;
   max-height: none;
+  margin-left: auto;
   border: 0;
   border-radius: 9999px;
   background: transparent;
-  /* Console tokens, not `text-neutral-*` utilities: the sheet must survive
-     dark mode and the utility-less test build. */
   color: var(--muted-foreground);
 }
 
-div.transcripts-sheet-header .transcripts-icon-action:hover {
+header.transcript-fullscreen-header .transcripts-icon-action:hover {
   background: var(--muted);
 }
 
-div.transcripts-sheet-header .transcripts-icon-action:active {
+header.transcript-fullscreen-header .transcripts-icon-action:active {
   background: var(--accent, var(--muted));
 }
 
-div.transcripts-sheet-header .transcripts-icon-action svg {
+header.transcript-fullscreen-header .transcripts-icon-action svg {
   width: 20px;
   height: 20px;
 }
 
-/* Phone sheet: tighter turn rhythm keeps more of the transcript above the
-   fold inside the 2-detent bottom sheet. */
+/* ── Full-screen body: bubbles fill everything below the header; iOS
+      standalone keeps its home-indicator clearance at the bottom. ──────── */
+
+.transcript-fullscreen-body {
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Phone: tighter turn rhythm fits more of the transcript on screen inside
+   the full-screen overlay. */
 @media (max-width: 767px) {
   .transcript-conversation .transcript-turn + .transcript-turn {
     margin-top: 10px;
