@@ -1617,3 +1617,45 @@
 .settings-mobile-subpage .settings-main {
   padding-top: 12px;
 }
+
+/* --------------------------------------------------------------------------
+   Contrast repair 24/10 (owner screenshot "Đã bật gần vô hình").
+   Steel-blue `.settings-mobile-card` surface came from workspace-shell tokens
+   while row text kept page-ink utilities → 2:1 ratios. These UNLAYERED rules
+   outrank the layered text-tertiary/text-quaternary utilities (see index.css
+   tabbar note) and restore WCAG AA on the mobile settings surface only.
+   -------------------------------------------------------------------------- */
+.settings-mobile-card .settings-mobile-row {
+  color: rgba(255, 255, 255, 0.96);
+}
+.settings-mobile-card .settings-mobile-row-label {
+  color: rgba(255, 255, 255, 0.96);
+}
+/* "Đã bật/Đang tắt" — self-contained ink pill: white text on the dark shell
+   token carries its own background, so contrast holds on ANY card surface
+   (steel blue in prod, navy/white in tests) instead of compositing. */
+.settings-mobile-card .settings-mobile-row-value {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: #ffffff;
+  background: #2b3a55; /* fixed ink navy — NOT the shell token (aliases the
+     blue card in workspace-frame); white on this = ~9:1 everywhere */
+}
+.settings-mobile-card .settings-mobile-row-chevron {
+  color: rgba(255, 255, 255, 0.85);
+}
+/* Hairline separators readable on blue. */
+.settings-mobile-card .settings-mobile-row + .settings-mobile-row {
+  border-top-color: rgba(255, 255, 255, 0.28);
+}
+/* Group titles + page eyebrow/subtitle sat at ~4.3:1 on cream — darken. */
+.settings-mobile-page .settings-group-title-group,
+.settings-command-header .ops-kicker {
+  color: var(--ink, #3a4149);
+}
+.settings-command-header p:not(.ops-kicker) {
+  color: var(--ink-muted, #4a5158);
+}

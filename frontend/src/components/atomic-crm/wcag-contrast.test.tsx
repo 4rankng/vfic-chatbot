@@ -98,21 +98,35 @@ vi.mock("./projects/ProjectKnowledgePanel", () => ({
   ),
 }));
 
-vi.mock("./integrations/api", () => ({
-  zaloIntegrationGateway: new Proxy(
-    {},
-    { get: () => vi.fn(() => Promise.resolve({})) },
-  ),
-  facebookIntegrationGateway: new Proxy(
-    {},
-    { get: () => vi.fn(() => Promise.resolve({})) },
-  ),
-}));
+vi.mock("./integrations/api", () => {
+  // Settings rows need enabled:true so the "Đã bật" chip renders (contrast
+  // net 24/10); everything else keeps the resolve-{} default.
+  const zaloGateway: Record<string, unknown> = new Proxy(
+    {
+      loadEmailDigestSettings: vi.fn(() => Promise.resolve({ enabled: true })),
+      loadCloudfoneSettings: vi.fn(() => Promise.resolve({ enabled: true })),
+    },
+    {
+      get: (target, prop) =>
+        Reflect.has(target, prop)
+          ? Reflect.get(target, prop)
+          : vi.fn(() => Promise.resolve({})),
+    },
+  );
+  return {
+    zaloIntegrationGateway: zaloGateway,
+    facebookIntegrationGateway: new Proxy(
+      {},
+      { get: () => vi.fn(() => Promise.resolve({})) },
+    ),
+  };
+});
 
 import { UserList } from "./users/UserList";
 import { ProjectWorkspaceShell } from "./projects/ProjectWorkspaceShell";
 import { ProjectMobileCardList } from "./projects/ProjectList";
 import { PerformancePage } from "./performance/PerformancePage";
+import { SettingsMobileGroups } from "./integrations/SettingsMobileGroups";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const user: UserAccount = {
@@ -324,6 +338,21 @@ describe("rendered WCAG AA contrast (mobile)", () => {
         .toBeVisible();
       assertContrast(
         screen.container.querySelector<HTMLElement>(".performance-page")!,
+        width,
+      );
+    },
+  );
+
+  it.each(PHONES)(
+    "keeps the settings mobile rows and Đã bật chip at AA contrast at %ipx",
+    async (width) => {
+      const screen = await renderContained(
+        <SettingsMobileGroups onItemSelect={() => {}} />,
+        width,
+      );
+      await expect.element(screen.getByText("Đã bật").first()).toBeVisible();
+      assertContrast(
+        screen.container.querySelector<HTMLElement>(".settings-mobile-groups")!,
         width,
       );
     },

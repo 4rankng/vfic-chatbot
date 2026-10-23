@@ -800,7 +800,9 @@ input:-webkit-autofill:focus {
 }
 
 .workspace-tabbar-item[aria-current="page"] {
-  color: var(--workspace-action);
+  /* Darkened action for the small 12px label — pure --workspace-action sat
+     at ~3.8:1 on paper (marginal AA fail); 60% ink mix keeps the brand hue. */
+  color: color-mix(in oklab, var(--workspace-action) 55%, var(--workspace-ink));
 }
 
 .workspace-tabbar-item[aria-current="page"]::before {
