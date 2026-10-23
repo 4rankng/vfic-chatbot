@@ -114,7 +114,6 @@ import { ProjectWorkspaceShell } from "./projects/ProjectWorkspaceShell";
 import { ProjectMobileCardList } from "./projects/ProjectList";
 import { PerformancePage } from "./performance/PerformancePage";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router";
 
 const user: UserAccount = {
   id: "user-1",
