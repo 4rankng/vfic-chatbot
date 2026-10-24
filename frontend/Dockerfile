@@ -6,6 +6,9 @@ FROM node:22-alpine AS build
 WORKDIR /app
 ENV CI=1
 COPY package.json package-lock.json ./
+# decode-uri-component resolves to the vendored CJS build via a `file:` override
+# (CHAT-2); npm ci needs that directory on disk before installing.
+COPY vendor ./vendor
 RUN npm ci
 COPY . .
 RUN npm run build
