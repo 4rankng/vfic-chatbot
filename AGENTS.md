@@ -85,3 +85,30 @@ When asked to commit, work directly on `main` per the repository workflow.
 
 Use `standards/definition-of-done.md` and `standards/review-checklist.md` only
 when their detailed gates apply to the task.
+
+## Board tickets — plan.tingting.vip (bắt buộc từ 24/10)
+MỌI thay đổi code bắt nguồn từ request/complaint/feedback PHẢI có issue trên board TRƯỚC khi code; commit message cite ticket (vd CHAT-123).
+
+- Board: https://plan.tingting.vip/tingtingsoft/CHAT
+- Quản lý qua MCP JSON-RPC: `POST https://plan.tingting.vip/mcp` với headers
+  `Authorization: Bearer $(cat ~/.hermes/profiles/dev/cache/scratch/ttplan-token.txt)`
+  và `Accept: application/json, text/event-stream`.
+  Flow: `initialize` (giữ header Mcp-Session-Id từ response) → `notifications/initialized` → `tools/call`.
+- Tools hay dùng: `list_issues {projectKey:"CHAT"}` (mỗi call = 1 page — lặp với seen-id set)
+  · `create_issue {projectKey, columnId, title, description}`
+  · `update_issue {issueId, columnId}` để chuyển cột (KHÔNG dùng move_issue — đó là đổi project)
+  · `add_comment {issueId, body}`.
+- Cột của CHAT: Backlog=11 · Todo=12 · In Progress=13 · Done=14 · Canceled=15.
+- Luật chuyển cột: mọi chuyển PHẢI kèm `add_comment` evidence (Done = có evidence kiểm chứng;
+  Canceled = won't-do + ghi rõ ruling/owner decision). Không đổi trạng thái khi thiếu evidence.
+
+## Consultation — webchat (design/UI/UX/SDLC)
+Khi gặp quyết định design/UI/UX, lựa chọn kiến trúc/library, hoặc challenge SDLC chưa rõ hướng:
+consult webchat TRƯỚC khi tự quyết:
+```bash
+cd /Volumes/LexarSSD/projects/one-shot
+timeout 240 python3 tools/webchat.py gemini send "<câu hỏi + NGỮ CẢNH + số liệu cụ thể>"
+sleep 60 && timeout 120 python3 tools/webchat.py gemini capture   # lặp nếu câu trả lời dài
+```
+- Adapter gemini/deepseek ONLY. Gửi kèm constraint + số đo thật (px, test counts, spec gốc).
+- Pattern/verdict trả về phải được dẫn lại trong brief hoặc comment ticket.
