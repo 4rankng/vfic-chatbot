@@ -116,6 +116,5 @@ sleep 60 && timeout 120 python3 tools/webchat.py gemini capture   # lặp nếu 
 ## COMPLETION PROTOCOL (lane land xong — bắt buộc 24/10)
 Khi công việc đã commit + push thành công:
 1. Update ticket trên board: `update_issue {issueId, columnId:<Done>}` + `add_comment` evidence: commit hash, số test pass, gates.
-2. Notify Hermes orchestrator NGAY (không đợi bị hỏi):
-   `hermes send --to telegram "✅ <MÃ-TICKET> landed <hash> — <1 dòng tóm tắt> · tests <n>/<n>"`
-3. Chỉ khi 2 bước trên xong mới được kết thúc lane. Nếu board/Telegram lỗi → ghi rõ trong HANDOFF.md phần \"COMPLETION BLOCKED\" kèm lý do.
+2. KHÔNG gửi Telegram (owner 24/10 — chat chỉ nhận verdict tổng từ orchestrator). Orchestrator theo dõi board + tự汇总.
+3. Chỉ khi ticket đã update xong mới được kết thúc lane. Nếu board/Telegram lỗi → ghi rõ trong HANDOFF.md phần \"COMPLETION BLOCKED\" kèm lý do.
