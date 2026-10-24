@@ -115,6 +115,6 @@ sleep 60 && timeout 120 python3 tools/webchat.py gemini capture   # lặp nếu 
 
 ## COMPLETION PROTOCOL (lane land xong — bắt buộc 24/10)
 Khi công việc đã commit + push thành công:
-1. Update ticket trên board: `update_issue {issueId, columnId:<Done>}` + `add_comment` evidence: commit hash, số test pass, gates.
+1. Update ticket trên board: `update_issue {issueId, columnId:<QA>}` (KHÔNG kéo Done — QA GATE owner rule 24/10: người code KHÔNG TỰ CHỨNG NHẬN code mình OK; QA agent khác sẽ test theo AC checklist — pass QA mới kéo Done, fail QA kéo về In Progress + repro) + `add_comment` evidence ĐẦY ĐỦ schema: commit SHA · test counts scoped (và full nếu chạy) · gates · screenshot paths (mọi UI work). Thiếu schema → auto-bounce về In Progress.
 2. KHÔNG gửi Telegram (owner 24/10 — chat chỉ nhận verdict tổng từ orchestrator). Orchestrator theo dõi board + tự汇总.
 3. Chỉ khi ticket đã update xong mới được kết thúc lane. Nếu board/Telegram lỗi → ghi rõ trong HANDOFF.md phần \"COMPLETION BLOCKED\" kèm lý do.
