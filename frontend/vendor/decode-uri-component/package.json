@@ -1,0 +1,8 @@
+{
+  "name": "decode-uri-component",
+  "version": "0.5.1",
+  "description": "Vendored CommonJS build of decode-uri-component 0.5.1 (upstream is ESM-only). See index.js header for provenance.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT"
+}
