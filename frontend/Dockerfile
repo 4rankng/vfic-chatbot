@@ -10,6 +10,10 @@ COPY package.json package-lock.json ./
 # (CHAT-2); npm ci needs that directory on disk before installing.
 COPY vendor ./vendor
 RUN npm ci
+# npm ci drops the file: override link for decode-uri-component (lock
+# stub has no resolved version) — recreate it so rolldown can resolve
+# query-string's import inside the image build. See CHAT-2 vendoring.
+RUN rm -f node_modules/decode-uri-component && ln -s /app/vendor/decode-uri-component node_modules/decode-uri-component
 COPY . .
 RUN npm run build
 
