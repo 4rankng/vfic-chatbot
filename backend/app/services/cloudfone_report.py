@@ -104,6 +104,91 @@ def _set_cell_borders(
     tcPr.append(tcBorders)
 
 
+def _apply_fixed_table_layout(table, col_widths_in: Sequence[float]) -> None:
+    """Force Word to honor column widths (consult spec 2026-10-25).
+
+    ``cell.width`` alone is ignored at render — Word autofits unless ALL of
+    ``tblLayout=fixed``, an explicit ``w:tblW``, ``w:gridCol`` widths and a
+    ``w:tcW`` on every cell are present. That autofit was the root cause of the
+    equal-width columns with huge empty gaps in the daily report.
+    """
+    dxa_widths = [max(int(round(w * 1440)), 1) for w in col_widths_in]
+    table.autofit = False
+    tblPr = table._tbl.tblPr
+    for child in list(tblPr):
+        if child.tag.endswith(("tblW", "tblLayout")):
+            tblPr.remove(child)
+    tblPr.append(parse_xml(f'<w:tblW {nsdecls("w")} w:w="{sum(dxa_widths)}" w:type="dxa"/>'))
+    tblPr.append(parse_xml(f'<w:tblLayout {nsdecls("w")} w:type="fixed"/>'))
+    for grid_col, dxa in zip(
+        table._tbl.tblGrid.findall(qn("w:gridCol")), dxa_widths, strict=False
+    ):
+        grid_col.set(qn("w:w"), str(dxa))
+    for row in table.rows:
+        for idx, width_in in enumerate(col_widths_in):
+            row.cells[idx].width = Inches(width_in)
+
+
+def _set_table_cell_margins(
+    table,
+    *,
+    top: int = 80,
+    bottom: int = 80,
+    left: int = 100,
+    right: int = 100,
+) -> None:
+    """Table-level cell padding in dxa (one definition for the whole table)."""
+    tblPr = table._tbl.tblPr
+    for child in list(tblPr):
+        if child.tag.endswith("tblCellMar"):
+            tblPr.remove(child)
+    tblPr.append(
+        parse_xml(
+            f'<w:tblCellMar {nsdecls("w")}>'
+            f'<w:top w:w="{top}" w:type="dxa"/>'
+            f'<w:bottom w:w="{bottom}" w:type="dxa"/>'
+            f'<w:left w:w="{left}" w:type="dxa"/>'
+            f'<w:right w:w="{right}" w:type="dxa"/>'
+            f"</w:tblCellMar>"
+        )
+    )
+
+
+def _set_table_borders(table) -> None:
+    """Horizontal-only dividers: subtle insideH, navy-tinted bottom rule, no verticals."""
+    tblPr = table._tbl.tblPr
+    for child in list(tblPr):
+        if child.tag.endswith("tblBorders"):
+            tblPr.remove(child)
+    tblPr.append(
+        parse_xml(
+            f'<w:tblBorders {nsdecls("w")}>'
+            f'<w:top w:val="none"/>'
+            f'<w:left w:val="none"/>'
+            f'<w:bottom w:val="single" w:sz="6" w:space="0" w:color="{HEX_BORDER}"/>'
+            f'<w:right w:val="none"/>'
+            f'<w:insideH w:val="single" w:sz="4" w:space="0" w:color="{HEX_BORDER_LIGHT}"/>'
+            f'<w:insideV w:val="none"/>'
+            f"</w:tblBorders>"
+        )
+    )
+
+
+def _mark_header_row(row) -> None:
+    """Repeat the header row when the table breaks across pages."""
+    tr_pr = row._tr.get_or_add_trPr()
+    if tr_pr.find(qn("w:tblHeader")) is None:
+        tr_pr.append(parse_xml(f'<w:tblHeader {nsdecls("w")}/>'))
+
+
+def _no_split_rows(table) -> None:
+    """Keep each data row on one page (a 700-char summary must not straddle)."""
+    for row in table.rows[1:]:
+        tr_pr = row._tr.get_or_add_trPr()
+        if tr_pr.find(qn("w:cantSplit")) is None:
+            tr_pr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
+
+
 def _build_hourly_chart(calls: Sequence[CallRecord]) -> io.BytesIO:
     """Stacked bar chart showing answered vs missed calls across 4 daily slots."""
     slots = {
@@ -349,6 +434,8 @@ def generate_daily_call_report_docx(
     # 2. Executive KPI Scorecard (1x4 Table)
     kpi_tbl = doc.add_table(rows=1, cols=4)
     kpi_tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+    _apply_fixed_table_layout(kpi_tbl, [6.77 / 4.0] * 4)
+    _set_table_borders(kpi_tbl)
     ans_pct = round(stats.answer_rate_pct, 1)
     mis_pct = round(100.0 - ans_pct, 1) if stats.total_calls > 0 else 0.0
 
@@ -412,6 +499,7 @@ def generate_daily_call_report_docx(
 
     co_tbl = doc.add_table(rows=1, cols=1)
     co_tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+    _apply_fixed_table_layout(co_tbl, [6.77])
     co_cell = co_tbl.rows[0].cells[0]
     co_cell.width = Inches(6.77)
     _set_cell_margins(co_cell, top=120, bottom=120, left=160, right=160)
@@ -482,34 +570,36 @@ def generate_daily_call_report_docx(
 
     sorted_insights = sorted(insights, key=lambda item: item.transcript.started_at)
     if sorted_insights:
-        c_widths = [Inches(0.85), Inches(1.1), Inches(1.0), Inches(0.85), Inches(2.97)]
+        # Consult spec 2026-10-25 (Option A): time + duration stacked in one
+        # narrow cell, the long summary gets the bulk of the width.
+        c_widths = [0.75, 0.95, 1.05, 4.02]
         c_headers = [
-            "Thời gian",
+            "Thời gian / Thời lượng",
             "Số gọi",
             "Hướng / Nhánh",
-            "Thời lượng",
             "Tóm tắt nội dung cuộc gọi",
         ]
 
-        tbl_ans = doc.add_table(rows=len(sorted_insights) + 1, cols=5)
+        tbl_ans = doc.add_table(rows=len(sorted_insights) + 1, cols=4)
         tbl_ans.alignment = WD_TABLE_ALIGNMENT.CENTER
+        _apply_fixed_table_layout(tbl_ans, c_widths)
+        _set_table_cell_margins(tbl_ans)
+        _set_table_borders(tbl_ans)
+        _mark_header_row(tbl_ans.rows[0])
+        _no_split_rows(tbl_ans)
 
         # Table Header
         h_cells = tbl_ans.rows[0].cells
         for col_i, h_txt in enumerate(c_headers):
-            h_cells[col_i].width = c_widths[col_i]
-            _set_cell_margins(h_cells[col_i], top=80, bottom=80, left=80, right=80)
+            h_cells[col_i].width = Inches(c_widths[col_i])
             _set_cell_shading(h_cells[col_i], HEX_HEADER_BG)
             _set_cell_borders(
                 h_cells[col_i],
-                top={"val": "single", "sz": "4", "color": HEX_BORDER_LIGHT},
                 bottom={"val": "single", "sz": "12", "color": HEX_HEADER_BG},
             )
             hp = h_cells[col_i].paragraphs[0]
             hp.alignment = (
-                WD_ALIGN_PARAGRAPH.CENTER
-                if col_i in [0, 3]
-                else (WD_ALIGN_PARAGRAPH.LEFT if col_i in [1, 2, 4] else WD_ALIGN_PARAGRAPH.LEFT)
+                WD_ALIGN_PARAGRAPH.CENTER if col_i in (0, 1) else WD_ALIGN_PARAGRAPH.LEFT
             )
             hp.paragraph_format.space_before = Pt(0)
             hp.paragraph_format.space_after = Pt(0)
@@ -525,6 +615,7 @@ def generate_daily_call_report_docx(
             row_bg = HEX_LIGHT_ROW if r_i % 2 == 1 else "FFFFFF"
 
             time_val = _hhmm(call.started_at) or call.started_at[:16].replace("T", " ")
+            dur_val = _fmt_duration(call.talk_seconds)
             caller_val = call.caller or "Không xác định"
             direction_raw = (call.direction or "").strip().lower()
             if direction_raw in ("inbound", "in", "gọi vào"):
@@ -534,34 +625,48 @@ def generate_daily_call_report_docx(
             else:
                 dir_label = call.direction or "Gọi vào"
             dir_agent = f"{dir_label} · Nhánh {call.agent}" if call.agent else dir_label
-            dur_val = _fmt_duration(call.talk_seconds)
-            raw_summary = ins.summary or "(Chưa có tóm tắt)"
-            summary_val = _clean_vn(raw_summary)
+            summary_val = _clean_vn(ins.summary or "(Chưa có tóm tắt)")
 
-            row_data = [time_val, caller_val, dir_agent, dur_val, summary_val]
-            for col_i, text_val in enumerate(row_data):
-                r_cells[col_i].width = c_widths[col_i]
-                _set_cell_margins(r_cells[col_i], top=60, bottom=60, left=80, right=80)
-                _set_cell_shading(r_cells[col_i], row_bg)
-                _set_cell_borders(
-                    r_cells[col_i],
-                    top={"val": "single", "sz": "4", "color": HEX_BORDER_LIGHT},
-                    bottom={"val": "single", "sz": "4", "color": HEX_BORDER_LIGHT},
-                )
-                rp = r_cells[col_i].paragraphs[0]
-                rp.alignment = (
-                    WD_ALIGN_PARAGRAPH.CENTER
-                    if col_i in [0, 3]
-                    else (
-                        WD_ALIGN_PARAGRAPH.LEFT if col_i in [1, 2, 4] else WD_ALIGN_PARAGRAPH.LEFT
-                    )
-                )
+            for col_i in range(4):
+                cell = r_cells[col_i]
+                cell.width = Inches(c_widths[col_i])
+                cell.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+                _set_cell_shading(cell, row_bg)
+                _set_cell_borders(cell)  # table-level borders render the dividers
+                rp = cell.paragraphs[0]
                 rp.paragraph_format.space_before = Pt(0)
                 rp.paragraph_format.space_after = Pt(0)
-                rr = rp.add_run(text_val)
-                rr.font.size = Pt(8.5)
-                if col_i == 1:
+                if col_i == 0:
+                    # Stacked metadata: time (bold) over duration (muted).
+                    rp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    r_time = rp.add_run(time_val)
+                    r_time.bold = True
+                    r_time.font.size = Pt(9)
+                    r_time.font.color.rgb = COLOR_DARK
+                    p_dur = cell.add_paragraph()
+                    p_dur.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    p_dur.paragraph_format.space_before = Pt(1)
+                    p_dur.paragraph_format.space_after = Pt(0)
+                    r_dur = p_dur.add_run(dur_val)
+                    r_dur.font.size = Pt(8)
+                    r_dur.font.color.rgb = COLOR_MUTED
+                elif col_i == 1:
+                    rp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    rr = rp.add_run(caller_val)
                     rr.bold = True
+                    rr.font.size = Pt(8.5)
+                    rr.font.color.rgb = COLOR_DARK
+                elif col_i == 2:
+                    rp.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    rr = rp.add_run(dir_agent)
+                    rr.font.size = Pt(8.5)
+                    rr.font.color.rgb = RGBColor(0x33, 0x41, 0x55)
+                else:
+                    rp.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    rp.paragraph_format.line_spacing = 1.15
+                    rr = rp.add_run(summary_val)
+                    rr.font.size = Pt(8.5)
+                    rr.font.color.rgb = COLOR_DARK
     else:
         p_no_ans = doc.add_paragraph()
         p_no_ans.paragraph_format.space_before = Pt(4)
@@ -585,21 +690,24 @@ def generate_daily_call_report_docx(
         r_mw.font.size = Pt(9)
         r_mw.font.color.rgb = COLOR_DANGER
 
-        m_widths = [Inches(1.2), Inches(1.8), Inches(1.6), Inches(2.17)]
+        m_widths = [0.65, 1.05, 1.2, 3.87]
         m_headers = ["Thời gian phát sinh", "Số thuê bao", "Trạng thái", "Hành động CSKH đề xuất"]
 
         tbl_mis = doc.add_table(rows=len(stats.missed) + 1, cols=4)
         tbl_mis.alignment = WD_TABLE_ALIGNMENT.CENTER
+        _apply_fixed_table_layout(tbl_mis, m_widths)
+        _set_table_cell_margins(tbl_mis)
+        _set_table_borders(tbl_mis)
+        _mark_header_row(tbl_mis.rows[0])
+        _no_split_rows(tbl_mis)
 
         # Header
         mh_cells = tbl_mis.rows[0].cells
         for col_i, h_txt in enumerate(m_headers):
-            mh_cells[col_i].width = m_widths[col_i]
-            _set_cell_margins(mh_cells[col_i], top=80, bottom=80, left=80, right=80)
+            mh_cells[col_i].width = Inches(m_widths[col_i])
             _set_cell_shading(mh_cells[col_i], HEX_ACCENT_RED)
             _set_cell_borders(
                 mh_cells[col_i],
-                top={"val": "single", "sz": "4", "color": HEX_BORDER_LIGHT},
                 bottom={"val": "single", "sz": "12", "color": HEX_ACCENT_RED},
             )
             mp = mh_cells[col_i].paragraphs[0]
@@ -623,15 +731,12 @@ def generate_daily_call_report_docx(
                 "Cần gọi lại hỗ trợ / ghi nhận nhu cầu",
             ]
             for col_i, txt in enumerate(m_data):
-                mr_cells[col_i].width = m_widths[col_i]
-                _set_cell_margins(mr_cells[col_i], top=60, bottom=60, left=80, right=80)
-                _set_cell_shading(mr_cells[col_i], row_bg)
-                _set_cell_borders(
-                    mr_cells[col_i],
-                    top={"val": "single", "sz": "4", "color": HEX_BORDER_LIGHT},
-                    bottom={"val": "single", "sz": "4", "color": HEX_BORDER_LIGHT},
-                )
-                mp = mr_cells[col_i].paragraphs[0]
+                cell = mr_cells[col_i]
+                cell.width = Inches(m_widths[col_i])
+                cell.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+                _set_cell_shading(cell, row_bg)
+                _set_cell_borders(cell)  # table-level borders render the dividers
+                mp = cell.paragraphs[0]
                 mp.alignment = (
                     WD_ALIGN_PARAGRAPH.CENTER if col_i in [0, 2] else WD_ALIGN_PARAGRAPH.LEFT
                 )
@@ -639,6 +744,7 @@ def generate_daily_call_report_docx(
                 mp.paragraph_format.space_after = Pt(0)
                 mr = mp.add_run(txt)
                 mr.font.size = Pt(8.5)
+                mr.font.color.rgb = COLOR_DARK if col_i == 1 else RGBColor(0x33, 0x41, 0x55)
                 if col_i == 1:
                     mr.bold = True
     else:

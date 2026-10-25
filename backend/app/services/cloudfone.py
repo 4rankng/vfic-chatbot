@@ -244,10 +244,29 @@ class _Leg:
         return self.status == "ANSWERED" and self.receive != "hangup" and self.real_seconds > 0
 
 
+def call_date_to_ict(raw: str) -> str:
+    """Vendor ``callDate`` (UTC) → Vietnam wall-clock ISO string.
+
+    GetCallHistoryVer2 returns naive UTC timestamps (``2026-10-24T07:37:37``);
+    every outbound surface (letter, DOCX report, LLM prompt, hour buckets) must
+    show Vietnam time, so this converts once at parse. A value that already
+    carries an offset is converted as-is; garbage passes through unchanged so
+    downstream slicing/sorting degrades the way it always has.
+    """
+    text = (raw or "").strip()
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return raw
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(ICT).replace(tzinfo=None).isoformat()
+
+
 def _leg_from_row(raw: dict) -> _Leg:
     lowered = _lowered(raw)
     return _Leg(
-        call_date=_first(lowered, "calldate"),
+        call_date=call_date_to_ict(_first(lowered, "calldate")),
         key=_first(lowered, "key"),
         caller=_first(lowered, "callernumber", "callername"),
         receive=_first(lowered, "receivenumber"),
@@ -357,9 +376,19 @@ def _data_items(payload: dict) -> list[dict]:
 
 
 def _day_window(day: date) -> tuple[str, str]:
-    """The spec date window covering one full calendar day (ICT wall clock)."""
-    day_str = day.isoformat()
-    return f"{day_str} 00:00:01", f"{day_str} 23:59:59"
+    """The query window covering one full Vietnam calendar day.
+
+    The vendor's clock is UTC — ``callDate`` rows come back in UTC (the user-
+    visible 07:37 that was really 14:37 ICT) — so the window the ICT day D
+    maps to is ``D-1 17:00:00 → D 16:59:59`` UTC, computed by converting the
+    ICT day boundaries rather than naive string math.
+    """
+    day_start = datetime(day.year, day.month, day.day, tzinfo=ICT).astimezone(timezone.utc)
+    day_end = day_start + timedelta(days=1) - timedelta(seconds=1)
+    return (
+        day_start.strftime("%Y-%m-%d %H:%M:%S"),
+        day_end.strftime("%Y-%m-%d %H:%M:%S"),
+    )
 
 
 def _envelope_total(payload: dict, *, fallback: int) -> int:
