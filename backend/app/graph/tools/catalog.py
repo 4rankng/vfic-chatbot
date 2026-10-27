@@ -619,6 +619,7 @@ async def search_bus_timetable(
     # Repository retrieval completes each matched route before formatting. Keep
     # every returned stop/time visible so the LLM can answer at Agent X detail.
     groups: OrderedDict[tuple, list[tuple[str, str]]] = OrderedDict()
+    group_notes: dict[tuple, str] = {}
     for r in rows:
         m: dict[str, Any] = dict(r._mapping)
         key = (
@@ -630,13 +631,22 @@ async def search_bus_timetable(
         stop = str(m.get("stop_name") or "").strip()
         when = str(m.get("scheduled_time") or "").strip()
         groups.setdefault(key, []).append((stop, when))
+        # route conditions (CHAT-13): the KB "Ghi chú" rides on the route row;
+        # surface it once per route so the LLM can quote the pickup conditions.
+        note = str(m.get("notes") or "").strip()
+        if note:
+            group_notes.setdefault(key, note)
     lines: list[str] = []
     for (company_name, route, shift, direction), stops in groups.items():
         parts = [f"{s}: {t}" if t else f"{s}: chưa có giờ trong nguồn" for s, t in stops if s]
-        lines.append(
+        line = (
             f"- {company_name} • Tuyến {route} ({shift}/{direction}) đầy đủ điểm dừng: "
             + "; ".join(parts)
         )
+        note = group_notes.get((company_name, route, shift, direction))
+        if note:
+            line += f" — Ghi chú: {note}"
+        lines.append(line)
     result = "\n".join(lines)
     if s.rag_cache_enabled:
         await cache_set_json(cache_key, result, s.rag_result_cache_ttl_seconds)

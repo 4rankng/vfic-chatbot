@@ -300,6 +300,17 @@ async def extract_category_plan(
                     "categories": validate_categories(saved.get("categories"), sections[index]),
                 }
             )
+        if completed and not any(
+            section["categories"][key] for section in completed for key in keys
+        ):
+            # CHAT-13: an all-empty checkpoint is the transient-glitch signature
+            # (a provider hiccup once returned no facts and its COMPLETED
+            # checkpoint then failed every retry without a provider call — the
+            # document was bricked on "no recruitment category facts"). Discard
+            # it and re-run the provider; a genuinely factless source only pays
+            # the extra calls on an explicit retry.
+            logger.info("category extraction checkpoint empty; discarding and re-running")
+            completed.clear()
 
     def state(status: str = "PROCESSING") -> dict[str, Any]:
         covered = [key for key in keys if any(section["categories"][key] for section in completed)]

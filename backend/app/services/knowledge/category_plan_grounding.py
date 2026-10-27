@@ -364,6 +364,15 @@ def validate_category_envelope(key: str, envelope: Any, source: str) -> dict[str
     fields = {field: value for field, value in record.items() if field != "id"}
     if not _has_facts(fields):
         raise CategoryPlanExtractionError("Category record contains no source facts")
+    if key == "transportation":
+        # CHAT-13: recover stops/notes the extractor dropped from the brief's
+        # multi-line bullet lists. Values come verbatim from the source and are
+        # still verified by the grounding pass below.
+        from app.services.knowledge.transportation_bullet_fill import (
+            complete_transportation_record,
+        )
+
+        fields = complete_transportation_record(fields, source)
     schema = record_model.model_json_schema()
     problems = _value_problems(
         fields, schema, normalized_source_text(source), source_token_text, schema.get("$defs", {})
