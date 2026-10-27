@@ -1069,6 +1069,41 @@ async def test_search_bus_timetable_groups_stops_under_route(no_cache_io, monkey
 
 
 @pytest.mark.asyncio
+async def test_search_bus_timetable_surfaces_route_notes(no_cache_io):
+    """CHAT-13: the KB Ghi chú rides on the route row and reaches the LLM."""
+    mapping = {
+        "company_name": "Lear Cát Hải",
+        "route_name": "Xe đưa đón",
+        "shift": "day",
+        "direction": "outbound",
+        "notes": "Các địa điểm khác phải gom đủ 5 người trở lên mới điều xe đón.",
+    }
+    rows = [
+        SimpleNamespace(
+            _mapping={
+                **mapping,
+                "stop_name": "Đồ Sơn",
+                "scheduled_time": "",
+            }
+        ),
+        SimpleNamespace(
+            _mapping={
+                **mapping,
+                "stop_name": "Bến xe Thượng Lý",
+                "scheduled_time": "",
+            }
+        ),
+    ]
+    repo = _make_repo(
+        search_bus_timetable=lambda self, company, question, limit: _const(rows),
+    )
+    out = await search_bus_timetable(retrieval=repo, company="Lear", question="có đưa đón không")
+    assert "Đồ Sơn: chưa có giờ trong nguồn" in out
+    assert "Bến xe Thượng Lý: chưa có giờ trong nguồn" in out
+    assert "Ghi chú: Các địa điểm khác phải gom đủ 5 người trở lên mới điều xe đón." in out
+
+
+@pytest.mark.asyncio
 async def test_search_bus_timetable_no_rows_returns_notice(no_cache_io):
     # second call (empty-company fallback) also empty → notice
     repo = _make_repo(

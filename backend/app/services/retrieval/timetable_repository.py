@@ -138,6 +138,7 @@ class TimetableRepository:
                       to_char(bs.scheduled_time, 'HH24:MI') AS scheduled_time,
                       br.area,
                       br.mode,
+                      br.notes,
                       ks.source_name,
                       br.source_page,
                       'complete matched route' AS match_reason,
