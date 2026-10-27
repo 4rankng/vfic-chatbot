@@ -32,6 +32,47 @@ const jobsPayload: CategoryPayload = {
 };
 
 describe("category markdown reader", () => {
+  it("renders a table field with its header columns and cell values", () => {
+    // Regression: the header row fed only a local variable, so the parsed
+    // table entry kept columns: [] and every card row rendered blank
+    // (transportation stops showed an empty table, 2026-10-27).
+    const source = [
+      "---",
+      'schema_version: "1.0"',
+      "category: transportation",
+      "---",
+      "",
+      "## transportation",
+      "",
+      "### record: auto-transportation-x",
+      'name: "Xe đưa đón"',
+      'direction: "round_trip"',
+      "service_days: []",
+      "shift: null",
+      "fee_vnd: 0",
+      "stops:",
+      "| order | name | time | address |",
+      "| --- | --- | --- | --- |",
+      '| 1 | "Đồ Sơn" | null | null |',
+      '| 2 | "Bến xe Thượng Lý" | "07:00" | null |',
+      "notes: null",
+      "",
+    ].join("\n");
+    const document = parseCategoryMarkdownView(source, "transportation");
+    const stops = document.records[0].fields.find(
+      (field) => field.name === "stops",
+    );
+    expect(stops).toMatchObject({
+      kind: "table",
+      columns: ["order", "name", "time", "address"],
+      rows: [
+        ["1", "Đồ Sơn", "", ""],
+        ["2", "Bến xe Thượng Lý", "07:00", ""],
+      ],
+    });
+    expect(document.records[0].malformed).toEqual([]);
+  });
+
   it("reads the serializer's document back into record views", () => {
     const document = parseCategoryMarkdownView(
       serializeCategoryMarkdown("jobs", jobsPayload),

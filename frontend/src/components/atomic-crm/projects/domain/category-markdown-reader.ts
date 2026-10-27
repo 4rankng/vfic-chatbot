@@ -294,6 +294,7 @@ export const parseCategoryMarkdownView = (
       }
       if (tableColumns === null) {
         tableColumns = cells;
+        openField.columns = cells;
         continue;
       }
       if (cells.every((cell) => SEPARATOR_CELL.test(cell))) continue;
