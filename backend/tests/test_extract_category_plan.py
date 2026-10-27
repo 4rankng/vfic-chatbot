@@ -284,6 +284,47 @@ async def test_resume_only_calls_unfinished_sections_and_revalidates_saved_evide
     no_calls.assert_not_awaited()
 
 
+async def test_all_empty_checkpoint_is_discarded_and_the_provider_reruns(monkeypatch):
+    """CHAT-13: a glitched run must not brick the document on every retry.
+
+    A provider outage that returns no facts once saved a COMPLETED checkpoint
+    whose every category was empty; each retry then replayed that cache and
+    failed with "no recruitment category facts" without calling the provider.
+    The all-empty checkpoint is now discarded on the retry.
+    """
+    monkeypatch.setattr("app.services.knowledge.extraction.CATEGORY_PLAN_SECTION_CHARS", 140)
+    source = _JOB_SOURCE + "\n" + "Thông báo nội bộ. " * 20 + "\n" + _CONTACT_SOURCE
+    saved: list[dict] = []
+
+    async def persist(checkpoint):
+        saved.append(checkpoint)
+
+    plan = await extract_category_plan(
+        source, AsyncMock(return_value=_response()), on_checkpoint=persist
+    )
+    assert plan is None
+    poisoned = saved[-1]
+    assert poisoned["status"] == "COMPLETED"
+    assert poisoned["covered_categories"] == []
+
+    retried_calls: list[str] = []
+
+    async def recovered(_system, section):
+        retried_calls.append(section)
+        return _response(
+            jobs=[_JOB] if _JOB_SOURCE in section else [],
+            contacts=[_CONTACT] if _CONTACT_SOURCE in section else [],
+        )
+
+    recovered_plan = await extract_category_plan(
+        source, recovered, checkpoint=poisoned, on_checkpoint=persist
+    )
+    assert recovered_plan is not None
+    assert {write.key.value for write in recovered_plan.writes} == {"jobs", "contacts"}
+    # Every section was re-run against the provider instead of replaying the cache.
+    assert len(retried_calls) == poisoned["total_sections"]
+
+
 @pytest.mark.parametrize(
     "mutation",
     [
@@ -293,7 +334,6 @@ async def test_resume_only_calls_unfinished_sections_and_revalidates_saved_evide
         "completed_sections",
         "section_hash",
         "section_index",
-        "evidence",
     ],
 )
 async def test_tampered_checkpoint_never_skips_extraction(mutation):
@@ -312,14 +352,41 @@ async def test_tampered_checkpoint_never_skips_extraction(mutation):
         checkpoint[mutation] += 1
     elif mutation == "section_hash":
         checkpoint["sections"][0]["source_sha256"] = "wrong"
-    elif mutation == "section_index":
-        checkpoint["sections"][0]["index"] = 9
     else:
-        checkpoint["sections"][0]["categories"]["jobs"][0]["source_quotes"] = ["fabricated quote"]
+        checkpoint["sections"][0]["index"] = 9
     llm = AsyncMock()
     with pytest.raises(CategoryPlanExtractionError):
         await extract_category_plan(_JOB_SOURCE, llm, checkpoint=checkpoint)
     llm.assert_not_awaited()
+
+
+async def test_tampered_evidence_is_never_published_it_reruns_grounded():
+    """Fabricated checkpoint evidence is discarded, never replayed as truth.
+
+    The tampered record fails its evidence check during checkpoint reuse, which
+    degrades the checkpoint to all-empty — and an all-empty checkpoint is
+    discarded (CHAT-13) so extraction re-runs the provider from scratch. The
+    fabricated text can only come back if the SOURCE supports it; here it does
+    not, so the fresh run must not contain it.
+    """
+    saved = []
+
+    async def persist(checkpoint):
+        saved.append(checkpoint)
+
+    await extract_category_plan(
+        _JOB_SOURCE, AsyncMock(return_value=_response(jobs=[_JOB])), on_checkpoint=persist
+    )
+    checkpoint = copy.deepcopy(saved[-1])
+    checkpoint["sections"][0]["categories"]["jobs"][0]["title"] = "Fabricated title"
+    checkpoint["sections"][0]["categories"]["jobs"][0]["source_quotes"] = ["fabricated quote"]
+
+    plan = await extract_category_plan(
+        _JOB_SOURCE, AsyncMock(return_value=_response(jobs=[_JOB])), checkpoint=checkpoint
+    )
+    assert plan is not None
+    document = parse_category_markdown(plan.writes[0].key, plan.writes[0].content)
+    assert [job.title for job in document.jobs] == [_JOB["record"]["title"]]
 
 
 async def test_section_budget_is_an_explicit_failure_before_any_provider_call(monkeypatch):
