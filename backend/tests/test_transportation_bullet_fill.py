@@ -107,6 +107,58 @@ def test_completion_is_a_noop_when_fields_are_already_grounded():
     assert filled == record
 
 
+def test_completion_appends_list_items_the_extractor_dropped_from_the_tail():
+    """CHAT-13 v3: the extractor kept stops 1-4 and dropped item 5 (≥5 người).
+
+    A partial list is completed in list order — the trailing condition item must
+    not fall off the end just because the extractor filled SOME stops.
+    """
+    record = {
+        "name": "Xe đưa đón",
+        "direction": "round_trip",
+        "fee_vnd": 0,
+        "stops": [
+            {"order": 1, "name": "Đồ Sơn", "time": None, "address": None},
+            {"order": 2, "name": "Thư viện thành phố", "time": None, "address": None},
+            {"order": 3, "name": "Nhà thi đấu Kiến Thụy", "time": None, "address": None},
+            {"order": 4, "name": "Bến xe Thượng Lý", "time": None, "address": None},
+        ],
+        "notes": None,
+    }
+    filled = complete_transportation_record(record, _full_source(DEEPSEEK_SECTION))
+    names = [stop["name"] for stop in filled["stops"]]
+    assert names[:4] == ["Đồ Sơn", "Thư viện thành phố", "Nhà thi đấu Kiến Thụy", "Bến xe Thượng Lý"]
+    assert names[4] == (
+        "Các địa điểm khác như An Lão, An Dương, Tiên Lãng phải gom đủ 5 người trở lên mới điều xe đón"
+    )
+    assert [stop["order"] for stop in filled["stops"]] == [1, 2, 3, 4, 5]
+
+
+def test_completion_does_not_duplicate_stops_the_record_already_has():
+    record = {
+        "name": "Xe đưa đón",
+        "direction": "round_trip",
+        "stops": [
+            {"order": 1, "name": "Đồ Sơn", "time": None, "address": None},
+            {"order": 2, "name": "Thư viện thành phố", "time": None, "address": None},
+            {"order": 3, "name": "Nhà thi đấu Kiến Thụy", "time": None, "address": None},
+            {"order": 4, "name": "Bến xe Thượng Lý", "time": None, "address": None},
+            {
+                "order": 5,
+                "name": (
+                    "Các địa điểm khác như An Lão, An Dương, Tiên Lãng phải gom đủ 5 người "
+                    "trở lên mới điều xe đón"
+                ),
+                "time": None,
+                "address": None,
+            },
+        ],
+        "notes": None,
+    }
+    filled = complete_transportation_record(record, _full_source(DEEPSEEK_SECTION))
+    assert len(filled["stops"]) == 5
+
+
 def test_completion_ignores_sources_without_the_heading():
     record = {"name": "Xe đưa đón", "direction": "round_trip", "stops": [], "notes": None}
     source = "## Lương & thu nhập\n- **Lương cơ bản:** 7.500.000 VNĐ / tháng.\n"

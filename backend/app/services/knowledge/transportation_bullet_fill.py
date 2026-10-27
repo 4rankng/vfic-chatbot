@@ -21,6 +21,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from app.services.knowledge.coercion import source_tokens
+
 _LABEL_SPLIT_RE = re.compile(r"^([^:\n]+?)\s*:\s*(.*)$")
 _ORDERED_ITEM_RE = re.compile(r"^\s*(\d+)[.)]\s+(.+?)\s*\.?\s*$")
 _BULLET_RE = re.compile(r"^\s*-\s+(.+)$")
@@ -81,13 +83,36 @@ def brief_category_section(source: str, heading_variants: tuple[str, ...]) -> st
     return "\n".join(lines[start:end])
 
 
+def _stop_covered(existing_names: list[str], item: str) -> bool:
+    """True when a parsed list item is already among the record's stop names.
+
+    Comparison is token-run equivalence both ways: the extractor may shorten a
+    source line ("1. Tuyến Đồ Sơn." → "Tuyến Đồ Sơn") and a list item may wrap
+    a stop name plus extra words — either direction still means covered.
+    """
+    item_tokens = source_tokens(item)
+    if not item_tokens:
+        return True
+    for name in existing_names:
+        name_tokens = source_tokens(name)
+        if not name_tokens:
+            continue
+        if name_tokens == item_tokens or (
+            f" {name_tokens} " in f" {item_tokens} " or f" {item_tokens} " in f" {name_tokens} "
+        ):
+            return True
+    return False
+
+
 def complete_transportation_record(record: dict, source: str) -> dict:
     """Fill ``stops`` / ``notes`` the extractor dropped, from the brief's bullets.
 
-    Only empty fields are filled; a value the model already grounded stays. The
-    filled stop names keep their list order (``order`` = 1..n) and are the
-    source lines verbatim (trailing sentence period stripped — still a verbatim
-    token run). Notes take the FIRST matching area-condition bullet.
+    Only empty fields are filled — plus the one CHAT-13 gap: an extractor that
+    maps only a PREFIX of the section's ordered stop list (dropping the trailing
+    items) gets the missing items appended, in list order, after the stops it
+    kept. The filled stop names keep their list order (``order`` = 1..n) and are
+    the source lines verbatim (trailing sentence period stripped — still a
+    verbatim token run). Notes take the FIRST matching area-condition bullet.
     """
     section = brief_category_section(source, ("Đưa đón & lịch xe", "Đưa đón"))
     if not section:
@@ -95,8 +120,9 @@ def complete_transportation_record(record: dict, source: str) -> dict:
     filled = dict(record)
     needs_stops = not filled.get("stops")
     needs_notes = not (filled.get("notes") or "").strip()
-    if not (needs_stops or needs_notes):
-        return filled
+    existing_stop_names = [
+        str(stop.get("name") or "") for stop in (filled.get("stops") or [])
+    ]
 
     ordered_items: list[str] = []
     area_notes: list[str] = []
@@ -117,7 +143,7 @@ def complete_transportation_record(record: dict, source: str) -> dict:
         if labeled:
             folded_label = _fold(labeled.group(1))
             value = labeled.group(2).strip()
-            if needs_stops and _is_stop_list_label(folded_label):
+            if _is_stop_list_label(folded_label):
                 in_stop_list = True
                 if value:
                     ordered_items.append(value)
@@ -145,6 +171,17 @@ def complete_transportation_record(record: dict, source: str) -> dict:
             {"order": index, "name": name, "time": None, "address": None}
             for index, name in enumerate(ordered_items, start=1)
         ]
+    elif filled.get("stops") and ordered_items:
+        # The extractor kept a prefix of the section's list: append the items it
+        # dropped, in list order, so the ≥5-people rule cannot fall off the end.
+        next_order = max(int(stop.get("order") or 0) for stop in filled["stops"]) + 1
+        for item in ordered_items:
+            if _stop_covered(existing_stop_names, item):
+                continue
+            filled["stops"].append(
+                {"order": next_order, "name": item, "time": None, "address": None}
+            )
+            next_order += 1
     if needs_notes and area_notes:
         filled["notes"] = area_notes[0]
     return filled
