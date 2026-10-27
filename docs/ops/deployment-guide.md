@@ -338,10 +338,17 @@ tunnel (`-N -L 18081:127.0.0.1:8081`). Ctrl-C closes the tunnel.
 
 ## 4. Alembic migration run
 
-- **HEAD:** `0078_job_physical_attributes` (22 Oct 2026). This line is grepped by the
+- **HEAD:** `0079_bus_search_project_name` (27 Oct 2026). This line is grepped by the
   `release-check` docs-drift gate against the live `alembic heads` value, so a
-  new migration that does not update it blocks the release. `0077` adds the
-  Cloudfone per-day marker (`cloudfone_transcript_days`, one row per inspected
+  new migration that does not update it blocks the release. `0079` patches the
+  `search_bus_timetable` SQL function (CHAT-13): company queries also match
+  `projects.name`/`projects.aliases`, stops without a scheduled time stay
+  discoverable, and route-name tokens contained in the question count as a route
+  match — query-shape only (the function body is replaced in place from 0001's
+  canonical constant, 0011-style), so blue/green run either way; `downgrade()`
+  restores the 0011-era body. `0078` adds nullable
+  `jobs` physical-attribute columns (posture, heavy lifting, health
+  certificate). `0077` adds the Cloudfone per-day marker (`cloudfone_transcript_days`, one row per inspected
   call day — `status`, `call_count`, `recordable_count`, `transcript_count`):
   additive, so blue/green runs either way; `downgrade()` drops the table.
   `0076` adds the
