@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ButtonProps as AriaButtonProps,
   TooltipProps as AriaTooltipProps,
@@ -11,6 +12,13 @@ import {
   TooltipTrigger as AriaTooltipTrigger,
 } from "react-aria-components";
 import { cx } from "@/utils/cx";
+
+/** Touch has no hover-out, so a tapped tooltip would pin itself over the row
+ * content until the next tap (CHAT-19: the Users "Sửa …" pill covered the
+ * status chip of its own row). On coarse pointers the tooltip stays readable
+ * for a short window and then closes itself; the trigger keeps its aria-label
+ * so the name is reachable either way. */
+const TOUCH_AUTO_CLOSE_MS = 2000;
 
 export interface TooltipProps
   extends AriaTooltipTriggerComponentProps,
@@ -73,6 +81,24 @@ export const Tooltip = ({
       ? 12
       : 0;
 
+  // Controlled open state so touch can close the pill on a timer (see
+  // TOUCH_AUTO_CLOSE_MS). A caller-provided `isOpen` stays caller-owned.
+  const [open, setOpen] = useState(defaultOpen ?? false);
+  const autoCloseTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => clearTimeout(autoCloseTimer.current), []);
+  const handleOpenChange = (nextOpen: boolean) => {
+    onOpenChange?.(nextOpen);
+    if (isOpen === undefined) setOpen(nextOpen);
+    clearTimeout(autoCloseTimer.current);
+    autoCloseTimer.current = undefined;
+    if (nextOpen && isOpen === undefined && window.matchMedia("(pointer: coarse)").matches) {
+      autoCloseTimer.current = window.setTimeout(() => {
+        setOpen(false);
+        onOpenChange?.(false);
+      }, TOUCH_AUTO_CLOSE_MS);
+    }
+  };
+
   return (
     <AriaTooltipTrigger
       {...{
@@ -80,9 +106,9 @@ export const Tooltip = ({
         delay,
         closeDelay,
         isDisabled,
-        isOpen,
+        isOpen: isOpen ?? open,
         defaultOpen,
-        onOpenChange,
+        onOpenChange: handleOpenChange,
       }}
     >
       {children}
