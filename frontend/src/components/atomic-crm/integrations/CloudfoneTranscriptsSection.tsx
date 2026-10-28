@@ -321,7 +321,12 @@ const PhonePager = ({
 export const CloudfoneTranscriptsSection = ({
   onBack,
 }: {
-  onBack: () => void;
+  /**
+   * Back into the Cloudfone settings sub-page. Omitted on the workspace
+   * call-records page (CHAT-15): non-admins have no config surface to
+   * return to, so they must not see the settings exit.
+   */
+  onBack?: () => void;
 }) => {
   const isMobile = useIsMobile();
   const notify = useNotify();
@@ -637,8 +642,9 @@ export const CloudfoneTranscriptsSection = ({
   return (
     <div className="flex flex-col gap-4">
       {/* Mobile back navigation lives in the settings app bar; the section
-          keeps its own explicit exit on desktop. */}
-      {!isMobile ? (
+          keeps its own explicit exit on desktop, and only in the console
+          flow (onBack) — the workspace page has no settings to exit to. */}
+      {!isMobile && onBack ? (
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"

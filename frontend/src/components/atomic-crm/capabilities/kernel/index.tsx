@@ -4,6 +4,7 @@ import {
   Gauge,
   Home,
   MessageCircle,
+  PhoneCall,
   Settings,
   Users,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import type {
 } from "../types";
 import {
   AdminPerformanceRoute,
+  CallRecordsPage,
   ForgotPasswordPage,
   ProfilePage,
   RouteBoundary,
@@ -81,6 +83,17 @@ const navigation: readonly CompiledDestination[] = [
     section: "system",
     isActive: pathStartsWith("/hieu-suat"),
   },
+  // CHAT-15: the Cloudfone call-records viewer is for every role, so this
+  // destination is unguarded. Declared last on purpose — the admin mobile
+  // tab bar (Tổng quan → Cài đặt) must not shift.
+  {
+    id: "call-records",
+    label: "Bản ghi cuộc gọi",
+    to: "/ban-ghi-cuoc-goi",
+    Icon: PhoneCall,
+    section: "operations",
+    isActive: pathStartsWith("/ban-ghi-cuoc-goi"),
+  },
 ];
 
 const routes: readonly CompiledRoute[] = [
@@ -91,6 +104,16 @@ const routes: readonly CompiledRoute[] = [
     Component: () => (
       <RouteBoundary>
         <AdminPerformanceRoute />
+      </RouteBoundary>
+    ),
+  },
+  {
+    id: "kernel.route.call-records",
+    path: "/ban-ghi-cuoc-goi",
+    layout: "layout",
+    Component: () => (
+      <RouteBoundary>
+        <CallRecordsPage />
       </RouteBoundary>
     ),
   },
