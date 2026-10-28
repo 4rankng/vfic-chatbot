@@ -1619,18 +1619,15 @@ input[type="time"] {
   padding-block: 0;
 }
 
-/* Editable text needs 16px on touch to prevent Safari focus zoom. Narrow
-   mouse/keyboard panels, labels, selects and read-only values do not. */
+/* Editable, selectable and toggleable text needs 16px on touch to prevent
+   Safari focus zoom (CHAT-17, owner audit 2026-10-29: 12px selects and
+   checkboxes zoomed the whole page on focus). Every form control carries
+   16px on touch now — checkboxes, radios, switches and ranges draw their own
+   visuals so the size is inert there; it only keeps focus from zooming.
+   Narrow mouse/keyboard panels, labels and read-only values keep the 12px
+   control scale. */
 @media (pointer: coarse) {
-  :is(input, textarea):not(
-    [type="checkbox"],
-    [type="radio"],
-    [type="range"],
-    [readonly],
-    [aria-readonly="true"],
-    [disabled],
-    [aria-disabled="true"]
-  ) {
+  :is(input, select, textarea):not([type="hidden"]) {
     font-size: 16px !important;
     line-height: 1.25;
   }
