@@ -638,7 +638,16 @@ async def search_bus_timetable(
             group_notes.setdefault(key, note)
     lines: list[str] = []
     for (company_name, route, shift, direction), stops in groups.items():
-        parts = [f"{s}: {t}" if t else f"{s}: chưa có giờ trong nguồn" for s, t in stops if s]
+        # A route with no times at all (KB-imported routes often have none) is a
+        # stop list, not a timetable: printing "chưa có giờ trong nguồn" behind
+        # every name — behind the ≥5-people condition line worst of all — reads
+        # as missing data. Keep the suffix only when the route HAS times and
+        # individual stops lack theirs.
+        has_any_time = any(when for _stop, when in stops)
+        if has_any_time:
+            parts = [f"{s}: {t}" if t else f"{s}: chưa có giờ trong nguồn" for s, t in stops if s]
+        else:
+            parts = [s for s, _t in stops if s]
         line = (
             f"- {company_name} • Tuyến {route} ({shift}/{direction}) đầy đủ điểm dừng: "
             + "; ".join(parts)

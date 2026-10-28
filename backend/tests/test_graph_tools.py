@@ -1098,8 +1098,11 @@ async def test_search_bus_timetable_surfaces_route_notes(no_cache_io):
         search_bus_timetable=lambda self, company, question, limit: _const(rows),
     )
     out = await search_bus_timetable(retrieval=repo, company="Lear", question="có đưa đón không")
-    assert "Đồ Sơn: chưa có giờ trong nguồn" in out
-    assert "Bến xe Thượng Lý: chưa có giờ trong nguồn" in out
+    # A route with no times at all is a stop list, not a timetable — no
+    # "chưa có giờ trong nguồn" noise behind every name (CHAT-13).
+    assert "Đồ Sơn" in out
+    assert "Bến xe Thượng Lý" in out
+    assert "chưa có giờ trong nguồn" not in out
     assert "Ghi chú: Các địa điểm khác phải gom đủ 5 người trở lên mới điều xe đón." in out
 
 
