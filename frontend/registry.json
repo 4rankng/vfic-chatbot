@@ -588,6 +588,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/integrations/CallRecordsPage.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/installation/runtime-manifest.ts",
           "type": "registry:component"
         },
