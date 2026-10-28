@@ -257,8 +257,8 @@ async def test_get_call_history_v2_sends_the_vendor_postman_body():
         "AuthKey": "cf-key",
         "TypeGet": 0,
         "HideFWOut": 1,
-        "DateStart": "2026-09-30 17:00:00",
-        "DateEnd": "2026-10-01 16:59:59",
+        "DateStart": "2026-10-01 00:00:00",
+        "DateEnd": "2026-10-01 23:59:59",
         "IsSort": 0,
         "CallNum": "",
         "ReceiveNum": "",
@@ -296,7 +296,7 @@ async def test_group_call_legs_merges_transfer_legs_into_one_call():
     assert len(calls) == 1
     call = calls[0]
     assert call.call_id == "1790818523"  # epoch before the "." of the first leg's key
-    assert call.started_at == "2026-10-01T15:35:23"
+    assert call.started_at == "2026-10-01T08:35:23"
     assert call.caller == "0364489026"
     assert call.direction == "Inbound"
     assert call.status == "ANSWERED"
@@ -335,7 +335,7 @@ async def test_group_call_legs_splits_redials_at_the_30s_boundary():
     )
     calls = group_call_legs([first, second])
     assert [call.call_id for call in calls] == ["1791181502", "1791181537"]
-    assert [call.started_at for call in calls] == ["2026-10-01T20:25:02", "2026-10-01T20:25:37"]
+    assert [call.started_at for call in calls] == ["2026-10-01T13:25:02", "2026-10-01T13:25:37"]
 
 
 async def test_group_call_legs_zero_second_pickup_is_not_answered():
@@ -346,12 +346,13 @@ async def test_group_call_legs_zero_second_pickup_is_not_answered():
     assert len(calls) == 1
     assert calls[0].status != "ANSWERED"
     assert calls[0].talk_seconds == 0
-    assert build_daily_stats(calls).missed == (("2026-10-01T16:00:00", "0901234567"),)
+    assert build_daily_stats(calls).missed == (("2026-10-01T09:00:00", "0901234567"),)
 
 
-def test_call_date_to_ict_shifts_naive_vendor_utc_to_vietnam_time():
-    """Vendor callDate is naive UTC; every outbound surface shows ICT (+7)."""
-    assert call_date_to_ict("2026-10-24T07:37:37") == "2026-10-24T14:37:37"
+def test_call_date_to_ict_keeps_naive_vendor_ict_unchanged():
+    """Vendor callDate is already Vietnam wall clock (verified live via the key
+    epoch) — the string passes through without a shift."""
+    assert call_date_to_ict("2026-10-24T07:37:37") == "2026-10-24T07:37:37"
 
 
 def test_call_date_to_ict_keeps_aware_offset_and_garbage():
@@ -362,10 +363,54 @@ def test_call_date_to_ict_keeps_aware_offset_and_garbage():
     assert call_date_to_ict("") == ""
 
 
-def test_day_window_covers_the_full_ict_day_in_the_vendor_utc_clock():
-    """The ICT day D queries UTC [D-1 17:00:00, D 16:59:59] — Vietnam, not UTC."""
+def test_day_window_covers_the_full_ict_day_in_the_vendor_ict_clock():
+    """The ICT day D queries the vendor's own (ICT) clock: [D 00:00:00, D 23:59:59]."""
     start, end = cloudfone_module._day_window(date(2026, 10, 24))
-    assert (start, end) == ("2026-10-23 17:00:00", "2026-10-24 16:59:59")
+    assert (start, end) == ("2026-10-24 00:00:00", "2026-10-24 23:59:59")
+
+
+# The vendor's real 2026-10-26 18:36 rows (verified live, probe of 28/10): the
+# 0906004310 call the +7h bug pushed into the 27/10 report and displayed 01:36.
+EVENING_4310_LEGS = [
+    _leg("2026-10-26T18:36:08", "1793014568.1369-104", "0906004310", "104", "NO ANSWER", 0),
+    _leg(
+        "2026-10-26T18:36:08",
+        "1793014568.1367-3000(Nhóm)",
+        "0906004310",
+        "3000(Nhóm)",
+        "NO ANSWER",
+        20,
+    ),
+    _leg("2026-10-26T18:36:28", "1793014568.1367-hangup", "0906004310", "hangup", "ANSWERED", 0),
+]
+
+
+async def test_regression_4310_evening_call_stays_in_its_own_day_at_its_wall_clock():
+    """2026-10-26 18:36 ICT (0906004310, verified live): the vendor returns
+    callDate in ICT wall clock, so the call belongs to the 26/10 report and
+    shows 18:36 — the old UTC assumption fetched it into the 27/10 report as
+    01:36 and dropped the 27/10 evening calls instead."""
+    calls = group_call_legs(EVENING_4310_LEGS)
+    assert len(calls) == 1
+    call = calls[0]
+    assert call.call_id == "1793014568"
+    assert call.started_at == "2026-10-26T18:36:08"  # wall clock, no shift
+    assert call.status == "NO ANSWER"
+
+    # The call time sits inside the 26/10 report window (vendor clock = ICT).
+    start, end = cloudfone_module._day_window(date(2026, 10, 26))
+    assert start <= "2026-10-26 18:36:08" <= end
+    # …and the evening calls of 27/10 (18:05, 19:22 — verified live) sit inside
+    # day 27's window; the old D-1 17:00 → D 16:59 window cut them off.
+    late_start, late_end = cloudfone_module._day_window(date(2026, 10, 27))
+    assert late_start <= "2026-10-27 18:05:53" <= late_end
+
+    # The letter shows 18:36 and buckets the call into the evening slot.
+    stats = build_daily_stats(calls)
+    html = render_insights_html([], stats, None, date(2026, 10, 26))
+    assert "Cuộc gọi nhỡ: 18:36 — 0906004310" in html
+    assert "18:00 - 24:00 (Tối)" in html
+    assert "1 cuộc (0✓/1✗)" in html
 
 
 async def test_group_call_legs_status_precedence_no_answer_then_busy():
@@ -424,9 +469,9 @@ def test_build_daily_stats_on_the_real_2026_10_01_rows():
     assert stats.answer_rate_pct == 57.1
     assert stats.avg_talk_seconds == 88
     assert stats.missed == (
-        ("2026-10-01T14:50:24", "0364489026"),
-        ("2026-10-01T14:58:09", "0364489026"),
-        ("2026-10-01T23:41:17", "0902065233"),
+        ("2026-10-01T07:50:24", "0364489026"),
+        ("2026-10-01T07:58:09", "0364489026"),
+        ("2026-10-01T16:41:17", "0902065233"),
     )
 
 
@@ -593,7 +638,7 @@ async def test_build_daily_insights_payload_and_bullets():
 
     assert captured["system"] is cloudfone_module.DAILY_INSIGHTS_SYSTEM_PROMPT
     assert "Tổng cuộc gọi: 7 · Trả lời: 4 (57.1%) · Nhỡ: 3" in captured["user"]
-    assert "14:50 · 0364489026 · Inbound ·" in captured["user"]  # compact per-call line (ICT)
+    assert "07:50 · 0364489026 · Inbound ·" in captured["user"]  # compact per-call line (ICT)
     assert " · —" in captured["user"]  # calls without a transcript show "—"
     assert notes == "– Gọi nhỡ tập trung buổi sáng.\n– Khách 0364489026 gọi lại nhiều lần."
 
@@ -655,7 +700,7 @@ def test_render_insights_html_shows_stats_missed_and_notes():
     )
 
     assert "Tổng cuộc gọi: 7 · Trả lời: 4 (57.1%) · Nhỡ: 3 · Thời gian trò chuyện TB: 1p28s" in html
-    assert "Cuộc gọi nhỡ: 14:50 — 0364489026; 14:58 — 0364489026; 23:41 — 0902065233" in html
+    assert "Cuộc gọi nhỡ: 07:50 — 0364489026; 07:58 — 0364489026; 16:41 — 0902065233" in html
     # Daily notes render above the per-call blocks, one <p> per bullet.
     assert html.index("– Gọi nhỡ tập trung buổi sáng.") < html.index("border-radius:8px")
     assert "<p>– Gọi nhỡ tập trung buổi sáng.</p>" in html
@@ -664,7 +709,7 @@ def test_render_insights_html_shows_stats_missed_and_notes():
     # Call transcripts never ship in the letter — only the LLM summary does.
     assert "<details>" not in html
     assert "Transcript" not in html
-    assert "14:50" not in html.split("border-radius:8px")[0].split("Cuộc gọi nhỡ")[0]
+    assert "07:50" not in html.split("border-radius:8px")[0].split("Cuộc gọi nhỡ")[0]
 
 
 def test_render_insights_html_escapes_content():
@@ -863,14 +908,14 @@ async def test_run_transcribes_summarizes_and_sends_the_letter(monkeypatch):
     assert result.insights_count == 4  # one insight per answered call
     assert result.transcribed_count == 4  # answered calls with recording + talk time
     # Only recorded calls with real talk time reach the transcriber — the
-    # ring-only 14:50 / 14:58 / 23:41 ICT recordings are noise and stay skipped.
+    # ring-only 07:50 / 07:58 / 16:41 recordings are noise and stay skipped.
     assert len(seen_audio) == 4
     assert sent["api_key"] == "resend-key"
     assert sent["to"] == ["ops@vp.vn"]
     assert sent["subject"] == "Cloudfone — Phân tích cuộc gọi ngày 01/10/2026"
     html = sent["html"]
     assert "Tổng cuộc gọi: 7 · Trả lời: 4 (57.1%) · Nhỡ: 3 · Thời gian trò chuyện TB: 1p28s" in html
-    assert "Cuộc gọi nhỡ: 14:50 — 0364489026; 14:58 — 0364489026; 23:41 — 0902065233" in html
+    assert "Cuộc gọi nhỡ: 07:50 — 0364489026; 07:58 — 0364489026; 16:41 — 0902065233" in html
     assert "Khách hỏi về giá dịch vụ." in html  # per-call summaries render
     assert "S1: nội dung" not in html  # transcripts never ship in the letter
     assert "– Khách 0364489026 gọi lại 3 lần." in html
