@@ -17,7 +17,7 @@ from fastapi import APIRouter, Body, Depends, Query, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth_dependencies import require_admin
+from app.api.auth_dependencies import get_current_user, require_admin
 from app.identity.application.http import AuthenticatedUser as User
 from app.schemas.integrations import (
     FacebookAccountStatusOut,
@@ -535,10 +535,11 @@ async def list_cloudfone_transcripts(
     caller: str | None = Query(default=None, max_length=64),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    _admin: User = Depends(require_admin),
+    _viewer: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CloudfoneTranscriptPageOut:
-    """Stored voice-call transcripts for the admin viewer, newest call first.
+    """Stored voice-call transcripts for every signed-in workspace user
+    (the call-records view is not admin-only — CHAT-15), newest call first.
 
     ``day`` filters on the call day the pipeline stored; ``caller`` matches a
     phone-number fragment. Rows come from ``cloudfone_call_transcripts`` — the
@@ -578,18 +579,20 @@ async def list_cloudfone_transcripts(
 )
 async def backfill_cloudfone_transcripts(
     body: CloudfoneTranscriptBackfillIn,
-    _admin: User = Depends(require_admin),
+    _viewer: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CloudfoneTranscriptBackfillOut:
     """Fetch one call day from CloudFone on demand and store its transcripts.
 
-    The daily insights pass only covers the previous day, so an admin opening
+    The daily insights pass only covers the previous day, so a viewer opening
     an older day in the viewer would see an empty table. This pulls that day
     from the vendor (same call history, same recording download, same MiniMax
     STT) and stores the transcripts. It never sends the insights email.
 
-    A day that was already checked is skipped — the marker says the day is
-    known — unless the request forces it.
+    This serves the call-records viewer (CHAT-15): any signed-in user may pull
+    the day they are looking at — the credentials and sync setup behind it stay
+    admin-only. A day that was already checked is skipped — the marker says the
+    day is known — unless the request forces it.
     """
     from app.services.cloudfone import backfill_day_transcripts
 
@@ -612,7 +615,7 @@ async def backfill_cloudfone_transcripts(
 async def get_cloudfone_transcript(
     response: Response,
     call_id: str,
-    _admin: User = Depends(require_admin),
+    _viewer: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CloudfoneTranscriptDetailOut:
     """One stored transcript (full text) by the vendor call id."""

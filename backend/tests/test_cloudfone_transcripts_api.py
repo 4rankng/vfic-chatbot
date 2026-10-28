@@ -1,12 +1,13 @@
-"""GET /admin/integrations/cloudfone/transcripts[/{call_id}]: admin viewer contract.
+"""GET /admin/integrations/cloudfone/transcripts[/{call_id}]: viewer contract.
 
 The daily insights pass stores transcripts in ``cloudfone_call_transcripts``;
-this pair of read endpoints serves the admin viewer. These tests drive the
-routes over HTTP on a bare app and pin the projection contract: the list
-carries a 160-char preview (never the full text), the detail carries the full
-transcript, and an unknown call id answers 404 with the domain error's
-Vietnamese reason. Filter/paging SQL behavior is covered against a real
-database in ``tests/integration/test_cloudfone_transcript_store.py``.
+this pair of read endpoints serves the call-records viewer — every signed-in
+workspace user, not just admins (CHAT-15). These tests drive the routes over
+HTTP on a bare app as a non-admin principal and pin the projection contract:
+the list carries a 160-char preview (never the full text), the detail carries
+the full transcript, and an unknown call id answers 404 with the domain
+error's Vietnamese reason. Filter/paging SQL behavior is covered against a
+real database in ``tests/integration/test_cloudfone_transcript_store.py``.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api import integrations as integrations_api
-from app.api.auth_dependencies import require_admin
+from app.api.auth_dependencies import get_current_user
 from app.core.errors import register_domain_exception_handlers
 from app.models.cloudfone import CloudfoneCallTranscript, CloudfoneTranscriptDay
 from app.shared.infrastructure.db import get_request_db
@@ -71,7 +72,11 @@ def _client(session) -> TestClient:
     app = FastAPI()
     register_domain_exception_handlers(app)
     app.include_router(integrations_api.router, prefix="/api/v1")
-    app.dependency_overrides[require_admin] = lambda: SimpleNamespace(id=uuid.uuid4())
+    # CHAT-15: the records endpoints serve non-admins, so the default principal
+    # is a recruiter — every projection test doubles as the permission pin.
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=uuid.uuid4(), role="recruiter"
+    )
     app.dependency_overrides[get_request_db] = lambda: session
     return TestClient(app)
 
