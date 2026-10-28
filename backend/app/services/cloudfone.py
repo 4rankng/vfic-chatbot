@@ -245,12 +245,14 @@ class _Leg:
 
 
 def call_date_to_ict(raw: str) -> str:
-    """Vendor ``callDate`` (UTC) → Vietnam wall-clock ISO string.
+    """Vendor ``callDate`` → Vietnam wall-clock ISO string (no shift).
 
-    GetCallHistoryVer2 returns naive UTC timestamps (``2026-10-24T07:37:37``);
-    every outbound surface (letter, DOCX report, LLM prompt, hour buckets) must
-    show Vietnam time, so this converts once at parse. A value that already
-    carries an offset is converted as-is; garbage passes through unchanged so
+    GetCallHistoryVer2 returns ``callDate`` already in Vietnam wall clock —
+    verified live: the 2026-10-26 18:36 call carries the string
+    ``2026-10-26T18:36:08`` and its ``key`` epoch is 11:36:08 UTC (= 18:36
+    ICT), so the string is the ICT time, not UTC. The value is normalized and
+    passed through unchanged; only a timestamp that carries an explicit UTC
+    offset is converted to ICT. Garbage passes through unchanged so
     downstream slicing/sorting degrades the way it always has.
     """
     text = (raw or "").strip()
@@ -258,9 +260,9 @@ def call_date_to_ict(raw: str) -> str:
         parsed = datetime.fromisoformat(text)
     except ValueError:
         return raw
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(ICT).replace(tzinfo=None).isoformat()
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(ICT)
+    return parsed.replace(tzinfo=None).isoformat()
 
 
 def _leg_from_row(raw: dict) -> _Leg:
@@ -378,12 +380,13 @@ def _data_items(payload: dict) -> list[dict]:
 def _day_window(day: date) -> tuple[str, str]:
     """The query window covering one full Vietnam calendar day.
 
-    The vendor's clock is UTC — ``callDate`` rows come back in UTC (the user-
-    visible 07:37 that was really 14:37 ICT) — so the window the ICT day D
-    maps to is ``D-1 17:00:00 → D 16:59:59`` UTC, computed by converting the
-    ICT day boundaries rather than naive string math.
+    The vendor's clock is Vietnam wall clock (ICT) — ``callDate`` rows come
+    back in ICT already (verified live: the 2026-10-26 18:36 call carries the
+    string ``2026-10-26T18:36:08`` whose ``key`` epoch is 11:36 UTC) — so the
+    ICT day D maps to ``D 00:00:00 → D 23:59:59`` in the vendor's own clock,
+    no offset math.
     """
-    day_start = datetime(day.year, day.month, day.day, tzinfo=ICT).astimezone(timezone.utc)
+    day_start = datetime(day.year, day.month, day.day)
     day_end = day_start + timedelta(days=1) - timedelta(seconds=1)
     return (
         day_start.strftime("%Y-%m-%d %H:%M:%S"),
