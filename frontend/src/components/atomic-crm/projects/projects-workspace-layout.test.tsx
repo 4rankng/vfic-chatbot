@@ -1,10 +1,15 @@
 import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DataProviderContext, TestMemoryRouter } from "ra-core";
 import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import "@/index.css";
 import "./projects.css";
+import { TestMessages } from "../providers/commons/TestMessages";
+import { ProjectMobileCardList } from "./ProjectList";
+import type { Project } from "../types";
 
 // TEST-17 — this replaces projects.css.test.ts, which read projects.css as
 // `?raw` and matched ~20 regexes against its own source text. Those regexes
@@ -413,4 +418,79 @@ describe("project knowledge category editor", () => {
     expect(textarea.getBoundingClientRect().height).toBeLessThanOrEqual(420);
     expect(textarea.getBoundingClientRect().height).toBeGreaterThan(0);
   });
+});
+
+// CHAT-18 (2026-10-29): the shared compact-step clamp and the 40px console
+// ceiling both pinned `project-card-main` at 40px while its content (title +
+// badge row) needs ~62px, so the badges spilled 18px past the card's painted
+// background. The card is a compound row surface: `data-allow-tall` is the
+// envelope's documented opt-out, and the card keeps a min-height so rows stay
+// even without ever clipping content.
+const noopDataProvider = {
+  create: vi.fn(),
+  getList: vi.fn(() => Promise.resolve({ data: [], total: 0 })),
+  getOne: vi.fn(() => Promise.resolve({ data: {} })),
+  getMany: vi.fn(() => Promise.resolve({ data: [] })),
+  getManyReference: vi.fn(() => Promise.resolve({ data: [], total: 0 })),
+  update: vi.fn(() => Promise.resolve({ data: {} })),
+  updateMany: vi.fn(() => Promise.resolve({ data: [] })),
+  delete: vi.fn(() => Promise.resolve({ data: {} })),
+  deleteMany: vi.fn(() => Promise.resolve({ data: [] })),
+};
+
+const cardProject = (id: string, name: string): Project => ({
+  id,
+  slug: `du-an-${id}`,
+  name,
+  is_active: true,
+  ingest_state: "ready",
+  knowledge_document_count: 3,
+  created_at: "2026-10-01T00:00:00Z",
+  updated_at: "2026-10-01T00:00:00Z",
+});
+
+describe("project phone card list", () => {
+  it.each([320, 390])(
+    "keeps badges inside the card and the tap area ≥44px at %ipx",
+    async (width) => {
+      await page.viewport(width, 844);
+      const screen = await render(
+        <TestMemoryRouter>
+          <QueryClientProvider client={new QueryClient()}>
+            <DataProviderContext.Provider value={noopDataProvider as never}>
+              <TestMessages>
+                {workspace(
+                  <ProjectMobileCardList
+                    projects={[cardProject("1", "Foxconn Nghệ An")]}
+                    isAdmin={false}
+                    canEdit={false}
+                    onEdit={() => {}}
+                    onDeleted={() => {}}
+                    onOpenKnowledge={() => {}}
+                  />,
+                )}
+              </TestMessages>
+            </DataProviderContext.Provider>
+          </QueryClientProvider>
+        </TestMemoryRouter>,
+      );
+      const main = screen.container.querySelector<HTMLElement>(
+        ".project-card-main",
+      )!;
+      const card =
+        screen.container.querySelector<HTMLElement>(".project-card")!;
+      // The compound-surface opt-out is what frees the card from both the
+      // compact-step clamp and the 40px ceiling.
+      expect(main.hasAttribute("data-allow-tall")).toBe(true);
+      // CHAT-16 tap floor and CHAT-18 containment: no spill past the button.
+      expect(main.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      expect(main.scrollHeight).toBeLessThanOrEqual(main.clientHeight + 1);
+      const badges = main.querySelector<HTMLElement>(".project-card-badges")!;
+      expect(badges.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        card.getBoundingClientRect().bottom + 1,
+      );
+      // min-height keeps cards even; content may still grow past it.
+      expect(card.getBoundingClientRect().height).toBeGreaterThanOrEqual(72);
+    },
+  );
 });

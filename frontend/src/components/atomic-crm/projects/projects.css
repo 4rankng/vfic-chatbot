@@ -1431,6 +1431,11 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+    /* CHAT-18: min-height keeps cards even across the list; the content
+       (title + badge row) may grow past it, and the card must never clip —
+       the old fixed 40px button height pushed the badges outside the painted
+       background entirely. */
+    min-height: 72px;
     padding: 4px 8px;
     border: 1px solid var(--workspace-border);
     border-radius: 12px;
