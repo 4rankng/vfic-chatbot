@@ -441,6 +441,11 @@ export const ProjectMobileCardList = ({
             <button
               type="button"
               className="project-card-main"
+              // Compound row surface (envelope opt-out): the compact-step clamp
+              // and the 40px ceiling pinned this button at 40px while its title
+              // + badge row needs ~62px, spilling the badges past the card
+              // background (CHAT-18).
+              data-allow-tall
               aria-label={`Mở kiến thức dự án ${project.name}`}
               onClick={() => onOpenKnowledge(project)}
             >

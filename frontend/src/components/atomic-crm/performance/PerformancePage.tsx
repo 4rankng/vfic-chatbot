@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { ClockRefresh } from "@untitledui/icons";
+import { Smartphone } from "lucide-react";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MobilePageHeader } from "@/components/atomic-crm/kit/mobile-page-header";
+import { EmptyState } from "@/components/atomic-crm/kit";
 
 import {
   ButtonGroup,
@@ -64,15 +66,24 @@ export const PerformanceMetrics = ({ data }: { data: PerfMetrics }) => {
           {conversion.with_phone.toLocaleString("vi-VN")} /{" "}
           {conversion.candidate_chats.toLocaleString("vi-VN")} cuộc trò chuyện
         </p>
-        {conversion.candidate_chats > 0 ? (
+        {conversion.candidate_chats > 0 && conversion.with_phone > 0 ? (
           <ProgressBarBase
             className="uu-scope performance-conversion-meter"
             value={conversion.rate_pct ?? 0}
           />
         ) : (
-          <p className="performance-empty">
-            Chưa có cuộc trò chuyện nào từ ứng viên trong khoảng thời gian này.
-          </p>
+          // CHAT-20: the meter rendered as a blank rail whenever no phone
+          // number was captured (0 / 13 in the 29/10 audit) — the surface now
+          // states itself through the console's shared empty-state pattern.
+          <EmptyState
+            icon={<Smartphone className="size-6" aria-hidden="true" />}
+            title="Chưa có số điện thoại nào được thu"
+            description={
+              conversion.candidate_chats > 0
+                ? "Chưa có cuộc trò chuyện nào để lại số điện thoại trong khoảng thời gian này."
+                : "Chưa có cuộc trò chuyện nào từ ứng viên trong khoảng thời gian này."
+            }
+          />
         )}
       </section>
     </>

@@ -8,7 +8,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Inbox } from "lucide-react";
 
+import { EmptyState } from "../kit";
 import {
   formatSecondsValue,
   toTrendRows,
@@ -31,10 +33,14 @@ export const PerformanceResponseTimeChart = ({
   window: PerfWindow;
 }) => {
   if (trend.length === 0) {
+    // CHAT-20: a chart with no data says so through the console's shared
+    // empty-state pattern (icon + message) instead of a bare surface.
     return (
-      <p className="performance-empty">
-        Chưa có dữ liệu trong khoảng thời gian này.
-      </p>
+      <EmptyState
+        icon={<Inbox className="size-6" aria-hidden="true" />}
+        title="Chưa có dữ liệu xu hướng"
+        description="Chưa có dữ liệu trong khoảng thời gian này."
+      />
     );
   }
 
@@ -68,7 +74,21 @@ export const PerformanceResponseTimeChart = ({
               y={TARGET_SECONDS}
               stroke="var(--muted-foreground)"
               strokeDasharray="4 4"
-              label="10 giây"
+              label={{
+                value: "10 giây",
+                // CHAT-20: the label used to sit on the dashed threshold and
+                // the p95 series at once. Offset it above the line's end
+                // (insideTopRight anchors to the line's bbox) and give it a
+                // panel-coloured halo so a crossing spike stays readable
+                // under it.
+                position: "insideTopRight",
+                fill: "var(--muted-foreground)",
+                style: {
+                  paintOrder: "stroke",
+                  stroke: "var(--card)",
+                  strokeWidth: 4,
+                },
+              }}
             />
             <Line
               type="monotone"

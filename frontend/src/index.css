@@ -967,8 +967,10 @@ input:-webkit-autofill:focus {
 /* One compact desktop action hierarchy for daisyUI-styled actions: small,
    normal and large text actions are 28/32/36px with 13px semibold labels.
    The exclusions are part of the contract — icon-only controls stay square,
-   touch controls keep their own height, and conversation rows keep theirs. */
-@media (min-width: 768px) {
+   touch controls keep their own height, and conversation rows keep theirs.
+   Fine-pointer only (CHAT-16): on touch every control keeps the 44px floor
+   below even at >=768px, so the compact 28/32/36px heights must not apply. */
+@media (min-width: 768px) and (pointer: fine) {
   .workspace-frame-content
     .tt-btn:not(.conversation):not(.tt-btn-square):not(.tt-btn-circle):not(
       .tt-btn-sm
@@ -1000,12 +1002,11 @@ input:-webkit-autofill:focus {
   }
 }
 
-/* Every control inside the workspace keeps a 40px touch-target floor at phone
-   widths, whatever height its own variant declares (owner cap 2026-09-30: no
-   button renders taller than 40px, so the floor and the global ceiling agree).
+/* Narrow mouse windows keep the historic 40px floor (2026-09-30 control
+   envelope): the 44px tier below is a touch requirement, not a width one.
    The inbox directory-header channel tiles are the one exemption: the owner
-   capped every control in that header at 40px, so they opt out here instead of
-   escalating a second `!important`. */
+   capped every control in that header at 40px, so they opt out here instead
+   of escalating a second `!important`. */
 @media (max-width: 767px) {
   .workspace-frame-content
     button:not(.conversation):not(.channel-adapter-option),
@@ -1020,6 +1021,89 @@ input:-webkit-autofill:focus {
   .workspace-chrome button,
   .workspace-chrome a[role="button"] {
     min-height: 40px !important;
+  }
+}
+
+/* Every interactive control keeps a 44x44 touch-target floor on touch — the
+   owner audit 2026-10-29 (CHAT-16) measured 49 targets under 44px at 390px and
+   33 more in Settings at 768px under the old 40px floor. Keyed on
+   (pointer: coarse) only: mouse desktops keep the compact envelope at every
+   width (40px narrow, 28/32/36px wide). The inbox channel tiles no longer opt
+   out (34x34 was one of the findings). The rule is global on purpose: select
+   options and menu items render in portals outside .workspace-frame-content. */
+@media (pointer: coarse) {
+  html body
+    button:not(.conversation):not([data-allow-tall]):not([role="checkbox"]):not(
+      [role="radio"]
+    ):not([role="switch"]),
+  html body a[role="button"]:not([data-allow-tall]),
+  html body a.console-button:not([data-allow-tall]),
+  html body input:not([type="checkbox"]):not([type="radio"]):not(
+      [data-allow-tall]
+    ),
+  html body select:not([data-allow-tall]),
+  html body textarea:not([data-allow-tall]),
+  html body summary:not([data-allow-tall]):not(
+      .knowledge-unit-disclosure > summary
+    ),
+  html body [role="option"],
+  html body [role="menuitem"],
+  html body [role="tab"] {
+    min-height: 44px !important;
+  }
+
+  /* Icon-only controls need the same floor on the cross axis (40x40,
+     36x36 and 34x34 were all measured under 44px). */
+  html body
+    button:not(.conversation):not([data-allow-tall]):not([role="checkbox"]):not(
+      [role="radio"]
+    ):not([role="switch"]),
+  html body a[role="button"]:not([data-allow-tall]),
+  html body a.console-button:not([data-allow-tall]) {
+    min-width: 44px !important;
+  }
+
+  /* InputGroup fields stretch to their wrapper (`min-height: 0 !important`
+     keeps the field flush) — the wrapper carries the floor instead, so
+     search fields measured at 34-38px reach 44px. */
+  html body [class~="group/input"] {
+    min-height: 44px !important;
+  }
+
+  /* Checkboxes, radios and switches keep their compact visual box; their hit
+     area grows to >=44px with an invisible pseudo-element (CHAT-16 AC:
+     "visual có thể nhỏ hơn qua pseudo-element mở rộng hit area"). The clear
+     space around a settings toggle is >=15px per side, so the expansion does
+     not reach a neighbouring control. */
+  html body input[type="checkbox"],
+  html body input[type="radio"] {
+    position: relative;
+  }
+
+  html body input[type="checkbox"]::after,
+  html body input[type="radio"]::after,
+  html body [role="checkbox"]::after,
+  html body [role="radio"]::after,
+  html body [role="switch"]::after {
+    content: "";
+    position: absolute;
+    inset: -16px;
+  }
+
+  html body [role="checkbox"],
+  html body [role="radio"],
+  html body [role="switch"] {
+    position: relative;
+  }
+
+  /* Standalone text links on the auth card ("Quên mật khẩu?" measured 18px
+     tall) get a centred 44px box on touch; the link sits on its own row so the
+     text position in the line is unchanged. Inline links inside prose are
+     exempt (WCAG 2.2 2.5.8 inline exception). */
+  .auth-shell a[href]:not(.console-button):not([role="button"]) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 }
 
@@ -1535,18 +1619,15 @@ input[type="time"] {
   padding-block: 0;
 }
 
-/* Editable text needs 16px on touch to prevent Safari focus zoom. Narrow
-   mouse/keyboard panels, labels, selects and read-only values do not. */
+/* Editable, selectable and toggleable text needs 16px on touch to prevent
+   Safari focus zoom (CHAT-17, owner audit 2026-10-29: 12px selects and
+   checkboxes zoomed the whole page on focus). Every form control carries
+   16px on touch now — checkboxes, radios, switches and ranges draw their own
+   visuals so the size is inert there; it only keeps focus from zooming.
+   Narrow mouse/keyboard panels, labels and read-only values keep the 12px
+   control scale. */
 @media (pointer: coarse) {
-  :is(input, textarea):not(
-    [type="checkbox"],
-    [type="radio"],
-    [type="range"],
-    [readonly],
-    [aria-readonly="true"],
-    [disabled],
-    [aria-disabled="true"]
-  ) {
+  :is(input, select, textarea):not([type="hidden"]) {
     font-size: 16px !important;
     line-height: 1.25;
   }
