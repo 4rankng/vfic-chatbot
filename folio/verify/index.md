@@ -7,13 +7,14 @@ Wiki nghiệp vụ & kỹ thuật hệ thống Silversea — vận tải contain
 ```mermaid
 graph LR
     A["1·Tổng quan"] --> B["2·O2C"] --> C["3·Chứng từ"] --> D["4·Điều phối"] --> E["5·Cước phí"] --> F["6·Kế toán"]
+    F --> G["7·Ma trận YC"] --> H["8·Quyết định"] --> I["9·LCL"] --> J["10·UI/UX"]
 ```
 
 - Nếu mới onboard, hãy đọc tuần tự theo thứ tự **1 → 2 → 3 → 4**.
 - Khi cần tra nhanh một nghiệp vụ, dùng mục lục dưới và tìm kiếm (^K).
 - Mọi thay đổi nghiệp vụ đều được ghi vào **Business Logic Changelog**.
 
-## Đặc tả nghiệp vụ (spec 1–8)
+## Đặc tả nghiệp vụ (spec 1–10)
 1. [Tổng quan hệ thống và nguyên tắc chung](spec/1-t-ng-quan-h-th-ng-v-nguy-n-t-c-chung.md) — bối cảnh, vai trò, nguyên tắc dữ liệu.
 2. [Luồng nghiệp vụ Order-to-Cash (O2C)](spec/2-lu-ng-nghi-p-v-order-to-cash-o2c.md) — từ nhận yêu cầu đến đối soát. Sơ đồ: [O2C](so-do/s-lu-ng-nghi-p-v-o2c.artifact) · [Tương tác các bên](so-do/s-t-ng-t-c-c-c-b-n-trong-lu-ng-o2c.artifact)
 3. [Module Chứng từ, lô hàng và tờ khai hải quan](spec/3-module-ti-p-v-l-h-ng-v-t-khai-h-i-quan.md) — CUS, tờ khai per-cont, bộ chứng từ.
@@ -22,9 +23,10 @@ graph LR
 6. [Phân hệ Kế toán](spec/6-ph-n-h-k-to-n.md) — phải thu/trả, chốt debit, hoàn ứng.
 7. [Ma trận yêu cầu chính thức](spec/7-ma-tr-n-y-u-c-u-ch-nh-th-c.md) — REQ ↔ module.
 8. [Quyết định ràng buộc và vấn đề đang mở](spec/8-quy-t-nh-r-ng-bu-c-v-v-n-ang-m.md) — ruling + open questions.
+9. [Logic nghiệp vụ Hàng lẻ (LCL)](spec/logic-nghi-p-v-h-ng-l-lcl.md) — định nghĩa LCL/FCL, gom cont, gộp/tách cước thu khách, BKS thực/báo khách, bảo toàn doanh thu.
+10. [Yêu cầu giao diện người dùng (UI/UX)](spec/10-y-u-c-u-giao-di-n-ng-i-d-ng-ui-ux.md) — chuẩn màn hình, data-dense, lỗi giao diện đang mở.
 
 ## Nghiệp vụ chuyên sâu
-- [Logic nghiệp vụ Hàng lẻ (LCL)](logic-nghi-p-v-h-ng-l-lcl.md) — định nghĩa, gom cont, gộp/tách cước, BKS thực/báo khách, bảo toàn doanh thu.
 - [Đặc tả kỹ thuật tổng hợp (TTransport)](c-t-k-thu-t-t-ng-h-p-silversea-ttransport.md) — bản tóm lược một trang.
 - [Business Logic Changelog](business-logic-changelog.md) — mọi thay đổi nghiệp vụ theo ngày.
 

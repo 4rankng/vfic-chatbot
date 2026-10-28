@@ -18,6 +18,8 @@ Tài liệu mô tả **luồng nghiệp vụ, quy tắc tính tiền, trạng th
 - Chương [6. Phân hệ kế toán](spec/6-ph-n-h-k-to-n.md) gồm chứng từ, công nợ phải thu/trả, thu chi, đối soát và báo cáo.
 - Chương [7. Ma trận yêu cầu chính thức](spec/7-ma-tr-n-y-u-c-u-ch-nh-th-c.md) là bảng 35 yêu cầu chính thức và 23 yêu cầu bổ sung kèm trạng thái.
 - Chương [8. Quyết định nghiệp vụ và vấn đề đang mở](spec/8-quy-t-nh-r-ng-bu-c-v-v-n-ang-m.md) liệt kê các quyết định đã chốt theo ngày, lỗi đang sửa, tính năng đã hủy và rủi ro.
+- Chương [9. Logic nghiệp vụ Hàng lẻ (LCL)](spec/logic-nghi-p-v-h-ng-l-lcl.md) tập trung vào nghiệp vụ hàng lẻ: tạo lô lẻ, gom/tách cước thu–trả, phân bổ xe và các luật đang áp dụng.
+- Chương [10. Yêu cầu giao diện người dùng (UI/UX)](spec/10-y-u-c-u-giao-di-n-ng-i-d-ng-ui-ux.md) tách riêng toàn bộ yêu cầu về màn hình, nút, bảng, bộ lọc và chuẩn trải nghiệm, tham chiếu từ các chương nghiệp vụ.
 
 ## Sơ đồ nghiệp vụ
 
@@ -48,3 +50,4 @@ graph TD
     F --> G["Kế toán<br/>Debit Note · chi trả"]
     G --> H["Báo cáo quản trị"]
 ```
+

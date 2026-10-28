@@ -31,7 +31,21 @@
 ### 7.2.1 CUS — Chứng từ / nhập lô (11 YC)
 
 | Mã | Yêu cầu (tóm tắt) | Trạng thái |
-|---|---|---| | | Gõ đủ 2 số giờ → focus tự sang ô phút, không rơi phím số; vẫn cho nhập tay/chọn lịch được. | **Đã triển khai, cần kiểm tra lại** — đạt có điều kiện về thứ tự nhập liệu; **còn mở — chờ chốt** | | | Enter ở form sửa ngày giờ lô chưa có lịch = **lưu + thoát về danh sách** (không đứng ở popup). | **Đã triển khai, cần kiểm tra lại** — đã sửa nguyên nhân: 2 nút gửi nằm ngoài biểu mẫu; nhiều lần kiểm trước chưa đạt | | | Nút "Copy thời gian" gán ngày giao chung cho **mọi cont** của lô nhiều cont (không nhập tay từng cont). | **Đã triển khai** — đã kiểm đạt; từng gặp lỗi nút biến mất ở 2 lần (11/10, 13/10) | | | TAB từ ô "Số cont" sang "Loại cont" rồi gõ phải **mở dropdown gợi ý** (không bắt buộc click). | **Đã triển khai, cần kiểm tra lại** — chưa có kết quả chốt () | | | Nhiều tờ khai trên một lô; thêm số tờ khai 1 cont → sync mọi cont; sửa/thêm ngay màn chi tiết. **Quyết định 22/10: sửa ngay tại Chi tiết + sync mọi cont.** | **Đã triển khai, cần kiểm tra lại** — kiểm tra giai đầu đạt, từng2 lần kiểm chưa đạt đã đóng; **còn mở — chờ chốt** đối chiếu quyết định 26/10 | | | Tờ khai hải quan nhập rồi bấm hoàn tất **không lưu dữ liệu** → sửa để lưu được. | **Đã triển khai, cần kiểm tra lại** — đã sửa để lưu được, chờ kết quả chốt | | | Form nhập liệu chỉ gọn **tên nhà máy** + nút "Xem chi tiết" mở địa chỉ đầy đủ + info xuất hóa đơn. | **Đã triển khai** — chưa có kết quả kiểm tra riêng () | | | Bỏ 2 số 0 thập phân vô nghĩa sau phẩy — **đi xa hơn: hiển thị theo TẤN** (18.500 kg → "18,5 tấn"; mọi màn kg→tấn, ô nhập vẫn kg). | **Đã triển khai** — quyết định 21/10; nguyên nhân trước: dấu chấm nghìn bị đọc nhầm thành thập phân | | | Sửa số lượng cont: bổ sung cont mới tự copy trường chung, **chỉ trống Số cont + Loại cont** ("Chưa chọn"). | **Đã hủy/thay thế (22/10)** — hủy quyết định 21/10, quay về nguyên văn A.1: copy Tuyến/Nhà xe/Nâng/Hạ/Trọng lượng/Giờ hẹn; không nút ở Chi tiết | | | Nút **"Xóa cont"** trực tiếp trong bảng Chi tiết lô CUS. | **Đã hủy/thay thế (22/10)** — quyết định 17/10 hết hiệu lực; ngày 22/10 09:50 **mở lại** nút @Chi tiết — chờ triển khai + gỡ kiểm thử ghim cũ; ngăn Tổng quan giữ nguyên | | | Thứ tự chứng từ chuẩn (quyết định 22/10): **BILL/BOOKING → SỐ TỜ KHAI → NHẬP/XUẤT → HÃNG TÀU** (ô đầu chốt là BILL/BOOKING, không chỉ "Số booking" như đặc tả A.3 cũ). | **Đã triển khai** — kiểm tra đạt ở môi trường thử nghiệm; từng 3 lần kiểm chưa đạt vì 3 màn trùng tên |
+| Mã | Yêu cầu (tóm tắt) | Trạng thái |
+|---|---|---|
+| CUS-01 | Gõ đủ 2 số giờ → focus tự sang ô phút, không rơi phím số; vẫn cho nhập tay/chọn lịch được. | **Đã triển khai, cần kiểm tra lại** — đạt có điều kiện về thứ tự nhập liệu; **còn mở — chờ chốt** |
+| CUS-02 | Enter ở form sửa ngày giờ lô chưa có lịch = **lưu + thoát về danh sách** (không đứng ở popup). | **Đã triển khai, cần kiểm tra lại** — đã sửa nguyên nhân: 2 nút gửi nằm ngoài biểu mẫu; nhiều lần kiểm trước chưa đạt |
+| CUS-03 | Nút "Copy thời gian" gán ngày giao chung cho **mọi cont** của lô nhiều cont (không nhập tay từng cont). | **Đã triển khai** — đã kiểm đạt; từng gặp lỗi nút biến mất ở 2 lần (11/10, 13/10) |
+| CUS-04 | TAB từ ô "Số cont" sang "Loại cont" rồi gõ phải **mở dropdown gợi ý** (không bắt buộc click). | **Đã triển khai, cần kiểm tra lại** — chưa có kết quả chốt (REQ-09) |
+| CUS-05 | Nhiều tờ khai trên một lô; thêm số tờ khai 1 cont → sync mọi cont; sửa/thêm ngay màn chi tiết. **Quyết định 22/10: sửa ngay tại Chi tiết + sync mọi cont.** | **Đã triển khai, cần kiểm tra lại** — kiểm tra giai đầu đạt, từng2 lần kiểm chưa đạt đã đóng; **còn mở — chờ chốt** đối chiếu quyết định 26/10 |
+| CUS-06 | Tờ khai hải quan nhập rồi bấm hoàn tất **không lưu dữ liệu** → sửa để lưu được. | **Đã triển khai, cần kiểm tra lại** — đã sửa để lưu được, chờ kết quả chốt |
+| CUS-07 | Form nhập liệu chỉ gọn **tên nhà máy** + nút "Xem chi tiết" mở địa chỉ đầy đủ + info xuất hóa đơn. | **Đã triển khai** — chưa có kết quả kiểm tra riêng (REQ-10) |
+| CUS-08 | Bỏ 2 số 0 thập phân vô nghĩa sau phẩy — **đi xa hơn: hiển thị theo TẤN** (18.500 kg → "18,5 tấn"; mọi màn kg→tấn, ô nhập vẫn kg). | **Đã triển khai** — quyết định 21/10; nguyên nhân trước: dấu chấm nghìn bị đọc nhầm thành thập phân |
+| CUS-09 | Sửa số lượng cont: bổ sung cont mới tự copy trường chung, **chỉ trống Số cont + Loại cont** ("Chưa chọn"). | **Đã hủy/thay thế (22/10)** — hủy quyết định 21/10, quay về nguyên văn A.1: copy Tuyến/Nhà xe/Nâng/Hạ/Trọng lượng/Giờ hẹn; không nút ở Chi tiết |
+| CUS-10 | Nút **"Xóa cont"** trực tiếp trong bảng Chi tiết lô CUS. | **Đã hủy/thay thế (22/10)** — quyết định 17/10 hết hiệu lực; ngày 22/10 09:50 **mở lại** nút @Chi tiết — chờ triển khai + gỡ kiểm thử ghim cũ; ngăn Tổng quan giữ nguyên |
+| CUS-11 | Thứ tự chứng từ chuẩn (quyết định 22/10): **BILL/BOOKING → SỐ TỜ KHAI → NHẬP/XUẤT → HÃNG TÀU** (ô đầu chốt là BILL/BOOKING, không chỉ "Số booking" như đặc tả A.3 cũ). | **Đã triển khai** — kiểm tra đạt ở môi trường thử nghiệm; từng 3 lần kiểm chưa đạt vì 3 màn trùng tên |
+
+> **Lưu ý chồng lấn 22–26/10 (ảnh hưởng CUS-05/09/11):** quyết định 26/10: tờ khai **theo cont, bỏ nhập cấp lô**; quyết định 24/10 đảo XNK ↔ Bill/Booking lần 3 → **XNK cạnh KH → Bill/Booking ở mức 2 → Số tờ khai ở mức cuối**; phiếu "Sửa lô" dùng lại form Tạo lô. Ngoài ma trận đã chốt 21–22/10 → **Còn mở — chưa chốt** trước khi chốt tiêu chí nghiệm thu.
 
 > **Lưu ý chồng lấn 22–26/10 (ảnh hưởng /09/11):** quyết định 26/10: tờ khai **theo cont, bỏ nhập cấp lô**; quyết định 24/10 đảo XNK ↔ Bill/Booking lần 3 → **XNK cạnh KH → Bill/Booking ở mức 2 → Số tờ khai ở mức cuối**; phiếu "Sửa lô" dùng lại form Tạo lô. Ngoài ma trận đã chốt 21–22/10 → **Còn mở — chưa chốt** trước khi chốt tiêu chí nghiệm thu.
 
@@ -78,12 +92,40 @@
 - **ENV-01** — (nội dung yêu cầu để trống trong tài liệu gốc).
 ---
 
-## 7.3 .. — bảng đối chiếu
+## 7.3 REQ-01..REQ-23 — bảng đối chiếu
 
 Bảng trạng thái yêu cầu đối chiếu ngày 21/10/2026, cập nhật quyết định 21–22/10; cột "Mã" giữ nguyên mã YC tương ứng.
 
 | REQ | Mã | Trạng thái | Ghi chú |
-|---|---|---|---| | |  | **Đã triển khai** | Enter lưu; lỗi phím không ăn ở 3 màn đã sửa | | | DIS-01 | **Đã triển khai, cần kiểm tra lại** | Chưa có kết quả chốt | | | DIS-02 | **Đã triển khai, cần kiểm tra lại** | Đã đổi luồng; icon 1 chạm chưa áp dụng riêng | | | DIS-03 | **Đã triển khai** | Kiểm tra ghi đạt | | | — | **Đã triển khai, cần kiểm tra lại** | Gợi ý hãng tàu chưa có kết quả chốt | | | — | **Đã triển khai** | Chọn-all số cont + ngày mặc định (khai chi phí + tạo lô) | | | — | **Đã triển khai** | Đã kiểm tra giao diện 390px trên môi trường thử nghiệm; kiểm tra phạt theo đơn vị chờ chủ trương dữ liệu · **đã thay thế 22/10**: bỏ mã chuyến khỏi app lái xe (chỉ giao diện) | | | DIS-04 | **Đã triển khai** | Tab "Chưa gán xe 52 \| Đã gán xe 47" | | |  | **Đã triển khai, cần kiểm tra lại** | Sự kiện focus | | |  | **Đã triển khai, cần kiểm tra lại** | Chưa có kết quả chốt | | | REP-01/02 | **Đã triển khai, cần kiểm tra lại** | Kiểm tra 2 chế độ còn mở | | | DIS-06/07 | **Đã triển khai, cần kiểm tra lại** | Danh mục có Lấy Lẻ; mới áp cho luồng cont — chờ kiểm tra luồng | | | DIS-05 | **Đã triển khai, cần kiểm tra lại** | "Đạt có điều kiện" — giữ mở chờ ma trận thứ tự nhập liệu | | | DRI-01 | **Đã triển khai** | Chạm để gọi (`tel:`) | | | DIS-09 | **Đã triển khai** | Phát lệnh chờ biển số | | | LCL-02/06 | **Đã triển khai** | Thêm nhanh kho; kiểm tra đạt | | | LCL-03 | **Đã triển khai** | Dọn trường; kiểm tra đạt | | | DRI-04 | **Đã triển khai** | Địa chỉ cảng hạ/địa chỉ bãi hạ đúng | | | LCL-07 | **Đã triển khai** | Theo quyết định 21/10 15:22 | | | LCL-04 | **Đã triển khai** | Quy cách đóng gói; số khối trống vẫn lưu được | | |  | **Còn mở — chờ chốt** | Tờ khai tự sao chép đạt; quyết định 22/10: sửa ngay tại Chi tiết + nhập 1 cont sync mọi cont — đối chiếu quyết định 26/10 bỏ nhập cấp lô | | |  | **Đã hủy/thay thế (22/10)** | Hủy "copy KỂ CẢ Loại cont" (quyết định 21/10): giờ copy **tất cả trừ Số cont + Loại cont** | | |  | **Đã hủy/thay thế (22/10)** | Bật lại nút Thêm/Xóa @Chi tiết (22/10 09:50); "bỏ nút @Chi tiết" chỉ đúng tới hết 21/10; kiểm thử ghim cũ cần gỡ |
+| REQ | Mã | Trạng thái | Ghi chú |
+|---|---|---|---|
+| REQ-01 | CUS-02 | **Đã triển khai** | Enter lưu; lỗi phím không ăn ở 3 màn đã sửa |
+| REQ-02 | DIS-01 | **Đã triển khai, cần kiểm tra lại** | Chưa có kết quả chốt |
+| REQ-03 | DIS-02 | **Đã triển khai, cần kiểm tra lại** | Đã đổi luồng; icon 1 chạm chưa áp dụng riêng |
+| REQ-04 | DIS-03 | **Đã triển khai** | Kiểm tra ghi đạt |
+| REQ-05 | — | **Đã triển khai, cần kiểm tra lại** | Gợi ý hãng tàu chưa có kết quả chốt |
+| REQ-06 | — | **Đã triển khai** | Chọn-all số cont + ngày mặc định (khai chi phí + tạo lô) |
+| REQ-07 | — | **Đã triển khai** | Đã kiểm tra giao diện 390px trên môi trường thử nghiệm; kiểm tra phạt theo đơn vị chờ chủ trương dữ liệu · **đã thay thế 22/10**: bỏ mã chuyến khỏi app lái xe (chỉ giao diện) |
+| REQ-08 | DIS-04 | **Đã triển khai** | Tab "Chưa gán xe 52 \| Đã gán xe 47" |
+| REQ-09 | CUS-04 | **Đã triển khai, cần kiểm tra lại** | Sự kiện focus |
+| REQ-10 | CUS-07 | **Đã triển khai, cần kiểm tra lại** | Chưa có kết quả chốt |
+| REQ-11 | REP-01/02 | **Đã triển khai, cần kiểm tra lại** | Kiểm tra 2 chế độ còn mở |
+| REQ-12 | DIS-06/07 | **Đã triển khai, cần kiểm tra lại** | Danh mục có Lấy Lẻ; mới áp cho luồng cont — chờ kiểm tra luồng |
+| REQ-13 | DIS-05 | **Đã triển khai, cần kiểm tra lại** | "Đạt có điều kiện" — giữ mở chờ ma trận thứ tự nhập liệu |
+| REQ-14 | DRI-01 | **Đã triển khai** | Chạm để gọi (`tel:`) |
+| REQ-15 | DIS-09 | **Đã triển khai** | Phát lệnh chờ biển số |
+| REQ-16 | LCL-02/06 | **Đã triển khai** | Thêm nhanh kho; kiểm tra đạt |
+| REQ-17 | LCL-03 | **Đã triển khai** | Dọn trường; kiểm tra đạt |
+| REQ-18 | DRI-04 | **Đã triển khai** | Địa chỉ cảng hạ/địa chỉ bãi hạ đúng |
+| REQ-19 | LCL-07 | **Đã triển khai** | Theo quyết định 21/10 15:22 |
+| REQ-20 | LCL-04 | **Đã triển khai** | Quy cách đóng gói; số khối trống vẫn lưu được |
+| REQ-21 | CUS-05 | **Còn mở — chờ chốt** | Tờ khai tự sao chép đạt; quyết định 22/10: sửa ngay tại Chi tiết + nhập 1 cont sync mọi cont — đối chiếu quyết định 26/10 bỏ nhập cấp lô |
+| REQ-22 | CUS-09 | **Đã hủy/thay thế (22/10)** | Hủy "copy KỂ CẢ Loại cont" (quyết định 21/10): giờ copy **tất cả trừ Số cont + Loại cont** |
+| REQ-23 | CUS-10 | **Đã hủy/thay thế (22/10)** | Bật lại nút Thêm/Xóa @Chi tiết (22/10 09:50); "bỏ nút @Chi tiết" chỉ đúng tới hết 21/10; kiểm thử ghim cũ cần gỡ |
+
+**Tổng hợp REQ-01..23:** Đã triển khai = 13 (01, 04, 06, 07, 08, 11, 14–20) · Đã triển khai, cần kiểm tra lại = 7 (02, 03, 05, 09, 10, 12, 13) · Còn mở — chờ chốt = 1 (REQ-21) · Đã hủy/thay thế = 2 (REQ-22, REQ-23).
+
+---
 
 **Tổng hợp ..23:** Đã triển khai = 13 (01, 04, 06, 07, 08, 11, 14–20) · Đã triển khai, cần kiểm tra lại = 7 (02, 03, 05, 09, 10, 12, 13) · Còn mở — chờ chốt = 1 () · Đã hủy/thay thế = 2 (, ).
 
@@ -100,7 +142,7 @@ Mô tả ngắn các nội dung nghiệp vụ còn giá trị từ nghiệm thu;
 
 ---
 
-## 7.6 Quyết định ảnh hưởng ma trận (truy ngược nhanh)
+## 7.5 Quyết định ảnh hưởng ma trận (truy ngược nhanh)
 
 Bảng này chỉ liệt kê các quyết định **trực tiếp đổi chiều** một yêu cầu trong chương này; toàn bộ lịch sử ở nhật ký thay đổi.
 
@@ -127,7 +169,7 @@ Bảng này chỉ liệt kê các quyết định **trực tiếp đổi chiều
 
 ---
 
-## 7.8 Thống kê tổng hợp
+## 7.6 Thống kê tổng hợp
 
 **A. 35 YC theo trạng thái (cập nhật 22/10):**
 

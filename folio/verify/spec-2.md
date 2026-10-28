@@ -37,9 +37,9 @@ hệ thống đều được ghi ở mức có thể kiểm chứng lại.
 
 ## 2.1 Sơ đồ luồng tổng thể
 
-![Sơ đồ luồng nghiệp vụ O2C](https://book.tingting.vip/files/silversea/so-do/luong-o2c.svg)
+![Sơ đồ luồng nghiệp vụ O2C](https://bot.tingting.vip/wiki-assets/luong-o2c.svg)
 
-![Sơ đồ tương tác các bên trong luồng O2C](https://book.tingting.vip/files/silversea/so-do/sequence-o2c.svg)
+![Sơ đồ tương tác các bên trong luồng O2C](https://bot.tingting.vip/wiki-assets/sequence-o2c.svg)
 
 > Bản đồ chi tiết từng bước: xem mục 2.2. Sơ đồ trạng thái: xem mục 2.3.
 
@@ -376,7 +376,7 @@ số hóa đơn, lý do thu 0đ…).
 
 ## 2.3 Trạng thái lô/chuyến và luật chuyển trạng thái
 
-![Sơ đồ trạng thái lô hàng và chuyến](https://book.tingting.vip/files/silversea/so-do/trang-thai-lo.svg)
+![Sơ đồ trạng thái lô hàng và chuyến](https://bot.tingting.vip/wiki-assets/trang-thai-lo.svg)
 
 ### 2.3.1 Giai đoạn của một phần việc (công việc/chuyến)
 

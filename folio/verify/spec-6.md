@@ -52,7 +52,7 @@ Chọn sai → phiếu **từ chối kèm tên dòng sai quỹ**; phiếu trộn
 
 ## 6.3 Công nợ (AR/AP, cấn trừ chi hộ)
 
-**Nguyên tắc.** Thanh toán dựa trên khoản thu/chi **thực tế**, phân bổ đúng đối tượng/bảng kê/khoản nợ; thu một phần giữ phần còn lại; "ghi nhận trong ứng dụng ≠ có chuyển khoản". **Thực thu** = khoản tính cho khách, ghi công nợ (chưa phải tiền vào quỹ); **Đã thu** = phiếu thu + phân bổ thực tế. Ví dụ §7.8: thực chi 500.000, thực thu 300.000 → công nợ 300.000, đã thu 0; thu 100.000 → còn 200.000, chênh lệch −200.000 không thành "phí dịch vụ âm"; thực thu 0đ hoặc cao hơn thực chi đều được. AC-CP-KT-10: thu vượt bị chặn, không âm ngầm.
+**Nguyên tắc.** Thanh toán dựa trên khoản thu/chi **thực tế**, phân bổ đúng đối tượng/bảng kê/khoản nợ; thu một phần giữ phần còn lại; "ghi nhận trong ứng dụng ≠ có chuyển khoản". **Thực thu** = khoản tính cho khách, ghi công nợ (chưa phải tiền vào quỹ); **Đã thu** = phiếu thu + phân bổ thực tế. Ví dụ §7.6: thực chi 500.000, thực thu 300.000 → công nợ 300.000, đã thu 0; thu 100.000 → còn 200.000, chênh lệch −200.000 không thành "phí dịch vụ âm"; thực thu 0đ hoặc cao hơn thực chi đều được. AC-CP-KT-10: thu vượt bị chặn, không âm ngầm.
 
 **Công nợ trên phơi (§3.4).** Hai bảng đối xứng: **PHẢI THU** (khách: Tiền nâng · Tiền hạ · PS khác · Tổng · Đã thu · Còn phải thu · Ghi chú) và **PHẢI TRẢ** (nhà xe). Dòng **"Chưa xác định"** gộp khoản không rõ đối tượng; dòng **"XE NHÀ – SILVER SEA"** là dòng gộp đặc biệt; **ẩn dòng còn = 0 mặc định** (AC-KT-15 — Chưa chốt: có cần nút bật hiện lại hay không); báo cáo mặc định theo thời gian tìm kiếm; bảng gắn với kế toán phụ trách xe.
 

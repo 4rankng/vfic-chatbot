@@ -24,7 +24,7 @@ graph LR
 8. [Quyết định ràng buộc và vấn đề đang mở](spec/8-quy-t-nh-r-ng-bu-c-v-v-n-ang-m.md) — ruling + open questions.
 
 ## Nghiệp vụ chuyên sâu
-- [Logic nghiệp vụ Hàng lẻ (LCL)](logic-nghi-p-v-h-ng-l-lcl.md) — định nghĩa, gom cont, gộp/tách cước, BKS thực/báo khách, bảo toàn doanh thu.
+- [Logic nghiệp vụ Hàng lẻ (LCL)](spec/logic-nghi-p-v-h-ng-l-lcl.md) — định nghĩa, gom cont, gộp/tách cước, BKS thực/báo khách, bảo toàn doanh thu.
 - [Đặc tả kỹ thuật tổng hợp (TTransport)](c-t-k-thu-t-t-ng-h-p-silversea-ttransport.md) — bản tóm lược một trang.
 - [Business Logic Changelog](business-logic-changelog.md) — mọi thay đổi nghiệp vụ theo ngày.
 

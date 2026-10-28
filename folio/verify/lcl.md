@@ -1,8 +1,5 @@
-# Logic nghiệp vụ Hàng lẻ (LCL)
-
-# Silversea — Logic nghiệp vụ Hàng lẻ (LCL)
-
-## 1. Định nghĩa & phân loại
+# 9. Logic nghiệp vụ Hàng lẻ (LCL)
+## 9.1 Định nghĩa & phân loại
 
 Hàng lẻ (LCL) là lô không gắn container cụ thể nào của khách — được vận chuyển bằng xe tải theo trọng tải (từ 1.25T đến 15T) hoặc gom chung container 20'/40' chạy ghép. Ngược lại, FCL là lô gắn container có số riêng (MSKU…, 20DC/40DC…).
 
@@ -12,7 +9,7 @@ Một dòng hàng lẻ có cụm thông số dạng "Lô hàng lẻ | Thu: Xe 3.
 
 Một dòng ghép mang tag "Lẻ · Ghép (n/N)", trong đó n là vị trí của lô trong nhóm và N là tổng số lô ghép.
 
-## 2. Tạo lô hàng lẻ
+## 9.2 Tạo lô hàng lẻ
 
 Khi chọn Loại hàng = Hàng lẻ, hệ thống không bắt nhập số container; người dùng chỉ cần nhập 4 trường: Quy cách đóng gói, Số lượng, Trọng lượng (kg) và Thể tích (CBM).
 
@@ -24,7 +21,7 @@ Số tờ khai được quản lý theo container, không còn ô nhập ở c�
 
 Về quy tắc container: hàng lẻ đi bằng xe tải luôn chạy 100% xe ngoài (chặn BKS nội bộ, trả 400); hàng lẻ gom cont 20'/40' thì dùng được cả xe nội bộ lẫn xe ngoài. Khi ghép, các dòng anh em còn trống sẽ kế thừa giá trị theo luật /521 — chỉ điền vào dòng trống, không ghi đè giá trị đã khác nhau.
 
-## 3. Danh mục & bảng giá
+## 9.3 Danh mục & bảng giá
 
 Danh mục vehicle_size_classes gồm: 1.25T, 2.5T, 3.5T, 5T, 8T, 10T, 15T, CONT20, CONT40 (CRUD tại /config/vehicle-size-classes).
 
@@ -32,7 +29,7 @@ Bảng giá được xây theo Tuyến × Khách hàng/Nhà thầu, gồm cướ
 
 Cước thu/trả dự kiến hiển thị trên dialog Chỉnh sửa điều phối; ở chế độ dense, Phân loại và Cước thu nằm cùng hàng.
 
-## 4. Điều vận: Kế hoạch Tổng quát & Chi tiết Xe
+## 9.4 Điều vận: Kế hoạch Tổng quát & Chi tiết Xe
 
 Kế hoạch Tổng quát trên mobile ở chế độ dense: mỗi lô là một card 3 dòng kèm badge lẻ/cont; nút Phân bổ nhà xe dạng compact và tự ẩn khi lô đã được phân.
 
@@ -46,7 +43,7 @@ Cột THAO TÁC xếp stack dọc (nút send phía trên, nút ⋯ phía dưới
 
 Cột Số tờ khai xuất hiện ở mọi bảng liệt kê container và cho phép click để sửa.
 
-## 5. Gộp xe thu khách & bảo toàn doanh thu
+## 9.5 Gộp xe thu khách & bảo toàn doanh thu
 
 Ghép cước thu khách áp dụng cho nhiều lô cùng khách hàng, cùng loại xe thu, mỗi lô có một BKS ảo riêng. Sau khi ghép, Lô 1 giữ nguyên 100% cước, các Lô 2..N về 0₫, và nhóm mang tag "Ghép cước cùng Bill [Bill Lô 1]". Tổng doanh thu không đổi.
 
@@ -58,7 +55,7 @@ Xóa lô chính đã ghép: lô còn lại kế thừa quyền lô chính cùng 
 
 Luật mirror dispatch: mọi quy tắc trên áp dụng y hệt cho cước TRẢ điều vận.
 
-## 6. Chứng từ (CUS) — Chi tiết lô hàng
+## 9.6 Chứng từ (CUS) — Chi tiết lô hàng
 
 Thông số container hiển thị dạng "Lô hàng lẻ | Thu: Xe 3.5T | Trả: Xe 10T".
 
@@ -70,7 +67,7 @@ Dòng hàng lẻ được click-to-edit tờ khai và phân xe như FCL.
 
 Ở màn Tổng quan, cột CHỨNG TỪ hiển thị Bill cùng tất cả số tờ khai của lô.
 
-## 7. Kế toán & Debit Note
+## 9.7 Kế toán & Debit Note
 
 Khi chốt debit, cột Thông số hiển thị dạng "Lẻ · Thu: 5T / Trả: 10T" hoặc "Ghép cùng Bill…"; phải thu/trả tự động tính 100%/0₫ theo nhóm.
 
@@ -80,7 +77,7 @@ Bảng kê cho NHÀ XE in BKS THỰC kèm loại xe trả.
 
 Với hoàn ứng: kế toán lập phiếu; khi replay với cùng idempotency-key, hệ thống trả 200; nếu dùng key khác sau khi đã duyệt thì trả 409.
 
-## 8. Doctrine UI/UX
+## 9.8 Doctrine UI/UX
 
 Nền toàn ứng dụng dùng màu SAGE #E3E8E5 (token --bg/--bg-1), card trắng nổi trên nền.
 

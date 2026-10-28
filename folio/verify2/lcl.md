@@ -1,7 +1,4 @@
-# Logic nghiệp vụ Hàng lẻ (LCL)
-
-# Silversea — Logic nghiệp vụ Hàng lẻ (LCL)
-
+# 9. Logic nghiệp vụ Hàng lẻ (LCL)
 ## 1. Định nghĩa & phân loại
 
 Hàng lẻ (LCL) là lô không gắn container cụ thể nào của khách — được vận chuyển bằng xe tải theo trọng tải (từ 1.25T đến 15T) hoặc gom chung container 20'/40' chạy ghép. Ngược lại, FCL là lô gắn container có số riêng (MSKU…, 20DC/40DC…).

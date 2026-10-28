@@ -1,7 +1,7 @@
 # 5. Cước phí, chứng từ vận đơn và báo giá
 
 
-![Sơ đồ quy trình tính cước](https://book.tingting.vip/files/silversea/so-do/tinh-cuoc.svg)
+![Sơ đồ quy trình tính cước](https://bot.tingting.vip/wiki-assets/tinh-cuoc.svg)
 
 
 > **Sơ đồ:** [Sơ đồ quy trình tính cước](https://book.tingting.vip/s/silversea/p/artifact-214cc718911bdf1c06ec8ac6)
@@ -10,7 +10,7 @@ Chương này nói về phần tiền của luồng vận tải Silversea: danh 
 
 Ba nguyên tắc nền: thao tác trực tiếp, không có phê duyệt nội bộ; không thay giá trị chưa biết bằng 0 — thiếu dữ liệu thì ghi `—` hoặc một nhãn nêu đúng phần thiếu; không hồi tố cước đã chốt, mọi mốc áp giá lấy theo Ngày vận chuyển.
 
-Phần mô tả cột, ô nhập, popup của các màn liên quan nằm ở [draft_ui_ch05.md](draft_ui_ch05.md); chương này chỉ giữ nghiệp vụ.
+Phần mô tả cột, ô nhập, popup của các màn liên quan nằm ở [Chương 10](10-y-u-c-u-giao-di-n-ng-i-d-ng-ui-ux.md); chương này chỉ giữ nghiệp vụ.
 
 ---
 
@@ -39,7 +39,7 @@ Tham số tính cước chia làm ba nhóm. Tĩnh (theo hợp đồng): `I`, `% 
 
 ### 5.1.2 Cước thu và cước trả
 
-Trên bảng Kế hoạch điều động tổng hợp, tiền của mỗi lô tách hai nhóm. Nhóm PHẢI THU gồm cước thu auto · Lạch Huyện auto · Phụ phí auto · Phát sinh (CUS) · Tổng thu, tính từ bảng giá thu khách cộng phần tự tính. Nhóm PHẢI TRẢ gồm cước trả ĐV · Lạch Huyện (điều vận) · Phát sinh (điều vận) · Tổng 1 · Phí RU, lấy từ bảng giá trả nhà xe cộng phần khai báo. Danh sách cột hiển thị ở file giao diện (draft_ui_ch05.md, §5.1.2).
+Trên bảng Kế hoạch điều động tổng hợp, tiền của mỗi lô tách hai nhóm. Nhóm PHẢI THU gồm cước thu auto · Lạch Huyện auto · Phụ phí auto · Phát sinh (CUS) · Tổng thu, tính từ bảng giá thu khách cộng phần tự tính. Nhóm PHẢI TRẢ gồm cước trả ĐV · Lạch Huyện (điều vận) · Phát sinh (điều vận) · Tổng 1 · Phí RU, lấy từ bảng giá trả nhà xe cộng phần khai báo. Danh sách cột hiển thị ở file giao diện (Chương 10, §5.1.2).
 
 - Cước thu dự kiến là cước tự tính theo hợp đồng, chỉ đọc. Giá đã phát hành là số trên bảng kê, để tách riêng: sửa lô không tự cho sửa giá đã phát hành.
 - Cước chính theo lô chỉ tính các chân vận chuyển còn hiệu lực; chân hủy không tính cước; lớp tổng và lớp chi tiết luôn khớp nhau. Cước đóng băng lúc phát hành lô (khi chưa gắn chân) vẫn vào lớp tổng dù chi tiết chưa hiển thị, và không suy ra 0.
@@ -227,7 +227,7 @@ Kế toán nhập kỳ mới → hiện danh sách khách bị ảnh hưởng. �
 
 ### 5.4.1 Phân tách theo 3 nhóm người chi
 
-- **Lái xe**: khai chi phí trên 2 bảng khi kết thúc lô; chọn loại chi phí và điền số tiền; thêm liên tục mà không lưu từng lần (giao diện chi tiết §5.1.6 file draft_ui_ch05.md).
+- **Lái xe**: khai chi phí trên 2 bảng khi kết thúc lô; chọn loại chi phí và điền số tiền; thêm liên tục mà không lưu từng lần (giao diện chi tiết §5.1.6 Chương 10).
 - **Ops**: điền tất cả chi phí lô hàng; khai từ Kế hoạch làm hàng; hệ thống cảnh báo khi lô đã có người nhập trước.
 - **Kế toán**: duyệt chi phí Ops/lái xe, thêm khoản chi ở Kiểm soát phơi phiếu, lập phiếu thu/chi, chốt debit.
 

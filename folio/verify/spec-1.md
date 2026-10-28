@@ -34,8 +34,6 @@ Hệ thống **bắt buộc** đạt ba điều sau cho người dùng:
 
 ### 1.1.4 Kiến trúc trục cốt lõi & phân hệ vệ tinh
 
-![Sơ đồ kiến trúc: trục cốt lõi và phân hệ vệ tinh](https://book.tingting.vip/files/silversea/so-do/kien-truc.svg)
-
 Theo tài liệu giải pháp tổng thể, hệ thống được tổ chức quanh một **trục cốt lõi** là quy trình O2C khép kín: **tiếp nhận → điều vận → vận chuyển → chứng từ/cước → quyết toán**. Dữ liệu nghiệp vụ được sinh ra và chốt ngay trên trục vào đúng thời điểm phát sinh, không chờ chuyển tay giữa các bộ phận.
 
 Các **phân hệ vệ tinh** — công nợ, sổ quỹ, nhân sự, báo cáo quản trị — không nhập liệu riêng mà **khai thác dữ liệu tự động từ trục**: lô hoàn thành chuyển chứng từ sang kế toán, chuyến hoàn thành đẩy nhật ký tiền sang sổ quỹ, dữ liệu vận hành nuôi số liệu chấm công và báo cáo. Đây là cách thi hành cụ thể của nguyên tắc **không nhập lại** và **không có trạng thái mâu thuẫn** giữa các màn hình (§1.1.3).
