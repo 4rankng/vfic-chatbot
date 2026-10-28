@@ -80,15 +80,19 @@ uses the live-probed 4310 legs verbatim: one NO ANSWER call at wall clock
 
 - Overall status: DONE
 - Remaining risks or follow-ups:
-  - Prod data repair (NOT run — needs approval): 4 stored transcripts keep a
-    +7h `started_at` (their `day` is coincidentally correct) and
-    `cloudfone_transcript_days` counts for 26–27/10 reflect the old window.
-    Suggested repair after deploy:
-    `UPDATE cloudfone_call_transcripts SET started_at = to_char((to_timestamp(started_at,'YYYY-MM-DD"T"HH24:MI:SS') AT TIME ZONE 'Asia/Ho_Chi_Minh' - interval '7 hours'),'YYYY-MM-DD"T"HH24:MI:SS') WHERE day IN ('2026-10-26','2026-10-27');`
-    or re-fetch both days with force from the admin transcripts viewer.
-  - Board ticket: the CHAT board at plan.tingting.vip rejected the cached MCP
-    token (`/login`), so no ticket could be cited or updated. File the ticket
-    via the shipmate specify flow and link commits `019d73f6`/`d6808823`.
+  - ~~Prod data repair~~ **DONE 28/10**: all 25 transcript rows epoch-audited — exactly the
+    4 rows of 26–27/10 sat at epoch+14h (older rows were written before the +7h
+    conversion existed and were already correct); repaired via
+    `started_at - interval '7 hours'` and verified to match the vendor raw
+    callDates (09:53:52 / 10:06:13 / 16:44:01 / 09:01:19). Day markers
+    recomputed by running the fixed `group_call_legs` over the live-probed
+    rows: 26/10 = 6/3/3, 27/10 = 4/1/1.
+  - ~~Board ticket~~ **DONE 28/10**: CHAT-14 (id 618) created via the shipmate
+    specify flow (spec validated, independent R&T review PASS after 1 defect
+    round), evidence comment 2299 added, moved to Done. Note: commits predate
+    the ticket, so they cite the branch instead of the key.
   - The already-sent 26/10 and 27/10 letters were produced from shifted
     windows; after deploy, regenerate those days from the admin viewer if the
     corrected letters are wanted.
+  - Deploy remains owner-gated per the task brief ("KHÔNG deploy"); the fix is
+    on `origin/fix-cloudfone-ict-day`, not yet live.
