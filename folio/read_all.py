@@ -1,0 +1,28 @@
+import json, os, mcp
+
+PAGES = {
+    "index":        "01M5YS8J46DF06DB5T0755D110",
+    "spec-tt":      "01M5YZRZ9BEQXHHN5E5BMK6JW6",
+    "lcl":          "01M5Z3YV7T5CM9B3BA6T5HJ7JT",
+    "changelog":    "01M5Z3HFZQFJWC7XY63GJY0M15",
+    "spec-1":       "01M5YZRRETZ0CEQ16XGR8AQZHF",
+    "spec-2":       "01M5YZRSKH1J26QPDCA65MCWA0",
+    "spec-3":       "01M5YZRTGK4DY7FYNDGGQBR1WB",
+    "spec-4":       "01M5YZRVBGTGVS4XF92QQMJMVR",
+    "spec-5":       "01M5YZRW5BBT6BZ93ZNZBWTF38",
+    "spec-6":       "01M5YZRXFABX10JDZBEAMFNTAH",
+    "spec-7":       "01M5YZRXWS0VR6QBXSCYA3T5R3",
+    "spec-8":       "01M5YZRYGWJV4T9BTP5CHE1AGZ",
+}
+
+mcp.init()
+os.makedirs("before", exist_ok=True)
+summary = []
+for key, pid in PAGES.items():
+    d = mcp.call("read_page", {"id": pid})
+    content = d["result"]["content"]
+    text = content[0]["text"] if content else ""
+    with open(f"before/{key}.md", "w") as f:
+        f.write(text)
+    summary.append(f"{key}\t{pid}\t{len(text)} chars")
+print("\n".join(summary))

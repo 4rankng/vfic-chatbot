@@ -1,0 +1,312 @@
+# 4. Module điều phối, màn hình lái xe và dữ liệu chủ
+
+Chương này đặc tả **(4.1)** điều phối/điều vận trên `/dispatch` và `/dispatch-detail`; **(4.2)** màn hình lái xe (`/my-trips`); **(4.3)** dữ liệu chủ; **(4.4)** luật hiển thị chung của bảng. Mã yêu cầu chính thức (`CUS-xx`, `DIS-xx`, `LCL-xx`, `DRI-xx`, `REP-xx`) được giữ nguyên theo đúng từng yêu cầu. **[CHƯA RỎ]** = chưa chốt quy tắc.
+
+---
+
+## 4.1 Module điều phối (điều vận)
+
+### 4.1.1 Vị trí, vai trò, nguyên tắc
+
+- Vai Điều vận: **“Nhìn phần chưa phân bổ, chọn nguồn lực, phát lệnh, xử lý thay đổi không trùng lịch / không mất việc”**.
+- Làm việc trên `/dispatch`, `/dispatch-detail`, Sổ chuyến đi; **không có hộp việc đến** (chỉ Ops, CUS).
+- **Không có bước phê duyệt nội bộ** trong điều phối — làm trực tiếp trong phạm vi quyền, bảo vệ bằng quyền, kiểm tra dữ liệu và lịch sử thao tác.
+- Chuỗi: lô **đủ dữ liệu để điều xe tự xuất hiện** → phân bổ nhà vận tải + xe–moóc–tài xế → **phát lệnh** → lái xe **chủ động nhận**. “Đã nhập biển số”, “đã phát lệnh”, “lái xe đã nhận” là **3 sự việc khác nhau**.
+- Bốn **tác vụ điều xe container**: **Đi đơn**, **Đi kết hợp** (trả rồi đóng), **Đi kẹp** (2×20FT cùng lộ trình), **Lấy lẻ** (vỏ rỗng → đóng hàng lẻ chuyển kho → hạ rỗng/đóng hàng hạ cảng).
+
+> **“Bảng điều hành”:** tên “Lưới Điều Hành” thuộc **bản demo giao diện 24/10 (đã hủy, không áp dụng)**; chương này dùng tên chính thức **Kế hoạch Tổng quát** (`/dispatch`) và **Kế hoạch Chi tiết Xe** (`/dispatch-detail`).
+
+### 4.1.2 Kế hoạch Tổng quát (`/dispatch`)
+
+Mỗi lô **1 dòng tổng hợp**; một lô phân cho nhiều nhà vận tải; tổng phân bổ ≤ số lượng từng loại; thêm phân bổ **không nhân đôi** công việc; LCL có đủ bước như một công việc hàng lẻ thật.
+
+- Cột **CHỌN LÔ** mặc định **ẩn**, chỉ hiện khi bật `[Gộp hàng]`, tiêu đề thống nhất “CHỌN LÔ”.
+- Cột **CẢNG NÂNG/HẠ** ở dòng LCL lấy **Kho lấy hàng / Điểm trả hàng** do CUS nhập; không có thì hiển thị `—`, không ghi “Chưa có cont”.
+- Cột **TỔNG QUAN HÀNG HÓA** hiển thị `[SL] [Loại bao bì] · [kg] · [CBM]` (VD `5 PALLET · 1.922 kg · 4 CBM`) và ẩn CBM khi không có.
+- Cột **PHÂN LOẠI / chiều** hiển thị badge **NHẬP LẺ / XUẤT LẺ** cho lô LCL.
+- Khi **chưa gán xe**, dòng hiện **1 nhãn mờ “Chưa phân xe”**; dòng trống hiện “Không có hàng lẻ chạy ngày đã chọn”.
+
+**Bộ lọc/thao tác:** “Chờ / Đang / Đã phân xe”, “Chưa / Đã gán biển” (`DIS-04`); lọc **ngày** theo **ngày Việt Nam** 00:00–23:59, lô không có ngày vẫn hiện dưới mọi bộ lọc; tìm **Bill/Booking** phải ra kết quả (lỗi “0 lô” đang mở); bấm dòng lô mở đúng dòng ở Chi tiết Xe. Mobile: giao diện **ELEGANT, DATA-DENSE, không lãng phí chỗ** — *đang mở*. Toolbar **44–48px**.
+
+- **Cột PHÂN BỔ NHÀ XE:** cột hiển thị nút bấm; bấm mở cửa sổ **«Phân bổ phương tiện»** cho phép chia một lô nhiều container cho nhiều nhà xe — mỗi dòng gồm chọn nhà xe · số lượng container · loại container, thêm/xóa dòng được (lô 4 cont có thể chia cho 2 nhà xe: SS 2×40HC và HÀ AN 2×40HC); **tổng phân bổ vượt tổng số lượng của lô thì báo lỗi, không cho lưu**; sau khi lưu, cột hiển thị thẻ tổng hợp từng nhà xe kèm số lượng và loại (`SS: 2×40HC`, `HÀ AN: 2×40HC`). Cửa sổ này **độc lập** với cửa sổ **Gán xe nhóm** dùng cho gộp hàng LCL hiện hành — không thay thế, không ghi nhóm chi phí.
+- **Chưa chốt:** bản mẫu Kế hoạch Tổng quát thể hiện cột phân bổ nhà xe là cột thao tác duy nhất của điều vận, không có cột chọn lô, trong khi thiết kế gộp hàng ngày 23/10 đã đặt cột chọn lô (mặc định ẩn, hiện khi bật nút gộp hàng) — cần chủ dự án xác nhận bản nào làm chuẩn.
+
+### 4.1.3 Kế hoạch Chi tiết Xe (`/dispatch-detail`)
+
+**1 dòng / 1 container hoặc 1 công việc** (LCL = 1 dòng công việc). Cột: nhà vận tải, biển số, tài xế, moóc, lịch, khách hàng/nhà máy, tuyến, cảng nâng/hạ, tình trạng nhận lệnh, ghi chú; **mobile/tablet rút gọn**.
+
+1. **Cấm truncate** — mọi ô **wrap full**; header 2 dòng bị đè (“THỜI GIAN &/LỊCH TRÌNH”) phải tách; “Ngày giao 23/10/2026” không đè “Trả hàng”.
+2. Cột **ĐIỀU PHỐI** tách **5 dòng**: nhà xe · biển số · tài xế · SĐT · trạng thái — không chi tiết nào bị ẩn/cắt.
+3. Dòng chưa phân nhà xe: **bỏ dòng italic “CUS sẽ bổ sung”**, để trống.
+4. Cột **PHÂN LOẠI**: tag compact, **1 nhãn/dòng**, header 1 dòng; pill “Lẻ · Ghép (n/2)” không tràn sang cột kế bên.
+5. Cột **SỐ TỜ KHAI** **sửa trực tiếp khi bấm vào ô** (“bấm ô để sửa là đủ, không cần nút Sửa”).
+6. Cột **THAO TÁC** **xếp dọc** (gửi trên, `⋯` dưới), “Hoàn thành” vào menu `⋯`, cao ~44–48px — còn mâu thuẫn với quy cách ~144px, cần **thống nhất một lần**.
+7. **Số container in đậm**, tên cảng chữ thường; ô **Ghi chú** gõ được **Space**.
+
+**Thao tác:** “Lấy Lẻ” **không tự nhảy sang “ĐẢO VỎ”** (bỏ tự gắn nhãn) (`DIS-06/07`); **“Giờ trả hàng”** sửa ngay lúc gán biển, **“Giờ điều vận”** có trong hộp thoại, sửa giờ phải cập nhật cột thời gian/lịch trình ngay (`DIS-05`); **đổi nhà xe/BKS** qua menu `⋯` trên dòng **đã gán xe** (`DIS-10`); **thêm nhanh biển số** ở cả danh sách chọn xe ngoài lẫn đội xe nội bộ; **nút “Xóa lô”** theo quyết định ngày 21/10/2026 **giữ** cho CUS, Quản trị viên **và** Điều vận (Ops không) — hệ thống vẫn chặn ở cấp dữ liệu.
+
+**Hộp thoại “Chỉnh sửa điều phối”:** dùng hết bề rộng, **không cuộn dọc**; “Phát lệnh cho tài xế” + chân hộp thoại `Hủy / Lưu thay đổi / Phát lệnh` không bị cắt dưới cùng; **gộp Phân loại + Cước thu dự kiến cùng hàng** — *đang mở*; đủ **Giờ điều vận** + **Giờ trả hàng**.
+
+- **Bộ lọc nâng cao:** bên cạnh tìm kiếm, lọc ngày và lọc nhập/xuất, cho phép **lọc đa chọn điểm nâng · điểm hạ · điểm trả** (chọn nhiều điểm nằm trên cùng một trục đường để gom/ghép chuyến) và **lọc theo khung giờ ca** — Từ giờ đến giờ — để sắp xếp theo giờ chạy hoặc điểm trả.
+- **Biển số xe của nhà xe ngoài:** điều vận được **để trống** ô biển số khi gán xe ngoài; **CUS là người cập nhật bổ sung** ô này sau khi đã liên hệ nhà xe. Quyền ghi của CUS trên cột biển số cần được xác định rõ — **chưa chốt**; không dùng dòng chữ giải thích trên bảng cho trường hợp này.
+
+### 4.1.4 Phân loại: Đơn · Lẻ · Ghép (Kẹp / Kết hợp)
+
+- **Nhãn phân loại** đặt cạnh đúng công việc/container, phản ánh **cặp ghép hiệu lực** — không suy ra từ trùng BKS/ngày/ghi chú.
+- **KẸP** = 2 container 20FT đồng thời, 1 đầu kéo + moóc 2 vị trí + tài xế; **40FT cấm** làm thành viên; tổng tải cả cặp phải phù hợp; hàng/tiến độ/bằng chứng mỗi container **riêng**. **KẾT HỢP** = “Cảng nâng → trả Lệnh 1 → giữ vỏ → đóng Lệnh 2 → Cảng hạ”; **không đóng Lệnh 2 trước khi trả xong Lệnh 1**; tiết kiệm hành trình rỗng **không** gộp chứng từ/doanh thu.
+- **Một cặp = một quan hệ ghép thống nhất** trên mọi màn; mỗi công việc chỉ thuộc **1 cặp hiệu lực**; **không ép tách lô nhiều container để ghép, không gộp 2 lô vì cùng xe**.
+
+Chi tiết lô ghép/kết hợp (tạo cặp, tiền, lương, bằng chứng) ở **Chương 3**.
+
+### 4.1.5 Cước thu dự kiến và cước trả dự kiến
+
+Hai trường tiền trên bảng/hộp thoại là **giá trị dự kiến**, không phải số đã phát hành:
+
+- **Cước trả ĐV / Cước trả dự kiến:** trống = **tự tra bảng giá** `tuyến × loại xe × nhà xe` (dòng riêng của nhà xe thắng dòng chung; ngày hiệu lực ≤ ngày lô); **nhập tay thắng giá tra**; **không tra được → giữ trống / “Thiếu cước trả ĐV”, không bịa 0**.
+- **Cước thu dự kiến:** mặc định theo từng lô = đơn giá **Bảng giá Tuyến × KH × loại xe × số lượng**; luật 100%/0₫ **chỉ** cho nhóm gộp CUS. **Số chưa chốt → ô trống**, không gắn nhãn; `0` chỉ khi đã tính và kết quả là 0.
+
+Công thức cước hợp nhất ở **Chương 5**.
+
+### 4.1.6 Gán xe, cảnh báo trùng lịch (cảnh báo một lần)
+
+- Mọi thao tác ghi biển số/đầu kéo đều qua kiểm tra quyền; **không bao giờ lưu thầm lặng**. **Phân tầng:** trùng **mạnh** (2 mốc thời gian) → **chặn cứng**; trùng **yếu** (chỉ có ngày) → **cảnh báo một lần** “Vẫn lưu?”.
+- **Cặp KẸP hợp lệ KHÔNG bị coi là xung đột** trong chính cặp; trùng khung giờ **ngoài cặp** → “Vẫn lưu?” (`DIS-03`). **Hai điều phối viên cùng phân xe** → không tạo phân công mâu thuẫn; người không hoàn tất phải thấy xe/moóc/tài xế nào đã dùng.
+- **Nhà xe ngoài phát lệnh khi chưa có biển số**: xác nhận “Vẫn phát lệnh?”, biển trống, trạng thái **chờ biển** (`DIS-09`). Người khác sửa phân công lúc đang mở màn → giữ nội dung đang nhập, **không ghi đè ngầm**; thử lại sau gián đoạn **không tạo trùng**.
+
+*Vấn đề đang mở:* phân xe lại không lưu, biển số lan sang lô khác; danh sách chọn biển số để trống; chuyến ở trạng thái đang vận chuyển nhưng ngày tương lai bị chặn nhận lệnh.
+
+### 4.1.7 Gộp hàng LCL trên màn điều phối
+
+**Cốt lõi:** **gộp xe của Điều vận** (chiều trả — nhóm chi phí) và **gộp hàng của CUS** (chiều thu — nhóm doanh thu) **hoàn toàn độc lập**; gộp/tách một bên **không ảnh hưởng** bên kia.
+
+**Nút [Gộp hàng]:** trên thanh bộ lọc của **Kế hoạch Tổng quát / Chi tiết Xe** (ĐV) và Chi tiết lô / Chi phí–Quyết toán (CUS); **mặc định cột CHỌN ẩn**, bấm mới hiện hộp chọn. Hộp chọn **chỉ hiển thị dòng LCL** (dòng container loại trừ), gộp từ 2 lô. Tích ≥1 dòng → **Thanh nổi** `Đang chọn N lô: Tổng X tấn | Y CBM — Lô 1 giữ 100%…` + nút bật cửa sổ + Bỏ chọn/Hủy; thoát → tự ẩn cột + đóng thanh. Nút dùng **biểu tượng vector**, không emoji `📦` — *đang mở*.
+
+**Cửa sổ “Gán xe nhóm” của ĐV — 4 trường** (quyết định ngày 23/10, đã bỏ biển số ảo khỏi màn ĐV):
+
+Bốn trường: **Loại xe tính cước trả ĐV** (tấn 1.25T–15T hoặc Cont 20'/40'; **xe tải → chỉ nhà xe ngoài**, cont → nội bộ hoặc ngoài) · **Nhà xe** (từ danh mục khách hàng được đánh dấu là nhà xe) · **BKS thực** (xe nội bộ **bắt buộc chọn từ đội xe công ty**) · **Cước trả ĐVVC (đ)** (trống = tra bảng giá, nhập tay = lấy giá nhập tay).
+
+→ ghi nhóm chi phí: **Lô 1 = 100%, Lô 2..N = 0 ₫**.
+
+**Luật tiền kèm** (chi tiết Chương 3, Chương 5): **thu (CUS)** mặc định mỗi lô lẻ = 1 chuyến độc lập; **chỉ** khi CUS bật `[Gộp hàng]` + lưu nhóm mới áp 100%/0₫; **[Tách nhóm]** về từng lô; **ghép CUS bắt buộc cùng 1 khách hàng**. **Biển báo khách** ghi theo từng lô, trống → lấy BKS thực; **Debit Note in biển báo khách**, **bản kê nhà xe in BKS thực**. **Tiền đường/lương xe cont nội bộ chỉ tính 1 lần vào Lô 1**; **hủy ghép/xóa Lô 1 → tự chuyển 100% + quyền Lô chính sang lô kế vị**; **cảnh báo tải trọng chỉ cảnh báo, không chặn**. Cột CONTAINER dòng LCL = `Lẻ · Xe 5T` / `5 PALLET` / `1.922 kg · 4 CBM`; cột PHÂN LOẠI = tag `Lẻ · Ghép (i/N)`.
+
+*Trạng thái:* quy tắc **Gộp hàng ngày 23/10 chưa được áp dụng**; có trường hợp mất quy tắc tiền 100%/0₫; sau **Tách nhóm** còn bị kẹt số 0 — xem **Chương 8**.
+
+### 4.1.8 Phát lệnh, chạy chuyến và ý nghĩa “duyệt”
+
+- **Phát lệnh:** bấm ngay tại dòng → chạy theo dữ liệu đã lưu, **không hẹn ngày/giờ, không hộp xác nhận lặp**; nút hiện tiến độ, **không nhận bấm lần 2**; lỗi hiển thị **tại dòng**; **điều kiện** = phân bổ + lịch + xe + tài xế + moóc phù hợp, xe/người đang hoạt động, đủ sức chở, không xung đột (`DIS-02`).
+- Nút “Phát lệnh” **thuộc vai Điều vận** (hộp thoại “Phát lệnh cho tài xế”); lệnh **tạo chuyến + thông báo tài xế**; `/my-trips` chỉ có lệnh **sau khi đã phát lệnh**. **Bất biến:** bấm lặp **không tạo chuyến/tiền thêm**; nhập biển số hay gửi thông báo **không phải** phát lệnh thành công.
+- **Chạy chuyến:** “Đã phát lệnh” → lái xe **chủ động nhận** → **đang thực hiện**; giờ nhận ≠ giờ xe xuất phát. Trạng thái: `Chưa đủ dữ liệu điều xe → Sẵn sàng điều xe → Đã phát lệnh → Đã nhận/đang thực hiện → Hoàn thành vận chuyển | Đã hủy`.
+- **Chữ “duyệt”:** điều phối **không có bước duyệt nào**; “Duyệt” chỉ ở màn **Kế toán chốt debit** với nghĩa **đối soát, không phải phê duyệt** (quyết định ngày 21/09) — **Chương 6**. Không dùng chữ “duyệt” cho phân xe/phát lệnh.
+
+### 4.1.9 Ranh giới sửa phân công, bổ sung cảng, ngoại lệ
+
+**Ranh giới sửa phân công**: *chưa phát lệnh* → sửa kế hoạch theo quyền; *đã phát, lái xe chưa nhận hiện tại* → đổi được nhà vận tải/xe/tài xế/moóc, **không khóa chỉ vì nhãn “đang vận chuyển”**; *lái xe đã nhận hiện tại* → **chỉ đổi phương tiện** (xe nhà↔xe nhà, nhà xe/biển số với xe ngoài), **giữ nguyên lái xe**, đổi lái xe hoặc chuyển nhà↔ngoài → **chặn + lý do + hướng xử lý**; *đã hoàn thành/hủy/kỳ khóa* → nghiệp vụ điều chỉnh, giữ lý do + lịch sử. **Cảng nâng/hạ bổ sung sau điều xe:** bổ sung **ngay trên Chi tiết lô** mà không gỡ phân xe, **tuyến vẫn khóa** (05/10/2026). Phát lệnh lặp → không tạo chuyến/tiền; trùng biển số → “Vẫn lưu?”, không lưu thầm; mất mạng → báo chưa thể lưu, giữ nội dung, **không xếp hàng/tự gửi lại**.
+
+---
+
+## 4.2 Màn hình lái xe
+
+### 4.2.1 Nguyên tắc và điều hướng
+
+- **Cần Internet** để xem hiện hành và ghi nhận thao tác; mất mạng → **chưa thể lưu**; **không chế độ ngoại tuyến, không tự gửi lại**.
+- **Không có phê duyệt nội bộ/đợi duyệt** để hoàn thành; **“Nhận lệnh vận chuyển”** là xác nhận tiếp nhận công việc thật; chỉ thực hiện công việc được giao và còn quyền, giữ ràng buộc an toàn xe/tài xế/moóc, thứ tự vận hành, yêu cầu bằng chứng.
+- **4 tab: Hành trình · Thu nhập · Kỷ luật · Tài khoản**; Hành trình → **Lệnh mới · Đã nhận · Lịch sử**; số lượng/trạng thái theo tài khoản. Ảnh/biên lai/chi phí thuộc đúng công việc, chỉ người có quyền thêm/sửa.
+
+### 4.2.2 Thẻ công việc và thứ tự thông tin
+
+**Quy mô thẻ:** FCL — **1 thẻ = 1 công việc gắn 1 container**, không gộp nhiều container khác tiến độ; container chưa có số → vẫn hiện **“Chưa có số container”** kèm loại + công việc + lịch; LCL — thẻ hàng lẻ với thông hàng + ngày vận chuyển, **không container giả, không yêu cầu ảnh/số cont không tồn tại**.
+
+**Thứ tự nội dung thẻ**: ① nhận diện (nhãn **ĐƠN/KẸP/KẾT HỢP** + lịch đóng/trả đủ ngày giờ khi có) → ② **tên ngắn nhà máy** (thiếu thì tên đầy đủ) → ③ **tuyến** ngay dưới (không thay bằng địa chỉ) → ④ **container**: mỗi số cont kèm **loại của chính nó** (VD `EMCU6163403 · 20DC`) + nhãn TRẢ HÀNG/ĐÓNG HÀNG đúng công việc → ⑤ **cảng nâng/hạ** đúng chiều, đúng nguồn → ⑥ **nhiệm vụ** viết hoa dòng riêng, **ghi chú lái xe** dòng riêng → ⑦ nút thao tác **khớp trạng thái thực tế** (không hứa nhiều thao tác nhưng chỉ làm được 1).
+
+**Nhãn cảng theo chiều**:
+
+- **Hàng nhập:** “Cảng hạ/Hạ” = điểm hạ thật; **không** để dòng chết “Chưa có nơi trả rỗng” thay điểm hạ; nhà máy không thay điểm hạ (trùng tên thì 2 hàng cùng tên). Container nhập khẩu **không chọn cảng hạ nhưng có điểm trả hàng** → hiện **tên điểm trả/nhà máy** + địa chỉ giao riêng; hàng xuất không có cảng hạ vẫn hiện “Chưa có cảng hạ”.
+- **Hàng xuất:** cảng nâng/hạ = điểm lấy vỏ + điểm hạ theo lệnh. Chưa xác định → “Chưa có thông tin” + hướng bổ sung theo quyền; **không tạo địa điểm giả, không mượn điểm của công việc khác**.
+
+**Chi tiết lệnh**: tiêu đề ưu tiên **tên viết tắt nhà máy**, tuyến ngay dưới; phần thông tin lệnh hiện **địa chỉ nhà máy** (không lặp tuyến). Thứ tự nhóm: **Bill/Booking** (định danh chính; mã chuyến → §4.2.7) → lịch & địa điểm (nhà máy → địa chỉ → người liên hệ + **SĐT**, bấm gọi được) → hàng hóa (số cont gắn loại, số chì, thao tác) → lộ trình (cảng nâng/hạ, điểm giao/điểm trả vỏ) → nhiệm vụ & ghi chú → xuất hóa đơn (tiêu đề từng bên **trước** tên/địa chỉ/MST) → bằng chứng & hành động. Tác vụ + ghi chú lái xe **ngay sau thông tin công việc, trước hóa đơn**; **không** thêm dòng đầu kéo/moóc; phần dài thu gọn độc lập.
+
+### 4.2.3 Nhận lệnh vận chuyển
+
+- Lệnh hợp lệ phát **đúng tài xế** → tab **Lệnh mới**; **thông báo mở đúng công việc**; trực tuyến → danh sách tự làm mới. Bấm **Nhận lệnh vận chuyển** → chuyển **Đã nhận** **chỉ khi hệ thống xác nhận đã ghi**; ghi thời điểm tiếp nhận; **tiếp nhận ≠ sự kiện xuất phát**.
+- **Xe/tài xế/moóc bận:** giữ ràng buộc, hiển thị **bền vững** lý do + liên kết công việc đang chặn kèm hướng dẫn bước làm — **không chỉ nút “tải lại”**; **cặp Kẹp không bị coi là xung đột**. **Không bắt buộc tải ảnh khi nhận lệnh** — ảnh **tùy chọn**.
+
+### 4.2.4 Yêu cầu ảnh: bắt buộc và tùy chọn
+
+- Ở lớp **nhận lệnh**, **không bắt buộc tải ảnh**.
+
+- **Không** coi ảnh container/chì, vé cầu đường, thu hồi chứng từ gốc, đối soát chi phí, xác nhận doanh thu 0 là điều kiện đóng chuyến.
+- **Ảnh tải 100% ≠ hồ sơ đã lưu**: chỉ báo thành công khi hệ thống xác nhận; người dùng biết ảnh nào đã lưu/mở lại được.
+- 1 ảnh thất bại sau ảnh đã lưu → **giữ tiến độ từng ảnh**, thử lại **ảnh lỗi**, không tạo bản sao; ảnh có **dấu thời gian thực tế**; xem ảnh phóng to, **Esc đóng**.
+
+### 4.2.5 Thực hiện công việc và hiển thị Kẹp / Kết hợp
+
+- Tiến độ và ảnh cập nhật **đúng công việc/container đang mở** — không hoàn thành phần việc khác trong cùng lô.
+- **KẸP:** **từng container 1 thẻ riêng** (số cont, số chì, khối lượng) + nút sửa riêng, lưu cập nhật đúng container đó; **2 thẻ liền kề có dấu hiệu cùng cặp**, mỗi thẻ vẫn có container/loại/lịch/thao tác riêng.
+- **KẾT HỢP:** trả Lệnh 1 xong mới đóng Lệnh 2; màn hình **nêu lý do** phần sau chưa bắt đầu.
+- Công việc bị phân lại/hủy/sửa bởi người khác → giải thích + giữ nội dung đang nhập, chỉ cho thao tác theo phân công hiện hành.
+- **11 nhãn tác vụ** do Điều vận chọn, lái xe thấy đúng nhãn: `HẾT HẠN · ĐẢO VỎ · ĐẶT ĐUÔI · ĐẶT ĐẦU · KIỂM HÓA · QUAY ĐẦU · GỬI VỎ BÃI ĐĂNG KHOA · QUÁ TẢI · ĐẢO HÀNG · HẠ VỎ ICD QUẾ VÕ · GẮP VỎ ICD QUẾ VÕ`. Nhãn **không thay thế ghi chú tự do**; **QUÁ TẢI không cho phép bỏ qua tải/an toàn**. **Giờ hẹn nhà máy ≠ bằng chứng xe xuất phát**; ngày theo giờ Việt Nam, giữ đủ phút.
+
+### 4.2.6 Hoàn tất lệnh / hoàn thành chuyến
+
+- Bấm **Hoàn tất lệnh vận chuyển** → màn **e-POD**; FCL cần **2 nhóm bằng chứng** (§4.2.4).
+- **Một thao tác hoàn thành:** đã **Nhận lệnh** + đủ 2 nhóm bằng chứng đã lưu → nút **HOÀN THÀNH CHUYẾN** gửi hồ sơ e-POD và hoàn thành **1 thao tác**.
+- **Không bắt nhập từng mốc**: hệ thống **suy ra mốc sau nhận lệnh** từ hành động hoàn thành, ghi nguồn **“suy ra từ hoàn thành”** — **không** mô tả là quan sát/GPS, **không bịa thời gian**, **không ghi đè mốc thực tế**.
+- **LCL:** hoàn thành theo **công việc hàng lẻ**, không phụ thuộc container; **không áp bộ FCL bắt buộc**; *bộ chứng từ thay “phiếu hạ bãi + biên bản giao nhận”* — **[CHƯA RỎ]**. **Lô nhiều phần việc:** chỉ xong khi **phần bắt buộc** xong — **1 container xong ≠ lô xong**; sau xác nhận thẻ chuyển tab **Lịch sử**.
+
+### 4.2.7 Bỏ mã chuyến nội bộ khỏi màn hình lái xe
+
+- **Mã chuyến KHÔNG hiển thị trên ứng dụng lái xe ở đâu cả**: thẻ lệnh, tiêu đề chi tiết, **banner lỗi**; định danh chính là **Số Bill/Booking**.
+- **Mã chuyến là mã sinh tự động trong hệ thống, không được hiển thị cho lái xe.**
+- **Mã chuyến vẫn được giữ trong hệ thống** (màn desktop/điều vận/kế toán vẫn dùng được); chỉ bỏ hiển thị trên giao diện lái xe.
+- *Đang mở:* màn hình còn một dòng hiển thị mã chuyến dạng “MÃ CHUYẾN …” — cần bỏ. **Mã nội bộ (mã vận chuyển, mã chuyến, mã chứng từ, số #) không bao giờ làm khóa hiển thị.** *Thay thế thống nhất cho màn desktop* — **[CHƯA RỎ]**.
+
+### 4.2.8 Mất kết nối và thử lại
+
+- **Không chế độ ngoại tuyến**, không giữ thao tác chờ mạng, **không tự gửi lại** khi mạng phục hồi; không kiểm tra kết nối trước thao tác. Mất Internet → **chưa thể lưu** + **giữ nội dung** + cảnh báo trước khi rời/tải lại; có mạng thì **người dùng chủ động** tiếp tục.
+- **Chưa rõ đã lưu chưa** → làm rõ kết quả **trước khi thử lại** (không báo thành công sai, không tạo trùng); hệ thống lỗi → **báo lỗi + giữ nội dung**; lỗi kết nối tạm **không đá phiên còn hợp lệ**.
+
+### 4.2.9 Các tab còn lại
+
+**Thu nhập:** xem theo kỳ, phân biệt **tạm tính / kỳ đã chốt / đã trả** (chốt ≠ thanh toán), công thức theo quy tắc lương hiện hành, **không đặt công thức riêng trên màn lái xe**. **Kỷ luật:** biên bản của mình, **đã hủy vẫn xem được** nhưng loại khỏi khấu trừ hiện hành, tổng khớp chi tiết. **Tài khoản:** chỉ sửa phần thuộc quyền, **đăng xuất không xem được dữ liệu tài khoản trước**. **Chi phí lái xe** và các ngoại lệ (0 ảnh e-POD vẫn hoàn thành; thiếu đối chiếu chi phí **không chặn** hoàn thành; chi phí trên chuyến chưa gắn lô vẫn nhập, **không tạo lô/chuyến giả**; QUÁ TẢI không bỏ qua tải trọng) → **Chương 5**, §4.2.6.
+
+---
+
+## 4.3 Dữ liệu chủ (master data)
+
+### 4.3.1 Kiến trúc quan hệ
+
+- **Khách hàng (1) → Nhà máy (N):** mỗi nhà máy thuộc **đúng 1** khách hàng.
+- **Nhà máy (1) → 1 vị trí đóng/trả hàng + 1 tuyến cấu hình**; nhiều nhà máy dùng chung 1 tuyến được; luồng chuẩn **lấy tuyến/vị trí theo nhà máy**, không cho chọn tuyến trái cấu hình. **Nhà máy ≠ kho** — quy tắc tuyến của nhà máy **không** mặc nhiên áp cho địa điểm khác.
+- Hai nhà máy cùng tên ngắn vẫn là **2 thực thể riêng** (phân biệt bằng tên đầy đủ / khách hàng / địa chỉ). **Lô nguồn (1) → nhiều container (N):** mỗi container có công việc với nhà máy/tuyến/vị trí riêng, **không ép cả lô chung 1 tuyến**.
+
+### 4.3.2 Khách hàng (Customer)
+
+- KH là chủ thể của lô, của **Bảng giá Tuyến × KH**, của nhóm gộp CUS; **gộp CUS chỉ được với lô cùng 1 khách hàng**.
+- KH có thể đồng thời là **nhà thầu/nhà xe ngoài** (được đánh dấu là nhà xe) — nguồn danh sách “Chọn nhà xe”; liên kết nhà cung cấp dùng cho bảng giá trả.
+- KH/nhà máy/bên xuất hóa đơn là **chủ thể riêng**; thiếu bên nào phải hiện rõ phần thiếu, **không gộp ngầm**.
+
+### 4.3.3 Nhà máy / xưởng (Factory)
+
+- **Tên:** tên đầy đủ + tên ngắn **riêng**; thẻ/danh sách ưu tiên tên ngắn, thiếu thì dùng tên đầy đủ.
+- **Địa chỉ & tuyến:** nhãn riêng, **không** dùng địa chỉ đường phố làm tên tuyến.
+- **Liên hệ vận hành:** tên người liên hệ + **SĐT** cùng nhóm, ngay dưới địa chỉ, **gọi được từ app**.
+- **Xuất hóa đơn:** đúng tên/địa chỉ/MST của **bên nâng, hạ, vệ sinh** — không gộp bên khác.
+- **Chỉ dẫn tại điểm làm hàng:** giữ nguyên cho lái xe, không trộn vào danh sách tác vụ, không đổi toàn bộ ghi chú sang chữ hoa.
+
+Không lặp cùng người + SĐT ở nhiều dòng với nhãn khác nhau; nhiều người liên hệ thật → giữ riêng + ghi vai trò. Đối tác **chỉ có địa chỉ, không có SĐT** → hiện “—”, không coi là lỗi.
+
+**Màn `#/config/factories` (quyết định ngày 24/10):** **bỏ cột TRẠNG THÁI** (hàng ngừng hoạt động → mờ + tooltip “Đã ngưng”), gộp MÃ + TÊN, Địa chỉ/Liên hệ 1 dòng + biểu tượng gọi, **bỏ STT**, dòng 48–52px, **không đổi giao diện dữ liệu**.
+
+**Chọn nhà máy khi lập công việc:** **chọn KH → xem nhà máy còn dùng của KH → chọn nhà máy cho đúng container → tuyến/vị trí tự điền**; đổi KH → bỏ nhà máy cũ không còn hợp lệ và **chỉ rõ trường cần chọn lại**; tìm/tải **không mất lựa chọn mới nhất**. Tìm theo mã/tên tắt/tên đầy đủ/địa chỉ trong phạm vi KH, không phân biệt hoa/thường, có/không dấu; không có kết quả → “Không tìm thấy kết quả”; **nhập từ khóa không tự tạo nhà máy**; tuyến khóa ghi nhãn **“Theo nhà máy”**.
+
+- **Nhà máy cũ chưa có tuyến:** cho chọn tuyến hợp lệ và chỉ rõ phần thiếu; **không phát lệnh** khi tuyến bắt buộc còn thiếu.
+- **KH chưa có nhà máy:** giải thích danh sách rỗng, tạo nhanh nếu đủ quyền; **không đưa nhà máy của khách hàng khác** vào.
+- **Nhà máy ngừng hoạt động / đang tải / lỗi tải:** không chọn cho việc mới (việc cũ vẫn xem); phân biệt tải lỗi với danh sách rỗng và cho thử lại.
+- **Người khác sửa lúc đang nhập:** giữ nội dung đang nhập, hiển thị thay đổi — **không ghi đè ngầm**.
+
+Ngoại lệ chọn tuyến **chỉ** cho nhà máy cũ chưa có tuyến; **tạo nhà máy mới bắt buộc có tuyến**.
+
+### 4.3.4 Kho lấy hàng (CFS/Cảng) và điểm vận hành
+
+- **Kho lấy hàng (CFS) là danh mục dùng chung, KHÔNG lọc theo khách hàng**.
+- **Nhãn động theo hình thức XNK** (quyết định ngày 22/10): **Nhập** = `Nhà máy (Điểm trả hàng)*` + `Kho lấy hàng (CFS/Cảng)*`; **Xuất** = `Nhà máy (Điểm lấy hàng)*` + `Kho trả hàng (CFS/Cảng)*`; ô chọn (chọn từ danh sách hoặc gõ tự do, kèm `+ Thêm kho/nhà máy`); **Nhà máy bắt buộc** với hàng lẻ, trừ Lệnh chạy ngoài.
+- **Sang màn điều vận:** LCL-NK → `Cảng nâng = Kho lấy (CFS)`, `Cảng hạ = Nhà máy`; LCL-XK → đảo lại; áp cả 2 bảng kế hoạch.
+- **Tìm kho phải khớp đầy đủ:** gõ đủ “GLC” phải ra “GLC” (không phân biệt hoa/thường, có/không dấu, tìm theo chuỗi con); lỗi thuộc **cơ chế lọc của ô chọn danh mục, không phải thiếu dữ liệu chủ**. SĐT kho/nhà máy lưu riêng theo điểm vận hành, cửa sổ popup hiện SĐT.
+
+### 4.3.5 Đối tác / nhà xe (carrier) và đội xe
+
+- **Nhà thầu (xe ngoài)** = khách hàng được đánh dấu là nhà xe; nguồn danh sách “Chọn nhà xe”; bảng giá trả resolve qua liên kết nhà cung cấp đã cấu hình.
+- **Xe nội bộ** có đội xe riêng (đầu kéo, moóc, tài xế); **biển nội bộ bắt buộc chọn từ đội xe công ty** (hệ thống báo lỗi “Xe nội bộ phải chọn biển số từ đội xe công ty.”); trường hợp hoàn biển xử lý riêng.
+- **Nguồn xe (luật cứng):** hàng lẻ **xe tải → 100% xe ngoài**; hàng lẻ **cont 20'/40' → nội bộ hoặc ngoài**.
+- **Đổi lại nhà xe / biển số** đã gán cho tác vụ (đơn, ghép, lấy lẻ) (`DIS-10`); **thêm nhanh biển số** ở cả danh sách chọn xe ngoài lẫn đội xe nội bộ.
+- Danh sách loại xe gồm `1.25T · 2.5T · 3.5T · 5T · 8T · 10T · 15T` đặt cạnh `Cont 20'DC / 40'DC / 40'HC`; bảng giá cấu hình **cước thu + cước trả theo từng trọng tải**.
+- **[CHƯA RỎ]:** chưa có màn hình thêm **tải trọng xe** (trường tải trọng luôn để trống) → điều kiện “thiếu khối lượng” không bao giờ thỏa, **chưa ghép được cặp KẸP**; thiếu bảng tải trọng tổ hợp.
+
+### 4.3.6 Cảng, bãi và vùng phụ phí
+
+- **Cảng/bãi là dữ liệu**: thêm / đổi tên / ngưng dùng / xóa = thao tác danh mục, **không sửa phần mềm**.
+- Cảng có **vùng phụ phí** với cờ **vùng mặc định** (mặc định chỉ 1 vùng đang hoạt động) cho các màn kế hoạch.
+- **Xóa cảng còn dữ liệu tham chiếu → chặn**; hỗ trợ **ngưng dùng** (không chọn cho lô mới, lô cũ vẫn xem). Lô đã **khóa chi phí** giữ nguyên số liệu **và nhãn cảng/vùng tại thời điểm khóa**.
+
+- **[CHƯA RỎ]:** chưa có quy tắc khi cấu hình có **2 vùng mặc định** đang hoạt động.
+- **“Bưu kiện”:** không có thực thể *bưu kiện/parcel* nào trong dữ liệu chủ theo đặc tả hiện hành; nếu nghiệp vụ yêu cầu thì cần quyết định riêng — **[CHƯA RỎ]**.
+
+### 4.3.7 Hiện hành vs lịch sử, lịch sử thay đổi, tạo nhanh, lệnh chạy ngoài
+
+- Sửa danh mục chỉ áp cho **công việc lập mới**; **không tự đổi** công việc đã hoàn thành / hồ sơ đã phát hành. Công việc **đang thực hiện**: cập nhật **chủ động**, thấy rõ cũ–mới + công việc bị ảnh hưởng trước khi lưu; sau lưu có **lịch sử (ai / nội dung / thời điểm)** + **thông báo lái xe/Ops**; **không âm thầm** đổi tuyến/địa điểm/bên xuất hóa đơn. Mọi thao tác thêm/sửa/xóa đều ghi lại **ai / nội dung / thời điểm**.
+- **Lệnh chạy ngoài:** công tắc **đầu form, mặc định TẮT**; bật/tắt **không âm thầm xóa** nội dung đã gõ; tắt còn thông tin riêng không hợp lệ → báo trường cần chọn lại; **không có** “tích bỏ qua kiểm tra cước”; **không tự thêm danh mục** khi chỉ nhập thông tin riêng; bản chất = chỉ cước khách báo + phí chi hộ, không áp bảng định mức.
+- **[CHƯA RỎ]:** danh sách **bước/thao tác/chi phí** mà lô lệnh chạy ngoài được bỏ qua; **[CHƯA RỎ]:** nhiều người liên hệ / nhiều bên xuất hóa đơn hợp lệ thì bên nào dùng cho công việc/loại phí.
+
+---
+
+## 4.4 Bảng và luật hiển thị chung
+
+### 4.4.1 Cột Số tờ khai (mô hình theo container)
+
+**Quyết định chốt 26/10/2026** — áp cho **mọi bảng liệt kê container theo từng dòng**:
+
+1. Số tờ khai quản lý **THEO CONTAINER, không theo lô** — thêm cột **Số tờ khai** ở mọi bảng cont;
+2. Cho phép cont cùng lô **trùng số tờ khai một phần hoặc toàn bộ** — **không chặn trùng**;
+3. Sửa **từng cont riêng lẻ**, không đồng bộ ép toàn lô (trừ dòng trống nếu có cơ chế copy);
+4. **Bỏ nhập tờ khai cấp lô** — gỡ ô nhập ở form tạo lô và mọi điểm nhập theo lô.
+
+**Trình tự áp dụng:** bảng **Kế hoạch Chi tiết Xe** → **mọi bảng liệt kê container** → màn **vận đơn** → **hộp chi tiết theo container + copy dòng đầu**.
+
+Auto-copy (số đầu lô lan sang cont trống, cont đã có số **không bị đè**) chỉ là **cơ chế copy dòng trống**; **không tái tạo ô nhập cấp lô**. Luật cũ `` (“1 cont → đồng bộ tất cả”) **đã bị thay thế** bằng quy tắc quản lý theo container ở trên.
+
+### 4.4.2 Cuộn ngang bằng phím `←` / `→`
+
+- **TOÀN CỤC:** **`←` `→` cuộn ngang bảng** cho **mọi bảng trong ứng dụng**, không chỉ `/dispatch-detail`.
+- Kết hợp **cấm truncate** — mọi ô wrap full; cột tự giãn, bảng không cắt cụt, mã/BKS/SĐT giữ nguyên cụm.
+- Bảng dày đặc trên mobile vẫn **đủ chiều rộng + cuộn được**, nút dễ chạm, không chồng.
+
+### 4.4.3 Nguyên tắc data-dense
+
+- **Mục tiêu chủ sản phẩm:** giao diện **ELEGANT, DATA-DENSE, không lãng phí chỗ** — Kế hoạch Tổng quát mobile, form Tạo lô hàng, trang danh mục.
+- **Chỉ số đã chốt:** dòng 40–52px, header 36–40px; hộp thoại dùng hết bề rộng, không cuộn dọc; toolbar 44–48px; thẻ lái xe “Chứng từ giao hàng” ≤60px.
+- **Gộp trường/cột cùng hàng** khi chỗ còn trống: Phân loại + Cước thu dự kiến; MÃ + TÊN; LOẠI + TRỌNG LƯỢNG vào cột SỐ CONTAINER.
+- **Không mất thông tin để dày thêm:** ẩn cột chỉ khi toàn giá trị rỗng, tự hiển thị lại khi có dữ liệu; bỏ dòng phụ không dữ liệu; “Chưa phân xe” 1 dòng.
+- **Màu sắc:** **Sage `#E3E8E5` là thiết kế chính thức** (token nền), thẻ/bề mặt giữ trắng — **thay** yêu cầu nền trắng trước đó; một kiểu thanh lọc dùng chung; header bảng **1 dòng**.
+
+### 4.4.4 Hiển thị trung thực (số, tiền, thiếu dữ liệu)
+
+- **Không thay giá trị chưa biết bằng số 0**: thiếu nguồn → `—` / “Chưa xác định”; `0` chỉ khi đã tính và kết quả là 0.
+- Ô tiền **chưa chốt → ô trống**, không gắn nhãn “Chờ số liệu”; dòng tổng hiện `—` khi chưa có gì chốt.
+- **Tiền format `1,000,000` ở toàn bộ các phân hệ**; trọng lượng qua định dạng chung (`24.000 kg`, không `24000.00 kg`), bỏ 2 số 0 thập phân.
+- Số căn phải cho cột tiền/ngày. Phân biệt trạng thái bằng **nhãn/chữ**, không chỉ màu; danh sách phân biệt **đang tải / rỗng / lỗi tải / đang lưu / đã lưu**, lỗi thử lại được.
+
+### 4.4.5 Điểm còn mở của chương
+
+1. **Bộ lọc Loại hàng (FCL/LCL)** trên `/dispatch-detail`: (A) thêm bộ lọc (khuyến nghị) / (B) đổi thứ tự bảng / (C) hiện lý do nút disable.
+2. **Bộ chứng từ LCL** thay “phiếu hạ bãi + biên bản giao nhận”.
+3. **Bảng mức phụ phí KẸP/KẾT HỢP** cho lương ghép.
+4. **Tải trọng tổ hợp** (trường tải trọng xe luôn để trống → chưa ghép được KẸP).
+5. **Bên xuất hóa đơn** khi nhiều bên hợp lệ; **danh mục bước bị bỏ qua** của lô lệnh chạy ngoài; **vùng phụ phí mặc định** khi có 2 vùng đang hoạt động.
+6. **Trường quyết định “có điểm trả hàng”** (container nhập khẩu); **cách thay thế mã chuyến thống nhất** cho màn desktop.
+7. **“Bưu kiện”** — không có thực thể tương ứng theo đặc tả hiện có; **mã chuyến còn hiển thị trên màn hình lái xe** — cần bỏ.
+8. **Cột THAO TÁC** — còn mâu thuẫn quy cách xếp dọc (~44–48px so với ~144px); **mật độ hộp thoại** — thống nhất một lần.
+*Toàn bộ quyết định ràng buộc và vấn đề đang mở của chương được tập hợp ở **Chương 8**.*
+
+---
+
+*Kết thúc Chương 4.*
+
+## Sơ đồ trực quan
+
+```mermaid
+stateDiagram-v2
+    [*] --> ChoPhanXe: Lô đã tạo
+    ChoPhanXe --> DaPhanXe: Điều phối phân xe
+    DaPhanXe --> DangChay: Lái xe chạy chuyến
+    DangChay --> HoanThanh: Trả hàng xong
+    HoanThanh --> [*]
+```
+
+```mermaid
+flowchart TD
+    A["Chọn ≥2 lô cùng tuyến"] --> B["Ghép nhóm xe"]
+    B --> C["Lô 1 = Lô chính<br/>giữ 100% cước"]
+    B --> D["Lô 2..N = 0₫<br/>tag Lẻ · Ghép (n/N)"]
+    C --> E["Hủy ghép → Lô 2 nhận 100%"]
+    D --> F["Tách nhóm → khôi phục<br/>cước + loại xe gốc"]
+```
