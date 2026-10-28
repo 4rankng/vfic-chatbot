@@ -1,0 +1,22 @@
+[
+  {
+    "href": "#/",
+    "text": "Tổng quan"
+  },
+  {
+    "href": "#/conversations",
+    "text": "Tin nhắn"
+  },
+  {
+    "href": "#/projects",
+    "text": "Dự án"
+  },
+  {
+    "href": "#/users",
+    "text": "Người dùng"
+  },
+  {
+    "href": "#/settings",
+    "text": "Cài đặt"
+  }
+]

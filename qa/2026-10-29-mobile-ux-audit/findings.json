@@ -1,0 +1,3524 @@
+{
+  "login": {
+    "url": "http://127.0.0.1:4173/#/login",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "",
+        "w": 324,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "",
+        "w": 324,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "a",
+        "cls": "font-medium.underline-offset-4.hover:underline.focus-visible:outline-2",
+        "text": "Quên mật khẩu?",
+        "w": 112.1,
+        "h": 18,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [],
+    "fixedBottom": [],
+    "navLinks": [
+      {
+        "href": "#/forgot-password",
+        "text": "Quên mật khẩu?"
+      }
+    ],
+    "buttonDumps": [
+      "Hiện mật khẩu",
+      "Đăng nhập"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 7,
+      "totalRules": 3377
+    }
+  },
+  "01-dashboard-390": {
+    "url": "http://127.0.0.1:4173/#/",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "Tìm ứng viên",
+        "w": 312,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Sắp xếp: Mới nhất",
+        "w": 36,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "lead-chip.is-active",
+        "text": "Tất cả",
+        "w": 69.4,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "lead-chip",
+        "text": "Mới",
+        "w": 51.8,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "lead-chip",
+        "text": "Đang liên hệ",
+        "w": 103.4,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "lead-chip",
+        "text": "Đã đăng ký",
+        "w": 98.1,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "lead-chip",
+        "text": "Bỏ qua",
+        "w": 71.8,
+        "h": 40,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "div",
+        "cls": "lead-card-toolbar",
+        "text": "Tất cả Mới Đang liên hệ Đã đăng ký Bỏ qua",
+        "h": 109,
+        "paddingBottom": "8px",
+        "bottom": -314.2
+      },
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Sắp xếp: Mới nhất",
+      "Tất cả",
+      "Mới",
+      "Đang liên hệ",
+      "Đã đăng ký",
+      "Bỏ qua",
+      "Phan Thành Mai Công nhân đóng gói Đang liên hệ 7",
+      "Ngô Liên Oanh Công nhân SMT Đang liên hệ 12 triệ",
+      "Lý Hoa Em Công nhân đóng gói Đã đăng ký",
+      "Lê Mai Vinh Kỹ thuật viên Đã đăng ký 10 triệu",
+      "Hà Văn Quân Công nhân sản xuất Đang liên hệ 8 tr",
+      "Vũ Ngọc Giang Công nhân kho vận Mới 10 triệu",
+      "Hoàng Minh Em Kỹ thuật viên Mới",
+      "Đặng Thanh An Công nhân kho vận Đã đăng ký 9 tri",
+      "Bùi Xuân Cường Công nhân lắp ráp Đã đăng ký 11 t",
+      "Trần Đức Tâm QC/KCS Đang liên hệ",
+      "Nguyễn Thị An Công nhân sản xuất Mới 8 triệu",
+      "Phạm Hoàng Cường QC/KCS Mới 10 triệu",
+      "Đỗ Anh Khôi Công nhân lắp ráp Đang liên hệ 10 tr"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 7,
+      "totalRules": 3377
+    }
+  },
+  "02-inbox-390": {
+    "url": "http://127.0.0.1:4173/#/conversations",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "channel-adapter-option",
+        "text": "Zalo Chatbot",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "channel-adapter-option",
+        "text": "Zalo OA",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "channel-adapter-option",
+        "text": "Messenger",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "channel-adapter-option",
+        "text": "TingTing OA",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "tt-input",
+        "text": "Tìm ứng viên hoặc số điện thoại",
+        "w": 360,
+        "h": 40,
+        "disabled": false
+      }
+    ],
+    "truncated": [
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Chị cần chuẩn bị: CCCD gốc, sơ yếu lý lịch, và 2",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ nhà máy hỗ trợ bữa ăn trưa, 25.000 VNĐ/bữa. C",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Mình đăng ký nhé. Đặng Thanh Em, 0361234567",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ không có gì ạ! Nếu cần thông tin khác cứ hỏi ",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ không có gì ạ! Nếu cần thông tin khác cứ hỏi ",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ 2 tháng, lương 85%. Sau đó ký HĐ 12 tháng.",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Không có gì thêm, em cảm ơn anh nhé!",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ có, cấp 2 bộ đồng phục/năm, miễn phí ạ. Ngoài",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ cảm ơn anh Hải! Mình đã tạo hồ sơ. Bộ phận tu",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Mình rất thích. Cho mình hỏi thêm về hợp đồng ạ",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      }
+    ],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [
+      {
+        "tag": "button",
+        "cls": "conversation.",
+        "text": "Đặng Thanh An 28-10 Dạ nhà máy hỗ trợ bữa ăn trư",
+        "hitTag": "span",
+        "hitCls": "workspace-tabbar-label",
+        "hitText": "Dự án"
+      }
+    ],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Zalo Chatbot",
+      "Zalo OA",
+      "Messenger",
+      "TingTing OA",
+      "5 Nguyễn Thị Sơn 28-10 Ok cảm ơn em Cần xử lý Ưu",
+      "4 Lý Hoa Linh 27-10 Chị cần chuẩn bị: CCCD gốc, ",
+      "4 Lê Mai Dũng 27-10 Ok cảm ơn em Cần xử lý",
+      "Vũ Ngọc Bình 28-10 Ok cảm ơn em Cần xử lý Ưu tiê",
+      "3 Hoàng Minh Em 27-10 Ok anh/chị nha Cần xử lý",
+      "Trần Đức Tâm 26-10 Ok anh/chị nha Cần xử lý Ưu t",
+      "Phan Thành Mai 27-10 Dạ em cảm ơn anh/nhạ Cần xử",
+      "Bùi Xuân Cường 26-10 Ok anh/chị nha Cần xử lý Ưu",
+      "Đặng Thanh An 28-10 Dạ nhà máy hỗ trợ bữa ăn trư",
+      "Lý Hoa Em 28-10 Mình đăng ký nhé. Đặng Thanh Em,",
+      "Bùi Xuân Hải 27-10 Vâng em ạ",
+      "Lê Mai Vinh 28-10 Dạ không có gì ạ! Nếu cần thôn",
+      "Đỗ Anh Khôi 26-10 Dạ không có gì ạ! Nếu cần thôn",
+      "Ngô Liên Oanh 26-10 Dạ Lê Quang Cường, 038123456",
+      "Huỳnh Quang Phong 26-10 Dạ không có gì ạ! 😊 Ưu ",
+      "Hoàng Minh Yến 27-10 Dạ không có gì ạ! Ưu tiên",
+      "Hà Văn Quân 26-10 Dạ 2 tháng, lương 85%. Sau đó ",
+      "Trần Đức Bình 28-10 Vâng ạ, cảm ơn em",
+      "Nguyễn Thị An 27-10 Không có gì thêm, em cảm ơn ",
+      "Phạm Hoàng Cường 27-10 Dạ có, cấp 2 bộ đồng phục",
+      "Vũ Ngọc Giang 26-10 Dạ cảm ơn anh Hải! Mình đã t",
+      "Đỗ Anh Dũng 28-10 Phạm Hoàng Dũng, 0341234567 Đã",
+      "Đặng Thanh Phúc 27-10 Mình rất thích. Cho mình h",
+      "Phạm Hoàng Uyên 27-10 Vâng em ạ Đã đóng Ưu tiên",
+      "Trịnh Duy Nam 26-10 Vâng ạ, cảm ơn em Đã đóng Ưu"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 21,
+      "totalRules": 4561
+    }
+  },
+  "03-inbox-thread-390": {
+    "url": "http://127.0.0.1:4173/#/conversations?id=4aad01b7-d86f-4da6-8b82-7d5760e60bb7",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "textarea",
+        "cls": "tt-textarea",
+        "text": "Tin nhắn trả lời",
+        "w": 294,
+        "h": 42,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [],
+    "navLinks": [],
+    "buttonDumps": [
+      "Mở danh sách hội thoại",
+      "Nguyễn Thị Sơn Chưa có số điện thoại",
+      "Thao tác hội thoại",
+      "Chế độ: Tư vấn viên",
+      "Gửi tin nhắn"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 21,
+      "totalRules": 4561
+    }
+  },
+  "04-projects-390": {
+    "url": "http://127.0.0.1:4173/#/projects",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "tt-btn.inline-flex.items-center.justify-center",
+        "text": "Tạo dự án",
+        "w": 103.5,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Tên, mã hoặc nội dung dự án…",
+        "w": 322,
+        "h": 38,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "relative.flex.w-full.cursor-pointer",
+        "text": "Tất cả dự án",
+        "w": 324,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Foxconn Nghệ An Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Foxconn Nghệ An",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Bắc Ninh Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Bắc Ninh",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Hải Phòng Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Hải Phòng",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Samsung Bắc Ninh Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Samsung Bắc Ninh",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [
+      {
+        "tag": "select",
+        "cls": "",
+        "text": "Tất cả dự án Đang tuyển dụng Chưa bật tuyển dụng",
+        "fontSize": 12,
+        "type": "select"
+      }
+    ],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Tạo dự án",
+      "Tất cả dự án",
+      "Foxconn Nghệ An Đang bật Đã nạp",
+      "Thao tác khác cho dự án Foxconn Nghệ An",
+      "LG Display Bắc Ninh Đang bật Đã nạp",
+      "Thao tác khác cho dự án LG Display Bắc Ninh",
+      "LG Display Hải Phòng Đang bật Đã nạp",
+      "Thao tác khác cho dự án LG Display Hải Phòng",
+      "Samsung Bắc Ninh Đang bật Đã nạp",
+      "Thao tác khác cho dự án Samsung Bắc Ninh"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 23,
+      "totalRules": 4855
+    }
+  },
+  "05-project-knowledge-sheet-390": {
+    "url": "http://127.0.0.1:4173/#/projects",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "tt-btn.inline-flex.items-center.justify-center",
+        "text": "Tạo dự án",
+        "w": 103.5,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Tên, mã hoặc nội dung dự án…",
+        "w": 322,
+        "h": 38,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "relative.flex.w-full.cursor-pointer",
+        "text": "Tất cả dự án",
+        "w": 324,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Foxconn Nghệ An Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Foxconn Nghệ An",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Bắc Ninh Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Bắc Ninh",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Hải Phòng Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Hải Phòng",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Samsung Bắc Ninh Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Samsung Bắc Ninh",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "",
+        "text": "Dismiss",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Xuất KB",
+        "w": 100.3,
+        "h": 36,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [
+      {
+        "tag": "select",
+        "cls": "",
+        "text": "Tất cả dự án Đang tuyển dụng Chưa bật tuyển dụng",
+        "fontSize": 12,
+        "type": "select"
+      }
+    ],
+    "tables": [],
+    "deadControls": [
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "tt-btn.inline-flex.items-center.justify-center",
+        "text": "Tạo dự án",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Tên, mã hoặc nội dung dự án…",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "relative.flex.w-full.cursor-pointer",
+        "text": "Tất cả dự án",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Foxconn Nghệ An Đang bật Đã nạp",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Foxconn Nghệ An",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Bắc Ninh Đang bật Đã nạp",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Bắc Ninh",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Hải Phòng Đang bật Đã nạp",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Hải Phòng",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Samsung Bắc Ninh Đang bật Đã nạp",
+        "hitTag": "div",
+        "hitCls": "uu-scope.flex.flex-wrap.items-center",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Samsung Bắc Ninh",
+        "hitTag": "button",
+        "hitCls": "group.relative.inline-flex.h-max",
+        "hitText": "Xuất KB"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Tổng quan",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Tin nhắn",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Dự án",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Người dùng",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Cài đặt",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      }
+    ],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Tạo dự án",
+      "Tất cả dự án",
+      "Foxconn Nghệ An Đang bật Đã nạp",
+      "Thao tác khác cho dự án Foxconn Nghệ An",
+      "LG Display Bắc Ninh Đang bật Đã nạp",
+      "Thao tác khác cho dự án LG Display Bắc Ninh",
+      "LG Display Hải Phòng Đang bật Đã nạp",
+      "Thao tác khác cho dự án LG Display Hải Phòng",
+      "Samsung Bắc Ninh Đang bật Đã nạp",
+      "Thao tác khác cho dự án Samsung Bắc Ninh",
+      "Dismiss",
+      "Xuất KB"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 23,
+      "totalRules": 4855
+    }
+  },
+  "05b-project-knowledge-sheet-scrolled-390": {
+    "url": "http://127.0.0.1:4173/#/projects",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "tt-btn.inline-flex.items-center.justify-center",
+        "text": "Tạo dự án",
+        "w": 103.5,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Tên, mã hoặc nội dung dự án…",
+        "w": 322,
+        "h": 38,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "relative.flex.w-full.cursor-pointer",
+        "text": "Tất cả dự án",
+        "w": 324,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Foxconn Nghệ An Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Foxconn Nghệ An",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Bắc Ninh Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Bắc Ninh",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Hải Phòng Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Hải Phòng",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Samsung Bắc Ninh Đang bật Đã nạp",
+        "w": 288,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Samsung Bắc Ninh",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "",
+        "text": "Dismiss",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Xuất KB",
+        "w": 100.3,
+        "h": 36,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [
+      {
+        "tag": "select",
+        "cls": "",
+        "text": "Tất cả dự án Đang tuyển dụng Chưa bật tuyển dụng",
+        "fontSize": 12,
+        "type": "select"
+      }
+    ],
+    "tables": [],
+    "deadControls": [
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "tt-btn.inline-flex.items-center.justify-center",
+        "text": "Tạo dự án",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Tên, mã hoặc nội dung dự án…",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "relative.flex.w-full.cursor-pointer",
+        "text": "Tất cả dự án",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Foxconn Nghệ An Đang bật Đã nạp",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Foxconn Nghệ An",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Bắc Ninh Đang bật Đã nạp",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Bắc Ninh",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "LG Display Hải Phòng Đang bật Đã nạp",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án LG Display Hải Phòng",
+        "hitTag": "div",
+        "hitCls": "fixed.inset-0.z-50.flex",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "project-card-main",
+        "text": "Samsung Bắc Ninh Đang bật Đã nạp",
+        "hitTag": "div",
+        "hitCls": "uu-scope.flex.flex-wrap.items-center",
+        "hitText": "KB đang sử dụng · Markdown (.md)"
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Thao tác khác cho dự án Samsung Bắc Ninh",
+        "hitTag": "button",
+        "hitCls": "group.relative.inline-flex.h-max",
+        "hitText": "Xuất KB"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Tổng quan",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Tin nhắn",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Dự án",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Người dùng",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      },
+      {
+        "tag": "a",
+        "cls": "workspace-tabbar-item",
+        "text": "Cài đặt",
+        "hitTag": "section",
+        "hitCls": "project-legacy-knowledge",
+        "hitText": "Kiến thức chưa được chuyển đổi D"
+      }
+    ],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Tạo dự án",
+      "Tất cả dự án",
+      "Foxconn Nghệ An Đang bật Đã nạp",
+      "Thao tác khác cho dự án Foxconn Nghệ An",
+      "LG Display Bắc Ninh Đang bật Đã nạp",
+      "Thao tác khác cho dự án LG Display Bắc Ninh",
+      "LG Display Hải Phòng Đang bật Đã nạp",
+      "Thao tác khác cho dự án LG Display Hải Phòng",
+      "Samsung Bắc Ninh Đang bật Đã nạp",
+      "Thao tác khác cho dự án Samsung Bắc Ninh",
+      "Dismiss",
+      "Xuất KB"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 23,
+      "totalRules": 4855
+    }
+  },
+  "06-settings-390": {
+    "url": "http://127.0.0.1:4173/#/settings",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "w": 13,
+        "h": 13,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "w": 13,
+        "h": 13,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "fontSize": 12,
+        "type": "checkbox"
+      },
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "fontSize": 12,
+        "type": "checkbox"
+      }
+    ],
+    "tables": [],
+    "deadControls": [
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "hitTag": "a",
+        "hitCls": "workspace-tabbar-item",
+        "hitText": "Cài đặt"
+      }
+    ],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/profile",
+        "text": "Hồ sơ cá nhân"
+      },
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Zalo",
+      "Messenger",
+      "Cloudfone Đang tắt",
+      "Email ứng viên Đang tắt",
+      "Geocoder",
+      "TingTing",
+      "Người dùng",
+      "AI Providers",
+      "Jev"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 26,
+      "totalRules": 5232
+    }
+  },
+  "07-settings-channels-390": {
+    "url": "http://127.0.0.1:4173/#/settings?section=channels",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "w": 13,
+        "h": 13,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "w": 13,
+        "h": 13,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "fontSize": 12,
+        "type": "checkbox"
+      },
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "fontSize": 12,
+        "type": "checkbox"
+      }
+    ],
+    "tables": [],
+    "deadControls": [
+      {
+        "tag": "input",
+        "cls": "",
+        "text": "",
+        "hitTag": "a",
+        "hitCls": "workspace-tabbar-item",
+        "hitText": "Cài đặt"
+      }
+    ],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/profile",
+        "text": "Hồ sơ cá nhân"
+      },
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Zalo",
+      "Messenger",
+      "Cloudfone Đang tắt",
+      "Email ứng viên Đang tắt",
+      "Geocoder",
+      "TingTing",
+      "Người dùng",
+      "AI Providers",
+      "Jev"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 26,
+      "totalRules": 5232
+    }
+  },
+  "08-settings-cloudfone-390": {
+    "url": "http://127.0.0.1:4173/#/settings",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Quay lại",
+        "w": 44,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "summary",
+        "cls": "settings-mobile-group-summary.tt-collapse-title",
+        "text": "CloudFone API & người nhận 0/4 0/4 trường đã cấu",
+        "w": 364,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "",
+        "w": 338,
+        "h": 38,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "",
+        "w": 338,
+        "h": 38,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Nhập CloudFone AuthKey",
+        "w": 242,
+        "h": 38,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Bật cron",
+        "w": 74.6,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Tắt cron",
+        "w": 74.3,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Kiểm tra kết nối",
+        "w": 125.8,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Xem",
+        "w": 78.6,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Lưu cấu hình",
+        "w": 102.6,
+        "h": 40,
+        "disabled": true
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Quay lại",
+      "Hiện CloudFone AuthKey",
+      "Sao chép CloudFone AuthKey",
+      "Bật cron",
+      "Tắt cron",
+      "Kiểm tra kết nối",
+      "Xem",
+      "Lưu cấu hình"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 26,
+      "totalRules": 5232
+    }
+  },
+  "09-users-390": {
+    "url": "http://127.0.0.1:4173/#/users",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "a",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Tạo tài khoản",
+        "w": 148.6,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Về trang trước",
+        "w": 40,
+        "h": 40,
+        "disabled": true
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Trang tiếp",
+        "w": 40,
+        "h": 40,
+        "disabled": true
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      },
+      {
+        "tag": "span",
+        "cls": "text-xs.font-semibold.text-white",
+        "text": "Sửa Nguyễn Văn Admin",
+        "fg": "rgb(255, 255, 255)",
+        "bgEl": "body.",
+        "bg": "rgb(255, 246, 237)",
+        "ratio": 1.07,
+        "need": 4.5,
+        "fontSize": 12,
+        "fontWeight": 600
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/users/create",
+        "text": "Tạo tài khoản"
+      },
+      {
+        "href": "#/users/4d6a952a-9d39-46f8-823f-5c28c6306aa1",
+        "text": "Sửa Nguyễn Văn Admin"
+      },
+      {
+        "href": "#/users/9d368b6e-962d-4c10-9733-f417fbc758c5",
+        "text": "Sửa Nguyễn Thị Lan"
+      },
+      {
+        "href": "#/users/4a3778d6-27f8-4817-a7b1-80986aa9e790",
+        "text": "Sửa Trần Văn Minh"
+      },
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Vô hiệu hóa Nguyễn Văn Admin",
+      "Đổi mật khẩu Nguyễn Văn Admin",
+      "Xóa vĩnh viễn Nguyễn Văn Admin",
+      "Vô hiệu hóa Nguyễn Thị Lan",
+      "Đổi mật khẩu Nguyễn Thị Lan",
+      "Xóa vĩnh viễn Nguyễn Thị Lan",
+      "Vô hiệu hóa Trần Văn Minh",
+      "Đổi mật khẩu Trần Văn Minh",
+      "Xóa vĩnh viễn Trần Văn Minh",
+      "Về trang trước",
+      "Trang tiếp"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 26,
+      "totalRules": 5232
+    }
+  },
+  "10-call-records-390": {
+    "url": "http://127.0.0.1:4173/#/ban-ghi-cuoc-goi",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Tìm số điện thoại",
+        "w": 358,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Tải bản ghi ngày gần nhất",
+        "w": 210.5,
+        "h": 40,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Tải bản ghi ngày gần nhất"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 26,
+      "totalRules": 5232
+    }
+  },
+  "11-performance-390": {
+    "url": "http://127.0.0.1:4173/#/hieu-suat",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "01:09:30",
+        "w": 109.8,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group/button-group.inline-flex.h-max.cursor-pointer",
+        "text": "1 ngày",
+        "w": 57.4,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group/button-group.inline-flex.h-max.cursor-pointer",
+        "text": "7 ngày",
+        "w": 59.5,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group/button-group.inline-flex.h-max.cursor-pointer",
+        "text": "1 tháng",
+        "w": 62.9,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group/button-group.inline-flex.h-max.cursor-pointer",
+        "text": "3 tháng",
+        "w": 66,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group/button-group.inline-flex.h-max.cursor-pointer",
+        "text": "6 tháng",
+        "w": 66.3,
+        "h": 40,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [
+      {
+        "tag": "table",
+        "cls": "performance-trend-data",
+        "text": "Dữ liệu xu hướng thời gian phản hồi Mốc thời gia",
+        "rows": 58,
+        "scrollW": 315,
+        "clientW": 315
+      }
+    ],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "01:09:30",
+      "1 ngày",
+      "7 ngày",
+      "1 tháng",
+      "3 tháng",
+      "6 tháng"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 27,
+      "totalRules": 5271
+    }
+  },
+  "12-profile-390": {
+    "url": "http://127.0.0.1:4173/#/profile",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "pageOverflow": {
+      "docScrollW": 390,
+      "docClientW": 390,
+      "bodyScrollW": 390
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N",
+        "w": 56,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Sửa",
+        "w": 78.9,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Đăng xuất",
+        "w": 110.2,
+        "h": 40,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "nav",
+        "cls": "workspace-tabbar.md:hidden",
+        "text": "Tổng quan Tin nhắn Dự án Người dùng Cài đặt",
+        "h": 61,
+        "paddingBottom": "0px",
+        "bottom": 0
+      }
+    ],
+    "navLinks": [
+      {
+        "href": "#/",
+        "text": "Tổng quan"
+      },
+      {
+        "href": "#/conversations",
+        "text": "Tin nhắn"
+      },
+      {
+        "href": "#/projects",
+        "text": "Dự án"
+      },
+      {
+        "href": "#/users",
+        "text": "Người dùng"
+      },
+      {
+        "href": "#/settings",
+        "text": "Cài đặt"
+      }
+    ],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N",
+      "Sửa",
+      "Đăng xuất"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 27,
+      "totalRules": 5297
+    }
+  },
+  "t-dashboard-768": {
+    "url": "http://127.0.0.1:4173/#/",
+    "viewport": {
+      "w": 768,
+      "h": 1024
+    },
+    "pageOverflow": {
+      "docScrollW": 768,
+      "docClientW": 768,
+      "bodyScrollW": 768
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N Nguyễn Văn Admin",
+        "w": 195.4,
+        "h": 40,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [
+      {
+        "tag": "h3",
+        "cls": "dashboard-candidate-day-header",
+        "text": "CHỦ NHẬT, 11/10/2026",
+        "h": 31.9,
+        "paddingBottom": "8px",
+        "bottom": -82.5
+      },
+      {
+        "tag": "h3",
+        "cls": "dashboard-candidate-day-header",
+        "text": "THỨ BẢY, 10/10/2026",
+        "h": 31.9,
+        "paddingBottom": "8px",
+        "bottom": -250.4
+      },
+      {
+        "tag": "h3",
+        "cls": "dashboard-candidate-day-header",
+        "text": "CHỦ NHẬT, 04/10/2026",
+        "h": 31.9,
+        "paddingBottom": "8px",
+        "bottom": -418.4
+      },
+      {
+        "tag": "h3",
+        "cls": "dashboard-candidate-day-header",
+        "text": "THỨ BẢY, 03/10/2026",
+        "h": 31.9,
+        "paddingBottom": "8px",
+        "bottom": -518.3
+      },
+      {
+        "tag": "h3",
+        "cls": "dashboard-candidate-day-header",
+        "text": "THỨ BA, 29/09/2026",
+        "h": 31.9,
+        "paddingBottom": "8px",
+        "bottom": -618.3
+      }
+    ],
+    "navLinks": [],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N Nguyễn Văn Admin",
+      "Phan Thành Mai 0326543670 Xem",
+      "Ngô Liên Oanh 0362626229 Xem",
+      "Lý Hoa Em 0386855396 Xem",
+      "Lê Mai Vinh 0579164991 Xem",
+      "Hà Văn Quân 0365171761 Xem",
+      "Vũ Ngọc Giang 0653770370 Xem",
+      "Hoàng Minh Em 0312876828 Xem",
+      "Đặng Thanh An 0354117625 Xem",
+      "Bùi Xuân Cường 0505374922 Xem",
+      "Trần Đức Tâm 0302564689 Xem",
+      "Nguyễn Thị An 0302921859 Xem",
+      "Phạm Hoàng Cường 0419517485 Xem",
+      "Đỗ Anh Khôi 0638574680 Xem"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 27,
+      "totalRules": 5297
+    }
+  },
+  "t-inbox-768": {
+    "url": "http://127.0.0.1:4173/#/conversations",
+    "viewport": {
+      "w": 768,
+      "h": 1024
+    },
+    "pageOverflow": {
+      "docScrollW": 768,
+      "docClientW": 768,
+      "bodyScrollW": 768
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N Nguyễn Văn Admin",
+        "w": 195.4,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "channel-adapter-option",
+        "text": "Zalo Chatbot",
+        "w": 34,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "channel-adapter-option",
+        "text": "Zalo OA",
+        "w": 34,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "channel-adapter-option",
+        "text": "Messenger",
+        "w": 34,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "channel-adapter-option",
+        "text": "TingTing OA",
+        "w": 34,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "tt-input",
+        "text": "Tìm ứng viên hoặc số điện thoại",
+        "w": 299,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "textarea",
+        "cls": "tt-textarea",
+        "text": "Tin nhắn trả lời",
+        "w": 298,
+        "h": 42,
+        "disabled": false
+      }
+    ],
+    "truncated": [
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Chị cần chuẩn bị: CCCD gốc, sơ yếu lý lịch, và 2",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ nhà máy hỗ trợ bữa ăn trưa, 25.000 VNĐ/bữa. C",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Mình đăng ký nhé. Đặng Thanh Em, 0361234567",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ không có gì ạ! Nếu cần thông tin khác cứ hỏi ",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ không có gì ạ! Nếu cần thông tin khác cứ hỏi ",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ Lê Quang Cường, 0381234567",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ 2 tháng, lương 85%. Sau đó ký HĐ 12 tháng.",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Không có gì thêm, em cảm ơn anh nhé!",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ có, cấp 2 bộ đồng phục/năm, miễn phí ạ. Ngoài",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Dạ cảm ơn anh Hải! Mình đã tạo hồ sơ. Bộ phận tu",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Phạm Hoàng Dũng, 0341234567",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "text": "Mình rất thích. Cho mình hỏi thêm về hợp đồng ạ",
+        "clamp": null,
+        "overW": true,
+        "overH": false,
+        "hasTitle": false,
+        "parentExpandable": false
+      }
+    ],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [],
+    "navLinks": [],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N Nguyễn Văn Admin",
+      "Zalo Chatbot",
+      "Zalo OA",
+      "Messenger",
+      "TingTing OA",
+      "4 Lý Hoa Linh 27-10 Chị cần chuẩn bị: CCCD gốc, ",
+      "4 Lê Mai Dũng 27-10 Ok cảm ơn em Cần xử lý",
+      "Vũ Ngọc Bình 28-10 Ok cảm ơn em Cần xử lý Ưu tiê",
+      "Nguyễn Thị Sơn 28-10 Ok cảm ơn em Cần xử lý Ưu t",
+      "3 Hoàng Minh Em 27-10 Ok anh/chị nha Cần xử lý",
+      "Trần Đức Tâm 26-10 Ok anh/chị nha Cần xử lý Ưu t",
+      "Phan Thành Mai 27-10 Dạ em cảm ơn anh/nhạ Cần xử",
+      "Bùi Xuân Cường 26-10 Ok anh/chị nha Cần xử lý Ưu",
+      "Đặng Thanh An 28-10 Dạ nhà máy hỗ trợ bữa ăn trư",
+      "Lý Hoa Em 28-10 Mình đăng ký nhé. Đặng Thanh Em,",
+      "Bùi Xuân Hải 27-10 Vâng em ạ",
+      "Lê Mai Vinh 28-10 Dạ không có gì ạ! Nếu cần thôn",
+      "Đỗ Anh Khôi 26-10 Dạ không có gì ạ! Nếu cần thôn",
+      "Ngô Liên Oanh 26-10 Dạ Lê Quang Cường, 038123456",
+      "Huỳnh Quang Phong 26-10 Dạ không có gì ạ! 😊 Ưu ",
+      "Hoàng Minh Yến 27-10 Dạ không có gì ạ! Ưu tiên",
+      "Hà Văn Quân 26-10 Dạ 2 tháng, lương 85%. Sau đó ",
+      "Trần Đức Bình 28-10 Vâng ạ, cảm ơn em",
+      "Nguyễn Thị An 27-10 Không có gì thêm, em cảm ơn ",
+      "Phạm Hoàng Cường 27-10 Dạ có, cấp 2 bộ đồng phục",
+      "Vũ Ngọc Giang 26-10 Dạ cảm ơn anh Hải! Mình đã t",
+      "Đỗ Anh Dũng 28-10 Phạm Hoàng Dũng, 0341234567 Đã",
+      "Đặng Thanh Phúc 27-10 Mình rất thích. Cho mình h",
+      "Phạm Hoàng Uyên 27-10 Vâng em ạ Đã đóng Ưu tiên",
+      "Trịnh Duy Nam 26-10 Vâng ạ, cảm ơn em Đã đóng Ưu",
+      "Nguyễn Thị Sơn Chưa có số điện thoại",
+      "Thao tác hội thoại",
+      "Chế độ: Tư vấn viên",
+      "Gửi tin nhắn"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 27,
+      "totalRules": 5297
+    }
+  },
+  "t-projects-768": {
+    "url": "http://127.0.0.1:4173/#/projects",
+    "viewport": {
+      "w": 768,
+      "h": 1024
+    },
+    "pageOverflow": {
+      "docScrollW": 768,
+      "docClientW": 768,
+      "bodyScrollW": 768
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N Nguyễn Văn Admin",
+        "w": 195.4,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "tt-btn.inline-flex.items-center.justify-center",
+        "text": "Tạo dự án",
+        "w": 114.5,
+        "h": 36,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Tên, mã hoặc nội dung dự án…",
+        "w": 364,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "relative.flex.w-full.cursor-pointer",
+        "text": "Tất cả dự án",
+        "w": 280,
+        "h": 36,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [
+      {
+        "tag": "select",
+        "cls": "",
+        "text": "Tất cả dự án Đang tuyển dụng Chưa bật tuyển dụng",
+        "fontSize": 12,
+        "type": "select"
+      }
+    ],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [],
+    "navLinks": [],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N Nguyễn Văn Admin",
+      "Tạo dự án",
+      "Tất cả dự án",
+      "Foxconn Nghệ An foxconn-nghe-an Đang bật Đã nạp ",
+      "LG Display Bắc Ninh lg-display-bac-ninh Đang bật",
+      "LG Display Hải Phòng lg-display-hai-phong Đang b",
+      "Samsung Bắc Ninh samsung-bac-ninh Đang bật Đã nạ"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 27,
+      "totalRules": 5297
+    }
+  },
+  "t-settings-768": {
+    "url": "http://127.0.0.1:4173/#/settings",
+    "viewport": {
+      "w": 768,
+      "h": 1024
+    },
+    "pageOverflow": {
+      "docScrollW": 768,
+      "docClientW": 768,
+      "bodyScrollW": 768
+    },
+    "viewportMeta": "width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover,interactive-widget=resizes-content",
+    "tapSmall": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "w": 1,
+        "h": 1,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Mở điều hướng",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Không có thông báo mới",
+        "w": 40,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "N Nguyễn Văn Admin",
+        "w": 195.4,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "settings-side-nav-link.is-active",
+        "text": "Zalo Bot Platform và OA",
+        "w": 240,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "settings-side-nav-link",
+        "text": "Messenger Trang Facebook",
+        "w": 240,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "settings-side-nav-link",
+        "text": "AI Providers Mặc định & dự phòng",
+        "w": 240,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "settings-side-nav-link",
+        "text": "Jev Mô hình quyết định",
+        "w": 240,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "settings-side-nav-link",
+        "text": "TingTing Đặt lại mật khẩu",
+        "w": 240,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "settings-side-nav-link",
+        "text": "Email ứng viên Gửi ứng viên mới qua email",
+        "w": 240,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "settings-side-nav-link",
+        "text": "Cloudfone Phân tích cuộc gọi",
+        "w": 240,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "settings-side-nav-link",
+        "text": "Geocoder Khoảng cách dự án",
+        "w": 240,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "settings-side-nav-link",
+        "text": "Người dùng Tài khoản & quyền",
+        "w": 240,
+        "h": 40,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Nhập giá trị",
+        "w": 251,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Hiện Bot Token",
+        "w": 36,
+        "h": 36,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Sao chép Bot Token",
+        "w": 36,
+        "h": 36,
+        "disabled": true
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Nhập giá trị",
+        "w": 251,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Hiện Bot Secret",
+        "w": 36,
+        "h": 36,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Sao chép Bot Secret",
+        "w": 36,
+        "h": 36,
+        "disabled": true
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Lưu & kiểm tra",
+        "w": 133.3,
+        "h": 36,
+        "disabled": false
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "",
+        "w": 296,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Sao chép Zalo App ID",
+        "w": 36,
+        "h": 36,
+        "disabled": true
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Nhập giá trị",
+        "w": 254,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Hiện App Secret",
+        "w": 36,
+        "h": 36,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Sao chép App Secret",
+        "w": 36,
+        "h": 36,
+        "disabled": true
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Nhập giá trị",
+        "w": 254,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Hiện OA Access Token",
+        "w": 36,
+        "h": 36,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Sao chép OA Access Token",
+        "w": 36,
+        "h": 36,
+        "disabled": true
+      },
+      {
+        "tag": "input",
+        "cls": "m-0.w-full.bg-transparent.text-primary",
+        "text": "Nhập giá trị",
+        "w": 254,
+        "h": 34,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Hiện OA Refresh Token",
+        "w": 36,
+        "h": 36,
+        "disabled": false
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Sao chép OA Refresh Token",
+        "w": 36,
+        "h": 36,
+        "disabled": true
+      },
+      {
+        "tag": "button",
+        "cls": "group.relative.inline-flex.h-max",
+        "text": "Lưu & kiểm tra",
+        "w": 133.3,
+        "h": 36,
+        "disabled": false
+      },
+      {
+        "tag": "summary",
+        "cls": "settings-advanced-summary",
+        "text": "Webhook",
+        "w": 694,
+        "h": 36,
+        "disabled": false
+      }
+    ],
+    "truncated": [],
+    "smallInputs": [],
+    "tables": [],
+    "deadControls": [],
+    "contrastFails": [
+      {
+        "tag": "a",
+        "cls": "sr-only.focus:not-sr-only.focus:absolute.focus:top-2",
+        "text": "Bỏ qua điều hướng",
+        "fg": "rgb(23, 32, 51)",
+        "bgEl": "div.workspace-frame",
+        "bg": "rgb(23, 32, 51)",
+        "ratio": 1,
+        "need": 4.5,
+        "fontSize": 14,
+        "fontWeight": 400
+      }
+    ],
+    "fixedBottom": [],
+    "navLinks": [],
+    "buttonDumps": [
+      "Mở điều hướng",
+      "Không có thông báo mới",
+      "N Nguyễn Văn Admin",
+      "Zalo Bot Platform và OA",
+      "Messenger Trang Facebook",
+      "AI Providers Mặc định & dự phòng",
+      "Jev Mô hình quyết định",
+      "TingTing Đặt lại mật khẩu",
+      "Email ứng viên Gửi ứng viên mới qua email",
+      "Cloudfone Phân tích cuộc gọi",
+      "Geocoder Khoảng cách dự án",
+      "Người dùng Tài khoản & quyền",
+      "Hiện Bot Token",
+      "Sao chép Bot Token",
+      "Hiện Bot Secret",
+      "Sao chép Bot Secret",
+      "Lưu & kiểm tra",
+      "Sao chép Zalo App ID",
+      "Hiện App Secret",
+      "Sao chép App Secret",
+      "Hiện OA Access Token",
+      "Sao chép OA Access Token",
+      "Hiện OA Refresh Token",
+      "Sao chép OA Refresh Token",
+      "Lưu & kiểm tra"
+    ],
+    "safeAreaScan": {
+      "safeAreaRules": 27,
+      "totalRules": 5297
+    }
+  }
+}
