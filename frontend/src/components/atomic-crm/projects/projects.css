@@ -153,6 +153,26 @@
     max-height: var(--form-control-height, 36px);
   }
 
+  /* CHAT-16 (owner audit 2026-10-29): the compact 40px step under the shared
+     form height cannot keep the 44px touch-target floor — this rule
+     out-specifies the global floor, so the value itself is corrected on touch.
+     Mouse desktops keep the compact step at every width. */
+  @media (pointer: coarse) {
+    .project-workspace-content input[data-slot="input"],
+    .project-workspace-content
+      button:not([role="switch"]):not([data-allow-tall]):not(
+        [data-icon-only]
+      ):not(
+        .project-category-card,
+        .project-icon-action,
+        .project-source-delete
+      ) {
+      height: 44px !important;
+      min-height: 44px !important;
+      max-height: 44px;
+    }
+  }
+
   summary {
     min-height: var(--form-control-height, 36px);
   }

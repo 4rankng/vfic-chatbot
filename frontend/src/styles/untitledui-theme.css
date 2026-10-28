@@ -606,9 +606,17 @@
 /* Operator rule (2026-10-01): console buttons cap at 40px tall and their
    labels render at 12px — no oversized call-to-action rows. The
    .console-button marker comes from the vendored Button root so every size
-   variant, icon-only button and data-input wrapper button is covered. The
-   element+class specificity outranks the text-sm/text-md size utilities. */
+   variant, icon-only button and data-input wrapper button is covered.
+   The element+class specificity outranks the text-sm/text-md size utilities.
+   On touch the cap lifts to 44px with the CHAT-16 target floor (owner audit
+   2026-10-29); mouse desktops keep the original 40px cap at every width. */
 button.console-button {
   max-height: 40px;
   font-size: 12px;
+}
+
+@media (pointer: coarse) {
+  button.console-button {
+    max-height: 44px;
+  }
 }
