@@ -310,7 +310,7 @@ const ProjectListContent = () => {
           isDismissable
           className="uu-scope"
         >
-          <AppModal className="w-full outline-hidden sm:max-w-md">
+          <AppModal className="project-knowledge-sheet w-full outline-hidden sm:max-w-md">
             <Dialog
               aria-label={`Kiến thức dự án ${sheetProject.name}`}
               className="outline-hidden"

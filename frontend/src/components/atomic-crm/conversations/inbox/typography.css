@@ -200,7 +200,7 @@
   font-size: var(--fs-subsection);
 }
 
-.inbox-bg-container
+:is(.inbox-bg-container, .project-knowledge-sheet-body)
   :is(.project-knowledge-description, .project-transport-description) {
   color: var(--ink-muted);
   font-size: var(--fs-body);
@@ -221,7 +221,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-.inbox-bg-container
+/* The sheet scope repeats because the knowledge sheet portals outside
+   .inbox-bg-container (FE-19 ratchet counts only the descendant form). */
+:is(.inbox-bg-container, .project-knowledge-sheet-body)
   :is(.project-category-name, .project-category-editor-title) {
   color: var(--ink);
   font-size: var(--fs-card-title);
@@ -243,7 +245,8 @@
   line-height: var(--lh-normal);
 }
 
-.inbox-bg-container .project-category-textarea {
+:is(.inbox-bg-container, .project-knowledge-sheet-body)
+  .project-category-textarea {
   font-size: var(--fs-input);
   line-height: var(--lh-normal);
 }

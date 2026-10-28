@@ -1,8 +1,17 @@
 /* Project surfaces share one page frame and one editor geometry. The desktop
-   navigation and header live outside this scope. */
+   navigation and header live outside this scope.
+   The mobile knowledge sheet (ProjectList's AppModal) portals its panel to
+   document.body, outside the workspace container — the :is() gives the sheet
+   body the same panel scope. The compound form stays, so the FE-19 ratchet
+   and the untitledui/workspace token contracts are untouched. */
+/* The page container resets its own padding (the content wrapper below owns
+   the gutters). Kept out of the shared :is() wrapper above: the sheet body
+   must keep its own padding, and this compound selector never matches it. */
 .inbox-bg-container.project-workspace {
   padding: 0;
+}
 
+:is(.inbox-bg-container.project-workspace, .project-knowledge-sheet-body) {
   .project-app {
     display: block;
     width: 100%;
@@ -720,8 +729,14 @@
     background: var(--card);
   }
 
+  /* Preflight strips heading sizes, so the record title needs its own scale
+     or it renders identical to the field values below it. */
   .project-category-record-title {
-    margin: 0 0 8px;
+    margin: 0 0 10px;
+    color: var(--foreground);
+    font-size: var(--fs-body-lg);
+    font-weight: var(--fw-semibold);
+    line-height: var(--lh-snug);
   }
 
   .project-category-record-malformed {
@@ -1215,6 +1230,66 @@
       --project-editor-box: 280px;
     }
 
+    /* Phone record cards: labels sit above their values (the desktop
+       two-column dt/dd grid starves the value column at 390px), tables
+       scroll sideways instead of blowing the card out. */
+    .project-category-record-card {
+      padding: 14px 16px;
+      border-radius: 12px;
+    }
+
+    /* Long Vietnamese titles wrap mid-word otherwise; balance avoids a lone
+       last word. */
+    .project-category-editor-title,
+    .project-category-record-title {
+      text-wrap: balance;
+    }
+
+    /* Revision numbers and dates line up visually when they change. */
+    .project-category-editor-description,
+    .project-category-rail-count {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 12px inputs summon the iOS auto-zoom on focus; 16px is the threshold. */
+    .project-category-textarea,
+    .project-single-page-textarea {
+      font-size: 16px;
+    }
+
+    .project-category-card {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Pressed feedback on touch (hover never fires reliably on phones). */
+    .project-category-card:active {
+      background: var(--surface-hover);
+    }
+
+    .project-category-record-title {
+      margin: 0 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .project-category-record-fields {
+      gap: 12px;
+    }
+
+    .project-category-record-field {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2px;
+    }
+
+    .project-category-record-field:has(.project-category-record-table) {
+      gap: 6px;
+    }
+
+    .project-category-record-field:has(.project-category-record-table) dd {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
     .project-category-navigation {
       padding: 0;
       border-right: 0;
@@ -1411,11 +1486,73 @@
   }
 
   /* Knowledge panel sheet: the panel's own responsive rules own the layout;
-     the sheet only pads and keeps the body from leaking past the rounded top. */
+     the sheet only pads and keeps the body from leaking past the rounded top.
+     No top padding: the sticky switcher below must sit flush under the drag
+     handle, with nothing scrolling through the gap above it.
+     This is a reading surface, so it earns a taller posture than the shared
+     85dvh sheet: unlayered CSS here outranks the AppModal's layered
+     max-sm:max-h-* utility. */
+  .project-knowledge-sheet {
+    max-height: calc(var(--visual-viewport-height, 100dvh) * 0.92);
+  }
+
+  .project-knowledge-sheet .project-knowledge-sheet-body {
+    max-height: calc(var(--visual-viewport-height, 100dvh) * 0.92 - 24px);
+  }
+
   .project-knowledge-sheet-body {
     min-width: 0;
     max-height: calc(var(--visual-viewport-height, 100dvh) * 0.85 - 24px);
     overflow-y: auto;
-    padding: 4px 16px calc(16px + env(safe-area-inset-bottom));
+    /* The full-bleed sticky switcher widens its block box past the container
+       (negative margins expand, not offset); clip the spill so the sheet
+       never grows a horizontal scrollbar. `clip`, not `hidden`: no scroll
+       container on the x axis. */
+    overflow-x: clip;
+    overscroll-behavior: contain;
+    touch-action: manipulation;
+    padding: 0 16px calc(16px + env(safe-area-inset-bottom));
+  }
+
+  /* The category switcher owns the sheet's sticky top slot, so switching
+     categories stays one tap away while the record list scrolls under it.
+     Full-bleed margins cancel the sheet's 16px gutter while stuck. */
+  /* Sheet-context overrides sit at (0,3,0) — one step above the :is()-scoped
+     panel rules they refine — and later in this file, so source order wins. */
+  .project-knowledge-sheet
+    .project-knowledge-sheet-body
+    .project-category-navigation {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    margin-inline: -16px;
+    padding: 4px 16px 8px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* The editor header (title, meta, edit button) scrolls away instead: two
+     sticky bands would fight for `top: 0` inside the sheet. */
+  .project-knowledge-sheet
+    .project-knowledge-sheet-body
+    .project-category-editor-header {
+    position: static;
+  }
+
+  /* The stuck switcher's bottom border owns the separation, so the editor's
+     own mobile border-top would double the line under it. */
+  .project-knowledge-sheet
+    .project-knowledge-sheet-body
+    .project-category-editor {
+    margin-top: 0;
+    padding-top: 16px;
+    border-top: 0;
+  }
+
+  /* The panel's own mobile padding would double the sheet's 16px gutter. */
+  .project-knowledge-sheet
+    .project-knowledge-sheet-body
+    .project-knowledge-content {
+    padding: 8px 0 0;
   }
 }

@@ -67,3 +67,24 @@ bot.tingting.vip {
 		reverse_proxy frontend:80
 	}
 }
+
+# --- book + plan edge vhosts (added 2026-10-27; required — a flip that
+# --- renders without them breaks TLS for book/plan.tingting.vip) ---
+plan.tingting.vip {
+	encode zstd gzip
+	handle /mcp/* {
+		reverse_proxy 172.17.0.1:3000
+	}
+	handle /ttapi/* {
+		uri strip_prefix /ttapi
+		reverse_proxy 172.17.0.1:3000
+	}
+	handle {
+		reverse_proxy 172.17.0.1:3001
+	}
+}
+
+book.tingting.vip {
+	encode zstd gzip
+	reverse_proxy 172.17.0.1:4870
+}
