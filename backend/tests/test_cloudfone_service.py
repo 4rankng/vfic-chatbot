@@ -369,6 +369,50 @@ def test_day_window_covers_the_full_ict_day_in_the_vendor_ict_clock():
     assert (start, end) == ("2026-10-24 00:00:00", "2026-10-24 23:59:59")
 
 
+# The vendor's real 2026-10-26 18:36 rows (verified live, probe of 28/10): the
+# 0906004310 call the +7h bug pushed into the 27/10 report and displayed 01:36.
+EVENING_4310_LEGS = [
+    _leg("2026-10-26T18:36:08", "1793014568.1369-104", "0906004310", "104", "NO ANSWER", 0),
+    _leg(
+        "2026-10-26T18:36:08",
+        "1793014568.1367-3000(Nhóm)",
+        "0906004310",
+        "3000(Nhóm)",
+        "NO ANSWER",
+        20,
+    ),
+    _leg("2026-10-26T18:36:28", "1793014568.1367-hangup", "0906004310", "hangup", "ANSWERED", 0),
+]
+
+
+async def test_regression_4310_evening_call_stays_in_its_own_day_at_its_wall_clock():
+    """2026-10-26 18:36 ICT (0906004310, verified live): the vendor returns
+    callDate in ICT wall clock, so the call belongs to the 26/10 report and
+    shows 18:36 — the old UTC assumption fetched it into the 27/10 report as
+    01:36 and dropped the 27/10 evening calls instead."""
+    calls = group_call_legs(EVENING_4310_LEGS)
+    assert len(calls) == 1
+    call = calls[0]
+    assert call.call_id == "1793014568"
+    assert call.started_at == "2026-10-26T18:36:08"  # wall clock, no shift
+    assert call.status == "NO ANSWER"
+
+    # The call time sits inside the 26/10 report window (vendor clock = ICT).
+    start, end = cloudfone_module._day_window(date(2026, 10, 26))
+    assert start <= "2026-10-26 18:36:08" <= end
+    # …and the evening calls of 27/10 (18:05, 19:22 — verified live) sit inside
+    # day 27's window; the old D-1 17:00 → D 16:59 window cut them off.
+    late_start, late_end = cloudfone_module._day_window(date(2026, 10, 27))
+    assert late_start <= "2026-10-27 18:05:53" <= late_end
+
+    # The letter shows 18:36 and buckets the call into the evening slot.
+    stats = build_daily_stats(calls)
+    html = render_insights_html([], stats, None, date(2026, 10, 26))
+    assert "Cuộc gọi nhỡ: 18:36 — 0906004310" in html
+    assert "18:00 - 24:00 (Tối)" in html
+    assert "1 cuộc (0✓/1✗)" in html
+
+
 async def test_group_call_legs_status_precedence_no_answer_then_busy():
     """NO ANSWER outranks BUSY when a call carries both leg statuses."""
     calls = group_call_legs(
