@@ -21,6 +21,11 @@ describe("static recruitment runtime", () => {
       runtime.routes.map(({ id, path, layout }) => ({ id, path, layout })),
     ).toEqual([
       { id: "kernel.route.performance", path: "/hieu-suat", layout: "layout" },
+      {
+        id: "kernel.route.call-records",
+        path: "/ban-ghi-cuoc-goi",
+        layout: "layout",
+      },
       { id: "kernel.route.profile", path: "/profile", layout: "layout" },
       {
         id: "kernel.route.settings-profile-redirect",
@@ -72,6 +77,12 @@ describe("static recruitment runtime", () => {
         roles: ["admin"],
         section: "system",
       },
+      {
+        id: "call-records",
+        to: "/ban-ghi-cuoc-goi",
+        roles: undefined,
+        section: "operations",
+      },
     ]);
     const navigationById = new Map(
       runtime.navigation.map((destination) => [destination.id, destination]),
@@ -90,6 +101,9 @@ describe("static recruitment runtime", () => {
     );
     expect(
       navigationById.get("performance")?.isActive("/hieu-suat/weekly"),
+    ).toBe(true);
+    expect(
+      navigationById.get("call-records")?.isActive("/ban-ghi-cuoc-goi"),
     ).toBe(true);
     expect(runtime.dashboard).toBeTypeOf("function");
     expect(runtime.conversationSlots).toMatchObject({
