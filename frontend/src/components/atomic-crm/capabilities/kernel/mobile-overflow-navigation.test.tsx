@@ -76,6 +76,7 @@ const ADMIN_NAV_HREFS = [
   "#/",
   "#/conversations",
   "#/projects",
+  "#/ban-ghi-cuoc-goi",
   "#/users",
   "#/settings",
   "#/hieu-suat",
@@ -85,6 +86,7 @@ const ADMIN_DESTINATION_LABELS = [
   "Tổng quan",
   "Tin nhắn",
   "Dự án",
+  "Bản ghi cuộc gọi",
   "Người dùng",
   "Cài đặt",
   "Hiệu suất",
@@ -172,7 +174,12 @@ describe("kernel mobile navigation drawer", () => {
     const drawer = screen.getByRole("dialog");
     await expect.element(drawer).toBeVisible();
 
-    for (const label of ["Tổng quan", "Tin nhắn", "Dự án"]) {
+    for (const label of [
+      "Tổng quan",
+      "Tin nhắn",
+      "Dự án",
+      "Bản ghi cuộc gọi",
+    ]) {
       await expect
         .element(drawer.getByRole("link", { name: label, exact: true }))
         .toBeVisible();
@@ -180,6 +187,11 @@ describe("kernel mobile navigation drawer", () => {
 
     await expect
       .element(drawer.getByRole("link", { name: "Người dùng", exact: true }))
+      .not.toBeInTheDocument();
+    // CHAT-15 AC2: no settings entry for a recruiter — the call-records view
+    // is reachable, the config console is not.
+    await expect
+      .element(drawer.getByRole("link", { name: "Cài đặt", exact: true }))
       .not.toBeInTheDocument();
     await expect
       .element(drawer.getByText("Hệ thống", { exact: true }))

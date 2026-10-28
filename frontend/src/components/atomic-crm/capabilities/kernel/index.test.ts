@@ -123,6 +123,12 @@ describe("kernel capability routes", () => {
         section: "system",
         roles: ["admin"],
       },
+      {
+        id: "call-records",
+        to: "/ban-ghi-cuoc-goi",
+        section: "operations",
+        roles: undefined,
+      },
     ]);
   });
 
@@ -139,6 +145,7 @@ describe("kernel capability routes", () => {
       "overview",
       "messages",
       "projects",
+      "call-records",
     ]);
     // The profile destination moved into the account menu, so no navigation
     // contribution may claim it any more.

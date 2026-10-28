@@ -59,7 +59,7 @@ The application registers the API routers in `backend/app/main.py` under
 | `dashboard` | `/api/v1/dashboard` | `dashboard` | JWT | Dashboard metrics + recruiter attention queue |
 | `performance` | `/api/v1/admin/performance` | `performance` | `require_admin` | Response-time p50/p95 + trend and phone-capture conversion |
 | `notifications` | `/api/v1/notifications` | `notifications` | JWT | Web Push subscription handles (VAPID key, subscribe, unsubscribe, self-test); alerts are sent server-side |
-| `integrations` | `/api/v1/admin/integrations` | `integrations` | `require_admin` | Integration settings (Zalo, Messenger, LLM, email digest) |
+| `integrations` | `/api/v1/admin/integrations` | `integrations` | `require_admin` (settings + tests); JWT only (Cloudfone transcripts) | Integration settings (Zalo, Messenger, LLM, email digest, Cloudfone); Cloudfone call-records view (`GET /cloudfone/transcripts[/{call_id}]`, day backfill) serves every signed-in user — config stays admin-only (CHAT-15) |
 | `installation` | `/api/v1/installation`, `/api/v1/admin/installation` | `installation` | Public-safe runtime projection; `require_admin` for lifecycle administration | Immutable installation revision lifecycle |
 | `realtime` | `/realtime` | — | JWT via `?token=` or Bearer | Legacy SSE endpoint |
 | `webhooks` | `/webhooks` | `webhooks` | HMAC signature (no JWT) | Zalo webhook receiver |

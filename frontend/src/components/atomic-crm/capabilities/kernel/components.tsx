@@ -10,6 +10,13 @@ export const ProfilePage = lazy(async () => {
   const module = await import("../../settings/ProfilePage");
   return { default: module.ProfilePage as ComponentType };
 });
+// Lazy chunk boundary — dynamic import is deliberate: a static import would
+// pull the transcripts viewer into the eager kernel graph that
+// kernel/index.test.ts pins ("not statically imported").
+export const CallRecordsPage = lazy(async () => {
+  const module = await import("../../integrations/CallRecordsPage");
+  return { default: module.CallRecordsPage as ComponentType };
+});
 export const ForgotPasswordPage = lazy(async () => {
   const module = await import("../../login/ForgotPasswordPage");
   return { default: module.ForgotPasswordPage as ComponentType };

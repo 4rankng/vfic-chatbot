@@ -615,7 +615,7 @@ class CloudfoneIntegrationTestOut(BaseModel):
 
 
 class CloudfoneTranscriptOut(BaseModel):
-    """One stored voice-call transcript row for the admin viewer (list projection)."""
+    """One stored voice-call transcript row for the call-records viewer (list projection)."""
 
     call_id: str
     day: date

@@ -24,6 +24,7 @@ const RESOURCE_IDS = [
 
 const ROUTE_IDS = [
   "kernel.route.performance",
+  "kernel.route.call-records",
   "kernel.route.profile",
   "kernel.route.settings-profile-redirect",
   "channel.zalo.route.legacy-settings-redirect",
@@ -37,6 +38,9 @@ const NAVIGATION_IDS = [
   "kernel.navigation.users",
   "kernel.navigation.settings",
   "kernel.navigation.performance",
+  // CHAT-15: last on purpose — the admin mobile tab bar (first five:
+  // Tổng quan → Cài đặt) must not shift.
+  "kernel.navigation.call-records",
 ] as const;
 
 const SLOT_IDS = [
