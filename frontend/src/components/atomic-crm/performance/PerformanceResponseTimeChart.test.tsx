@@ -43,6 +43,14 @@ describe("PerformanceResponseTimeChart", () => {
       .poll(() => screen.container.querySelector(".performance-chart svg"))
       .not.toBeNull();
 
+    // CHAT-20: the "10 giây" threshold label carries a panel-coloured halo
+    // (paint-order: stroke) so a crossing spike cannot make it illegible.
+    const thresholdLabel = Array.from(
+      screen.container.querySelectorAll(".performance-chart svg text"),
+    ).find((node) => node.textContent === "10 giây");
+    expect(thresholdLabel).toBeDefined();
+    expect(getComputedStyle(thresholdLabel!).paintOrder).toBe("stroke");
+
     const table = screen.container.querySelector(".performance-trend-data");
     expect(table?.querySelector("caption")?.textContent).toBe(
       "Dữ liệu xu hướng thời gian phản hồi",

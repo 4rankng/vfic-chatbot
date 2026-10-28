@@ -100,4 +100,32 @@ describe("PerformanceMetrics", () => {
       .toBeVisible();
     expect(screen.container.querySelector('[role="progressbar"]')).toBeNull();
   });
+
+  it("shows an empty-state instead of a blank meter when no phone number was captured", async () => {
+    const screen = await render(
+      <div style={{ width: "900px", height: "400px" }}>
+        <PerformanceMetrics
+          data={{
+            ...metrics,
+            conversion: { rate_pct: 0, with_phone: 0, candidate_chats: 13 },
+          }}
+        />
+      </div>,
+    );
+
+    // CHAT-20 (29/10 audit): this state rendered as a blank grey rail under
+    // "0%". No number captured → no meter, only the shared empty-state, while
+    // the factual counter line stays.
+    expect(screen.container.querySelector('[role="progressbar"]')).toBeNull();
+    await expect
+      .element(
+        screen.getByText(
+          "Chưa có cuộc trò chuyện nào để lại số điện thoại trong khoảng thời gian này.",
+        ),
+      )
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("0 / 13 cuộc trò chuyện"))
+      .toBeVisible();
+  });
 });
