@@ -26,6 +26,10 @@
 ## Lương & thu nhập
 - **Lương cơ bản:** 7.500.000 – 8.500.000 VNĐ / tháng.
 - **Tổng thu nhập thực tế:** 14.000.000 – 15.000.000 VNĐ / tháng (đã bao gồm tăng ca, chưa tính tiền thưởng).
+- **Lương theo ca (bản tuyển dụng công nhân may — mới nhất):**
+  - Ngày thường: ca sáng (6h–18h, 12h): 612.000 VNĐ / ca · ca hành chính (8h–20h, 11h): 546.000 VNĐ / ca.
+  - Thứ Bảy: ca 12h: 787.000 VNĐ / ca · ca 11h: 721.000 VNĐ / ca.
+  - Chủ nhật: ca 12h: 1.050.000 VNĐ / ca · ca 11h: 962.000 VNĐ / ca.
 - **Các khoản phụ cấp & trợ cấp hàng tháng:**
   - Phụ cấp tổng hợp (xăng xe, đi lại, điện thoại): 1.300.000 VNĐ / tháng.
 - **Thưởng:** Thưởng 4.000.000 VNĐ cho người mới (Hết thời gian thử việc chi trả 2.000.000 VNĐ; sau 3 tháng làm việc tiếp theo chi trả nốt 2.000.000 VNĐ).
@@ -73,12 +77,14 @@
 
 ## Đưa đón & lịch xe
 - **Xe đưa đón:** CÓ xe đưa đón công nhân viên (áp dụng cả khi đi phỏng vấn).
-- **Tuyến & điểm đón cố định:**
-  1. Tuyến Đồ Sơn.
-  2. Tuyến Thư viện thành phố Hải Phòng.
-  3. Tuyến Nhà thi đấu Kiến Thụy.
-  4. Tuyến Bến xe Thượng Lý.
-- **Các khu vực khác:** Các địa điểm như An Lão, An Dương, Tiên Lãng công ty sẽ điều phối xe đưa đón khi gom đủ từ 5 người trở lên.
+- **Tuyến & điểm đón cố định (cập nhật đợt mới):**
+  1. Đồ Sơn.
+  2. Thư viện thành phố Hải Phòng.
+  3. Nhà thi đấu Kiến Thụy.
+  4. Bến xe Thượng Lý.
+  5. An Lão.
+  6. An Dương.
+  7. Tiên Lãng.
 - **Chi phí xe đưa đón:** Miễn phí theo chính sách công ty.
 
 ## Bảo hiểm
@@ -93,7 +99,15 @@
   4. Bổ sung hồ sơ giấy tờ đầy đủ trong vòng 3 – 5 ngày sau khi nhận việc.
 - **Trang phục đi phỏng vấn:** Mặc áo có tay, quần dài lịch sự, đi giày; mang theo CCCD gốc còn hạn sử dụng.
 
+## Tuyển công nhân may — đợt mới (yêu cầu tay nghề)
+- **Đối tượng:** Nhận NỮ, 18 – 55 tuổi, YÊU CẦU có tay nghề may.
+- **Công việc:** May da thật, da công nghiệp, vải nỉ cho tựa lưng, đệm ngồi, tựa đầu theo rập, bản vẽ kỹ thuật.
+- **Thời gian làm:** 6h–18h hoặc 8h–20h · 24 công / tháng.
+- **Lương theo ca:** xem mục "Lương theo ca" ở phần Lương & thu nhập (612k/12h ngày thường → 1.050k/12h chủ nhật).
+- **Đăng ký:** Hotline 0973569710.
+
 ## Liên hệ
+- **Hotline đăng ký tuyển dụng:** 0973569710.
 - **Đón tiếp & hỗ trợ hồ sơ / Cán bộ phụ trách:**
   - Admin dự án: Hòa – SĐT/Zalo: 0357827388
 - **Địa chỉ văn phòng:** Số nhà 07-08 Manhattan 07, Vinhomes Imperia, Thượng Lý, Hồng Bàng, Hải Phòng.

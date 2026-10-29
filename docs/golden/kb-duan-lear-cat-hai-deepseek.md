@@ -24,6 +24,7 @@
 ## Lương & thu nhập
 - **Lương cơ bản:** 7.500.000 – 8.500.000 VNĐ / tháng.
 - **Tổng thu nhập thực tế:** 14.000.000 – 15.000.000 VNĐ / tháng (lương + phụ cấp + tăng ca, chưa gồm thưởng).
+- **Lương theo ca (đợt tuyển công nhân may — mới nhất):** ngày thường 612k/ca 12h (6h–18h) hoặc 546k/ca 11h (8h–20h); Thứ Bảy 787k/12h hoặc 721k/11h; Chủ nhật 1.050k/12h hoặc 962k/11h.
 - **Các khoản phụ cấp & trợ cấp hàng tháng:**
   - Phụ cấp xăng xe, đi lại, điện thoại: 1.300.000 VNĐ / tháng.
 - **Thưởng:** Thưởng 4 triệu cho người mới — hết thử việc trả 2 triệu, 3 tháng sau trả tiếp 2 triệu.
@@ -68,7 +69,9 @@
   2. Thư viện thành phố
   3. Nhà thi đấu Kiến Thụy
   4. Bến xe Thượng Lý
-  5. Các địa điểm khác như An Lão, An Dương, Tiên Lãng phải gom đủ 5 người trở lên mới điều xe đón.
+  5. An Lão
+  6. An Dương
+  7. Tiên Lãng
 - **Chi phí:** Miễn phí (xe công ty).
 - **Tự túc đi lại:** Được hưởng phụ cấp xăng xe, đi lại trong khoản phụ cấp 1,3 triệu/tháng.
 
@@ -83,7 +86,14 @@
 - **Thời gian chờ:** Đạt phỏng vấn vào làm luôn; bổ sung hồ sơ sau 3–5 ngày.
 - **Thủ tục nghỉ việc:** Liên hệ cán bộ phụ trách để được hướng dẫn trả đồng phục và thẻ.
 
+## Tuyển công nhân may — đợt mới (yêu cầu tay nghề)
+- Nhận NỮ, 18 – 55 tuổi, YÊU CẦU có tay nghề may.
+- Công việc: may da thật, da công nghiệp, vải nỉ cho tựa lưng, đệm ngồi, tựa đầu theo rập, bản vẽ kỹ thuật.
+- Thời gian: 6h–18h hoặc 8h–20h · 24 công / tháng. Lương theo ca xem phần Lương & thu nhập.
+- Đăng ký: Hotline 0973569710.
+
 ## Liên hệ
+- **Hotline đăng ký tuyển dụng:** 0973569710.
 - **Đón tiếp & hỗ trợ hồ sơ:**
   - Admin dự án Hòa – SĐT/Zalo: 0357827388
 - **Tiếp nhận trả đồ / giải quyết nghỉ việc:**
