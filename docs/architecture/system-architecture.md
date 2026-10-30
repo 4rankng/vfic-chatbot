@@ -903,7 +903,13 @@ load_conversation_state -> typing -> direct_context?
 - Container entrypoint: `app/workers/run_worker.py` → calls
   `Worker.clean_registries()` on startup (requeues stuck jobs). It preloads the
   graph and lazy LangChain SDK modules in the parent so forked chat jobs inherit
-  them copy-on-write instead of paying the import cost per turn.
+  them copy-on-write instead of paying the import cost per turn. It also
+  installs the SIGCHLD child reaper (`app/workers/child_reaper.py`): every dead
+  child of a worker process is reaped as it dies, so zombies cannot accumulate
+  (the 2026-10-30 droplet incident). The fork-per-job services (`worker-ingest`,
+  `worker-category`, `worker-maintenance`) run `rq worker --worker-class
+  app.workers.reaping_worker.ReapingWorker`, which pauses that reaping across
+  RQ's own work-horse `os.wait4` so job execution and reporting stay stock RQ.
 - Async bridge: `workers/async_runner.py` — one persistent event loop per
   worker process.
 - rq-scheduler runs in its own container; the FastAPI lifespan also registers

@@ -280,8 +280,11 @@ services:
     volumes: [vfic_kb_uploads:/data/kb_uploads]
     # SEC-11: no `--url` — rq 2.10 falls back to os.environ["REDIS_URL"] when the
     # flag is absent (rq/cli/helpers.py:388 -> get_redis_from_config), so env_file
-    # already supplies the broker and the credential stops appearing in argv.
-    command: ["rq", "worker", "ingest"]
+    # SEC-11 (see worker-ingest): broker comes from env, never argv.
+    # ReapingWorker = stock rq fork worker + zombie reaping (app/workers/
+    # reaping_worker.py) — a work horse is always waited by rq, but any other
+    # child that dies inside the worker used to stay a zombie forever.
+    command: ["rq", "worker", "--worker-class", "app.workers.reaping_worker.ReapingWorker", "ingest"]
     healthcheck:
       # Loop liveness via the RQ worker registry — see worker-chatbot.
       test: ["CMD-SHELL", "python -c \"import os,socket,sys;from rq import Worker;import redis as r;c=r.from_url(os.environ['REDIS_URL'],socket_connect_timeout=3,socket_timeout=3);sys.exit(0 if any(w.hostname==socket.gethostname() for w in Worker.all(connection=c)) else 1)\""]
@@ -312,7 +315,8 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     # SEC-11 (see worker-ingest): broker comes from env, never argv.
-    command: ["rq", "worker", "category"]
+    # ReapingWorker — see worker-ingest.
+    command: ["rq", "worker", "--worker-class", "app.workers.reaping_worker.ReapingWorker", "category"]
     healthcheck:
       # Loop liveness via the RQ worker registry — see worker-chatbot.
       test: ["CMD-SHELL", "python -c \"import os,socket,sys;from rq import Worker;import redis as r;c=r.from_url(os.environ['REDIS_URL'],socket_connect_timeout=3,socket_timeout=3);sys.exit(0 if any(w.hostname==socket.gethostname() for w in Worker.all(connection=c)) else 1)\""]
@@ -378,7 +382,8 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     # SEC-11: no `--url` — see worker-ingest; rq reads REDIS_URL from the env.
-    command: ["rq", "worker", "maintenance"]
+    # ReapingWorker — see worker-ingest.
+    command: ["rq", "worker", "--worker-class", "app.workers.reaping_worker.ReapingWorker", "maintenance"]
     deploy:
       resources:
         limits:
