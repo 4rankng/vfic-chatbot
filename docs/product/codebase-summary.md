@@ -32,7 +32,8 @@ ChatBot/
 │   │   ├── workers/      run_worker, chatbot, persistence,
 │   │   │                 ingest, reconcile,
 │   │   │                 category_worker, async_runner,
-│   │   │                 scheduler_utils                   (~2,700 LOC)
+│   │   │                 scheduler_utils, child_reaper,
+│   │   │                 reaping_worker                    (~2,700 LOC)
 │   │   ├── realtime/     Socket.IO server + bridge         (~440 LOC)
 │   │   ├── prompts/
 │   │   └── main.py        FastAPI app + lifespan + ASGI wrap

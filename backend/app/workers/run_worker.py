@@ -17,9 +17,12 @@ forks a child for every job, and each forked child re-imports langchain/openai
 ``preamble_ms`` avg 6.1s, p95 10.9s). ``SimpleWorker`` runs jobs in-process, so
 ``preload_imports`` warms the modules once and ``_build_cached_clients`` reuses
 the LLM clients across all turns for the life of the worker process. The
-tradeoff is isolation: a crashing job can take the worker down (no fork
+trades isolation: a crashing job can take the worker down (no fork
 boundary), so ``_run_job_async`` wraps the turn in a top-level catch and the
 direct/ASGI turn path (already no-fork) is the trusted precedent.
+
+``main`` also installs the SIGCHLD reaper (``app.workers.child_reaper``) so a
+child that ever exits inside this process cannot accumulate as a zombie.
 """
 
 from __future__ import annotations
@@ -47,6 +50,14 @@ def main(queues: list[str]) -> None:
     from app.core.logging import silence_credential_bearing_transport_loggers
 
     silence_credential_bearing_transport_loggers()
+
+    # Reap any child that exits un-waited (SIGCHLD handler).  SimpleWorker runs
+    # jobs in-process and never waits for children, so without this every dead
+    # child of this process is a permanent zombie for the life of the worker
+    # (the 2026-10-30 droplet incident — see app/workers/child_reaper.py).
+    from app.workers import child_reaper
+
+    child_reaper.install()
 
     from rq import SimpleWorker
     from app.core.redis import get_redis_sync
