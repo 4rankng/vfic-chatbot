@@ -219,13 +219,18 @@ async def confirm_self_checkin_otp(
 
 
 def _effective_date_text(raw: Any) -> str:
-    """``YYYY-MM-DD`` (or any dotted/slashed variant) read as ``DD/MM``."""
-    parts = [p for p in str(raw or "").replace("/", "-").split("-") if p]
-    if len(parts) == 3:
-        day, month = parts[2], parts[1]
-        if day.isdigit() and month.isdigit():
-            return f"{int(day):02d}/{int(month):02d}"
-    return str(raw or "").strip()
+    """``YYYY-MM-DD``, full ISO (``2026-11-01T00:00:00+07:00``) or dotted /
+    slashed variants → natural Vietnamese ``DD/MM/YYYY`` (owner 30/10: no
+    technical datetime format in worker-facing messages)."""
+    text = str(raw or "").strip()
+    if not text:
+        return text
+    date_part = text.split("T", 1)[0].split(" ", 1)[0]
+    parts = [p for p in date_part.replace("/", "-").split("-") if p]
+    if len(parts) == 3 and all(p.isdigit() for p in parts):
+        year, month, day = parts
+        return f"{int(day):02d}/{int(month):02d}/{int(year)}"
+    return text
 
 
 def render_self_checkin_verdict(data: dict[str, Any]) -> str:
