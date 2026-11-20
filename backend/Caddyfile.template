@@ -88,3 +88,12 @@ book.tingting.vip {
 	encode zstd gzip
 	reverse_proxy 172.17.0.1:4870
 }
+
+tingtingsoft.vn {
+	encode zstd gzip
+	reverse_proxy 172.17.0.1:8082
+}
+
+www.tingtingsoft.vn {
+	redir https://tingtingsoft.vn{uri}
+}
