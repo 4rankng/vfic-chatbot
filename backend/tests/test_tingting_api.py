@@ -1197,7 +1197,7 @@ async def test_self_checkin_update_relays_an_immediate_enable() -> None:
     # the token is consumed single-use and the flow clears
     assert retrieval.cleared == 1
     assert "sc-tok-9" not in result
-    assert "Đã BẬT tự chấm công từ ngày 01/10, cả tháng tính tự chấm công" in result
+    assert "Đã BẬT tự chấm công từ ngày 01/10/2026, cả tháng tính tự chấm công" in result
 
 
 @pytest.mark.asyncio
@@ -1210,7 +1210,7 @@ async def test_self_checkin_update_relays_a_deferred_enable_and_disable() -> Non
         },
     )
     result = await update_self_checkin(deferred, phone="0987654321", project_id="7", enable=True)
-    assert "SẼ BẬT từ ngày 01/11" in result
+    assert "SẼ BẬT từ ngày 01/11/2026" in result
 
     disabled = _FlowRetrieval(
         _sc_update_ok("disable", immediate=False, effective_from="2026-11-01"),
@@ -1220,7 +1220,7 @@ async def test_self_checkin_update_relays_a_deferred_enable_and_disable() -> Non
         },
     )
     result = await update_self_checkin(disabled, phone="0987654321", project_id="7", enable=False)
-    assert "SẼ TẮT từ ngày 01/11; trước đó vẫn chấm công bình thường" in result
+    assert "SẼ TẮT từ ngày 01/11/2026; trước đó vẫn chấm công bình thường" in result
     assert disabled.calls[-1]["params"]["enable"] is False
 
 
@@ -1302,7 +1302,7 @@ async def test_self_checkin_update_maps_the_project_name_to_the_stored_id() -> N
     )
     result = await update_self_checkin(retrieval, phone="0987654321", project_id="LGD", enable=True)
     assert retrieval.calls[-1]["params"]["project_id"] == 7
-    assert "Đã BẬT tự chấm công từ ngày 01/10" in result
+    assert "Đã BẬT tự chấm công từ ngày 01/10/2026" in result
 
 
 # ── the channel scope: the flow belongs to the TingTing Zalo OA ─────────────
