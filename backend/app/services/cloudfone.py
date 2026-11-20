@@ -63,6 +63,15 @@ MAX_DAILY_PAGES = 5
 # stays within this bound: transfer legs land 0–6s apart (verified live), real
 # redials are ≥31s apart (verified live).
 CALL_CHAIN_GAP_SECONDS = 30.0
+# A caller ID shorter than this many digits is one of our own extensions/short
+# codes (101, 102, 106…), and no digits at all is the assistant robot
+# ("Cloudfone-Assistant", empty callerNumber). The CloudFone dashboard never
+# counts that traffic as customer calls — verified against the real
+# 2026-11-18 day: dropping caller IDs with <9 digits removes exactly the
+# 4 assistant + 3 extension calls that keep the bot's totals inflated
+# (24 → the dashboard's 19).
+MIN_CUSTOMER_DIGITS = 9
+
 # Sequential STT is ~10–15s per recording; a busy day past this bound keeps the
 # extra calls in stats/letter but without transcripts (one warning).
 MAX_TRANSCRIPTIONS_PER_DAY = 60
@@ -238,10 +247,26 @@ class _Leg:
     direction: str
 
     @property
+    def internal(self) -> bool:
+        # Verified live (2026-11-18): the assistant auto-dials carry an empty
+        # callerNumber (the caller falls back to "Cloudfone-Assistant") and
+        # extension-to-extension calls show an extension as callerNumber
+        # ("102" → a team). The dashboard never counts that traffic as customer
+        # calls, so neither do we. Outbound legs are exempt: their caller is
+        # our own extension by definition, not internal traffic to drop.
+        if self.direction.strip().lower() not in ("", "inbound"):
+            return False
+        return sum(map(str.isdigit, self.caller)) < MIN_CUSTOMER_DIGITS
+
+    @property
     def answered(self) -> bool:
         # A ``hangup`` leg always claims ANSWERED/0 and a 0s pickup produced no
-        # conversation (verified live) — neither counts as answered.
-        return self.status == "ANSWERED" and self.receive != "hangup" and self.real_seconds > 0
+        # conversation (verified live) — neither counts as answered. Only a
+        # numeric destination is a real agent extension: the after-hours
+        # announcement ("Nghe thông báo", verified live 2026-11-18) claims
+        # ANSWERED/14s yet nobody spoke — the dashboard counts that call as
+        # nhỡ, not answered.
+        return self.status == "ANSWERED" and self.receive.isdigit() and self.real_seconds > 0
 
 
 def call_date_to_ict(raw: str) -> str:
@@ -299,7 +324,10 @@ def _record_for(group: list[_Leg]) -> CallRecord:
     elif any(leg.status == "BUSY" for leg in group):
         status = "BUSY"
     else:
-        status = "FAILED"
+        # Every leg claims ANSWERED yet none reached an agent extension — the
+        # announcement-only pickup (verified live: "Nghe thông báo") is nhỡ,
+        # same as any other unanswered call.
+        status = "NO ANSWER"
     if answered:
         best = max(answered, key=lambda leg: leg.real_seconds)
         agent = best.receive
@@ -320,26 +348,39 @@ def _record_for(group: list[_Leg]) -> CallRecord:
 
 
 def group_call_legs(rows: list[dict]) -> list[CallRecord]:
-    """Cluster leg rows into calls, ordered by start time.
+    """Cluster leg rows into customer calls, ordered by start time.
 
-    Legs sorted by ``callDate`` chain into one call while the caller is the
-    same (``callerNumber``, falling back to ``callerName``) and the consecutive
-    gap stays within :data:`CALL_CHAIN_GAP_SECONDS`. Verified against live
-    rows: transfer legs 1s apart merge, redials ≥31s apart split, and the
-    ``hangup`` leg (20s later, ANSWERED/0) chains into its call without making
-    it answered. ``call_id`` is the epoch before the ``.`` of the first leg's
-    ``key`` (``1790848955.584-…`` → ``"1790848955"``).
+    One call = one recording. Legs sharing a ``linkFile`` always merge —
+    including transfer legs whose keys carry different epochs — and a leg
+    carrying a *different* recording starts its own call even inside the chain
+    window (verified live 2026-11-18: the 22:09:02 and 22:09:14 "Nghe thông
+    báo" attempts are 12s apart, same caller, two recordings — the dashboard
+    counts two calls, the old gap-only chaining merged them). Recording-less
+    legs (extension ring attempts) chain by caller + gap as before: transfer
+    legs land 0–6s apart, real redials ≥31s (verified live). Internal traffic
+    — assistant auto-dials, extension/short-code callers — never becomes a
+    call: the dashboard excludes it (see :attr:`_Leg.internal`). ``call_id``
+    is the epoch before the ``.`` of the first leg's ``key``
+    (``1790848955.584-…`` → ``"1790848955"``).
     """
     legs = sorted((_leg_from_row(row) for row in rows), key=lambda leg: (leg.call_date, leg.key))
     groups: list[list[_Leg]] = []
+    group_links: list[str] = []  # first recording seen per group
     for leg in legs:
+        if leg.internal:
+            continue
         previous = groups[-1][-1] if groups else None
         if previous is not None and leg.caller and leg.caller == previous.caller:
             gap = _leg_gap_seconds(previous, leg)
-            if gap is not None and gap <= CALL_CHAIN_GAP_SECONDS:
+            link = group_links[-1]
+            same_recording = not leg.link_file or not link or leg.link_file == link
+            if gap is not None and gap <= CALL_CHAIN_GAP_SECONDS and same_recording:
                 groups[-1].append(leg)
+                if not link and leg.link_file:
+                    group_links[-1] = leg.link_file
                 continue
         groups.append([leg])
+        group_links.append(leg.link_file)
     return [_record_for(group) for group in groups]
 
 
