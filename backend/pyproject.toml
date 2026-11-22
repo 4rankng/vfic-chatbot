@@ -28,8 +28,8 @@ dependencies = [
     "pyjwt[crypto]>=2.9.0,<3.0",
     "cryptography>=42,<51",
     "passlib[argon2]>=1.7.4,<2.0",
-    "redis>=5.2,<8.0.0",
-    "rq>=2.0,<3.0",
+    "redis>=5.2,<9.0.0",
+    "rq>=2.0,<4.0",
     "rq-scheduler>=0.14,<1.0",
     "httpx>=0.28,<1.0",
     # Realtime: Socket.IO server + cross-process emit bridge — the whole realtime
@@ -46,7 +46,7 @@ dependencies = [
     "langchain-openai>=0.2,<2.0",
     # Gemini embeddings + LLM probe only (`from google import genai`). No Drive
     # API client and no OAuth flow library are imported anywhere in backend/.
-    "google-genai>=0.3,<3.0",
+    "google-genai>=0.3,<4.0",
     "pywebpush>=2.5.0",
     "python-docx>=1.1,<2.0",
     "matplotlib>=3.9,<4.0",
