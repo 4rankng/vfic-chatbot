@@ -605,7 +605,7 @@ class CloudfoneIntegrationSettingsUpdate(BaseModel):
 
 
 class CloudfoneIntegrationTestOut(BaseModel):
-    """Outcome of POST /cloudfone/test (a real GetCallHistoryVer2 probe against CloudFone)."""
+    """Outcome of POST /cloudfone/test (a real GetCallLogs probe against CloudFone)."""
 
     ok: bool
     configured: bool

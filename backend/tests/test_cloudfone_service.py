@@ -1,10 +1,10 @@
-"""Cloudfone service: GetCallHistoryVer2 legs → call clustering → daily stats,
+"""Cloudfone service: GetCallLogs rows → linkedId grouping → daily stats,
 STT wiring, insights build, and the pass.
 
 The client's transport is injected (``httpx.MockTransport``), the fetcher,
 transcriber, summarizer and sender are callables — no network and no graph
-import anywhere here. The 14-leg day fixture is the vendor's real
-2026-10-01 row shape (verified live); linkFile tokens are shortened to
+import anywhere here. The real-day fixtures keep the vendor's live GetCallLogs
+row shape (verified live); recording tokens are shortened to
 structurally-identical placeholders.
 """
 
@@ -37,7 +37,7 @@ from app.services.cloudfone import (
     build_daily_stats,
     build_insights,
     call_date_to_ict,
-    group_call_legs,
+    group_call_logs,
     insights_subject,
     insights_window,
     render_insights_html,
@@ -55,167 +55,140 @@ def _envelope(items: list[dict], *, total: int | None = None) -> dict:
     }
 
 
-def _leg(
-    call_date: str,
-    key: str,
-    caller: str,
-    receive: str,
-    status: str,
-    real: int | str,
-    *,
-    link: str = "",
-    caller_name: str = "",
-    total: int | str = 0,
-    direction: str = "Inbound",
+def _log(
+    linked_id: str,
+    time: str,
+    direction: str,
+    src: str,
+    dst: str,
+    disposition: str,
+    agent: int | str,
+    dur: int | str,
+    telco: int | str,
+    event: str,
+    rec: str = "",
 ) -> dict:
-    """One GetCallHistoryVer2 leg row in the verified live shape."""
+    """One GetCallLogs row in the verified live shape."""
     return {
-        "stt": 0,
-        "key": key,
-        "callDate": call_date,
-        "callerNumber": caller,
-        "callerName": caller_name or caller,
-        "headNumber": "18007228",
-        "receiveNumber": receive,
-        "status": status,
-        "totalCallTime": str(total),
-        "realCallTime": str(real),
-        "linkFile": link,
+        "linkedId": linked_id,
+        "timeCall": time,
+        "direction": direction,
+        "src": src,
+        "srcName": src,
+        "did": "18007228",
+        "queue": "2000(Nhóm)",
+        "dst": dst,
+        "disposition": disposition,
+        "billsecAgent": str(agent),
+        "duration": str(dur),
+        "billsecTelco": str(telco),
+        "recordingFile": rec,
+        "transfered": "",
+        "followmeTo": "",
+        "pickupExt": "",
+        "dialUExtAnswer": "",
+        "hotlineUExtAnswer": "",
         "gsmPort": "",
-        "typecall": direction,
+        "stt": 0,
+        "event": event,
     }
 
 
-# The vendor's real 2026-10-01 day: 14 legs → 7 calls (4 answered, 3 missed).
+# A compact GetCallLogs day fixture producing exactly the seven calls the
+# real 2026-10-01 day yielded (4 answered, 3 missed) — used by every test
+# below the fetch layer (renderer, insights, report, transcript store).
 _REAL_LINK_A = "https://90.cloudfone.vn/Home?ID=rec-0750"
-REAL_DAY_LEGS = [
-    # 07:50 call — queue + agent leg + hangup leg claiming ANSWERED/0.
-    _leg("2026-10-01T07:50:24", "1790815824.562-104", "0364489026", "104", "NO ANSWER", 0),
-    _leg(
+REAL_DAY_LOGS = [
+    _log(
+        "1790815824.560",
         "2026-10-01T07:50:24",
-        "1790815824.560-3000(Nhóm)",
+        "Inbound",
         "0364489026",
         "3000(Nhóm)",
         "NO ANSWER",
-        20,
-        link=_REAL_LINK_A,
-        total=20,
-    ),
-    _leg(
-        "2026-10-01T07:50:44",
-        "1790815824.560-hangup",
-        "0364489026",
-        "hangup",
-        "ANSWERED",
         0,
-        link=_REAL_LINK_A,
+        20,
+        20,
+        "finish",
+        _REAL_LINK_A,
     ),
-    # 07:58 redial — 445s later: its own call.
-    _leg(
+    _log(
+        "1790816289.564",
         "2026-10-01T07:58:09",
-        "1790816289.564-3000(Nhóm)",
+        "Inbound",
         "0364489026",
         "3000(Nhóm)",
         "NO ANSWER",
+        0,
         1,
-        link="https://90.cloudfone.vn/Home?ID=rec-0758",
-        total=1,
+        1,
+        "finish",
+        "https://90.cloudfone.vn/Home?ID=rec-0758",
     ),
-    # 08:35 transfer — legs 1s apart share one call.
-    _leg(
+    _log(
+        "1790818523.568",
         "2026-10-01T08:35:23",
-        "1790818523.568-2000(Nhóm)",
-        "0364489026",
-        "2000(Nhóm)",
-        "ANSWERED",
-        103,
-        link="https://90.cloudfone.vn/Home?ID=rec-0835",
-        total=103,
-    ),
-    _leg(
-        "2026-10-01T08:35:24",
-        "1790818524.570-101",
+        "Inbound",
         "0364489026",
         "101",
         "ANSWERED",
         98,
-        link="https://90.cloudfone.vn/Home?ID=rec-0835",
-        total=103,
+        103,
+        103,
+        "finish",
+        "https://90.cloudfone.vn/Home?ID=rec-0835",
     ),
-    # 14:23 transfer.
-    _leg(
+    _log(
+        "1790839395.572",
         "2026-10-01T14:23:15",
-        "1790839395.572-2000(Nhóm)",
-        "0362172696",
-        "2000(Nhóm)",
-        "ANSWERED",
-        72,
-        link="https://90.cloudfone.vn/Home?ID=rec-1423",
-        total=72,
-    ),
-    _leg(
-        "2026-10-01T14:23:15",
-        "1790839395.574-101",
+        "Inbound",
         "0362172696",
         "101",
         "ANSWERED",
         61,
-        link="https://90.cloudfone.vn/Home?ID=rec-1423",
-        total=71,
+        72,
+        71,
+        "finish",
+        "https://90.cloudfone.vn/Home?ID=rec-1423",
     ),
-    # 16:37 transfer.
-    _leg(
-        "2026-10-01T16:37:50",
-        "1790847470.576-2000(Nhóm)",
-        "0362698948",
+    _log(
+        "1790847677.580",
+        "2026-10-01T16:41:17",
+        "Inbound",
+        "0902065233",
         "2000(Nhóm)",
-        "ANSWERED",
-        76,
-        link="https://90.cloudfone.vn/Home?ID=rec-1637",
-        total=76,
+        "NO ANSWER",
+        0,
+        4,
+        4,
+        "finish",
+        "https://90.cloudfone.vn/Home?ID=rec-1641",
     ),
-    _leg(
-        "2026-10-01T16:37:51",
-        "1790847470.578-102",
+    _log(
+        "1790847470.576",
+        "2026-10-01T16:37:50",
+        "Inbound",
         "0362698948",
         "102",
         "ANSWERED",
         72,
-        link="https://90.cloudfone.vn/Home?ID=rec-1637",
-        total=76,
+        76,
+        76,
+        "finish",
+        "https://90.cloudfone.vn/Home?ID=rec-1637",
     ),
-    # 16:41 missed — second caller of the day.
-    _leg(
-        "2026-10-01T16:41:17",
-        "1790847677.580-2000(Nhóm)",
-        "0902065233",
-        "2000(Nhóm)",
-        "NO ANSWER",
-        4,
-        link="https://90.cloudfone.vn/Home?ID=rec-1641",
-        total=4,
-    ),
-    _leg("2026-10-01T16:41:18", "1790847678.582-101", "0902065233", "101", "NO ANSWER", 0, total=4),
-    # 17:02 transfer — same caller as 16:37, 25min later: its own call.
-    _leg(
+    _log(
+        "1790848955.584",
         "2026-10-01T17:02:35",
-        "1790848955.584-2000(Nhóm)",
-        "0362698948",
-        "2000(Nhóm)",
-        "ANSWERED",
-        101,
-        link="https://90.cloudfone.vn/Home?ID=rec-1702",
-        total=101,
-    ),
-    _leg(
-        "2026-10-01T17:02:35",
-        "1790848955.586-102",
+        "Inbound",
         "0362698948",
         "102",
         "ANSWERED",
         98,
-        link="https://90.cloudfone.vn/Home?ID=rec-1702",
-        total=101,
+        101,
+        101,
+        "finish",
+        "https://90.cloudfone.vn/Home?ID=rec-1702",
     ),
 ]
 
@@ -236,7 +209,7 @@ def _transport_client(handler) -> CloudfoneClient:
     return CloudfoneClient("CloudFone", "cloudfone-user", "cf-key", transport=transport)
 
 
-async def test_get_call_history_v2_sends_the_vendor_postman_body():
+async def test_get_call_logs_sends_the_vendor_postman_body():
     """Auth trio + the Postman body fields verbatim; PageIndex 1-based here."""
     seen: dict = {}
 
@@ -245,23 +218,24 @@ async def test_get_call_history_v2_sends_the_vendor_postman_body():
         seen["body"] = json.loads(request.content)
         return httpx.Response(200, json=_envelope([]))
 
-    rows = await _transport_client(handler).get_call_history_v2(
+    rows = await _transport_client(handler).get_call_logs_page(
         day=date(2026, 10, 1), page_index=1, page_size=5
     )
 
     assert rows == []
-    assert seen["url"].endswith("/GetCallHistoryVer2")
+    assert seen["url"].endswith("/GetCallLogs")
     assert seen["body"] == {
         "ServiceName": "CloudFone",
         "AuthUser": "cloudfone-user",
         "AuthKey": "cf-key",
-        "TypeGet": 0,
-        "HideFWOut": 1,
+        "Direction": "all",
+        "Disposition": "",
         "DateStart": "2026-10-01 00:00:00",
         "DateEnd": "2026-10-01 23:59:59",
         "IsSort": 0,
         "CallNum": "",
         "ReceiveNum": "",
+        "trunk": "",
         "Key": "",
         "PageIndex": 1,
         "PageSize": 5,
@@ -275,7 +249,7 @@ async def test_client_rejects_a_non_success_result():
         return httpx.Response(200, json={"result": "error", "message": "Invalid APIKey"})
 
     with pytest.raises(CloudfoneError, match="Invalid APIKey"):
-        await _transport_client(handler).get_call_history_v2(day=date(2026, 10, 1))
+        await _transport_client(handler).get_call_logs_page(day=date(2026, 10, 1))
 
 
 async def test_client_rejects_the_live_failure_envelope():
@@ -287,66 +261,146 @@ async def test_client_rejects_the_live_failure_envelope():
         )
 
     with pytest.raises(CloudfoneError, match="không rõ lý do"):
-        await _transport_client(handler).get_call_history_v2(day=date(2026, 10, 1))
+        await _transport_client(handler).get_call_logs_page(day=date(2026, 10, 1))
 
 
-async def test_group_call_legs_merges_transfer_legs_into_one_call():
-    """Legs 1s apart (queue → agent) are one dial attempt: one call record."""
-    calls = group_call_legs(REAL_DAY_LEGS[4:6])
+def test_group_call_logs_ring_then_answer_is_one_call_from_the_finish_row():
+    """The 25/11 08:35 episode (REAL_2511_LOGS rows 1–2): a ring hide row (NO
+    ANSWER, dst 105) + the finish row (ANSWERED, dst 102) share one linkedId —
+    ONE answered call whose agent and talk seconds come from the finish row.
+    This is the exact shape GetCallHistoryVer2 returned as two legs 35s apart,
+    which the old 30s gap window split into a spurious missed + an answered."""
+    calls = group_call_logs(REAL_2511_LOGS[0:2])
     assert len(calls) == 1
     call = calls[0]
-    assert call.call_id == "1790818523"  # epoch before the "." of the first leg's key
-    assert call.started_at == "2026-10-01T08:35:23"
-    assert call.caller == "0364489026"
+    assert call.call_id == "1795570511"  # linkedId epoch before the "."
+    assert call.started_at == "2026-11-25T08:35:11"
+    assert call.caller == "0342837626"
     assert call.direction == "Inbound"
     assert call.status == "ANSWERED"
-    assert call.talk_seconds == 98  # the agent leg's realCallTime
-    assert call.agent == "101"  # the answered agent extension (not the queue leg)
-    assert call.recording_url == "https://90.cloudfone.vn/Home?ID=rec-0835"
+    assert call.agent == "102"  # the finish row's dst, not the hide row's 105
+    assert call.talk_seconds == 5  # the finish row's billsecAgent
+    assert call.recording_url == _D2511 + "-0835"
+    # Even with the ring and talk rows carrying timestamps 35s apart — the
+    # spacing at which GetCallHistoryVer2's legs fell outside the old window —
+    # one linkedId is still exactly one call, whatever the gap.
+    spaced = [
+        _log(
+            "1795570511.1981",
+            "2026-11-25T08:35:11",
+            "Inbound",
+            "0342837626",
+            "105",
+            "NO ANSWER",
+            0,
+            30,
+            0,
+            "hide",
+        ),
+        _log(
+            "1795570511.1981",
+            "2026-11-25T08:35:46",
+            "Inbound",
+            "0342837626",
+            "102",
+            "ANSWERED",
+            5,
+            43,
+            43,
+            "finish",
+            _D2511 + "-0835",
+        ),
+    ]
+    assert len(group_call_logs(spaced)) == 1
 
 
-async def test_group_call_legs_hangup_leg_never_counts_answered():
-    """…-hangup legs claim ANSWERED/0 — the call is missed, not answered."""
-    calls = group_call_legs(REAL_DAY_LEGS[0:3])
+def test_group_call_logs_keeps_distinct_linkedids_as_two_calls():
+    """Same caller 12s apart (18/11 22:09, verified live) but two linkedIds =
+    two calls — grouping is by linkedId, never by caller proximity."""
+    calls = group_call_logs(REAL_1811_LOGS[-2:])
+    assert [call.call_id for call in calls] == ["1795014542", "1795014554"]
+    assert [call.started_at for call in calls] == ["2026-11-18T22:09:02", "2026-11-18T22:09:14"]
+    assert all(call.status == "NO ANSWER" and call.caller == "0397546416" for call in calls)
+
+
+def test_group_call_logs_drops_local_and_outbound_directions():
+    """direction "Local" (extension→extension) and "Outbound" never become
+    calls; "Inbound" does (verified live 18/11: the dashboard counts none of
+    the internal traffic)."""
+    calls = group_call_logs(
+        [
+            _log(
+                "1794968551.1794",
+                "2026-11-18T09:22:36",
+                "Local",
+                "102",
+                "103",
+                "FAILED",
+                0,
+                13,
+                0,
+                "finish",
+            ),
+            _log(
+                "1794968597.1796",
+                "2026-11-18T09:23:22",
+                "Local",
+                "102",
+                "103",
+                "CANCEL",
+                0,
+                6,
+                0,
+                "finish",
+            ),
+            _log(
+                "1794999999.1900",
+                "2026-11-18T09:30:00",
+                "Outbound",
+                "102",
+                "0901234567",
+                "ANSWERED",
+                30,
+                35,
+                0,
+                "finish",
+            ),
+            _log(
+                "1794968993.1798",
+                "2026-11-18T09:29:53",
+                "Inbound",
+                "0367203065",
+                "102",
+                "ANSWERED",
+                33,
+                38,
+                38,
+                "finish",
+                _D1811 + "-0929",
+            ),
+        ]
+    )
     assert len(calls) == 1
-    call = calls[0]
-    assert call.status == "NO ANSWER"
-    assert call.talk_seconds == 0
-    assert call.recording_url == "https://90.cloudfone.vn/Home?ID=rec-0750"
+    assert calls[0].caller == "0367203065"
 
 
-async def test_group_call_legs_splits_redials_at_the_30s_boundary():
-    """Same caller 35s apart = two dial attempts = two calls."""
-    first = _leg(
-        "2026-10-01T13:25:02",
-        "1791181502.600-2000(Nhóm)",
-        "0901234567",
-        "2000(Nhóm)",
-        "NO ANSWER",
-        0,
+def test_group_call_logs_no_answer_groups_carry_empty_recordings():
+    """The 25/11 missed calls: the 16:11:43 episode is a single NO ANSWER
+    finish row (it never existed in GetCallHistoryVer2 at all), the 20:50
+    episode is a hide + finish pair — both stay nhỡ with 0 talk seconds and
+    no recording."""
+    calls = group_call_logs([REAL_2511_LOGS[8], *REAL_2511_LOGS[11:13]])
+    assert [(call.started_at, call.caller) for call in calls] == [
+        ("2026-11-25T16:11:43", "0936688846"),
+        ("2026-11-25T20:50:28", "0981116786"),
+    ]
+    assert all(call.status == "NO ANSWER" for call in calls)
+    assert all(call.talk_seconds == 0 for call in calls)
+    assert all(call.recording_url == "" for call in calls)
+    assert build_daily_stats(calls).missed == (
+        ("2026-11-25T16:11:43", "0936688846"),
+        ("2026-11-25T20:50:28", "0981116786"),
     )
-    second = _leg(
-        "2026-10-01T13:25:37",
-        "1791181537.602-2000(Nhóm)",
-        "0901234567",
-        "2000(Nhóm)",
-        "NO ANSWER",
-        0,
-    )
-    calls = group_call_legs([first, second])
-    assert [call.call_id for call in calls] == ["1791181502", "1791181537"]
-    assert [call.started_at for call in calls] == ["2026-10-01T13:25:02", "2026-10-01T13:25:37"]
-
-
-async def test_group_call_legs_zero_second_pickup_is_not_answered():
-    """An ANSWERED leg with 0s talk produced no conversation — not answered."""
-    calls = group_call_legs(
-        [_leg("2026-10-01T09:00:00", "1791200000.610-101", "0901234567", "101", "ANSWERED", 0)]
-    )
-    assert len(calls) == 1
-    assert calls[0].status != "ANSWERED"
-    assert calls[0].talk_seconds == 0
-    assert build_daily_stats(calls).missed == (("2026-10-01T09:00:00", "0901234567"),)
 
 
 def test_call_date_to_ict_keeps_naive_vendor_ict_unchanged():
@@ -369,19 +423,10 @@ def test_day_window_covers_the_full_ict_day_in_the_vendor_ict_clock():
     assert (start, end) == ("2026-10-24 00:00:00", "2026-10-24 23:59:59")
 
 
-# The vendor's real 2026-10-26 18:36 rows (verified live, probe of 28/10): the
+# The vendor's real 2026-10-26 18:36 row (verified live, probe of 28/10): the
 # 0906004310 call the +7h bug pushed into the 27/10 report and displayed 01:36.
-EVENING_4310_LEGS = [
-    _leg("2026-10-26T18:36:08", "1793014568.1369-104", "0906004310", "104", "NO ANSWER", 0),
-    _leg(
-        "2026-10-26T18:36:08",
-        "1793014568.1367-3000(Nhóm)",
-        "0906004310",
-        "3000(Nhóm)",
-        "NO ANSWER",
-        20,
-    ),
-    _leg("2026-10-26T18:36:28", "1793014568.1367-hangup", "0906004310", "hangup", "ANSWERED", 0),
+EVENING_4310_LOGS = [
+    _log("1793014568.0", "2026-10-26T18:36:08", "Inbound", "0906004310", "", "NO ANSWER", 0, 0, 0, "finish"),
 ]
 
 
@@ -390,7 +435,7 @@ async def test_regression_4310_evening_call_stays_in_its_own_day_at_its_wall_clo
     callDate in ICT wall clock, so the call belongs to the 26/10 report and
     shows 18:36 — the old UTC assumption fetched it into the 27/10 report as
     01:36 and dropped the 27/10 evening calls instead."""
-    calls = group_call_legs(EVENING_4310_LEGS)
+    calls = group_call_logs(EVENING_4310_LOGS)
     assert len(calls) == 1
     call = calls[0]
     assert call.call_id == "1793014568"
@@ -413,194 +458,6 @@ async def test_regression_4310_evening_call_stays_in_its_own_day_at_its_wall_clo
     assert "1 cuộc (0✓/1✗)" in html
 
 
-async def test_group_call_legs_status_precedence_no_answer_then_busy():
-    """NO ANSWER outranks BUSY when a call carries both leg statuses."""
-    calls = group_call_legs(
-        [
-            _leg(
-                "2026-10-01T09:00:00",
-                "1791200000.610-2000(Nhóm)",
-                "0901234567",
-                "2000(Nhóm)",
-                "BUSY",
-                0,
-            ),
-            _leg("2026-10-01T09:00:01", "1791200001.612-101", "0901234567", "101", "NO ANSWER", 0),
-        ]
-    )
-    assert len(calls) == 1
-    assert calls[0].status == "NO ANSWER"
-
-
-def test_group_call_legs_drops_assistant_and_extension_traffic():
-    """Verified live 2026-11-18: the Cloudfone-Assistant auto-dials (empty
-    callerNumber) and extension callers (short code 102) never become calls —
-    the Cloudfone dashboard counts none of them."""
-    calls = group_call_legs(
-        [
-            _leg(
-                "2026-11-18T09:00:20",
-                "1794967220.1778-106",
-                "",
-                "106",
-                "NO ANSWER",
-                0,
-                caller_name="Cloudfone-Assistant",
-            ),
-            _leg(
-                "2026-11-18T09:22:31",
-                "1794968551.1794-state-not_set",
-                "102",
-                "state-not_set",
-                "NO ANSWER",
-                0,
-                caller_name="TeamanhCường",
-            ),
-            _leg(
-                "2026-11-18T16:41:04",
-                "1794994864.1838-105",
-                "102",
-                "105",
-                "ANSWERED",
-                18,
-                caller_name="TeamanhCường",
-            ),
-            _leg(
-                "2026-11-18T09:04:27",
-                "1794967467.1784-2000(Nhóm)",
-                "0936890712",
-                "2000(Nhóm)",
-                "ANSWERED",
-                228,
-            ),
-        ]
-    )
-    assert [call.caller for call in calls] == ["0936890712"]
-
-
-def test_group_call_legs_customer_caller_name_still_clusters():
-    """A real customer leg whose callerNumber is missing still chains on
-    callerName when the name carries a full subscriber number — the internal
-    rule only drops caller IDs with fewer than 9 digits."""
-    calls = group_call_legs(
-        [
-            _leg(
-                "2026-10-01T09:00:00",
-                "1791200000.610-2000(Nhóm)",
-                "",
-                "2000(Nhóm)",
-                "NO ANSWER",
-                0,
-                caller_name="0901234567",
-            ),
-            _leg(
-                "2026-10-01T09:00:02",
-                "1791200002.612-101",
-                "",
-                "101",
-                "NO ANSWER",
-                0,
-                caller_name="0901234567",
-            ),
-        ]
-    )
-    assert len(calls) == 1
-    assert calls[0].caller == "0901234567"
-
-
-def test_announcement_pickup_is_missed_not_answered():
-    """Verified live 2026-11-18 22:09: the after-hours announcement claims
-    ANSWERED/14s but no agent extension is involved — nhỡ, not answered."""
-    calls = group_call_legs(
-        [
-            _leg(
-                "2026-11-18T22:09:02",
-                "1795014542.1844-Nghe thông báo",
-                "0397546416",
-                "Nghe thông báo",
-                "ANSWERED",
-                14,
-            ),
-        ]
-    )
-    assert len(calls) == 1
-    assert calls[0].status == "NO ANSWER"
-    assert build_daily_stats(calls).missed == (("2026-11-18T22:09:02", "0397546416"),)
-
-
-def test_group_call_legs_two_recordings_break_the_chain():
-    """Same caller 12s apart but two recordings = two calls (verified live
-    2026-11-18: the two 22:09 announcement attempts, each with its own
-    recording — the dashboard counts both)."""
-    legs = [
-        _leg(
-            "2026-11-18T22:09:02",
-            "1795014542.1844-Nghe thông báo",
-            "0397546416",
-            "Nghe thông báo",
-            "ANSWERED",
-            14,
-            link="https://90.cloudfone.vn/Home?ID=rec-2209a",
-        ),
-        _leg(
-            "2026-11-18T22:09:14",
-            "1795014554.1845-Nghe thông báo",
-            "0397546416",
-            "Nghe thông báo",
-            "ANSWERED",
-            0,
-            link="https://90.cloudfone.vn/Home?ID=rec-2209b",
-        ),
-    ]
-    calls = group_call_legs(legs)
-    assert [call.started_at for call in calls] == ["2026-11-18T22:09:02", "2026-11-18T22:09:14"]
-
-
-def test_group_call_legs_transfer_across_epochs_shares_one_recording():
-    """Queue and agent legs carry different key epochs but one recording —
-    still one call (verified live 2026-11-18 09:04)."""
-    calls = group_call_legs(
-        [
-            _leg(
-                "2026-11-18T09:04:27",
-                "1794967467.1784-2000(Nhóm)",
-                "0936890712",
-                "2000(Nhóm)",
-                "ANSWERED",
-                228,
-                link="https://90.cloudfone.vn/Home?ID=rec-0904",
-            ),
-            _leg(
-                "2026-11-18T09:04:28",
-                "1794967468.1786-102",
-                "0936890712",
-                "102",
-                "ANSWERED",
-                225,
-                link="https://90.cloudfone.vn/Home?ID=rec-0904",
-            ),
-        ]
-    )
-    assert len(calls) == 1
-    assert calls[0].talk_seconds == 225  # the agent leg, not the queue leg
-    assert calls[0].agent == "102"
-
-
-def test_build_daily_stats_on_the_real_2026_10_01_rows():
-    """14 live legs → 7 calls: 4 answered, 3 missed, 57.1% answer rate, 82s avg."""
-    stats = build_daily_stats(group_call_legs(REAL_DAY_LEGS))
-    assert stats.total_calls == 7
-    assert stats.answered_calls == 4
-    assert stats.missed_calls == 3
-    assert stats.answer_rate_pct == 57.1
-    assert stats.avg_talk_seconds == 82
-    assert stats.missed == (
-        ("2026-10-01T07:50:24", "0364489026"),
-        ("2026-10-01T07:58:09", "0364489026"),
-        ("2026-10-01T16:41:17", "0902065233"),
-    )
-
-
 def test_build_daily_stats_empty_day_is_all_zero():
     stats = build_daily_stats([])
     assert stats == DailyCallStats(
@@ -613,482 +470,83 @@ def test_build_daily_stats_empty_day_is_all_zero():
     )
 
 
-# The vendor's real 2026-11-18 day — all 51 GetCallHistoryVer2 legs, captured
-# live for CHAT-30 (link IDs shortened; leg identity, callers, statuses and
-# durations verbatim). The Cloudfone dashboard shows this day as
+# The vendor's real 2026-11-18 day — all 30 GetCallLogs rows, captured live
+# (recording tokens shortened; linkedIds, callers, dispositions, agent talk
+# seconds and events verbatim). The Cloudfone dashboard shows this day as
 # 19 cuộc gọi đến / 0 gọi đi / 4 nhỡ, and the letter must reproduce exactly
-# that (the old gap-only chaining reported 24 tổng / 17 trả lời / 7 nhỡ by
-# counting assistant dials, extension callers, and merging the two 22:09
-# announcement attempts into one answered call).
+# that: the three "Local" extension episodes drop out, and every hide row
+# collapses into its linkedId's single finish row.
 _D1811 = "https://90.cloudfone.vn/Home?ID=d1811"
-REAL_1811_LEGS = [
-    # 08:09 — 0977518241: every extension busy/unanswered (the vendor repeats
-    # the 3000(Nhóm) row; extension legs carry no recording).
-    _leg("2026-11-18T08:09:33", "1794964173.1756-103", "0977518241", "103", "BUSY", 0),
-    _leg(
-        "2026-11-18T08:09:33",
-        "1794964173.1754-3000(Nhóm)",
-        "0977518241",
-        "3000(Nhóm)",
-        "NO ANSWER",
-        20,
-        link=_D1811 + "-0809",
-        total=20,
-    ),
-    _leg("2026-11-18T08:09:33", "1794964173.1758-106", "0977518241", "106", "NO ANSWER", 0),
-    _leg(
-        "2026-11-18T08:09:33",
-        "1794964173.1754-3000(Nhóm)",
-        "0977518241",
-        "3000(Nhóm)",
-        "NO ANSWER",
-        20,
-        link=_D1811 + "-0809",
-        total=20,
-    ),
-    _leg("2026-11-18T08:09:39", "1794964173.1756-103", "0977518241", "103", "NO ANSWER", 0),
-    _leg(
-        "2026-11-18T08:09:53",
-        "1794964173.1754-hangup",
-        "0977518241",
-        "hangup",
-        "ANSWERED",
-        0,
-        link=_D1811 + "-0809",
-    ),
-    # 08:19 — same caller redials, still unanswered.
-    _leg("2026-11-18T08:19:26", "1794964766.1764-103", "0977518241", "103", "NO ANSWER", 0),
-    _leg(
-        "2026-11-18T08:19:26",
-        "1794964766.1762-3000(Nhóm)",
-        "0977518241",
-        "3000(Nhóm)",
-        "NO ANSWER",
-        20,
-        link=_D1811 + "-0819",
-        total=20,
-    ),
-    _leg("2026-11-18T08:19:26", "1794964766.1766-106", "0977518241", "106", "NO ANSWER", 0),
-    _leg(
-        "2026-11-18T08:19:26",
-        "1794964766.1762-3000(Nhóm)",
-        "0977518241",
-        "3000(Nhóm)",
-        "NO ANSWER",
-        20,
-        link=_D1811 + "-0819",
-        total=20,
-    ),
-    _leg("2026-11-18T08:19:31", "1794964766.1764-103", "0977518241", "103", "BUSY", 0),
-    _leg(
-        "2026-11-18T08:19:46",
-        "1794964766.1762-hangup",
-        "0977518241",
-        "hangup",
-        "ANSWERED",
-        0,
-        link=_D1811 + "-0819",
-    ),
-    # 08:47 + 08:48 — same caller, answered twice (agent legs 105, then 102).
-    _leg(
-        "2026-11-18T08:47:53",
-        "1794966473.1770-2000(Nhóm)",
-        "0977518241",
-        "2000(Nhóm)",
-        "ANSWERED",
-        25,
-        link=_D1811 + "-0847",
-        total=25,
-    ),
-    _leg(
-        "2026-11-18T08:47:53",
-        "1794966473.1772-105",
-        "0977518241",
-        "105",
-        "ANSWERED",
-        21,
-        link=_D1811 + "-0847",
-        total=24,
-    ),
-    _leg(
-        "2026-11-18T08:48:26",
-        "1794966506.1774-2000(Nhóm)",
-        "0977518241",
-        "2000(Nhóm)",
-        "ANSWERED",
-        68,
-        link=_D1811 + "-0848",
-        total=68,
-    ),
-    _leg(
-        "2026-11-18T08:48:26",
-        "1794966506.1776-102",
-        "0977518241",
-        "102",
-        "ANSWERED",
-        65,
-        link=_D1811 + "-0848",
-        total=67,
-    ),
-    # 09:00–09:12 — four Cloudfone-Assistant auto-dials, all unanswered;
-    # internal, the dashboard never counts them.
-    _leg(
-        "2026-11-18T09:00:20",
-        "1794967220.1778-106",
-        "",
-        "106",
-        "NO ANSWER",
-        0,
-        caller_name="Cloudfone-Assistant",
-        link=_D1811 + "-a0900",
-    ),
-    _leg(
-        "2026-11-18T09:02:17",
-        "1794967337.1780-106",
-        "",
-        "106",
-        "NO ANSWER",
-        0,
-        caller_name="Cloudfone-Assistant",
-        link=_D1811 + "-a0902a",
-    ),
-    _leg(
-        "2026-11-18T09:02:34",
-        "1794967354.1782-106",
-        "",
-        "106",
-        "NO ANSWER",
-        0,
-        caller_name="Cloudfone-Assistant",
-        link=_D1811 + "-a0902b",
-    ),
-    _leg(
-        "2026-11-18T09:12:21",
-        "1794967941.1792-106",
-        "",
-        "106",
-        "NO ANSWER",
-        0,
-        caller_name="Cloudfone-Assistant",
-        link=_D1811 + "-a0912",
-    ),
-    # 09:04 + 09:12 — answered, queue and agent legs on one recording but
-    # different key epochs.
-    _leg(
-        "2026-11-18T09:04:27",
-        "1794967467.1784-2000(Nhóm)",
-        "0936890712",
-        "2000(Nhóm)",
-        "ANSWERED",
-        228,
-        link=_D1811 + "-0904",
-        total=228,
-    ),
-    _leg(
-        "2026-11-18T09:04:28",
-        "1794967468.1786-102",
-        "0936890712",
-        "102",
-        "ANSWERED",
-        225,
-        link=_D1811 + "-0904",
-        total=227,
-    ),
-    _leg(
-        "2026-11-18T09:12:19",
-        "1794967939.1788-2000(Nhóm)",
-        "0378474865",
-        "2000(Nhóm)",
-        "ANSWERED",
-        215,
-        link=_D1811 + "-0912",
-        total=215,
-    ),
-    _leg(
-        "2026-11-18T09:12:20",
-        "1794967940.1790-102",
-        "0378474865",
-        "102",
-        "ANSWERED",
-        205,
-        link=_D1811 + "-0912",
-        total=214,
-    ),
-    # 09:22 + 09:23 — extension 102 calling a team, unanswered; internal.
-    _leg(
-        "2026-11-18T09:22:31",
-        "1794968551.1794-state-not_set",
-        "102",
-        "state-not_set",
-        "NO ANSWER",
-        0,
-        caller_name="TeamanhCường",
-        link=_D1811 + "-i0922",
-    ),
-    _leg(
-        "2026-11-18T09:23:17",
-        "1794968597.1796-state-not_set",
-        "102",
-        "state-not_set",
-        "NO ANSWER",
-        0,
-        caller_name="TeamanhCường",
-        link=_D1811 + "-i0923",
-    ),
-    # 09:29 … 16:49 — the fifteen answered customer calls.
-    _leg(
-        "2026-11-18T09:29:53",
-        "1794968993.1800-102",
-        "0367203065",
-        "102",
-        "ANSWERED",
-        32,
-        link=_D1811 + "-0929",
-        total=37,
-    ),
-    _leg(
-        "2026-11-18T09:29:53",
-        "1794968993.1798-2000(Nhóm)",
-        "0367203065",
-        "2000(Nhóm)",
-        "ANSWERED",
-        38,
-        link=_D1811 + "-0929",
-        total=38,
-    ),
-    _leg(
-        "2026-11-18T10:33:38",
-        "1794972818.1804-101",
-        "0832274656",
-        "101",
-        "ANSWERED",
-        127,
-        link=_D1811 + "-1033",
-        total=130,
-    ),
-    _leg(
-        "2026-11-18T10:33:38",
-        "1794972818.1802-2000(Nhóm)",
-        "0832274656",
-        "2000(Nhóm)",
-        "ANSWERED",
-        131,
-        link=_D1811 + "-1033",
-        total=131,
-    ),
-    _leg(
-        "2026-11-18T11:23:37",
-        "1794975817.1808-105",
-        "0362173251",
-        "105",
-        "ANSWERED",
-        26,
-        link=_D1811 + "-1123",
-        total=30,
-    ),
-    _leg(
-        "2026-11-18T11:23:37",
-        "1794975817.1806-2000(Nhóm)",
-        "0362173251",
-        "2000(Nhóm)",
-        "ANSWERED",
-        31,
-        link=_D1811 + "-1123",
-        total=31,
-    ),
-    _leg(
-        "2026-11-18T11:24:14",
-        "1794975854.1812-102",
-        "0362173251",
-        "102",
-        "ANSWERED",
-        74,
-        link=_D1811 + "-1124",
-        total=76,
-    ),
-    _leg(
-        "2026-11-18T11:24:14",
-        "1794975854.1810-2000(Nhóm)",
-        "0362173251",
-        "2000(Nhóm)",
-        "ANSWERED",
-        77,
-        link=_D1811 + "-1124",
-        total=77,
-    ),
-    _leg(
-        "2026-11-18T11:55:53",
-        "1794977753.1814-2000(Nhóm)",
-        "0354876358",
-        "2000(Nhóm)",
-        "ANSWERED",
-        18,
-        link=_D1811 + "-1155",
-        total=18,
-    ),
-    _leg(
-        "2026-11-18T11:55:54",
-        "1794977754.1816-105",
-        "0354876358",
-        "105",
-        "ANSWERED",
-        13,
-        link=_D1811 + "-1155",
-        total=17,
-    ),
-    _leg(
-        "2026-11-18T13:26:52",
-        "1794983212.1820-101",
-        "0936333027",
-        "101",
-        "ANSWERED",
-        69,
-        link=_D1811 + "-1326",
-        total=87,
-    ),
-    _leg(
-        "2026-11-18T13:26:52",
-        "1794983212.1818-2000(Nhóm)",
-        "0936333027",
-        "2000(Nhóm)",
-        "ANSWERED",
-        87,
-        link=_D1811 + "-1326",
-        total=87,
-    ),
-    _leg(
-        "2026-11-18T15:20:15",
-        "1794990015.1822-2000(Nhóm)",
-        "0986526843",
-        "2000(Nhóm)",
-        "ANSWERED",
-        16,
-        link=_D1811 + "-1520",
-        total=16,
-    ),
-    _leg(
-        "2026-11-18T15:20:16",
-        "1794990016.1824-105",
-        "0986526843",
-        "105",
-        "ANSWERED",
-        13,
-        link=_D1811 + "-1520",
-        total=16,
-    ),
-    _leg(
-        "2026-11-18T15:21:45",
-        "1794990105.1826-2000(Nhóm)",
-        "0986526843",
-        "2000(Nhóm)",
-        "ANSWERED",
-        32,
-        link=_D1811 + "-1521",
-        total=32,
-    ),
-    _leg(
-        "2026-11-18T15:21:46",
-        "1794990106.1828-102",
-        "0986526843",
-        "102",
-        "ANSWERED",
-        29,
-        link=_D1811 + "-1521",
-        total=32,
-    ),
-    _leg(
-        "2026-11-18T16:38:04",
-        "1794994684.1830-2000(Nhóm)",
-        "0946406532",
-        "2000(Nhóm)",
-        "ANSWERED",
-        33,
-        link=_D1811 + "-1638",
-        total=33,
-    ),
-    _leg(
-        "2026-11-18T16:38:05",
-        "1794994685.1832-105",
-        "0946406532",
-        "105",
-        "ANSWERED",
-        28,
-        link=_D1811 + "-1638",
-        total=32,
-    ),
-    _leg(
-        "2026-11-18T16:39:47",
-        "1794994787.1836-101",
-        "0904378575",
-        "101",
-        "ANSWERED",
-        3,
-        link=_D1811 + "-1639",
-        total=7,
-    ),
-    _leg(
-        "2026-11-18T16:39:47",
-        "1794994787.1834-2000(Nhóm)",
-        "0904378575",
-        "2000(Nhóm)",
-        "ANSWERED",
-        8,
-        link=_D1811 + "-1639",
-        total=8,
-    ),
-    _leg(
-        "2026-11-18T16:41:04",
-        "1794994864.1838-105",
-        "102",
-        "105",
-        "ANSWERED",
-        18,
-        caller_name="TeamanhCường",
-        link=_D1811 + "-i1641",
-        total=21,
-    ),
-    _leg(
-        "2026-11-18T16:49:03",
-        "1794995343.1840-2000(Nhóm)",
-        "0385413381",
-        "2000(Nhóm)",
-        "ANSWERED",
-        88,
-        link=_D1811 + "-1649",
-        total=88,
-    ),
-    _leg(
-        "2026-11-18T16:49:04",
-        "1794995344.1842-101",
-        "0385413381",
-        "101",
-        "ANSWERED",
-        84,
-        link=_D1811 + "-1649",
-        total=87,
-    ),
-    # 22:09 — after-hours announcement: two attempts 12s apart, each with its
-    # own recording; the dashboard counts both as nhỡ (no agent ever spoke).
-    _leg(
-        "2026-11-18T22:09:02",
-        "1795014542.1844-Nghe thông báo",
-        "0397546416",
-        "Nghe thông báo",
-        "ANSWERED",
-        14,
-        link=_D1811 + "-2209a",
-        total=14,
-    ),
-    _leg(
-        "2026-11-18T22:09:14",
-        "1795014554.1845-Nghe thông báo",
-        "0397546416",
-        "Nghe thông báo",
-        "ANSWERED",
-        0,
-        link=_D1811 + "-2209b",
-        total=1,
-    ),
+REAL_1811_LOGS = [
+    _log(*row)
+    for row in [
+        # 08:09 — 0977518241: every extension busy/unanswered; the finish row
+        # carries the episode's disposition, empty dst and the billed seconds.
+        ("1794964173.1754", "2026-11-18T08:09:33", "Inbound", "0977518241", "103", "BUSY", 0, 6, 0, "hide", ""),
+        ("1794964173.1754", "2026-11-18T08:09:33", "Inbound", "0977518241", "106", "NO ANSWER", 0, 20, 0, "hide", ""),
+        ("1794964173.1754", "2026-11-18T08:09:33", "Inbound", "0977518241", "103", "BUSY", 0, 20, 0, "hide", ""),
+        ("1794964173.1754", "2026-11-18T08:09:33", "Inbound", "0977518241", "", "NO ANSWER", 0, 20, 20, "finish", ""),
+        # 08:19 — same caller redials, still unanswered.
+        ("1794964766.1762", "2026-11-18T08:19:26", "Inbound", "0977518241", "103", "BUSY", 0, 11, 0, "hide", ""),
+        ("1794964766.1762", "2026-11-18T08:19:26", "Inbound", "0977518241", "103", "BUSY", 0, 20, 0, "hide", ""),
+        ("1794964766.1762", "2026-11-18T08:19:26", "Inbound", "0977518241", "106", "NO ANSWER", 0, 20, 0, "hide", ""),
+        ("1794964766.1762", "2026-11-18T08:19:26", "Inbound", "0977518241", "", "NO ANSWER", 0, 20, 20, "finish", ""),
+        # 08:47 + 08:48 — same caller, answered twice (agents 105, then 102).
+        ("1794966473.1770", "2026-11-18T08:47:53", "Inbound", "0977518241", "105", "ANSWERED", 21, 25, 25, "finish", _D1811 + "-0847"),
+        ("1794966506.1774", "2026-11-18T08:48:26", "Inbound", "0977518241", "102", "ANSWERED", 65, 68, 68, "finish", _D1811 + "-0848"),
+        # 09:04 + 09:12 — answered customer calls.
+        ("1794967467.1784", "2026-11-18T09:04:27", "Inbound", "0936890712", "102", "ANSWERED", 226, 229, 228, "finish", _D1811 + "-0904"),
+        ("1794967939.1788", "2026-11-18T09:12:19", "Inbound", "0378474865", "102", "ANSWERED", 206, 216, 215, "finish", _D1811 + "-0912"),
+        # 09:22 + 09:23 — extension 102 calling a team: Local, dropped.
+        ("1794968551.1794", "2026-11-18T09:22:36", "Local", "102", "103", "FAILED", 0, 8, 0, "hide", ""),
+        ("1794968551.1794", "2026-11-18T09:22:36", "Local", "102", "103", "FAILED", 0, 13, 0, "finish", ""),
+        ("1794968597.1796", "2026-11-18T09:23:22", "Local", "102", "103", "CANCEL", 0, 6, 0, "hide", ""),
+        ("1794968597.1796", "2026-11-18T09:23:22", "Local", "102", "103", "CANCEL", 0, 6, 0, "finish", ""),
+        # 09:29 … 16:49 — the fifteen answered customer calls.
+        ("1794968993.1798", "2026-11-18T09:29:53", "Inbound", "0367203065", "102", "ANSWERED", 33, 38, 38, "finish", _D1811 + "-0929"),
+        ("1794972818.1802", "2026-11-18T10:33:38", "Inbound", "0832274656", "101", "ANSWERED", 128, 131, 131, "finish", _D1811 + "-1033"),
+        ("1794975817.1806", "2026-11-18T11:23:37", "Inbound", "0362173251", "105", "ANSWERED", 26, 31, 31, "finish", _D1811 + "-1123"),
+        ("1794975854.1810", "2026-11-18T11:24:14", "Inbound", "0362173251", "102", "ANSWERED", 74, 77, 77, "finish", _D1811 + "-1124"),
+        ("1794977753.1814", "2026-11-18T11:55:53", "Inbound", "0354876358", "105", "ANSWERED", 14, 19, 18, "finish", _D1811 + "-1155"),
+        ("1794983212.1818", "2026-11-18T13:26:52", "Inbound", "0936333027", "101", "ANSWERED", 69, 87, 87, "finish", _D1811 + "-1326"),
+        ("1794990015.1822", "2026-11-18T15:20:15", "Inbound", "0986526843", "105", "ANSWERED", 14, 17, 16, "finish", _D1811 + "-1520"),
+        ("1794990105.1826", "2026-11-18T15:21:45", "Inbound", "0986526843", "102", "ANSWERED", 30, 33, 32, "finish", _D1811 + "-1521"),
+        ("1794994684.1830", "2026-11-18T16:38:04", "Inbound", "0946406532", "105", "ANSWERED", 29, 34, 33, "finish", _D1811 + "-1638"),
+        ("1794994787.1834", "2026-11-18T16:39:47", "Inbound", "0904378575", "101", "ANSWERED", 3, 8, 8, "finish", _D1811 + "-1639"),
+        ("1794994864.1838", "2026-11-18T16:41:04", "Local", "102", "105", "ANSWERED", 18, 22, 0, "finish", _D1811 + "-i1641"),
+        ("1794995343.1840", "2026-11-18T16:49:03", "Inbound", "0385413381", "101", "ANSWERED", 84, 88, 87, "finish", _D1811 + "-1649"),
+        # 22:09 — after-hours announcement: two attempts 12s apart, each its
+        # own linkedId; the dashboard counts both as nhỡ (no agent ever spoke).
+        ("1795014542.1844", "2026-11-18T22:09:02", "Inbound", "0397546416", "", "NO ANSWER", 0, 15, 0, "finish", ""),
+        ("1795014554.1845", "2026-11-18T22:09:14", "Inbound", "0397546416", "", "NO ANSWER", 0, 1, 0, "finish", ""),
+    ]
+]
+
+
+# The vendor's real 2026-11-25 day — 13 GetCallLogs rows, the owner's bug
+# report day: the bot said 11 tổng / 4 nhỡ where the dashboard shows 9 tổng /
+# 7 trả lời / 2 nhỡ. The three ring-then-answer episodes (08:35, 10:13,
+# 17:25) share one linkedId across their ring and talk rows; the 16:11:43
+# missed call exists only in GetCallLogs (GetCallHistoryVer2 never returned
+# it — verified across TypeGet/HideFWOut variations).
+_D2511 = "https://90.cloudfone.vn/Home?ID=d2511"
+REAL_2511_LOGS = [
+    _log(*row)
+    for row in [
+        ("1795570511.1981", "2026-11-25T08:35:11", "Inbound", "0342837626", "105", "NO ANSWER", 0, 30, 0, "hide", ""),
+        ("1795570511.1981", "2026-11-25T08:35:11", "Inbound", "0342837626", "102", "ANSWERED", 5, 43, 43, "finish", _D2511 + "-0835"),
+        ("1795576438.1988", "2026-11-25T10:13:58", "Inbound", "0336086543", "105", "NO ANSWER", 0, 31, 0, "hide", ""),
+        ("1795576438.1988", "2026-11-25T10:13:58", "Inbound", "0336086543", "101", "ANSWERED", 152, 191, 190, "finish", _D2511 + "-1013"),
+        ("1795587526.1995", "2026-11-25T13:18:46", "Inbound", "0362172696", "101", "ANSWERED", 70, 89, 89, "finish", _D2511 + "-1318"),
+        ("1795591158.1999", "2026-11-25T14:19:18", "Inbound", "0332625985", "105", "ANSWERED", 144, 147, 147, "finish", _D2511 + "-1419"),
+        ("1795591425.2003", "2026-11-25T14:23:45", "Inbound", "0363348790", "105", "ANSWERED", 351, 355, 354, "finish", _D2511 + "-1423"),
+        ("1795595628.2007", "2026-11-25T15:33:48", "Inbound", "0862908944", "101", "ANSWERED", 102, 106, 105, "finish", _D2511 + "-1533"),
+        ("1795597903.2011", "2026-11-25T16:11:43", "Inbound", "0936688846", "", "NO ANSWER", 0, 0, 0, "finish", ""),
+        ("1795602343.2012", "2026-11-25T17:25:43", "Inbound", "0936688846", "105", "NO ANSWER", 0, 30, 0, "hide", ""),
+        ("1795602343.2012", "2026-11-25T17:25:43", "Inbound", "0936688846", "101", "ANSWERED", 199, 238, 238, "finish", _D2511 + "-1725"),
+        ("1795614628.2019", "2026-11-25T20:50:28", "Inbound", "0981116786", "104", "NO ANSWER", 0, 19, 0, "hide", ""),
+        ("1795614628.2019", "2026-11-25T20:50:28", "Inbound", "0981116786", "", "NO ANSWER", 0, 19, 18, "finish", ""),
+    ]
 ]
 
 
@@ -1096,12 +554,12 @@ def test_regression_18112026_matches_the_cloudfone_dashboard():
     """CHAT-30: the letter's numbers must equal the Cloudfone dashboard for
     18/11/2026 — 19 cuộc gọi đến / 0 gọi đi / 4 nhỡ — where the old grouping
     reported 24/17/7."""
-    stats = build_daily_stats(group_call_legs(REAL_1811_LEGS))
+    stats = build_daily_stats(group_call_logs(REAL_1811_LOGS))
     assert stats.total_calls == 19
     assert stats.answered_calls == 15
     assert stats.missed_calls == 4
     assert stats.answer_rate_pct == 78.9
-    assert stats.avg_talk_seconds == 68  # 1014 agent-talk seconds / 15 calls
+    assert stats.avg_talk_seconds == 68  # 1022 agent-talk seconds / 15 calls
     assert stats.missed == (
         ("2026-11-18T08:09:33", "0977518241"),
         ("2026-11-18T08:19:26", "0977518241"),
@@ -1111,14 +569,51 @@ def test_regression_18112026_matches_the_cloudfone_dashboard():
 
 
 def test_regression_18112026_no_internal_traffic_reaches_the_letter():
-    """The 18/11 letter carries only customer calls: no Cloudfone-Assistant or
-    extension-caller record survives grouping."""
-    calls = group_call_legs(REAL_1811_LEGS)
+    """The 18/11 letter carries only customer calls: the Local
+    extension-to-extension episodes never become call records."""
+    calls = group_call_logs(REAL_1811_LOGS)
     callers = {call.caller for call in calls}
-    assert "Cloudfone-Assistant" not in callers
     assert "102" not in callers
-    assert "TeamanhCường" not in callers
     assert len(calls) == 19
+
+
+def test_regression_25112026_matches_the_cloudfone_dashboard():
+    """The owner's bug (reported 26/11 for 25/11): the bot said 11 tổng /
+    4 nhỡ where the dashboard shows 9 tổng / 7 trả lời / 2 nhỡ. GetCallLogs +
+    linkedId grouping reproduces the dashboard exactly — each of the three
+    ring-then-answer episodes (08:35, 10:13, 17:25) is ONE answered call, not
+    a spurious missed + answered pair, and the 16:11:43 / 20:50:28 nhỡ calls
+    are counted."""
+    stats = build_daily_stats(group_call_logs(REAL_2511_LOGS))
+    assert stats.total_calls == 9
+    assert stats.answered_calls == 7
+    assert stats.missed_calls == 2
+    assert stats.answer_rate_pct == 77.8
+    assert stats.avg_talk_seconds == 146  # 1023 agent-talk seconds / 7 calls
+    assert stats.missed == (
+        ("2026-11-25T16:11:43", "0936688846"),
+        ("2026-11-25T20:50:28", "0981116786"),
+    )
+    answered = [call for call in group_call_logs(REAL_2511_LOGS) if call.status == "ANSWERED"]
+    assert [call.started_at for call in answered] == [
+        "2026-11-25T08:35:11",
+        "2026-11-25T10:13:58",
+        "2026-11-25T13:18:46",
+        "2026-11-25T14:19:18",
+        "2026-11-25T14:23:45",
+        "2026-11-25T15:33:48",
+        "2026-11-25T17:25:43",
+    ]
+    # The dashboard's Nhánh columns for 08:35/10:13/13:18/14:19/14:23/15:33/17:25.
+    assert [call.agent for call in answered] == [
+        "102",
+        "101",
+        "101",
+        "105",
+        "105",
+        "101",
+        "101",
+    ]
 
 
 async def test_fetch_daily_calls_walks_pages_until_total_is_drained():
@@ -1131,13 +626,17 @@ async def test_fetch_daily_calls_walks_pages_until_total_is_drained():
         seen_pages.append(body["PageIndex"])
         start = (body["PageIndex"] - 1) * page_size
         items = [
-            _leg(
+            _log(
+                f"1790000000.{i}",  # unique linkedId: one row = one call
                 f"2026-10-18T09:{i // 60:02d}:{i % 60:02d}",
-                f"1790000000.{i:03d}-101",
+                "Inbound",
                 f"09{i:08d}",
-                "101",
+                "",
                 "NO ANSWER",
                 0,
+                0,
+                0,
+                "finish",
             )
             for i in range(start, min(start + page_size, 205))
         ]
@@ -1159,13 +658,17 @@ async def test_fetch_daily_calls_caps_the_page_walk(caplog):
         requests.append(body)
         base = (body["PageIndex"] - 1) * page_size
         items = [
-            _leg(
+            _log(
+                f"1790000000.{base + i}",  # unique linkedId: one row = one call
                 "2026-10-18T09:00:00",
-                f"1790000000.{base + i:03d}-101",
+                "Inbound",
                 f"09{base + i:08d}",
-                "101",
+                "",
                 "NO ANSWER",
                 0,
+                0,
+                0,
+                "finish",
             )
             for i in range(page_size)
         ]
@@ -1266,7 +769,7 @@ async def test_build_daily_insights_payload_and_bullets():
         captured["user"] = user
         return "– Gọi nhỡ tập trung buổi sáng.\n– Khách 0364489026 gọi lại nhiều lần."
 
-    calls = group_call_legs(REAL_DAY_LEGS)
+    calls = group_call_logs(REAL_DAY_LOGS)
     stats = build_daily_stats(calls)
     notes = await build_daily_insights(stats, calls, summarizer)
 
@@ -1306,7 +809,7 @@ async def test_llm_reasoning_blocks_never_reach_the_letter():
             "\u2013 Ghi nhan A.\n\u2013 Ghi nhan B."
         )
 
-    calls = group_call_legs(REAL_DAY_LEGS[4:6])
+    calls = group_call_logs(REAL_DAY_LOGS[4:6])
     notes = await build_daily_insights(build_daily_stats(calls), calls, reasoning_summarizer)
     assert notes == "\u2013 Ghi nhan A.\n\u2013 Ghi nhan B."
 
@@ -1320,7 +823,7 @@ async def test_llm_reasoning_blocks_never_reach_the_letter():
 
 
 def test_render_insights_html_shows_stats_missed_and_notes():
-    calls = group_call_legs(REAL_DAY_LEGS)
+    calls = group_call_logs(REAL_DAY_LOGS)
     stats = build_daily_stats(calls)
     answered = [call for call in calls if call.status == "ANSWERED"]
     insights = [
@@ -1507,7 +1010,7 @@ async def test_run_transcribes_summarizes_and_sends_the_letter(monkeypatch):
     seen_audio: list[bytes] = []
 
     async def fetcher(_day):
-        return group_call_legs(REAL_DAY_LEGS)
+        return group_call_logs(REAL_DAY_LOGS)
 
     async def download(url: str) -> bytes:
         return url.encode()
@@ -1565,7 +1068,7 @@ async def test_run_transcribes_summarizes_and_sends_the_letter(monkeypatch):
 
 async def test_run_transcriber_failure_isolates_the_call(monkeypatch):
     async def fetcher(_day):
-        return group_call_legs(REAL_DAY_LEGS)
+        return group_call_logs(REAL_DAY_LOGS)
 
     async def download(url: str) -> bytes:
         if "rec-1702" in url:
@@ -1599,7 +1102,7 @@ async def test_run_skips_transcription_without_minimax_key(monkeypatch):
     """No stored MiniMax key → no downloads at all, letter still sends."""
 
     async def fetcher(_day):
-        return group_call_legs(REAL_DAY_LEGS)
+        return group_call_logs(REAL_DAY_LOGS)
 
     async def no_download(_url: str) -> bytes:  # pragma: no cover — must not run
         raise AssertionError("download must be skipped without an STT key")
@@ -1635,7 +1138,7 @@ async def test_run_default_transcriber_uses_the_stored_minimax_key(monkeypatch):
             return f"transcript:{audio.decode()}"
 
     async def fetcher(_day):
-        return group_call_legs(REAL_DAY_LEGS)
+        return group_call_logs(REAL_DAY_LOGS)
 
     async def download(url: str) -> bytes:
         return url.encode()
@@ -1712,7 +1215,7 @@ async def test_run_daily_notes_are_omitted_when_the_llm_call_fails(monkeypatch):
 
     async def fetcher(_day):
         return [
-            replace(group_call_legs(REAL_DAY_LEGS[4:6])[0], transcript="Khách hỏi giá dịch vụ.")
+            replace(group_call_logs(REAL_DAY_LOGS[4:6])[0], transcript="Khách hỏi giá dịch vụ.")
         ]
 
     async def summarizer(system: str, _user: str) -> str:
@@ -1827,7 +1330,7 @@ def test_generate_daily_call_report_docx_creates_valid_document_with_charts():
     import docx
     from app.services.cloudfone_report import generate_daily_call_report_docx
 
-    calls = group_call_legs(REAL_DAY_LEGS)
+    calls = group_call_logs(REAL_DAY_LOGS)
     stats = build_daily_stats(calls)
     answered = [c for c in calls if c.status == "ANSWERED"]
     insights = [cloudfone_module.CallInsight(c, summary="Tóm tắt cuộc gọi") for c in answered]
@@ -1871,7 +1374,7 @@ def test_report_docx_never_embeds_call_transcripts():
 
     from app.services.cloudfone_report import generate_daily_call_report_docx
 
-    calls = group_call_legs(REAL_DAY_LEGS)
+    calls = group_call_logs(REAL_DAY_LOGS)
     stats = build_daily_stats(calls)
     answered = [c for c in calls if c.status == "ANSWERED"]
     leak = "S1: alo chị ơi khách hỏi giá cước nội dung riêng tư."
@@ -1917,7 +1420,7 @@ class _FakeTranscriptStore:
 
 
 def _stt_eligible() -> list[CallRecord]:
-    return [c for c in group_call_legs(REAL_DAY_LEGS) if c.recording_url and c.talk_seconds > 0]
+    return [c for c in group_call_logs(REAL_DAY_LOGS) if c.recording_url and c.talk_seconds > 0]
 
 
 def _cached_day() -> dict[str, str]:
@@ -1925,7 +1428,7 @@ def _cached_day() -> dict[str, str]:
 
 
 async def _real_day_fetcher(_day):
-    return group_call_legs(REAL_DAY_LEGS)
+    return group_call_logs(REAL_DAY_LOGS)
 
 
 def _flat_summarizer():

@@ -456,7 +456,7 @@ async def test_cloudfone_integration_settings(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CloudfoneIntegrationTestOut:
-    """Make a real GetCallHistoryVer2 call (one page: PageIndex 1, PageSize 5) so
+    """Make a real GetCallLogs call (one page: PageIndex 1, PageSize 5) so
     bad CloudFone credentials fail here, not in the daily tick — the probe
     exercises the exact endpoint the tick uses. Credentials typed in the
     console may be probed BEFORE being saved; anything omitted falls back to
@@ -483,7 +483,7 @@ async def test_cloudfone_integration_settings(
             creds["auth_key"],
             timeout=15.0,
         )
-        await client.get_call_history_v2(day=date.today(), page_index=1, page_size=5)
+        await client.get_call_logs_page(day=date.today(), page_index=1, page_size=5)
     except CloudfoneError as exc:
         return CloudfoneIntegrationTestOut(
             ok=False,

@@ -2,9 +2,9 @@
 
 Cloudfone is the vendor label for the CloudFone-hosted call center (the underlying
 HTTP API stays ``api.cloudfone.vn``). One ``run_cloudfone_insights`` pass: resolve
-the admin config, fetch the previous full day's call legs from
-``GetCallHistoryVer2``, cluster the legs into calls, download each call's
-recording (``linkFile`` WAV) and transcribe it through MiniMax speech-to-text
+the admin config, fetch the previous full day's rows from ``GetCallLogs`` (the
+dashboard's own source), group them into calls by ``linkedId``, download each
+call's recording (pre-signed WAV) and transcribe it through MiniMax speech-to-text
 (injected), persist each transcript to ``cloudfone_call_transcripts`` so a rerun
 never repeats the download + STT cost, summarize each answered call through the
 shared digest summarizer
@@ -54,23 +54,11 @@ STATUS_SENT = "sent"
 
 CloudfoneTransport = Callable[[str, dict], Awaitable[dict]]
 
-# GetCallHistoryVer2 page geometry for the daily fetch and the admin probe.
+# GetCallLogs page geometry for the daily fetch and the admin probe.
 DEFAULT_PAGE_SIZE = 200
 # Bounds one day's fetch at 5 × 200 rows — any real day fits; see
 # fetch_daily_calls for the truncation behavior past the bound.
 MAX_DAILY_PAGES = 5
-# One dial-attempt episode = legs of one caller whose consecutive callDate gap
-# stays within this bound: transfer legs land 0–6s apart (verified live), real
-# redials are ≥31s apart (verified live).
-CALL_CHAIN_GAP_SECONDS = 30.0
-# A caller ID shorter than this many digits is one of our own extensions/short
-# codes (101, 102, 106…), and no digits at all is the assistant robot
-# ("Cloudfone-Assistant", empty callerNumber). The CloudFone dashboard never
-# counts that traffic as customer calls — verified against the real
-# 2026-11-18 day: dropping caller IDs with <9 digits removes exactly the
-# 4 assistant + 3 extension calls that keep the bot's totals inflated
-# (24 → the dashboard's 19).
-MIN_CUSTOMER_DIGITS = 9
 
 # Sequential STT is ~10–15s per recording; a busy day past this bound keeps the
 # extra calls in stats/letter but without transcripts (one warning).
@@ -110,10 +98,11 @@ class CloudfoneError(RuntimeError):
 
 @dataclass(frozen=True)
 class CallRecord:
-    """One customer call clustered from GetCallHistoryVer2 legs.
+    """One customer call grouped from GetCallLogs rows sharing a ``linkedId``.
 
-    A call spans several legs (queue leg, agent leg, ``hangup`` leg) sharing
-    one ``linkFile``; :func:`group_call_legs` collapses them. ``transcript`` is
+    GetCallLogs returns one row per leg; exactly one row of the episode
+    (``event: "finish"``) carries the final disposition, the agent extension
+    and ``billsecAgent`` — the values this record keeps. ``transcript`` is
     filled from the downloaded recording via speech-to-text (empty when STT
     was skipped or failed).
     """
@@ -234,47 +223,28 @@ def _int_field(data: dict, *names: str) -> int:
 
 
 @dataclass(frozen=True)
-class _Leg:
-    """One GetCallHistoryVer2 row before legs are clustered into calls."""
+class _LogRow:
+    """One GetCallLogs row before rows are grouped into calls by ``linkedId``."""
 
+    linked_id: str
     call_date: str
-    key: str
     caller: str
-    receive: str
-    status: str
-    real_seconds: int
-    link_file: str
     direction: str
-
-    @property
-    def internal(self) -> bool:
-        # Verified live (2026-11-18): the assistant auto-dials carry an empty
-        # callerNumber (the caller falls back to "Cloudfone-Assistant") and
-        # extension-to-extension calls show an extension as callerNumber
-        # ("102" → a team). The dashboard never counts that traffic as customer
-        # calls, so neither do we. Outbound legs are exempt: their caller is
-        # our own extension by definition, not internal traffic to drop.
-        if self.direction.strip().lower() not in ("", "inbound"):
-            return False
-        return sum(map(str.isdigit, self.caller)) < MIN_CUSTOMER_DIGITS
-
-    @property
-    def answered(self) -> bool:
-        # A ``hangup`` leg always claims ANSWERED/0 and a 0s pickup produced no
-        # conversation (verified live) — neither counts as answered. Only a
-        # numeric destination is a real agent extension: the after-hours
-        # announcement ("Nghe thông báo", verified live 2026-11-18) claims
-        # ANSWERED/14s yet nobody spoke — the dashboard counts that call as
-        # nhỡ, not answered.
-        return self.status == "ANSWERED" and self.receive.isdigit() and self.real_seconds > 0
+    status: str
+    agent: str
+    agent_seconds: int
+    telco_seconds: int
+    duration: int
+    recording: str
+    event: str
 
 
 def call_date_to_ict(raw: str) -> str:
-    """Vendor ``callDate`` → Vietnam wall-clock ISO string (no shift).
+    """Vendor ``timeCall`` → Vietnam wall-clock ISO string (no shift).
 
-    GetCallHistoryVer2 returns ``callDate`` already in Vietnam wall clock —
+    GetCallLogs returns ``timeCall`` already in Vietnam wall clock —
     verified live: the 2026-10-26 18:36 call carries the string
-    ``2026-10-26T18:36:08`` and its ``key`` epoch is 11:36:08 UTC (= 18:36
+    ``2026-10-26T18:36:08`` and its ``linkedId`` epoch is 11:36:08 UTC (= 18:36
     ICT), so the string is the ICT time, not UTC. The value is normalized and
     passed through unchanged; only a timestamp that carries an explicit UTC
     offset is converted to ICT. Garbage passes through unchanged so
@@ -290,98 +260,69 @@ def call_date_to_ict(raw: str) -> str:
     return parsed.replace(tzinfo=None).isoformat()
 
 
-def _leg_from_row(raw: dict) -> _Leg:
+def _log_row_from_row(raw: dict) -> _LogRow:
     lowered = _lowered(raw)
-    return _Leg(
-        call_date=call_date_to_ict(_first(lowered, "calldate")),
-        key=_first(lowered, "key"),
-        caller=_first(lowered, "callernumber", "callername"),
-        receive=_first(lowered, "receivenumber"),
-        status=_first(lowered, "status"),
-        real_seconds=_int_field(lowered, "realcalltime"),
-        link_file=_first(lowered, "linkfile"),
-        direction=_first(lowered, "typecall"),
+    return _LogRow(
+        linked_id=_first(lowered, "linkedid"),
+        call_date=call_date_to_ict(_first(lowered, "timecall")),
+        caller=_first(lowered, "src"),
+        direction=_first(lowered, "direction"),
+        status=_first(lowered, "disposition"),
+        agent=_first(lowered, "dst"),
+        agent_seconds=_int_field(lowered, "billsecagent"),
+        telco_seconds=_int_field(lowered, "billsectelco"),
+        duration=_int_field(lowered, "duration"),
+        recording=_first(lowered, "recordingfile"),
+        event=_first(lowered, "event"),
     )
 
 
-def _leg_gap_seconds(prev: _Leg, leg: _Leg) -> float | None:
-    """callDate gap in seconds; ``None`` when either timestamp is unusable."""
-    try:
-        prev_at = datetime.fromisoformat(prev.call_date)
-        leg_at = datetime.fromisoformat(leg.call_date)
-    except ValueError:
-        return None
-    return (leg_at - prev_at).total_seconds()
+def group_call_logs(rows: list[dict]) -> list[CallRecord]:
+    """Group GetCallLogs rows into customer calls, ordered by start time.
 
-
-def _record_for(group: list[_Leg]) -> CallRecord:
-    first = group[0]
-    answered = [leg for leg in group if leg.answered]
-    if answered:
-        status = "ANSWERED"
-    elif any(leg.status == "NO ANSWER" for leg in group):
-        status = "NO ANSWER"
-    elif any(leg.status == "BUSY" for leg in group):
-        status = "BUSY"
-    else:
-        # Every leg claims ANSWERED yet none reached an agent extension — the
-        # announcement-only pickup (verified live: "Nghe thông báo") is nhỡ,
-        # same as any other unanswered call.
-        status = "NO ANSWER"
-    if answered:
-        best = max(answered, key=lambda leg: leg.real_seconds)
-        agent = best.receive
-        talk_seconds = max(leg.real_seconds for leg in answered)
-    else:
-        agent = first.receive
-        talk_seconds = 0
-    return CallRecord(
-        call_id=first.key.split(".", 1)[0] or first.call_date,
-        started_at=first.call_date,
-        caller=first.caller,
-        direction=first.direction,
-        agent=agent,
-        status=status,
-        talk_seconds=talk_seconds,
-        recording_url=next((leg.link_file for leg in group if leg.link_file), ""),
-    )
-
-
-def group_call_legs(rows: list[dict]) -> list[CallRecord]:
-    """Cluster leg rows into customer calls, ordered by start time.
-
-    One call = one recording. Legs sharing a ``linkFile`` always merge —
-    including transfer legs whose keys carry different epochs — and a leg
-    carrying a *different* recording starts its own call even inside the chain
-    window (verified live 2026-11-18: the 22:09:02 and 22:09:14 "Nghe thông
-    báo" attempts are 12s apart, same caller, two recordings — the dashboard
-    counts two calls, the old gap-only chaining merged them). Recording-less
-    legs (extension ring attempts) chain by caller + gap as before: transfer
-    legs land 0–6s apart, real redials ≥31s (verified live). Internal traffic
-    — assistant auto-dials, extension/short-code callers — never becomes a
-    call: the dashboard excludes it (see :attr:`_Leg.internal`). ``call_id``
-    is the epoch before the ``.`` of the first leg's ``key``
-    (``1790848955.584-…`` → ``"1790848955"``).
+    GetCallLogs is the dashboard's own source (vendor ``API.docx`` §1.1): one
+    row per leg, with ``linkedId`` grouping the whole episode — a
+    ring-then-answer attempt shares one ``linkedId`` no matter how long the
+    ring ran, so grouping can never split it (the old gap-based clustering of
+    GetCallHistoryVer2 split those episodes and inflated the counts). Exactly
+    one row per episode carries ``event: "finish"`` and holds the final
+    disposition, the agent extension and ``billsecAgent`` (agent talk
+    seconds); the rest are ``event: "hide"``. ``direction: "Local"`` is
+    internal extension→extension traffic and ``"Outbound"`` is our own
+    dial-out — the dashboard counts neither as a customer call, so both are
+    dropped; the Cloudfone-Assistant auto-dials the old source leaked do not
+    exist here at all. ``call_id`` is the epoch before the ``.`` of the
+    ``linkedId`` (``1795570511.1981`` → ``"1795570511"``), the same value the
+    old rows carried in their ``key``, so stored transcript keys keep
+    resolving. A row without a ``linkedId`` becomes its own call (counts
+    degrade to per-row, never crash).
     """
-    legs = sorted((_leg_from_row(row) for row in rows), key=lambda leg: (leg.call_date, leg.key))
-    groups: list[list[_Leg]] = []
-    group_links: list[str] = []  # first recording seen per group
-    for leg in legs:
-        if leg.internal:
-            continue
-        previous = groups[-1][-1] if groups else None
-        if previous is not None and leg.caller and leg.caller == previous.caller:
-            gap = _leg_gap_seconds(previous, leg)
-            link = group_links[-1]
-            same_recording = not leg.link_file or not link or leg.link_file == link
-            if gap is not None and gap <= CALL_CHAIN_GAP_SECONDS and same_recording:
-                groups[-1].append(leg)
-                if not link and leg.link_file:
-                    group_links[-1] = leg.link_file
-                continue
-        groups.append([leg])
-        group_links.append(leg.link_file)
-    return [_record_for(group) for group in groups]
+    inbound = [
+        row
+        for row in (_log_row_from_row(raw) for raw in rows)
+        if row.direction.strip().lower() in ("", "inbound")
+    ]
+    inbound.sort(key=lambda row: (row.call_date, row.linked_id))
+    groups: dict[str, list[_LogRow]] = {}
+    for row in inbound:
+        key = row.linked_id or f"\x00unlinked-{len(groups)}"  # unique per-row fallback
+        groups.setdefault(key, []).append(row)
+    records: list[CallRecord] = []
+    for group in groups.values():
+        finish = next((row for row in reversed(group) if row.event == "finish"), group[-1])
+        records.append(
+            CallRecord(
+                call_id=finish.linked_id.split(".", 1)[0] or finish.call_date,
+                started_at=finish.call_date,
+                caller=finish.caller,
+                direction=finish.direction,
+                agent=finish.agent,
+                status=finish.status,
+                talk_seconds=finish.agent_seconds,
+                recording_url=next((row.recording for row in group if row.recording), ""),
+            )
+        )
+    return records
 
 
 def build_daily_stats(calls: list[CallRecord]) -> DailyCallStats:
@@ -512,25 +453,26 @@ class CloudfoneClient:
             raise CloudfoneError(f"CloudFone từ chối yêu cầu: {message or 'không rõ lý do'}")
         return data
 
-    async def _call_history_v2_page(
+    async def _call_logs_page(
         self, *, day: date, page_index: int, page_size: int
     ) -> tuple[list[dict], int]:
-        """One GetCallHistoryVer2 page: the rows plus the envelope's total.
+        """One GetCallLogs page: the rows plus the envelope's total.
 
         The vendor Postman body verbatim (``PageIndex`` is 1-based on this
-        endpoint — verified live).
+        endpoint — verified live; page 0 aliases page 1).
         """
         date_start, date_end = _day_window(day)
         data = await self._request(
-            "GetCallHistoryVer2",
+            "GetCallLogs",
             {
-                "TypeGet": 0,
-                "HideFWOut": 1,
+                "Direction": "all",
+                "Disposition": "",
                 "DateStart": date_start,
                 "DateEnd": date_end,
                 "IsSort": 0,
                 "CallNum": "",
                 "ReceiveNum": "",
+                "trunk": "",
                 "Key": "",
                 "PageIndex": max(int(page_index), 1),
                 "PageSize": max(int(page_size), 1),
@@ -539,17 +481,17 @@ class CloudfoneClient:
         items = _data_items(data)
         return items, _envelope_total(data, fallback=len(items))
 
-    async def get_call_history_v2(
+    async def get_call_logs_page(
         self, *, day: date, page_index: int = 1, page_size: int = DEFAULT_PAGE_SIZE
     ) -> list[dict]:
-        """One GetCallHistoryVer2 page — the admin credential probe's call."""
-        items, _total = await self._call_history_v2_page(
+        """One GetCallLogs page — the admin credential probe's call."""
+        items, _total = await self._call_logs_page(
             day=day, page_index=page_index, page_size=page_size
         )
         return items
 
     async def fetch_daily_calls(self, *, day: date) -> list[CallRecord]:
-        """All calls of one full ICT calendar day, legs clustered.
+        """All calls of one full ICT calendar day, rows grouped by ``linkedId``.
 
         Paging walks ``PageIndex`` 1, 2, … until the envelope's ``total`` is
         drained — bounded at :data:`MAX_DAILY_PAGES` so a broken counter can
@@ -559,7 +501,7 @@ class CloudfoneClient:
         rows: list[dict] = []
         total = 0
         for page_index in range(1, MAX_DAILY_PAGES + 1):
-            items, total = await self._call_history_v2_page(
+            items, total = await self._call_logs_page(
                 day=day, page_index=page_index, page_size=DEFAULT_PAGE_SIZE
             )
             rows.extend(items)
@@ -572,7 +514,7 @@ class CloudfoneClient:
                 total,
                 MAX_DAILY_PAGES,
             )
-        return group_call_legs(rows)
+        return group_call_logs(rows)
 
 
 def insights_window(now: datetime) -> date:
